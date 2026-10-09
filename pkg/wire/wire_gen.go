@@ -730,8 +730,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v200 := wire10.NewProjectionOpening(recordingsService)
 	v201 := provideResponsePresentation()
 	scopeOpening := wire10.NewScopeOpening(v199, v200, v201, recordingsService)
-	runtimeFactory := provideFactoryVisualizationFactory(v198, scopeOpening)
 	v202 := wire10.NewRuntimeSinkOwner()
+	runtimeOpening := provideFactoryVisualizationOpening(v182, v198, scopeOpening, v202, edges2)
 	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
 	promptTemplates, err := provideHTTPWorkerPrompts(workersService)
 	if err != nil {
@@ -761,7 +761,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	runnerFactory := provideLifecycleRunnerFactory()
 	v204 := wire3.NewLifecyclePlanOperation()
-	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v182, edges2, runtimeFactory, v202, wireHttpRuntimeBinding, runnerFactory, v204)
+	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v182, runtimeOpening, wireHttpRuntimeBinding, runnerFactory, v204)
 	if err != nil {
 		return nil, err
 	}
@@ -982,7 +982,7 @@ var servicesSet = wire11.NewSet(
 	provideDurableOpening,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
-	provideProcessRuntimeFactory, wire3.NewLifecyclePlanOperation, wire11.Bind(new(factory_visualization.RuntimeReader), new(*wire3.Root)), wire10.NewRuntimeSourceOpening, wire10.NewActivationOpening, wire10.NewProjectionOpening, wire10.NewScopeOpening, provideFactoryVisualizationFactory,
+	provideProcessRuntimeFactory, wire3.NewLifecyclePlanOperation, wire11.Bind(new(factory_visualization.RuntimeReader), new(*wire3.Root)), wire10.NewRuntimeSourceOpening, wire10.NewActivationOpening, wire10.NewProjectionOpening, wire10.NewScopeOpening, provideFactoryVisualizationOpening,
 	provideResponsePresentation, wire10.NewRuntimeSinkOwner, wire3.NewOpeningPresentationOwner, provideWorkContentStagingService, wire.NewContentPolicy, wire.NewContentPreparation, wire.NewRequestContentBridge, wire.NewRequestPolicy, wire.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, wire.NewInvocationInputPolicy, wire.NewInvocationInputAdapter, provideWorkSessionResolver, wire.NewStateAccess, provideWorkSnapshotReader,
 	provideWorkersMockWorkersConfigFileSystem,
 	provideWorkersMockWorkersConfigDiagnosticsLoader,

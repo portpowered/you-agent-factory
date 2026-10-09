@@ -616,3 +616,34 @@ func assertDurableOpeningRetryAndValidation(t *testing.T, opening *RuntimeOpenin
 		t.Fatalf("invalid request = %v, calls = %d", err, owner.calls)
 	}
 }
+
+func TestSessionPresentationContainsSelectedScopeFacts(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			scope, err := (models.RuntimeScopeRef{}).Parse("models-" + id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bound := &runtimebinding.SessionState{
+				ModelsScope:          scope,
+				ModelInvocation:      modelinvocation.RuntimeModelInvocation{RuntimeID: "runtime-" + id},
+				Instance:             selectedModelRecord{generation: "generation-" + id},
+				Diagnostics:          factoryruntime.RuntimeLogDiagnostics{MetricsRootDir: "/metrics/" + id},
+				OperatorSettingsPath: "/settings/" + id,
+			}
+			want := SessionPresentation{ModelsScope: scope, RuntimeID: "runtime-" + id,
+				GenerationID: "generation-" + id, MetricsRootDir: "/metrics/" + id,
+				OperatorSettingsPath: "/settings/" + id}
+			captured := sessionPresentation(bound, id)
+			if captured != want {
+				t.Fatalf("presentation = %+v, want %+v", captured, want)
+			}
+			bound.Instance = selectedModelRecord{generation: "replacement-" + id}
+			if next := sessionPresentation(bound, id); next.GenerationID != "replacement-"+id || captured != want {
+				t.Fatalf("replacement facts = %+v; captured = %+v", next, captured)
+			}
+		})
+	}
+}

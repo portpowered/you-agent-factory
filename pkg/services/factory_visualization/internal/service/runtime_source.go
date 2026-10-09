@@ -7,8 +7,73 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	"go.uber.org/zap"
 )
+
+// RuntimeOpeningOwner selects scoped resources without constructing reusable
+// services. Effects are captured under the addressed Sessions read authority;
+// later replacement or Current Factory selection cannot substitute them.
+type RuntimeOpeningOwner struct {
+	reader     RuntimeReader
+	openSource func(string) Source
+	openScope  func(Source, Clock, Sink, ErrorReporter) (Root, error)
+	sinks      factoryvisualization.RuntimeSinkOwner
+	override   Sink
+	observe    factoryvisualization.RootObserver
+}
+
+func NewRuntimeOpeningOwner(reader RuntimeReader, openSource func(string) Source,
+	openScope func(Source, Clock, Sink, ErrorReporter) (Root, error),
+	sinks factoryvisualization.RuntimeSinkOwner, override Sink,
+	observe factoryvisualization.RootObserver,
+) *RuntimeOpeningOwner {
+	return &RuntimeOpeningOwner{reader: reader, openSource: openSource, openScope: openScope,
+		sinks: sinks, override: override, observe: observe}
+}
+
+func (owner *RuntimeOpeningOwner) Open(ctx context.Context, sessionID string, sinkID factoryvisualization.RuntimeSinkID) (Root, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var sink Sink
+	if sinkID != "" {
+		var ok bool
+		sink, ok = owner.sinks.RuntimeSink(sinkID)
+		if !ok {
+			return nil, fmt.Errorf("factory visualization sink %q is unavailable", sinkID)
+		}
+	}
+	if owner.override != nil {
+		sink = owner.override
+	}
+	if sink == nil {
+		return nil, nil
+	}
+	var clock Clock
+	var reportError ErrorReporter
+	err := owner.reader.WithRuntimeReadForSession(sessionID, func(runtime *factorysessions.LiveRuntime) error {
+		if runtime == nil {
+			return factorysessions.ErrRuntimeNotAvailable
+		}
+		clock = runtime.Clock
+		logger := runtime.LiveChangeLogger
+		reportError = func(err error) { logger.Error("Factory visualization failed", zap.Error(err)) }
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	root, err := owner.openScope(owner.openSource(sessionID), clock, sink, reportError)
+	if err != nil {
+		return nil, err
+	}
+	if owner.observe != nil {
+		owner.observe(root)
+	}
+	return root, nil
+}
 
 type runtimeSource struct {
 	reader RuntimeReader

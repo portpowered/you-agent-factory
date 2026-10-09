@@ -430,68 +430,6 @@ func wireWebhookEvent() recordings.CanonicalEvent {
 var _ factorydefinitions.LoadedFactorySource = wireLoadedFactorySource{}
 var _ recordings.Service = (*wireWebhookEvents)(nil)
 
-// stubVisualizationRoot records the lifecycle calls the composed visualization
-// role makes on the constructed Factory Visualization root. Unimplemented root
-// methods stay nil so any unexpected call fails loudly.
-type stubVisualizationRoot struct {
-	factoryvisualization.Service
-	activations int
-	drains      int
-}
-
-func (root *stubVisualizationRoot) Activate(
-	context.Context,
-	factoryvisualization.ActivateRequest,
-) (factoryvisualization.ActivateResult, error) {
-	root.activations++
-	return factoryvisualization.ActivateResult{}, nil
-}
-
-func (root *stubVisualizationRoot) StopDrain(
-	context.Context,
-	factoryvisualization.StopDrainRequest,
-) (factoryvisualization.StopDrainResult, error) {
-	root.drains++
-	return factoryvisualization.StopDrainResult{}, nil
-}
-
-// recordedVisualizationBuild is one observed call into the injected Factory
-// Visualization runtime factory.
-type recordedVisualizationBuild struct {
-	calls int
-	clock factoryvisualization.Clock
-	sink  factoryvisualization.Sink
-	root  *stubVisualizationRoot
-}
-
-func recordingVisualizationFactory(build *recordedVisualizationBuild) factoryvisualization.RuntimeFactory {
-	return func(
-		_ string,
-		clock factoryvisualization.Clock,
-		sink factoryvisualization.Sink,
-		_ factoryvisualization.ErrorReporter,
-	) (factoryvisualization.Service, error) {
-		build.calls++
-		build.clock = clock
-		build.sink = sink
-		build.root = &stubVisualizationRoot{}
-		return build.root, nil
-	}
-}
-
-// stubSinkOwner is the composition-root sink registry.
-type stubSinkOwner struct {
-	factoryvisualization.RuntimeSinkOwner
-	sinks map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink
-}
-
-func (owner stubSinkOwner) RuntimeSink(
-	id factoryvisualization.RuntimeSinkID,
-) (factoryvisualization.Sink, bool) {
-	sink, ok := owner.sinks[id]
-	return sink, ok
-}
-
 // markerHandler is a comparable owner handler so a test can assert the exact
 // handler instance the bound transport runs.
 type markerHandler struct{}
@@ -513,27 +451,27 @@ func stubRunRuntimePlanLifecycle(
 func TestProvideRunRuntimeRunnerBuilderRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 
-	factory := recordingVisualizationFactory(&recordedVisualizationBuild{})
+	factory := factoryvisualization.RuntimeOpening(func(context.Context, string, factoryvisualization.RuntimeSinkID) (factoryvisualization.Service, error) {
+		return nil, nil
+	})
 	binding := boundHandlerAdapter(&markerHandler{})
 	missing := []struct {
 		name    string
 		root    *factorysessionwire.Root
-		factory factoryvisualization.RuntimeFactory
-		sinks   factoryvisualization.RuntimeSinkOwner
+		factory factoryvisualization.RuntimeOpening
 		binding httpRuntimeBinding
 		runner  lifecycle.RunnerFactory
 		plan    factorysessionwire.LifecyclePlanOperation
 	}{
-		{"process root", nil, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"visualization factory", &factorysessionwire.Root{}, nil, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"visualization sink owner", &factorysessionwire.Root{}, factory, nil, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"HTTP binding", &factorysessionwire.Root{}, factory, stubSinkOwner{}, nil, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"runner factory", &factorysessionwire.Root{}, factory, stubSinkOwner{}, binding, nil, stubRunRuntimePlanLifecycle},
-		{"lifecycle plan operation", &factorysessionwire.Root{}, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, nil},
+		{"process root", nil, factory, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"visualization factory", &factorysessionwire.Root{}, nil, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"HTTP binding", &factorysessionwire.Root{}, factory, nil, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"runner factory", &factorysessionwire.Root{}, factory, binding, nil, stubRunRuntimePlanLifecycle},
+		{"lifecycle plan operation", &factorysessionwire.Root{}, factory, binding, lifecycle.NewRunner, nil},
 	}
 	for _, operation := range missing {
 		if _, err := provideRunRuntimeRunnerBuilder(
-			operation.root, serviceedges.Edges{}, operation.factory, operation.sinks, operation.binding, operation.runner, operation.plan,
+			operation.root, operation.factory, operation.binding, operation.runner, operation.plan,
 		); err == nil {
 			t.Fatalf("missing %s = nil error, want a construction failure", operation.name)
 		}

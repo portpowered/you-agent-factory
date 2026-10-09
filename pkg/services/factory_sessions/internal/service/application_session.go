@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"go.uber.org/zap"
 )
 
 // applicationSessionState resolves application lifecycle values from the
@@ -126,8 +125,8 @@ func (r *Root) ApplicationDiagnostics(sessionID string) (factoryruntime.RuntimeL
 // session. HTTP peer services are injected directly by process composition.
 type SessionPresentation struct {
 	ModelsScope          models.RuntimeScopeRef
-	Logger               *zap.Logger
-	Clock                factoryruntime.Clock
+	RuntimeID            string
+	GenerationID         string
 	MetricsRootDir       string
 	OperatorSettingsPath string
 }
@@ -137,13 +136,18 @@ func (r *Root) SessionPresentation(sessionID string) (SessionPresentation, error
 	if err != nil {
 		return SessionPresentation{}, err
 	}
+	return sessionPresentation(bound, sessionID), nil
+}
+
+func sessionPresentation(bound *runtimebinding.SessionState, sessionID string) SessionPresentation {
+	facts := selectedModelFacts(bound, sessionID)
 	return SessionPresentation{
 		ModelsScope:          bound.ModelsScope,
-		Logger:               bound.Logger,
-		Clock:                bound.Clock,
+		RuntimeID:            facts.RuntimeID,
+		GenerationID:         facts.GenerationID,
 		MetricsRootDir:       bound.Diagnostics.MetricsRootDir,
 		OperatorSettingsPath: bound.OperatorSettingsPath,
-	}, nil
+	}
 }
 
 // WithRuntimeReadForSession exposes the canonical addressed observation owner;

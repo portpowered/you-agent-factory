@@ -519,23 +519,15 @@ func provideProcessRuntimeFactory(
 	return factorysessionwire.NewProcessLifecycleFactory(host)
 }
 
-func provideFactoryVisualizationFactory(
+func provideFactoryVisualizationOpening(
+	reader factoryvisualization.RuntimeReader,
 	openSource func(string) factoryvisualization.Source,
 	openScope factoryvisualizationwire.ScopeOpening,
-) factoryvisualization.RuntimeFactory {
-	return func(
-		sessionID string,
-		clock factoryvisualization.Clock,
-		sink factoryvisualization.Sink,
-		reportError factoryvisualization.ErrorReporter,
-	) (factoryvisualization.Service, error) {
-		return openScope(
-			openSource(sessionID),
-			clock,
-			sink,
-			reportError,
-		)
-	}
+	sinks factoryvisualization.RuntimeSinkOwner,
+	edges serviceedges.Edges,
+) factoryvisualization.RuntimeOpening {
+	return factoryvisualizationwire.NewRuntimeOpening(reader, openSource, openScope, sinks,
+		edges.FactoryVisualizationSink, edges.FactoryVisualizationRootObserver)
 }
 
 func provideWorkContentStagingService(
@@ -555,24 +547,6 @@ func provideWorkContentStagingService(
 		clock = source
 	}
 	return workwire.NewContentStagingService(filesystem, random, clock, 0)
-}
-
-// selectVisualizationSink resolves the transport-selected visualization sink
-// the opening request carries. Factory Sessions carries only the opaque
-// selection, so the composition root that owns the sink registry is the only
-// place that can turn it back into a presentation sink.
-func selectVisualizationSink(
-	sinks factoryvisualization.RuntimeSinkOwner,
-	sinkID factorysessions.VisualizationSinkID,
-) (factoryvisualization.Sink, error) {
-	if sinkID == "" {
-		return nil, nil
-	}
-	sink, ok := sinks.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID))
-	if !ok {
-		return nil, fmt.Errorf("Factory Visualization sink %q is unavailable", sinkID)
-	}
-	return sink, nil
 }
 
 func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {

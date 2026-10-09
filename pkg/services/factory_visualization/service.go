@@ -3,6 +3,7 @@
 package factory_visualization
 
 import (
+	"context"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 )
 
@@ -40,11 +41,6 @@ type Source = liveviewprojection.Source
 // ErrorReporter receives non-fatal projection or presentation-read failures.
 type ErrorReporter = liveviewprojection.ErrorReporter
 
-// RuntimeFactory constructs one inert visualization root for a selected Factory
-// Session runtime. Wire injects this operation into runtime assembly.
-type RuntimeFactory func(
-	string,
-	Clock,
-	Sink,
-	ErrorReporter,
-) (Service, error)
+// RuntimeOpening allocates an inert session-scoped lifecycle handle over fixed
+// injected owners. Requests carry only session and presentation resource identity.
+type RuntimeOpening func(context.Context, string, RuntimeSinkID) (Service, error)

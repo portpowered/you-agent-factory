@@ -122,7 +122,7 @@ var servicesSet = wire.NewSet(
 	factoryvisualizationwire.NewActivationOpening,
 	factoryvisualizationwire.NewProjectionOpening,
 	factoryvisualizationwire.NewScopeOpening,
-	provideFactoryVisualizationFactory,
+	provideFactoryVisualizationOpening,
 	provideResponsePresentation,
 	factoryvisualizationwire.NewRuntimeSinkOwner,
 	factorysessionwire.NewOpeningPresentationOwner,

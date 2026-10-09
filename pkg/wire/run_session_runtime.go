@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -24,19 +23,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	"go.uber.org/zap"
 )
 
 func provideRunRuntimeRunnerBuilder(
 	root *factorysessionwire.Root,
-	edges serviceedges.Edges,
-	visualizationFactory factoryvisualization.RuntimeFactory,
-	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	openVisualization factoryvisualization.RuntimeOpening,
 	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (runcli.RuntimeRunnerBuilder, error) {
-	if root == nil || visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
+	if root == nil || openVisualization == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
 		return nil, errors.New("run Factory Session: process root and presentation operations are required")
 	}
 	return func(ctx context.Context, request *factorysessions.SessionStartRequest, cancellation initializer.InvocationCancellation, sinkID factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
@@ -56,7 +52,7 @@ func provideRunRuntimeRunnerBuilder(
 		if historical {
 			return buildHistoricalRunSession(inspection, planLifecycle)
 		}
-		runner, err := buildCanonicalRunSession(*request, cancellation, sinkID, root, edges, visualizationFactory, visualizationSinks, httpBinding, newRunner, planLifecycle)
+		runner, err := buildCanonicalRunSession(*request, cancellation, sinkID, root, openVisualization, httpBinding, newRunner, planLifecycle)
 		if err != nil {
 			return nil, err
 		}
@@ -251,18 +247,13 @@ func buildCanonicalRunSession(
 	cancellation initializer.InvocationCancellation,
 	sinkID factorysessions.VisualizationSinkID,
 	root *factorysessionwire.Root,
-	edges serviceedges.Edges,
-	visualizationFactory factoryvisualization.RuntimeFactory,
-	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	openVisualization factoryvisualization.RuntimeOpening,
 	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (runSessionRunner, error) {
-	if root == nil || visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil || planLifecycle == nil {
-		return runSessionRunner{}, errors.New("run Factory Session: process root and presentation operations are required")
-	}
 	process := newRunSessionProcess(root, request)
-	visualizationComponent := newRunVisualizationComponent(process, sinkID, root, edges, visualizationFactory, visualizationSinks)
+	visualizationComponent := newRunVisualizationComponent(process, sinkID, openVisualization)
 	transport := newRunner(func(ctx context.Context) error {
 		handler, err := httpBinding(process.ID(), cancellation)
 		if err != nil {
@@ -291,37 +282,14 @@ func buildCanonicalRunSession(
 func newRunVisualizationComponent(
 	process *runSessionProcess,
 	sinkID factorysessions.VisualizationSinkID,
-	root *factorysessionwire.Root,
-	edges serviceedges.Edges,
-	visualizationFactory factoryvisualization.RuntimeFactory,
-	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	openVisualization factoryvisualization.RuntimeOpening,
 ) lifecycle.Functions {
 	var visualization factoryvisualization.Service
 	return lifecycle.Functions{
-		StartFunc: func(context.Context) error {
-			sink, err := selectVisualizationSink(visualizationSinks, sinkID)
-			if err != nil {
-				return err
-			}
-			if edges.FactoryVisualizationSink != nil {
-				sink = edges.FactoryVisualizationSink
-			}
-			if sink == nil {
-				return nil
-			}
-			view, err := root.SessionPresentation(process.ID())
-			if err != nil {
-				return err
-			}
-			logger := view.Logger
-			visualization, err = visualizationFactory(process.ID(), view.Clock, sink, func(err error) { logger.Error("Factory visualization failed", zap.Error(err)) })
-			if err != nil {
-				return err
-			}
-			if edges.FactoryVisualizationRootObserver != nil {
-				edges.FactoryVisualizationRootObserver(visualization)
-			}
-			return nil
+		StartFunc: func(ctx context.Context) error {
+			var err error
+			visualization, err = openVisualization(ctx, process.ID(), factoryvisualization.RuntimeSinkID(sinkID))
+			return err
 		},
 		StopFunc: func(ctx context.Context) error {
 			if visualization == nil {

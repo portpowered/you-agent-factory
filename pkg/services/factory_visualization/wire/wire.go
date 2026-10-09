@@ -76,6 +76,15 @@ func NewRuntimeSourceOpening(reader factoryvisualization.RuntimeReader) func(str
 	return internalservice.NewRuntimeSourceOpening(reader)
 }
 
+// NewRuntimeOpening constructs the fixed addressed resource-selection owner.
+func NewRuntimeOpening(reader factoryvisualization.RuntimeReader,
+	openSource func(string) factoryvisualization.Source, openScope ScopeOpening,
+	sinks factoryvisualization.RuntimeSinkOwner, override factoryvisualization.Sink,
+	observe factoryvisualization.RootObserver,
+) factoryvisualization.RuntimeOpening {
+	return internalservice.NewRuntimeOpeningOwner(reader, openSource, openScope, sinks, override, observe).Open
+}
+
 // NewResponsePresentation constructs the inert response/event presentation
 // capability used by transport composition.
 func NewResponsePresentation() factoryvisualization.ResponsePresentation {

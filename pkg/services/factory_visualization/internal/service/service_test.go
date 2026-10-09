@@ -8,6 +8,8 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
@@ -16,6 +18,8 @@ import (
 	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // FND-12 captured visualization-activation typed-failure baseline: activation
@@ -606,3 +610,200 @@ func visualizationSnapshotFacts(tick int) *liveviewprojection.RuntimeSnapshotFac
 type fixedClock struct{ now time.Time }
 
 func (c fixedClock) Now() time.Time { return c.now }
+
+// The opening component receives controlled owner operations. No lifecycle,
+// source or projection implementation participates in these selection witnesses.
+type openingRuntimeReader func(string, func(*factorysessions.LiveRuntime) error) error
+
+func (read openingRuntimeReader) WithRuntimeReadForSession(id string, consume func(*factorysessions.LiveRuntime) error) error {
+	return read(id, consume)
+}
+func (openingRuntimeReader) WithRuntimeRead(func(*factorysessions.LiveRuntime) error) error {
+	panic("opening must never select Current Factory")
+}
+
+type openingSinkRegistry struct {
+	factoryvisualization.RuntimeSinkOwner
+	sinks map[factoryvisualization.RuntimeSinkID]Sink
+}
+
+func (registry openingSinkRegistry) RuntimeSink(id factoryvisualization.RuntimeSinkID) (Sink, bool) {
+	sink, ok := registry.sinks[id]
+	return sink, ok
+}
+
+type openingRootStub struct{ Root }
+
+func TestRuntimeOpeningKeepsSelectedEffectsAndPeerIsolation(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) { t.Parallel(); testRuntimeOpeningSelectedEffects(t, id) })
+	}
+}
+
+func testRuntimeOpeningSelectedEffects(t *testing.T, id string) {
+	t.Helper()
+	core, logs := observer.New(zap.ErrorLevel)
+	clock := fixedClock{now: time.Unix(123, 0)}
+	runtime := &factorysessions.LiveRuntime{Clock: clock, LiveChangeLogger: zap.New(core).With(zap.String("session_id", id))}
+	read := openingRuntimeReader(func(got string, consume func(*factorysessions.LiveRuntime) error) error {
+		if got != id {
+			return factorysessions.ErrSessionNotFound
+		}
+		return consume(runtime)
+	})
+	sinkID := factoryvisualization.RuntimeSinkID("sink-" + id)
+	sink := &openingSinkStub{}
+	source := &sourceStub{}
+	root := &openingRootStub{}
+	var reporter ErrorReporter
+	observations := 0
+	owner := NewRuntimeOpeningOwner(read,
+		func(got string) Source {
+			if got != id {
+				t.Fatalf("source session = %q", got)
+			}
+			return source
+		},
+		func(gotSource Source, gotClock Clock, gotSink Sink, report ErrorReporter) (Root, error) {
+			if gotSource != source || gotClock != clock || gotSink != sink {
+				t.Fatal("opening substituted selected resources")
+			}
+			reporter = report
+			return root, nil
+		}, openingSinkRegistry{sinks: map[factoryvisualization.RuntimeSinkID]Sink{sinkID: sink}}, nil,
+		func(got Root) {
+			if got != root {
+				t.Fatal("observer got another root")
+			}
+			observations++
+		})
+	got, err := owner.Open(t.Context(), id, sinkID)
+	if err != nil || got != root || observations != 1 {
+		t.Fatalf("Open = (%v, %v), observations=%d", got, err, observations)
+	}
+	// The acquired reporter keeps the original scoped sink even after
+	// the selected runtime replaces its diagnostic resource.
+	runtime.LiveChangeLogger = zap.NewNop()
+	reporter(errors.New("selected projection failed"))
+	assertOpeningErrorLog(t, logs, id)
+	if got, err := owner.Open(t.Context(), "missing", sinkID); got != nil || !errors.Is(err, factorysessions.ErrSessionNotFound) || observations != 1 {
+		t.Fatalf("missing Open = (%v, %v), observations=%d", got, err, observations)
+	}
+}
+
+type openingSinkStub struct{ marker byte }
+
+func (*openingSinkStub) PresentFactoryView(View) {}
+
+func TestRuntimeOpeningResourceFailuresAndDisabledSelection(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("scope failed")
+	cases := []struct {
+		name                   string
+		sinkID                 factoryvisualization.RuntimeSinkID
+		override               Sink
+		cancel, missingRuntime bool
+		wantError              error
+		wantText               string
+		wantReads              int
+	}{
+		{name: "disabled"},
+		{name: "missing sink", sinkID: "missing", wantText: "unavailable"},
+		{name: "cancelled", sinkID: "selected", cancel: true, wantError: context.Canceled},
+		{name: "missing runtime", sinkID: "selected", missingRuntime: true, wantError: factorysessions.ErrRuntimeNotAvailable, wantReads: 1},
+		{name: "scope failure", sinkID: "selected", wantError: cause, wantReads: 1},
+		{name: "override", sinkID: "selected", override: &openingSinkStub{}, wantError: cause, wantReads: 1},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if test.cancel {
+				cancel()
+			}
+			sink := &openingSinkStub{}
+			registry := openingSinkRegistry{sinks: map[factoryvisualization.RuntimeSinkID]Sink{"selected": sink}}
+			reads, observations := 0, 0
+			owner := NewRuntimeOpeningOwner(openingRuntimeReader(func(_ string, consume func(*factorysessions.LiveRuntime) error) error {
+				reads++
+				if test.missingRuntime {
+					return consume(nil)
+				}
+				return consume(&factorysessions.LiveRuntime{Clock: fixedClock{}, LiveChangeLogger: zap.NewNop()})
+			}), func(string) Source { return &sourceStub{} },
+				func(_ Source, _ Clock, got Sink, _ ErrorReporter) (Root, error) {
+					if test.override != nil && got != test.override {
+						t.Fatal("explicit override was lost")
+					}
+					return nil, cause
+				}, registry, test.override, func(Root) { observations++ })
+			got, err := owner.Open(ctx, "selected", test.sinkID)
+			if got != nil || observations != 0 || reads != test.wantReads {
+				t.Fatalf("Open = %v, observations=%d reads=%d", got, observations, reads)
+			}
+			if test.wantText != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantText) {
+					t.Fatalf("error = %v, want %q", err, test.wantText)
+				}
+			} else if !errors.Is(err, test.wantError) {
+				t.Fatalf("error = %v, want %v", err, test.wantError)
+			}
+		})
+	}
+}
+
+func assertOpeningErrorLog(t *testing.T, logs *observer.ObservedLogs, id string) {
+	t.Helper()
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("selected error records = %+v", entries)
+	}
+	fields := entries[0].ContextMap()
+	if fields["session_id"] != id || fields["error"] != "selected projection failed" {
+		t.Fatalf("selected error fields = %+v", fields)
+	}
+}
+
+func TestSharedRuntimeOpeningKeepsConcurrentEffectsScoped(t *testing.T) {
+	t.Parallel()
+	selectedCore, selectedLogs := observer.New(zap.ErrorLevel)
+	peerCore, peerLogs := observer.New(zap.ErrorLevel)
+	runtimes := map[string]*factorysessions.LiveRuntime{
+		"selected": {Clock: fixedClock{now: time.Unix(1, 0)}, LiveChangeLogger: zap.New(selectedCore).With(zap.String("session_id", "selected"))},
+		"peer":     {Clock: fixedClock{now: time.Unix(2, 0)}, LiveChangeLogger: zap.New(peerCore).With(zap.String("session_id", "peer"))},
+	}
+	selectedSink, peerSink := &openingViewSink{}, &openingViewSink{}
+	owner := NewRuntimeOpeningOwner(openingRuntimeReader(func(id string, consume func(*factorysessions.LiveRuntime) error) error {
+		return consume(runtimes[id])
+	}), func(string) Source { return &sourceStub{} },
+		func(_ Source, clock Clock, sink Sink, report ErrorReporter) (Root, error) {
+			sink.PresentFactoryView(View{ObservedAt: clock.Now()})
+			report(errors.New("selected projection failed"))
+			return &openingRootStub{}, nil
+		}, openingSinkRegistry{sinks: map[factoryvisualization.RuntimeSinkID]Sink{"selected": selectedSink, "peer": peerSink}}, nil, nil)
+	for _, test := range []struct {
+		id        string
+		sink      *openingViewSink
+		logs      *observer.ObservedLogs
+		timestamp int64
+	}{
+		{"selected", selectedSink, selectedLogs, 1}, {"peer", peerSink, peerLogs, 2},
+	} {
+		t.Run(test.id, func(t *testing.T) {
+			t.Parallel()
+			if root, err := owner.Open(t.Context(), test.id, factoryvisualization.RuntimeSinkID(test.id)); err != nil || root == nil {
+				t.Fatalf("Open = (%v, %v)", root, err)
+			}
+			if test.sink.view.ObservedAt != time.Unix(test.timestamp, 0) {
+				t.Fatalf("observed timestamp = %v", test.sink.view.ObservedAt)
+			}
+			assertOpeningErrorLog(t, test.logs, test.id)
+		})
+	}
+}
+
+type openingViewSink struct{ view View }
+
+func (sink *openingViewSink) PresentFactoryView(view View) { sink.view = view }
