@@ -190,7 +190,7 @@ func writeFleetFactory(b testing.TB, dir string) {
 	b.Helper()
 	files := map[string]string{
 		"factory.json":                   `{"name":"fleet-load","workTypes":[{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],"workers":[{"name":"processor"}],"workstations":[{"name":"process","worker":"processor","inputs":[{"workType":"task","state":"ready"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]}`,
-		"workers/processor/AGENTS.md":    "---\ntype: MODEL_WORKER\nmodel: gpt-5-codex\nmodelProvider: CODEX\nexecutorProvider: CODEX\nstopToken: COMPLETE\n---\nComplete the fixture Work.\n",
+		"workers/processor/AGENTS.md":    "---\ntype: MODEL_WORKER\nmodel: gpt-5-codex\nmodelProvider: CODEX\nexecutorProvider: codex\nstopToken: COMPLETE\n---\nComplete the fixture Work.\n",
 		"workstations/process/AGENTS.md": "---\ntype: MODEL_WORKSTATION\n---\nComplete the fixture Work.\n",
 	}
 	for name, contents := range files {

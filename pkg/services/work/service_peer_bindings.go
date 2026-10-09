@@ -17,6 +17,7 @@ func MaterializationService(materializer ContentMaterializer) Service {
 }
 
 type materializationService struct {
+	workerSessionWorkUnavailable
 	materializer ContentMaterializer
 }
 
@@ -122,6 +123,7 @@ func AdmissionContentService(
 }
 
 type admissionContentService struct {
+	workerSessionWorkUnavailable
 	staging     ContentStagingService
 	preparation RequestPreparationService
 }
@@ -222,10 +224,9 @@ func (admissionContentService) ResolvePrimaryResult(
 	return PrimaryResultSelection{}, fmt.Errorf("Work admission content service does not support invocation policy")
 }
 
-func (materializationService) ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error) {
-	return WorkerSessionWork{}, fmt.Errorf("Work materializationService does not support state access")
-}
+// Partial Work roots reject state access through one shared implementation.
+type workerSessionWorkUnavailable struct{}
 
-func (admissionContentService) ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error) {
-	return WorkerSessionWork{}, fmt.Errorf("Work admissionContentService does not support state access")
+func (workerSessionWorkUnavailable) ResolveWorkerSessionWork(context.Context, string, string) (WorkerSessionWork, error) {
+	return WorkerSessionWork{}, fmt.Errorf("Work service does not support state access")
 }

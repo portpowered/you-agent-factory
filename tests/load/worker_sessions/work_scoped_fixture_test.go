@@ -79,7 +79,7 @@ func newScopedLatencyFixture(t *testing.T, ctx context.Context) scopedLatencyFix
 	return f
 }
 
-func startScopedLatencyHost(t *testing.T, ctx context.Context, process *application.Process, f scopedLatencyFixture, ready <-chan *httptest.Server) *httptest.Server {
+func startScopedLatencyHost(t *testing.T, ctx context.Context, process *application.Process, f scopedLatencyFixture, ready <-chan *httptest.Server, extraArgs ...string) *httptest.Server {
 	t.Helper()
 	// Bootstrap the isolated profile through the existing customer boundary.
 	_ = process.Execute(application.Input{Args: []string{"you", "run", "--factory", filepath.Join(f.dir, "missing.json")}, Env: f.environment, WorkingDirectory: f.dir, Context: ctx, Stdout: io.Discard, Stderr: io.Discard})
@@ -87,7 +87,8 @@ func startScopedLatencyHost(t *testing.T, ctx context.Context, process *applicat
 	done := make(chan struct{})
 	var hostErr error
 	go func() {
-		hostErr = process.Execute(application.Input{Args: []string{"you", "run", "--dir", f.dir, "--continuously", "--with-server", "--quiet"}, Env: f.environment, WorkingDirectory: f.dir, Context: hostCtx, Stdout: io.Discard, Stderr: io.Discard})
+		args := append([]string{"you", "run", "--dir", f.dir, "--continuously", "--with-server", "--quiet"}, extraArgs...)
+		hostErr = process.Execute(application.Input{Args: args, Env: f.environment, WorkingDirectory: f.dir, Context: hostCtx, Stdout: io.Discard, Stderr: io.Discard})
 		close(done)
 	}()
 	t.Cleanup(func() {
