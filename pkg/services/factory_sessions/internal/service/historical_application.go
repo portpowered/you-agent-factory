@@ -22,9 +22,17 @@ type HistoricalApplicationInspection struct {
 	Close                  func() error
 }
 
+// InspectHistoricalApplication delegates replay inspection to the fixed opening owner.
+func (r *Root) InspectHistoricalApplication(ctx context.Context, request factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error) {
+	if r == nil {
+		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay input service is required")
+	}
+	return r.opening.InspectHistoricalApplication(ctx, request)
+}
+
 // InspectHistoricalApplication classifies a replay input before live session
 // activation. Hosted or legacy V1 replays continue through canonical Start.
-func (r *Root) InspectHistoricalApplication(
+func (r *RuntimeOpening) InspectHistoricalApplication(
 	ctx context.Context,
 	request factorysessions.SessionStartRequest,
 ) (HistoricalApplicationInspection, bool, error) {
@@ -49,21 +57,21 @@ func (r *Root) InspectHistoricalApplication(
 	}
 	session := request
 	selection := runtimeSelectionForStart(request)
-	opening, err := r.opening.prepareRuntimeOpening(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
+	opening, err := r.prepareRuntimeOpening(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
 	if opening.load.HistoricalReplay == nil {
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay inspection is unavailable")
 	}
-	replay, closeReplay, err := r.opening.openHistoricalSessionRuntime(ctx, opening)
+	replay, closeReplay, err := r.openHistoricalSessionRuntime(ctx, opening)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
 	inspection := replay.Inspection()
 	release := func() {}
 	if inspection.Checkpoint != nil {
-		binder, ok := r.SessionGateway.(interface {
+		binder, ok := r.assembly.SessionGateway.(interface {
 			BindHistoricalExecution(string, durableexecution.Service) func()
 		})
 		if !ok {

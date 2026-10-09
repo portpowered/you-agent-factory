@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -26,11 +27,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
 
 // RuntimeOpening owns fixed preparation, activation, live binding and historical acquisition behavior.
 // It retains selected collaborators directly and never retains the Sessions Root.
 type RuntimeOpening struct {
+	assembly                  *legacyservice.Assembly
+	startFlights              singleflight.Group
+	factoryDefinitions        factorydefinitions.Service
+	resolveHome               factorysessions.HomeDirectoryResolver
 	runtimeRoot               FactoryRuntimeRoot
 	snapshotSelection         *RuntimeSnapshotSelection
 	baseLogger                *zap.Logger
@@ -65,8 +71,11 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
 	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
 	runtimeRoot FactoryRuntimeRoot, snapshots *RuntimeSnapshotSelection, logger *zap.Logger,
+	assembly roles.RuntimeAssembly, definitions factorydefinitions.Service, resolveHome factorysessions.HomeDirectoryResolver,
 ) *RuntimeOpening {
+	concrete, _ := assembly.(*legacyservice.Assembly)
 	return &RuntimeOpening{
+		assembly: concrete, factoryDefinitions: definitions, resolveHome: resolveHome,
 		runtimeRoot: runtimeRoot, snapshotSelection: snapshots, baseLogger: logger, replayInputs: recordingsRuntime,
 		resourceAcquisition: resources, openingCompletion: completion, openingBinding: binding, generateSessionID: generateSessionID, recordedInventory: inventory, preparation: preparation, durableOpening: durableOpening,
 		initialEngine: initialEngine, executionBinding: executionBinding,

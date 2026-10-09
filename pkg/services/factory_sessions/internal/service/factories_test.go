@@ -85,19 +85,15 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 	return NewRoot(
 		NewRuntimeOpening(fixture.preparation(), fixture.DurableOpening, initialEngine, NewExecutionBinding(fixture.ProviderOverride, fixture.ProviderCommandRunner), recordingreplay.NewBehavior(), fixture.RecordingsService, fixture.RecordingsRuntime, fixture.Clock, fixture.ResolveClock, fixture.ProviderOverride, fixture.GenerateRuntimeInstanceID, nil, fixture.GenerateSessionID, inventory, fixture.resourceAcquisition(),
 			NewRuntimeOpeningCompletion(fixture.Assembly, fixture.RuntimeRouter, fixture.WebhooksService, fixture.ProcessRuntimeFactory),
-			NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner), fixture.RuntimeRoot, fixture.snapshotSelection(), fixture.Logger),
+			NewRuntimeOpeningBinding(nil, fixture.RecordingsService, fixture.ProviderOverride, fixture.ProviderCommandRunner), fixture.RuntimeRoot, fixture.snapshotSelection(), fixture.Logger, fixture.Assembly, fixture.Definitions, fixture.ResolveHome),
 		fixture.ProviderSessions,
-		fixture.Logger,
 		fixture.WorkflowPreview,
 		fixture.Definitions,
-		fixture.snapshotSelection(),
 		fixture.Assembly,
 		fixture.GenerateSessionID,
-		fixture.ResolveHome,
 		fixture.WorkService,
 		fixture.ModelService,
 		fixture.RecordingsService,
-		fixture.RecordingsRuntime,
 		fixture.WorkerService,
 		nil,
 		fixture.LiveChangeCoordinator,
@@ -342,8 +338,7 @@ func (fixture runtimeOpeningFixture) preparation() *RuntimePreparation {
 		replayClock = fixture.RecordingsRuntime.ReplayClock
 	}
 	loading := NewRuntimeInputLoading(fixture.LoadFactory, fixture.NewLoadedFactory, fixture.DecodeReplayConfig, fixture.RecordingsRuntime, fixture.CaptureLoadedFactorySnapshot, fixture.NewSessionLogger, fixture.Logger)
-	return NewRuntimePreparation(loading.Load, resolveCurrentDir, fixture.GenerateRuntimeInstanceID,
-		fixture.ResolveHome, fixture.EnsureBackendScope, fixture.ProviderIdentities, fixture.Validator,
+	return NewRuntimePreparation(loading.Load, resolveCurrentDir, fixture.GenerateRuntimeInstanceID, fixture.ResolveHome, fixture.EnsureBackendScope, fixture.ProviderIdentities, fixture.Validator,
 		replayClock, fixture.ResolveClock)
 }
 
@@ -555,7 +550,7 @@ func TestRuntimeOpeningPreparationFailureDoesNotAllocateCanonicalMetricsIdentity
 				func() (string, error) { return preparationPath("home"), nil }, nil, nil, nil, nil, nil)
 			operation := NewRuntimeOpening(preparation, nil, nil, nil, nil,
 				&recordingsRootConstructionStub{}, &recordingsRootConstructionStub{}, nil, nil, nil,
-				func() string { identityRequests++; return id + "-metrics-identity" }, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+				func() string { identityRequests++; return id + "-metrics-identity" }, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			if loadRequests != 0 || identityRequests != 0 {
 				t.Fatal("construction performed request-scoped work")
 			}

@@ -43,7 +43,7 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	_, replay, closeArtifacts, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	_, replay, closeArtifacts, err := factory.opening.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -75,14 +75,14 @@ func TestCheckpointPortableReplayFailedOpeningPreservesPartialCleanup(t *testing
 	var events []string
 	owner := &portableReplayRuntimeOwner{restorable: true, events: &events}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	factory.opening.initialEngine = NewRuntimeInitialEngine(factory.snapshotSelection.Resolve, portableReplayRuntimeAssemblerStub{
+	factory.opening.initialEngine = NewRuntimeInitialEngine(factory.opening.snapshotSelection.Resolve, portableReplayRuntimeAssemblerStub{
 		runtime: &portableReplayRuntimeRecord{closeArtifacts: func() error {
 			events = append(events, "partial-runtime-close")
 			return artifactErr
 		}},
 		err: openingErr,
 	}.Open)
-	_, replay, closeArtifacts, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	_, replay, closeArtifacts, err := factory.opening.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,9 +161,9 @@ func TestCheckpointPortableReplayFailedDurableAcquisitionReleasesOwnerAndRetries
 				return acquire(ctx, facts, clock, logger)
 			})
 			request := portableCheckpointOwnerFixture(t).startRequest()
-			failedLifecycle, failedReplay, failedClose, err := factory.openForRequest(t.Context(), request)
+			failedLifecycle, failedReplay, failedClose, err := factory.opening.openForRequest(t.Context(), request)
 			assertFailedReplayAcquisition(t, failedLifecycle, failedReplay, failedClose, err, failure, closeErr, events)
-			_, retriedReplay, retriedClose, err := factory.openForRequest(t.Context(), request)
+			_, retriedReplay, retriedClose, err := factory.opening.openForRequest(t.Context(), request)
 			if err != nil || retriedReplay == nil || attempts != 2 {
 				t.Fatalf("same-request retry = %v, attempts %d, execution present %v", err, attempts, retriedReplay != nil)
 			}
@@ -349,7 +349,7 @@ func TestCheckpointPortableReplayWiresPublicDispatchHandoff(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	_, replay, _, err := factory.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
+	_, replay, _, err := factory.opening.openForRequest(t.Context(), portableCheckpointOwnerFixture(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -936,7 +936,7 @@ func TestCheckpointPortableReplayBindingFailureRetainsCleanupAndRetry(t *testing
 	owner := &portableReplayRuntimeOwner{restorable: true, workerErr: cause, closeErr: cleanupCause}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
 	request := portableCheckpointOwnerFixture(t).startRequest()
-	_, failedReplay, failedClose, err := factory.openForRequest(t.Context(), request)
+	_, failedReplay, failedClose, err := factory.opening.openForRequest(t.Context(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +953,7 @@ func TestCheckpointPortableReplayBindingFailureRetainsCleanupAndRetry(t *testing
 		t.Fatalf("cleanup retry: %v", err)
 	}
 	owner.workerErr = nil
-	_, retriedReplay, retriedClose, err := factory.openForRequest(t.Context(), request)
+	_, retriedReplay, retriedClose, err := factory.opening.openForRequest(t.Context(), request)
 	if err != nil {
 		t.Fatal(err)
 	}

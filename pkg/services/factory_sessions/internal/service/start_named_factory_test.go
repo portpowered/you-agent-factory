@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -142,12 +143,12 @@ func TestPrepareLiveStartRequestNormalizesSelectionAndValidatesTarget(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	root.resolveHome = func() (string, error) { return "/home/operator", nil }
-	root.inheritCurrentSelection("other", &factorysessions.SessionRuntimeSelection{}) // missing current remains safe
+	root.opening.resolveHome = func() (string, error) { return "/home/operator", nil }
+	root.opening.inheritCurrentSelection("other", &factorysessions.SessionRuntimeSelection{}) // missing current remains safe
 	selection := factorysessions.SessionRuntimeSelection{}
 	// The source selection is copied, so normalization cannot mutate its caller.
 	request := factorysessions.SessionStartRequest{FolderPath: "/project", RuntimeSelection: &selection}
-	selected, err := root.prepareLiveStartRequest(context.Background(), request, factorysessions.DefaultSessionID)
+	selected, err := root.opening.prepareLiveStartRequest(context.Background(), request, factorysessions.DefaultSessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +157,7 @@ func TestPrepareLiveStartRequestNormalizesSelectionAndValidatesTarget(t *testing
 	}
 	named := request
 	named.Target = &factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "  reviews  "}
-	selected, err = root.prepareLiveStartRequest(context.Background(), named, "session-1")
+	selected, err = root.opening.prepareLiveStartRequest(context.Background(), named, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,12 +171,12 @@ func TestPrepareLiveStartRequestNormalizesSelectionAndValidatesTarget(t *testing
 	} {
 		invalid := request
 		invalid.Target = &target
-		if _, err := root.prepareLiveStartRequest(context.Background(), invalid, "session-1"); err == nil {
+		if _, err := root.opening.prepareLiveStartRequest(context.Background(), invalid, "session-1"); err == nil {
 			t.Fatalf("accepted invalid target %+v", target)
 		}
 	}
-	root.resolveHome = func() (string, error) { return "", errors.New("home unavailable") }
-	if _, err := root.prepareLiveStartRequest(context.Background(), request, "session-1"); err == nil || !strings.Contains(err.Error(), "home unavailable") {
+	root.opening.resolveHome = func() (string, error) { return "", errors.New("home unavailable") }
+	if _, err := root.opening.prepareLiveStartRequest(context.Background(), request, "session-1"); err == nil || !strings.Contains(err.Error(), "home unavailable") {
 		t.Fatalf("home resolution error = %v", err)
 	}
 }
@@ -296,7 +297,7 @@ func TestStartAppliesDurableDefaultsAndReportsUnavailableExecution(t *testing.T)
 		t.Fatal(err)
 	}
 	request := factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeDurable, FolderPath: t.TempDir()}
-	prepared := root.prepareDurableStartRequest(request)
+	prepared := root.opening.prepareDurableStartRequest(request)
 	if prepared.WorkerSettings != nil || prepared.WorkerAttemptStarter != nil || prepared.WorkerResourceAdmission != nil {
 		t.Fatalf("unopened Factory supplied execution capabilities: %+v", prepared)
 	}
@@ -323,11 +324,11 @@ func TestStartHelpersKeepSessionSelectionAndBindingDetached(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root.setStartedSessionTarget("missing", selected)
-	if _, err := root.bindStartedSession(context.Background(), "missing", selected, &sessionActivation{lifecycle: &startLifecycleStub{}}, "request", nil); err == nil || !strings.Contains(err.Error(), "unavailable") {
+	root.opening.setStartedSessionTarget("missing", selected)
+	if _, err := root.opening.bindStartedSession(context.Background(), "missing", selected, &sessionActivation{lifecycle: &startLifecycleStub{}}, "request", nil); err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("binding absent session error = %v", err)
 	}
-	if _, found := root.startedForRequestID("request"); found {
+	if _, found := root.opening.startedForRequestID("request"); found {
 		t.Fatal("unstarted request appeared in idempotency lookup")
 	}
 	session := &livesession.LiveSession{ID: "canonical-1", SessionState: livesession.SessionState{FactoryDir: "/project/factory", FolderPath: "/project/factory/reviews"}, Target: *selected.Target}
@@ -383,7 +384,7 @@ func (s *startNamedDefinitions) ResolveNamedFactory(_ context.Context, request f
 
 func TestResolveStartFolderUsesRequestProjectForPackagedFactory(t *testing.T) {
 	definitions := &startNamedDefinitions{}
-	root := &Root{factoryDefinitions: definitions}
+	root := &Root{opening: &RuntimeOpening{factoryDefinitions: definitions}}
 	project := t.TempDir()
 	home := t.TempDir()
 	request := factorysessions.SessionStartRequest{
@@ -391,7 +392,7 @@ func TestResolveStartFolderUsesRequestProjectForPackagedFactory(t *testing.T) {
 		Source:     factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"},
 		Args:       map[string]any{"workingRoot": project},
 	}
-	got, err := root.resolveStartFolder(context.Background(), request, factorysessions.SessionRuntimeSelection{SystemConfigHome: home})
+	got, err := root.opening.resolveStartFolder(context.Background(), request, factorysessions.SessionRuntimeSelection{SystemConfigHome: home})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +410,7 @@ func TestResolveStartFolderUsesRequestProjectForPackagedFactory(t *testing.T) {
 
 func TestResolveStartFolderPreservesAlreadyResolvedFactory(t *testing.T) {
 	definitions := &startNamedDefinitions{}
-	root := &Root{factoryDefinitions: definitions}
+	root := &Root{opening: &RuntimeOpening{factoryDefinitions: definitions}}
 	project := t.TempDir()
 	factoryDir := filepath.Join(project, "factory", "@you", "subagent")
 	request := factorysessions.SessionStartRequest{
@@ -417,7 +418,7 @@ func TestResolveStartFolderPreservesAlreadyResolvedFactory(t *testing.T) {
 		Source:     factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"},
 		Args:       map[string]any{"workingRoot": project},
 	}
-	got, err := root.resolveStartFolder(context.Background(), request, factorysessions.SessionRuntimeSelection{})
+	got, err := root.opening.resolveStartFolder(context.Background(), request, factorysessions.SessionRuntimeSelection{})
 	if err != nil || got != factoryDir || definitions.calls != 0 {
 		t.Fatalf("resolved Factory directory = %q, calls = %d, error = %v", got, definitions.calls, err)
 	}
@@ -425,16 +426,16 @@ func TestResolveStartFolderPreservesAlreadyResolvedFactory(t *testing.T) {
 
 func TestActivationOnlyStartAllocatesDistinctSessionIdentities(t *testing.T) {
 	generated := 0
-	root := &Root{generateSessionID: func() string {
+	root := &Root{opening: &RuntimeOpening{generateSessionID: func() string {
 		generated++
 		return "chat-session-" + string(rune('0'+generated))
-	}}
+	}}}
 	request := factorysessions.SessionStartRequest{ActivationOnly: true}
-	first, err := root.sessionIDForStart(request)
+	first, err := root.opening.sessionIDForStart(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := root.sessionIDForStart(request)
+	second, err := root.opening.sessionIDForStart(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,8 +443,37 @@ func TestActivationOnlyStartAllocatesDistinctSessionIdentities(t *testing.T) {
 		t.Fatalf("activation IDs = %q, %q; want distinct non-default IDs", first, second)
 	}
 	request.SessionID = first
-	reused, err := root.sessionIDForStart(request)
+	reused, err := root.opening.sessionIDForStart(request)
 	if err != nil || reused != first || generated != 2 {
 		t.Fatalf("explicit activation ID = %q, generated = %d, error = %v", reused, generated, err)
+	}
+}
+
+func TestRuntimeOpeningStartAdmissionFailurePreservesCauseAndCanRetry(t *testing.T) {
+	for _, id := range []string{"session-a", "session-b", "session-c", "session-d"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			cause := &factorysessions.DetachedRequestError{Field: "home", Message: id}
+			homes, identities := 0, 0
+			opening := &RuntimeOpening{
+				assembly:          &legacyservice.Assembly{},
+				resolveHome:       func() (string, error) { homes++; return "", cause },
+				generateSessionID: func() string { identities++; return id },
+			}
+			request := factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, FolderPath: "/factory"}
+			result, err := opening.Start(t.Context(), request)
+			var typed *factorysessions.DetachedRequestError
+			if !errors.Is(err, cause) || !errors.As(err, &typed) || typed != cause || result.SessionID != "" || homes != 1 || identities != 0 {
+				t.Fatalf("failed admission = %+v, error=%v, homes=%d identities=%d", result, err, homes, identities)
+			}
+			// Correcting home selection must progress to target validation on the same
+			// owner, without allocating or acquiring a runtime on either failure.
+			request.RuntimeSelection = &factorysessions.SessionRuntimeSelection{SystemConfigHome: "/selected/home"}
+			request.Target = &factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "nested/name"}
+			result, err = opening.Start(t.Context(), request)
+			if err == nil || !strings.Contains(err.Error(), "invalid named Factory Session target") || errors.Is(err, cause) || result.SessionID != "" || homes != 1 || identities != 0 {
+				t.Fatalf("corrected admission = %+v, error=%v, homes=%d identities=%d", result, err, homes, identities)
+			}
+		})
 	}
 }

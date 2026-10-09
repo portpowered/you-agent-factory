@@ -129,28 +129,24 @@ func NewRuntimeOpening(preparation *RuntimePreparation, durableOpening *DurableO
 	generateSessionID factorysessions.SessionIDGenerator, inventory recordings.RecordedSessionInventory,
 	resources *RuntimeResourceAcquisition, completion *RuntimeOpeningCompletion, binding *RuntimeOpeningBinding,
 	runtimeRoot FactoryRuntimeRoot, snapshots *RuntimeSnapshotSelection, logger *zap.Logger,
+	assembly RuntimeAssembly, definitions factorydefinitions.Service, resolveHome factorysessions.HomeDirectoryResolver,
 ) *RuntimeOpening {
 	return service.NewRuntimeOpening(preparation, durableOpening, initialEngine, executionBinding,
 		replayBehavior, recordingsService, recordingsRuntime, clock, resolveClock, providerOverride,
-		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding, runtimeRoot, snapshots, logger)
+		generateRuntimeInstanceID, runtimeLogs, generateSessionID, inventory, resources, completion, binding, runtimeRoot, snapshots, logger, assembly, definitions, resolveHome)
 }
 
 func NewRoot(
 	opening *RuntimeOpening,
 	providerSessions providersessions.Service,
-	logger *zap.Logger,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	definitions factorydefinitions.Service,
 
-	snapshotSelection *RuntimeSnapshotSelection,
-
 	assembly RuntimeAssembly,
 	generateSessionID factorysessions.SessionIDGenerator,
-	resolveHome factorysessions.HomeDirectoryResolver,
 	workService work.Service,
 	modelService models.Service,
 	recordingsService recordings.Service,
-	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
 	modelInvocation RuntimeModelInvocationOperation,
 	liveChangeCoordinator factorysessionwirecontracts.LiveChangeCoordinator,
@@ -159,19 +155,14 @@ func NewRoot(
 	return service.NewRoot(
 		opening,
 		providerSessions,
-		logger,
 		workflowPreview,
 		definitions,
 
-		snapshotSelection,
-
 		assembly,
 		generateSessionID,
-		resolveHome,
 		workService,
 		modelService,
 		recordingsService,
-		recordingsRuntime,
 		workerService,
 		modelInvocation,
 		liveChangeCoordinator,

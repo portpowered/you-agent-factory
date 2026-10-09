@@ -615,12 +615,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v173 := wire5.NewRuntimeOpening(v39, v95, v163, v164, v165, recordingsService, v34, source, clockResolver, v91, runtimeInstanceIDGenerator, factoryRuntimeLogOwner, v45, recordedSessionInventory, v166, v169, v170, v172, v103, logger)
+	v173 := wire5.NewRuntimeOpening(v39, v95, v163, v164, v165, recordingsService, v34, source, clockResolver, v91, runtimeInstanceIDGenerator, factoryRuntimeLogOwner, v45, recordedSessionInventory, v166, v169, v170, v172, v103, logger, v126, factorydefinitionsService, homeDirectoryResolver)
 	workflowPreviewOperation := provideWorkflowPreviewOperation(javaScriptWorkflows)
 	v174 := provideRuntimeModelFactoryConfigReader(v126)
 	v175 := provideRuntimeModelWorkerExecution(workersService)
 	v176 := wire5.NewRuntimeModelInvocation(modelsService, v174, v175)
-	v177, err := wire5.NewRoot(v173, providersessionsService, logger, workflowPreviewOperation, factorydefinitionsService, v103, v126, v45, homeDirectoryResolver, workService, modelsService, recordingsService, v34, workersService, v176, liveChangeCoordinator, v21)
+	v177, err := wire5.NewRoot(v173, providersessionsService, workflowPreviewOperation, factorydefinitionsService, v126, v45, workService, modelsService, recordingsService, workersService, v176, liveChangeCoordinator, v21)
 	if err != nil {
 		return nil, err
 	}
