@@ -95,7 +95,7 @@ func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan
 
 // Read outside the registry lock; reservation later rechecks the immutable
 // source attempt. A replay already reserved in this host needs no storage read.
-func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
+func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, callers ...context.Context) (*workers.WorkstationDispatchRequest, error) {
 	r.mu.RLock()
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	source, exists := r.sessions[address]
@@ -103,9 +103,13 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*
 	_, replay := r.continueReplays[req.RequestID]
 	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
 	factorySessionID := ""
+	var terminalPublished <-chan struct{}
 	if supervision := r.supervisions[address]; supervision != nil {
 		supervision.mu.Lock()
 		factorySessionID = supervision.execution.Execution.FactorySessionID
+		if supervision.accepted {
+			terminalPublished = supervision.done
+		}
 		supervision.mu.Unlock()
 	}
 	source = cloneSession(source)
@@ -117,6 +121,20 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest) (*
 		return nil, err
 	}
 	ctx := r.serverOwnedContext()
+	// Terminal state is visible before capture finalization. Join the exact
+	// admitted attempt's publication, outside the registry lock, before reading
+	// the durable recipe. A peer's completion cannot release this barrier.
+	if terminalPublished != nil {
+		waitCtx := ctx
+		if len(callers) != 0 && callers[0] != nil {
+			waitCtx = callers[0]
+		}
+		select {
+		case <-terminalPublished:
+		case <-waitCtx.Done():
+			return nil, waitCtx.Err()
+		}
+	}
 	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
 	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable

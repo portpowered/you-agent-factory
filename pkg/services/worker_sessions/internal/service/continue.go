@@ -142,7 +142,7 @@ func (r *registry) Continue(
 	if addressErr != nil {
 		return workersessions.ContinueResult{}, addressErr
 	}
-	replay, owner, err := r.reserveContinuation(req)
+	replay, owner, err := r.reserveContinuation(req, callerCtx)
 	if err != nil {
 		r.logContinuationRejected(req, continuationReservationOutcome(err))
 		return workersessions.ContinueResult{}, err
@@ -192,8 +192,9 @@ func (r *registry) Continue(
 // Workers/provider effect can occur.
 func (r *registry) reserveContinuation(
 	req workersessions.ContinueRequest,
+	callers ...context.Context,
 ) (*continueReplay, bool, error) {
-	captured, err := r.readContinuationRecipe(req)
+	captured, err := r.readContinuationRecipe(req, callers...)
 	if err != nil {
 		return nil, false, err
 	}

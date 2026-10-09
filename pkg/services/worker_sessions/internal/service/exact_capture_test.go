@@ -939,3 +939,23 @@ func TestWorkerWorkAttributionCaptureRequestCarriesOriginatingArtifact(t *testin
 		t.Fatalf("capture request = %+v", recorder.request)
 	}
 }
+
+func TestContinuationTerminalPublicationWaitHonorsCallerCancellation(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	supervision := newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	supervision.accepted = true
+	r.supervisions[req.SourceWorkerSessionID] = supervision
+	r.observations[req.SourceWorkerSessionID] = &observation{direct: true}
+	r.logs = &LogReader{reader: &controlCaptureReader{}}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := r.readContinuationRecipe(req, ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("terminal publication wait = %v, want caller cancellation", err)
+	}
+	if len(r.continueReplays) != 0 || len(r.sessions) != 1 {
+		t.Fatal("canceled publication wait reserved a successor")
+	}
+}

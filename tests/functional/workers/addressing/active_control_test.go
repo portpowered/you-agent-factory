@@ -22,6 +22,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -146,6 +147,9 @@ func openAddressingOwner(t *testing.T, f *replayFixture) replayOwner {
 	if err := os.WriteFile(filepath.Join(owner.dir, "factory.json"), config, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	f.group.mu.Lock()
+	f.group.runners[owner.dir] = f.runner
+	f.group.mu.Unlock()
 	owner.session = support.OpenFactorySessionAt(t, f.url, owner.dir).Session.Id
 	// The fixture Process.Close cleanup cancels and joins every owned session.
 	return owner
@@ -252,6 +256,7 @@ func assertSameJSON(t *testing.T, first, second []byte) {
 type addressingRunner struct {
 	mu                   sync.Mutex
 	requests             []platformprocess.CommandRequest
+	nativeSession        string
 	started              chan struct{}
 	release              chan struct{}
 	releaseOnce          sync.Once
@@ -267,12 +272,16 @@ func (r *addressingRunner) Run(ctx context.Context, req platformprocess.CommandR
 
 func (r *addressingRunner) RunStreaming(ctx context.Context, req platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
+	if r.nativeSession == "" {
+		r.nativeSession = "addressing-native-" + uuid.NewString()
+	}
+	nativeSession := r.nativeSession
 	req.Args = append([]string(nil), req.Args...)
 	r.requests = append(r.requests, platformprocess.CommandRequest{Command: req.Command, Args: req.Args,
 		Stdin: append([]byte(nil), req.Stdin...), WorkDir: req.WorkDir})
 	r.mu.Unlock()
 	r.calls.Add(1)
-	thread := []byte("{\"type\":\"thread.started\",\"thread_id\":\"addressing-native\"}\n")
+	thread := []byte(fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", nativeSession))
 	if observe != nil {
 		observe(platformprocess.OutputStreamStdout, thread)
 	}
@@ -299,18 +308,56 @@ func (r *addressingRunner) RunStreaming(ctx context.Context, req platformprocess
 func TestSelectedLegacyCollisionContinuation(t *testing.T) {
 	t.Parallel()
 	runner := &addressingRunner{started: make(chan struct{}, 2), release: make(chan struct{})}
-	f := newReplayFixtureWithRunner(t, runner, 1)
-	t.Cleanup(func() { runner.releaseOnce.Do(func() { close(runner.release) }) })
+	gate := &selectedTerminalGateStore{arrived: make(chan struct{}), release: make(chan struct{})}
+	f := newReplayFixtureWithEdges(t, runner, 1, serviceedges.Edges{WorkerRecordingWriter: gate})
+	var continuation sync.WaitGroup
+	t.Cleanup(func() {
+		gate.once.Do(func() { close(gate.release) })
+		runner.releaseOnce.Do(func() { close(runner.release) })
+		continuation.Wait()
+	})
 	live := openAddressingOwner(t, f)
 	invokeAddressingSource(t, f, live)
 	awaitAddressingStart(t, runner, f, live)
 	runner.releaseOnce.Do(func() { close(runner.release) })
 	waitAddressingCompleted(t, f, f.worker, live.session)
+	select {
+	case <-gate.arrived:
+	case <-time.After(15 * time.Second):
+		t.Fatal("source terminal did not reach recording writer")
+	}
 
 	body, flags := controlInput("continue")
 	body["factorySessionId"] = live.session
 	path := "/worker-sessions/" + f.worker + "/continue"
-	status, first := f.http(t, "POST", path, body)
+	type response struct {
+		status int
+		raw    []byte
+	}
+	continued := make(chan response, 1)
+	continuation.Add(1)
+	go func() {
+		defer continuation.Done()
+		status, raw := f.http(t, "POST", path, body)
+		continued <- response{status, raw}
+	}()
+	// Observe both selected and peer identities while terminal persistence is
+	// held. Admission must succeed after the exact source publication joins.
+	assertAddressingState(t, f, live, "COMPLETED")
+	peerStatus, peerRaw := f.http(t, "GET", "/worker-sessions/"+f.worker+"?factorySessionId="+f.owners[0].session, nil)
+	if peerStatus != http.StatusOK {
+		t.Fatalf("peer during terminal publication = %d: %s", peerStatus, peerRaw)
+	}
+	assertOwner(t, f, f.owners[0], peerRaw)
+	assertAddressingEffects(t, runner, 1, 0)
+	gate.once.Do(func() { close(gate.release) })
+	var result response
+	select {
+	case result = <-continued:
+	case <-time.After(15 * time.Second):
+		t.Fatal("continuation did not join terminal sync")
+	}
+	status, first := result.status, result.raw
 	if status != http.StatusAccepted {
 		t.Fatalf("selected continuation = %d: %s", status, first)
 	}
@@ -352,12 +399,13 @@ func TestSelectedLegacyCollisionContinuation(t *testing.T) {
 	assertAddressingEffects(t, runner, 2, 0)
 	runner.mu.Lock()
 	requests := append([]platformprocess.CommandRequest(nil), runner.requests...)
+	nativeSession := runner.nativeSession
 	runner.mu.Unlock()
 	if len(requests) != 2 || strings.Contains(strings.Join(requests[0].Args, " "), "resume") {
 		t.Fatalf("initial provider requests: %#v", requests)
 	}
 	resume := strings.Join(requests[1].Args, " ")
-	if !strings.Contains(resume, "resume") || !strings.Contains(resume, "addressing-native") ||
+	if !strings.Contains(resume, "resume") || !strings.Contains(resume, nativeSession) ||
 		string(requests[1].Stdin) != "replacement" || requests[1].WorkDir != live.dir {
 		t.Fatalf("selected provider continuation: %#v", requests[1])
 	}
@@ -443,4 +491,26 @@ func TestSelectedLegacyCollisionUnsupportedProvider(t *testing.T) {
 	runner.releaseOnce.Do(func() { close(runner.release) })
 	waitAddressingCompleted(t, f, f.worker, live.session)
 	assertAddressingEffects(t, runner, 1, 0)
+}
+
+// Hold only the selected source's terminal persistence at the external edge;
+// public observation remains available, as do all other scenarios.
+type selectedTerminalGateStore struct {
+	recordings.WorkerRecordingStore
+	source           string
+	arrived, release chan struct{}
+	once, arriveOnce sync.Once
+}
+
+func (s *selectedTerminalGateStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	var draft workers.Draft
+	if record.WorkerSessionID == s.source && json.Unmarshal(record.Record.Payload, &draft) == nil && draft.Kind == workers.KindSession && draft.Phase == workers.PhaseCompleted {
+		s.arriveOnce.Do(func() { close(s.arrived) })
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
