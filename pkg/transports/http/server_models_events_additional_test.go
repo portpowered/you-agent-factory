@@ -331,7 +331,7 @@ func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
 	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
-		modelshttp.NewHandler(modelshttp.NewSessionAdapter(models, strictModelsServiceInvoker{fake: models}, modelHTTPContentPreparation{}, modelHTTPTestScope(), "~default"), logger),
+		modelshttp.NewHandler(modelshttp.NewSessionAdapter(models, strictModelsServiceInvoker{fake: models}, modelHTTPContentPreparation{}, func(context.Context) modelinference.RuntimeScopeRef { return modelHTTPTestScope() }, func(context.Context) string { return "~default" }), logger),
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)

@@ -46,7 +46,7 @@ func TestAdapterMapsExactReportAndRuntimeInputs(t *testing.T) {
 			ProviderModels: []costs.ProviderModelRollup{{Provider: "provider", Model: "known", Rollup: costs.Rollup{Key: "provider/known", Currency: "USD", Status: costs.StatusPriced, KnownCost: &amount, PricedSubtotal: &amount, TokenTotals: costs.TokenTotals{TotalTokens: &totalTokens, InputTokens: &inputTokens, OutputTokens: &outputTokens}, UnpricedPairs: []costs.UnpricedPair{}}}},
 		}, nil
 	})
-	adapter := NewAdapter(query, " metrics-root ", " settings.json ", identityScopeResolver())
+	adapter := NewAdapter(query, staticRuntimePaths(" metrics-root ", " settings.json "), identityScopeResolver())
 	if adapter == nil {
 		t.Fatal("NewAdapter() returned nil")
 	}
@@ -79,7 +79,7 @@ func TestAdapterPassesResolvedScopeAndPublicSelectorToCostsQuery(t *testing.T) {
 		}, nil
 	})
 
-	got, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), " ~default ")
+	got, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), resolver).GetMetricsCosts(context.Background(), " ~default ")
 	if err != nil {
 		t.Fatalf("GetMetricsCosts() error = %v", err)
 	}
@@ -106,7 +106,7 @@ func TestAdapterMapsUnknownSelectorToTypedNotFound(t *testing.T) {
 		return factorysessions.RuntimeMetricsScope{}, factorysessions.ErrSessionNotFound
 	})
 
-	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), "missing-session")
+	_, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), resolver).GetMetricsCosts(context.Background(), "missing-session")
 	var scopeErr *costsScopeError
 	if !errors.As(err, &scopeErr) || !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("GetMetricsCosts() error = %v, want typed not-found", err)
@@ -128,7 +128,7 @@ func TestAdapterFailsClosedWhenScopeResolutionIsUnavailable(t *testing.T) {
 		return factorysessions.RuntimeMetricsScope{}, want
 	})
 
-	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), "selected-session")
+	_, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), resolver).GetMetricsCosts(context.Background(), "selected-session")
 	var queryErr *costs.QueryError
 	if !errors.As(err, &queryErr) || queryErr.Kind != costs.QueryErrorMetricsFailed || !errors.Is(err, want) {
 		t.Fatalf("scope resolution error = %v, want typed wrapped metrics failure", err)
@@ -158,7 +158,7 @@ func TestAdapterMapsBothPriceSourcesAndOmitsSourceForUnpricedRows(t *testing.T) 
 		}, nil
 	})
 
-	got, err := NewAdapter(query, "metrics", "settings", identityScopeResolver()).GetMetricsCosts(context.Background(), "")
+	got, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()).GetMetricsCosts(context.Background(), "")
 	if err != nil {
 		t.Fatalf("GetMetricsCosts() error = %v", err)
 	}
@@ -271,7 +271,7 @@ func TestAdapterPropagatesQueryFailure(t *testing.T) {
 	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
 		return costs.Report{}, want
 	})
-	_, err := NewAdapter(query, "metrics", "settings", identityScopeResolver()).GetMetricsCosts(context.Background(), "session")
+	_, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()).GetMetricsCosts(context.Background(), "session")
 	if !errors.Is(err, want) {
 		t.Fatalf("error = %v, want original failure", err)
 	}
@@ -286,7 +286,7 @@ func TestAdapterFailsClosedForEmptyRetainedScope(t *testing.T) {
 	resolver := metricsScopeResolverFunc(func(context.Context, string) (factorysessions.RuntimeMetricsScope, error) {
 		return factorysessions.RuntimeMetricsScope{}, nil
 	})
-	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), "selected")
+	_, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), resolver).GetMetricsCosts(context.Background(), "selected")
 	var typed *costs.QueryError
 	if !errors.As(err, &typed) || typed.Kind != costs.QueryErrorMetricsFailed {
 		t.Fatalf("error=%v, want metrics failure", err)
@@ -304,8 +304,33 @@ func TestAdapterAllSessionsDoesNotResolveScope(t *testing.T) {
 		t.Fatal("all-session query resolved a selector")
 		return factorysessions.RuntimeMetricsScope{}, nil
 	})
-	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), " ")
+	_, err := NewAdapter(query, staticRuntimePaths("metrics", "settings"), resolver).GetMetricsCosts(context.Background(), " ")
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func staticRuntimePaths(metricsRoot, settingsPath string) func(context.Context) (string, string) {
+	return func(context.Context) (string, string) { return metricsRoot, settingsPath }
+}
+
+func TestCostsAdapterSharesOwnersButIsolatesHostPaths(t *testing.T) {
+	t.Parallel()
+	query := costs.CostsQuery(func(_ context.Context, request costs.QueryRequest) (costs.Report, error) {
+		if request.MetricsRoot != request.FactorySessionID+"/metrics" || request.OperatorSettingsPath != request.FactorySessionID+"/settings" {
+			t.Errorf("cross-host paths: %#v", request)
+		}
+		return costs.Report{Scope: costs.Scope{Kind: costs.ScopeFactorySession, FactorySessionID: request.FactorySessionID}, Status: costs.StatusNoUsage}, nil
+	})
+	adapter := NewAdapter(query, RuntimePaths, identityScopeResolver())
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			ctx := WithRuntimePaths(context.Background(), " "+id+"/metrics ", " "+id+"/settings ")
+			report, err := adapter.GetMetricsCosts(ctx, id)
+			if err != nil || report.Scope.FactorySessionId == nil || *report.Scope.FactorySessionId != id {
+				t.Fatalf("report=%#v error=%v", report, err)
+			}
+		})
 	}
 }

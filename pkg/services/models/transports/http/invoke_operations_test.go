@@ -899,20 +899,20 @@ func stringPointer(value string) *string {
 
 func TestAdapterModelInvocationUsesTheHostingSessionSelection(t *testing.T) {
 	t.Parallel()
+	invoker := addressedModelInvokerFake{invoke: func(_ context.Context, id, name string, request models.Request) (models.Result, error) {
+		return models.Result{ModelName: name, Worker: id + "-worker", Operation: request.Operation}, nil
+	}}
+	adapter := NewSessionAdapter(&rootFake{}, invoker, passthroughContentPreparation{}, ModelsScope, SessionID)
+	handler := NewHandler(adapter, zap.NewNop())
 	for _, sessionID := range []string{"selected-session", "peer-session"} {
 		t.Run(sessionID, func(t *testing.T) {
 			t.Parallel()
-			var observedID string
-			invoker := addressedModelInvokerFake{invoke: func(_ context.Context, id, name string, request models.Request) (models.Result, error) {
-				observedID = id
-				return models.Result{ModelName: name, Worker: id + "-worker", Operation: request.Operation}, nil
-			}}
-			adapter := NewSessionAdapter(&rootFake{}, invoker, passthroughContentPreparation{}, models.RuntimeScopeRef{}, sessionID)
-			handler := NewHandler(adapter, zap.NewNop())
 			recorder := httptest.NewRecorder()
-			handler.InvokeModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`)), "voice")
-			if observedID != sessionID || recorder.Code != http.StatusOK {
-				t.Fatalf("session=%q status=%d body=%s", observedID, recorder.Code, recorder.Body.String())
+			request := httptest.NewRequest(http.MethodPost, "/models/voice/invocations", strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello"}]}`))
+			request = request.WithContext(WithRuntimeSelection(request.Context(), sessionID, models.RuntimeScopeRef{}))
+			handler.InvokeModel(recorder, request, "voice")
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
 			var response factoryapi.ModelInvocationResponse
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {

@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -18,10 +17,10 @@ var (
 // Adapter maps Models service values at the outward HTTP boundary.
 type Adapter struct {
 	models         models.Service
-	scope          models.RuntimeScopeRef
+	scope          func(context.Context) models.RuntimeScopeRef
 	content        work.ContentPreparation
 	sessionInvoker SessionModelInvoker
-	sessionID      string
+	sessionID      func(context.Context) string
 }
 
 // SessionModelInvoker is the addressed invocation capability consumed by a live host.
@@ -29,10 +28,10 @@ type SessionModelInvoker interface {
 	InvokeModelForSession(context.Context, string, string, models.Request) (models.Result, error)
 }
 
-// NewSessionAdapter retains the host's explicit session selection on this
-// representation boundary; the invocation owner remains process-scoped.
-func NewSessionAdapter(service models.Service, invoker SessionModelInvoker, content work.ContentPreparation, scope models.RuntimeScopeRef, sessionID string) *Adapter {
-	if service == nil || invoker == nil || content == nil || strings.TrimSpace(sessionID) == "" {
+// NewSessionAdapter constructs the fixed representation boundary. Its fact
+// readers consume the host selection from each request; owners stay injected.
+func NewSessionAdapter(service models.Service, invoker SessionModelInvoker, content work.ContentPreparation, scope func(context.Context) models.RuntimeScopeRef, sessionID func(context.Context) string) *Adapter {
+	if service == nil || invoker == nil || content == nil || scope == nil || sessionID == nil {
 		return nil
 	}
 	return &Adapter{models: service, scope: scope, content: content, sessionInvoker: invoker, sessionID: sessionID}
@@ -60,7 +59,7 @@ func (a *Adapter) InvokeModel(
 		return models.Result{}, err
 	}
 	mapped.Content = prepared
-	return a.sessionInvoker.InvokeModelForSession(ctx, a.sessionID, modelName, mapped)
+	return a.sessionInvoker.InvokeModelForSession(ctx, a.sessionID(ctx), modelName, mapped)
 }
 
 // InvokeGenericModel maps and validates the provider-neutral request before it
@@ -73,7 +72,7 @@ func (a *Adapter) InvokeGenericModel(
 	if a == nil || a.models == nil {
 		return models.GenericInvocationResult{}, errModelsServiceRequired
 	}
-	if a.scope.IsZero() {
+	if a.scope(ctx).IsZero() {
 		return models.GenericInvocationResult{}, models.ErrRuntimeScopeInvalid
 	}
 	mapped, err := GenericInvocationRequestFromGenerated(request)
@@ -83,7 +82,7 @@ func (a *Adapter) InvokeGenericModel(
 	// The HTTP handler is already bound to the live Models runtime scope. Keep
 	// that process-owned scope authoritative instead of trusting a caller to
 	// select a different runtime through the generic request body.
-	mapped.Scope = a.scope
+	mapped.Scope = a.scope(ctx)
 	if err := mapped.ValidateGeneric(); err != nil {
 		return models.GenericInvocationResult{}, err
 	}
@@ -100,14 +99,36 @@ func (a *Adapter) RemoveModel(
 	if a == nil || a.models == nil {
 		return models.RemoveModelAssetsResult{}, errModelsServiceRequired
 	}
-	if a.scope.IsZero() {
+	if a.scope(ctx).IsZero() {
 		return models.RemoveModelAssetsResult{}, models.ErrRuntimeScopeInvalid
 	}
 	request := models.RemoveModelAssetsRequest{
-		Scope: a.scope, Name: modelName, ReclaimUnusedCache: reclaimUnusedCache,
+		Scope: a.scope(ctx), Name: modelName, ReclaimUnusedCache: reclaimUnusedCache,
 	}
 	if err := request.Validate(); err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
 	return a.models.RemoveModelAssets(ctx, request)
+}
+
+// WithRuntimeSelection attaches only the selected host's identity and Models
+// scope facts. The fixed HTTP adapter never retrieves collaborators from context.
+func WithRuntimeSelection(ctx context.Context, sessionID string, scope models.RuntimeScopeRef) context.Context {
+	ctx = context.WithValue(ctx, modelSessionKey{}, sessionID)
+	return context.WithValue(ctx, modelScopeKey{}, scope)
+}
+
+type modelSessionKey struct{}
+type modelScopeKey struct{}
+
+// SessionID reads the identity selected by the HTTP host shell.
+func SessionID(ctx context.Context) string {
+	id, _ := ctx.Value(modelSessionKey{}).(string)
+	return id
+}
+
+// ModelsScope reads the scope selected by the HTTP host shell.
+func ModelsScope(ctx context.Context) models.RuntimeScopeRef {
+	scope, _ := ctx.Value(modelScopeKey{}).(models.RuntimeScopeRef)
+	return scope
 }

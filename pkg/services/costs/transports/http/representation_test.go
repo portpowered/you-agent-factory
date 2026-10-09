@@ -32,7 +32,7 @@ func TestCostsReportRepresentationPricingCases(t *testing.T) {
 				return costs.Report{Currency: "USD", Status: tc.status, KnownCost: amount, TokenTotals: totals, UnpricedDispatchCount: tc.unpricedDispatchCount, UnpricedPairs: pairs, LineItems: tc.rows, WorkItems: []costs.Rollup{rollup}, WorkerSessions: []costs.Rollup{rollup}, FactorySessions: []costs.Rollup{rollup}, ProviderModels: []costs.ProviderModelRollup{{Rollup: rollup}}}, nil
 			})
 			recorder := httptest.NewRecorder()
-			NewHandler(NewAdapter(query, "metrics", "settings", identityScopeResolver()), zap.NewNop()).GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
+			NewHandler(NewAdapter(query, staticRuntimePaths("metrics", "settings"), identityScopeResolver()), zap.NewNop()).GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}

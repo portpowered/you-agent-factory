@@ -147,13 +147,16 @@ func provideHTTPRuntimeBindingWithMetrics(
 	factoryDefinitionsHandler := factorydefinitionshttp.NewHandler(
 		definitions, factorydefinitionshttp.NewTopologyValidation(definitions), logger,
 	)
+	modelsHandler := modelshttp.NewHandler(modelshttp.NewSessionAdapter(modelService, root, modelsContent, modelshttp.ModelsScope, modelshttp.SessionID), logger)
+	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(costsQuery, costshttp.RuntimePaths, metricsScopeResolver), logger)
+	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(metricsQuery, metricsScopeResolver, factoryvisualizationhttp.MetricsRoot), logger)
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
 				return nil, err
 			}
 		}
-		return newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, metricsScopeResolver, workService, modelService, sessionID, cancellation, providerSessionsHTTP, modelsContent, metricsQuery, costsQuery, logs, writer, clock, snapshots, attribution)
+		return newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, workService, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, logs, writer, clock, snapshots, attribution, logger)
 	}, nil
 }
 
@@ -163,20 +166,19 @@ func newHTTPRuntimeHandlerWithMetrics(
 	sessionsHandler *factorysessionshttp.Handler,
 	factoryDefinitionsHandler *factorydefinitionshttp.Handler,
 	workHandler *workhttp.Adapter,
-	metricsScopeResolver factorysessions.RuntimeMetricsScopeResolver,
 	workService work.Service,
-	modelService models.Service,
 	sessionID string,
 	cancellation initializer.InvocationCancellation,
 	providerSessionsHTTP *providersessionshttp.Handler,
-	modelsContent work.ContentPreparation,
-	metricsQuery factoryvisualization.RuntimeMetricsQuery,
-	costsQuery costs.CostsQuery,
+	modelsHandler *modelshttp.Handler,
+	metricsHandler *factoryvisualizationhttp.MetricsHandler,
+	costsHandler *costshttp.Handler,
 	logs workersessions.Service,
 	writer recordings.WorkerRecordingWriter,
 	clock factoryruntime.Clock,
 	snapshots *workersessionswire.HistorySnapshotBudget,
 	attribution recordings.WorkerWorkAttributionReader,
+	logger *zap.Logger,
 ) (http.Handler, error) {
 	if root == nil {
 		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
@@ -185,38 +187,12 @@ func newHTTPRuntimeHandlerWithMetrics(
 	if err != nil {
 		return nil, err
 	}
-	modelsHandler, err := newHTTPModelsHandler(root, modelService, presentation, modelsContent, sessionID)
-	if err != nil {
-		return nil, err
-	}
 	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, presentation, logs, writer, clock, snapshots, attribution)
-	if metricsScopeResolver == nil {
-		return nil, errors.New("bind HTTP runtime: Factory Sessions metrics scope resolver is unavailable")
-	}
-	costsHandler, err := newHTTPCostsHandler(presentation, costsQuery, metricsScopeResolver)
-	if err != nil {
-		return nil, err
-	}
 	return newHTTPRuntimeServer(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler,
-		providerSessionsHTTP, factoryDefinitionsHandler, presentation, cancellation, metricsQuery,
-		metricsScopeResolver, costsHandler, workerSessionsHandler,
+		providerSessionsHTTP, factoryDefinitionsHandler, presentation, sessionID, cancellation, metricsHandler,
+		costsHandler, workerSessionsHandler, logger,
 	), nil
-}
-
-func newHTTPModelsHandler(
-	root *factorysessionwire.Root,
-	modelService models.Service,
-	presentation factorysessionwire.SessionPresentation,
-	modelsContent work.ContentPreparation,
-	sessionID string,
-) (*modelshttp.Handler, error) {
-	modelsAdapter := modelshttp.NewSessionAdapter(modelService, root, modelsContent, presentation.ModelsScope, sessionID)
-	modelsHandler := modelshttp.NewHandler(modelsAdapter, presentation.Logger)
-	if modelsHandler == nil {
-		return nil, errors.New("bind HTTP runtime: Models service, invoker, content preparation, and logger are required")
-	}
-	return modelsHandler, nil
 }
 
 func newHTTPSessionsHandler(
@@ -446,21 +422,6 @@ func containsString(values []string, wanted string) bool {
 	return false
 }
 
-func newHTTPCostsHandler(
-	presentation factorysessionwire.SessionPresentation,
-	costsQuery costs.CostsQuery,
-	metricsScopeResolver factorysessions.RuntimeMetricsScopeResolver,
-) (*costshttp.Handler, error) {
-	costsAdapter := costshttp.NewAdapter(
-		costsQuery,
-		presentation.MetricsRootDir,
-		presentation.OperatorSettingsPath,
-		metricsScopeResolver,
-	)
-	costsHandler := costshttp.NewHandler(costsAdapter, presentation.Logger)
-	return costsHandler, nil
-}
-
 func newHTTPRuntimeServer(
 	recordingsAdapter *recordingshttp.Adapter,
 	sessionsHandler *factorysessionshttp.Handler,
@@ -469,26 +430,30 @@ func newHTTPRuntimeServer(
 	providerSessionsHTTP *providersessionshttp.Handler,
 	factoryDefinitionsHandler *factorydefinitionshttp.Handler,
 	presentation factorysessionwire.SessionPresentation,
+	sessionID string,
 	cancellation initializer.InvocationCancellation,
-	metricsQuery factoryvisualization.RuntimeMetricsQuery,
-	metricsScopeResolver factorysessions.RuntimeMetricsScopeResolver,
+	metricsHandler *factoryvisualizationhttp.MetricsHandler,
 	costsHandler *costshttp.Handler,
 	workerSessionsHandler *workersessionshttp.Handler,
+	logger *zap.Logger,
 ) http.Handler {
-	metricsAdapter := factoryvisualizationhttp.NewMetricsAdapter(
-		metricsQuery,
-		metricsScopeResolver,
-		presentation.MetricsRootDir,
-	)
-	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(metricsAdapter, presentation.Logger)
 	var shutdown transporthttp.ShutdownOperation
 	if cancellation != nil {
 		shutdown = cancellation.Cancel
 	}
-	return transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
+	handler := transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, presentation.Logger, metricsHandler, costsHandler, shutdown, workerSessionsHandler,
+		factoryDefinitionsHandler, logger, metricsHandler, costsHandler, shutdown, workerSessionsHandler,
 	).Handler()
+	modelsScope := presentation.ModelsScope
+	metricsRoot := presentation.MetricsRootDir
+	settingsPath := presentation.OperatorSettingsPath
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := modelshttp.WithRuntimeSelection(r.Context(), sessionID, modelsScope)
+		ctx = costshttp.WithRuntimePaths(ctx, metricsRoot, settingsPath)
+		ctx = factoryvisualizationhttp.WithMetricsRoot(ctx, metricsRoot)
+		handler.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func workhttpAdapter(

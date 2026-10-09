@@ -79,26 +79,26 @@ func NewMetricsScopeUnavailableError(sessionID string, cause error) error {
 }
 
 // MetricsAdapter maps the stateless Visualization query into the authored
-// metrics representation. It is request-local and receives the opened
-// runtime's metrics root during composition.
+// metrics representation. Its fixed owners consume only request-scoped
+// artifact paths from the opened host.
 type MetricsAdapter struct {
-	query    factoryvisualization.RuntimeMetricsQuery
-	resolver factorysessions.RuntimeMetricsScopeResolver
-	request  factoryvisualization.RuntimeMetricsQueryRequest
+	query       factoryvisualization.RuntimeMetricsQuery
+	resolver    factorysessions.RuntimeMetricsScopeResolver
+	metricsRoot func(context.Context) string
 }
 
 func NewMetricsAdapter(
 	query factoryvisualization.RuntimeMetricsQuery,
 	resolver factorysessions.RuntimeMetricsScopeResolver,
-	metricsRoot string,
+	metricsRoot func(context.Context) string,
 ) *MetricsAdapter {
 	if query == nil {
 		return nil
 	}
 	return &MetricsAdapter{
-		query:    query,
-		resolver: resolver,
-		request:  factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: strings.TrimSpace(metricsRoot)},
+		query:       query,
+		resolver:    resolver,
+		metricsRoot: metricsRoot,
 	}
 }
 
@@ -110,7 +110,7 @@ func (adapter *MetricsAdapter) GetMetrics(
 		return factoryapi.MetricsReport{}, errors.New("Factory Visualization metrics query is required")
 	}
 	requestedID := strings.TrimSpace(sessionID)
-	request := adapter.request
+	request := factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: strings.TrimSpace(adapter.metricsRoot(ctx))}
 	request.SessionID = requestedID
 	request.SessionIDs = nil
 	if requestedID != "" {
@@ -369,4 +369,17 @@ func optionalMetricString(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+// WithMetricsRoot attaches the selected host's artifact path to a request.
+func WithMetricsRoot(ctx context.Context, metricsRoot string) context.Context {
+	return context.WithValue(ctx, metricsRootKey{}, metricsRoot)
+}
+
+type metricsRootKey struct{}
+
+// MetricsRoot reads the path fact supplied by the HTTP route shell.
+func MetricsRoot(ctx context.Context) string {
+	root, _ := ctx.Value(metricsRootKey{}).(string)
+	return root
 }

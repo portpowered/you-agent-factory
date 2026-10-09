@@ -429,7 +429,7 @@ func TestHTTPEncodingSelectedDiagnosticPolicy(t *testing.T) {
 						calls++
 						return factoryvisualization.RuntimeMetricsQueryResult{}, nil
 					})
-					handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/controlled"), logger)
+					handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, nil, staticMetricsRoot("/controlled")), logger)
 					handler.GetMetrics(writer, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
 					if calls != 1 {
 						t.Fatalf("query calls = %d", calls)

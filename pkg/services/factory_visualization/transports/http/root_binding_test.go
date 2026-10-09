@@ -155,7 +155,7 @@ func TestMetricsHandlerResolvesPublicSessionBeforeQueryAndPreservesEmptyReport(t
 		}, nil
 	})
 	handler := factoryvisualizationhttp.NewMetricsHandler(
-		factoryvisualizationhttp.NewMetricsAdapter(query, resolver, "/tmp/metrics"),
+		factoryvisualizationhttp.NewMetricsAdapter(query, resolver, staticMetricsRoot("/tmp/metrics")),
 		zap.NewNop(),
 	)
 
@@ -217,7 +217,7 @@ func TestMetricsHandlerMapsTypedSessionScopeFailures(t *testing.T) {
 			resolver := metricsScopeResolverFunc(func(string) (factorysessions.RuntimeMetricsScope, error) {
 				return factorysessions.RuntimeMetricsScope{}, test.err
 			})
-			handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, resolver, "/tmp/metrics"), zap.NewNop())
+			handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, resolver, staticMetricsRoot("/tmp/metrics")), zap.NewNop())
 			recorder := httptest.NewRecorder()
 			handler.GetMetrics(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{SessionId: stringPointer("selected-live-id")})
 
@@ -240,7 +240,7 @@ func TestMetricsHandlerAllowsValidEmptyUnscopedReport(t *testing.T) {
 	query := factoryvisualization.RuntimeMetricsQuery(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
 		return factoryvisualization.RuntimeMetricsQueryResult{}, nil
 	})
-	handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/tmp/metrics"), zap.NewNop())
+	handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, nil, staticMetricsRoot("/tmp/metrics")), zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetMetrics(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
 	if recorder.Code != http.StatusOK {
@@ -274,7 +274,7 @@ func TestMetricsHandlerEncodesMetricDetails(t *testing.T) {
 		}, nil
 	})
 	handler := factoryvisualizationhttp.NewMetricsHandler(
-		factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/tmp/metrics"), zap.NewNop(),
+		factoryvisualizationhttp.NewMetricsAdapter(query, nil, staticMetricsRoot("/tmp/metrics")), zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
 	handler.GetMetrics(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
@@ -325,7 +325,7 @@ func TestMetricsHandlerMapsQueryFailures(t *testing.T) {
 				return factoryvisualization.RuntimeMetricsQueryResult{}, test.err
 			})
 			handler := factoryvisualizationhttp.NewMetricsHandler(
-				factoryvisualizationhttp.NewMetricsAdapter(query, nil, "/tmp/metrics"), zap.NewNop(),
+				factoryvisualizationhttp.NewMetricsAdapter(query, nil, staticMetricsRoot("/tmp/metrics")), zap.NewNop(),
 			)
 			recorder := httptest.NewRecorder()
 			handler.GetMetrics(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil), factoryapi.GetMetricsParams{})
@@ -351,7 +351,7 @@ func TestMetricsScopeErrorUnwrapsCauseAndConstructorsHandleNil(t *testing.T) {
 	if !errors.Is(err, cause) {
 		t.Fatalf("scope error = %v, want cause %v", err, cause)
 	}
-	if factoryvisualizationhttp.NewMetricsAdapter(nil, nil, "") != nil {
+	if factoryvisualizationhttp.NewMetricsAdapter(nil, nil, staticMetricsRoot("")) != nil {
 		t.Fatal("NewMetricsAdapter(nil) returned a handler")
 	}
 	if factoryvisualizationhttp.NewMetricsHandler(nil, zap.NewNop()) != nil {
@@ -373,5 +373,32 @@ func assertMetricsErrorContract(t *testing.T, rec *httptest.ResponseRecorder, fa
 	want := map[string]any{"family": string(family), "code": string(code), "message": message}
 	if !reflect.DeepEqual(body, want) {
 		t.Fatalf("body = %#v, want %#v", body, want)
+	}
+}
+
+func staticMetricsRoot(root string) func(context.Context) string {
+	return func(context.Context) string { return root }
+}
+
+func TestMetricsAdapterSharesOwnersButIsolatesHostPaths(t *testing.T) {
+	t.Parallel()
+	query := factoryvisualization.RuntimeMetricsQuery(func(_ context.Context, request factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+		if request.MetricsRoot != request.SessionID+"/metrics" {
+			t.Errorf("cross-host metrics path: %#v", request)
+		}
+		return factoryvisualization.RuntimeMetricsQueryResult{}, nil
+	})
+	resolver := metricsScopeResolverFunc(func(id string) (factorysessions.RuntimeMetricsScope, error) {
+		return factorysessions.RuntimeMetricsScope{RequestedFactorySessionID: id, RetainedFactorySessionIDs: []string{id}}, nil
+	})
+	adapter := factoryvisualizationhttp.NewMetricsAdapter(query, resolver, factoryvisualizationhttp.MetricsRoot)
+	for _, id := range []string{"selected", "peer"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			ctx := factoryvisualizationhttp.WithMetricsRoot(context.Background(), " "+id+"/metrics ")
+			if _, err := adapter.GetMetrics(ctx, id); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
