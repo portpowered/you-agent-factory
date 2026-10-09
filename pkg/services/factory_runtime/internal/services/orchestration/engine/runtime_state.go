@@ -152,6 +152,29 @@ func (e *FactoryEngine) SeedRestoredDispatchHistory(history []interfaces.Complet
 	return nil
 }
 
+// SeedRestoredDispatch retains an already-executed dispatch's original claims
+// until its recorded result passes through the normal completion phases.
+// The opening owns removal of these claims from the fresh marking.
+func (e *FactoryEngine) SeedRestoredDispatch(entry interfaces.DispatchEntry) error {
+	if e == nil || e.runtimeState == nil {
+		return fmt.Errorf("Factory Runtime engine is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.runLoopActive || e.runtimeState.TickCount != 0 || entry.DispatchID == "" || len(entry.ConsumedTokens) == 0 {
+		return fmt.Errorf("recorded dispatch claims can only be restored before execution")
+	}
+	if _, exists := e.runtimeState.Dispatches[entry.DispatchID]; exists {
+		return fmt.Errorf("recorded dispatch %q already has restored claims", entry.DispatchID)
+	}
+	entry.ConsumedTokens = cloneWorkerTokens(entry.ConsumedTokens)
+	entry.ExpectedArtifactContext = entry.ExpectedArtifactContext.Clone()
+	e.runtimeState.Dispatches[entry.DispatchID] = &entry
+	e.runtimeState.InFlightCount++
+	e.publishRuntimeSnapshotLocked()
+	return nil
+}
+
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)

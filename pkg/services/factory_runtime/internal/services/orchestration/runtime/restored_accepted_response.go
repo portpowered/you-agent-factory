@@ -165,6 +165,10 @@ func completeRestoredContent(content []work.WorkContentPart) bool {
 			if strings.TrimSpace(part.Text) == "" {
 				return false
 			}
+			raw := strings.TrimSpace(part.Text)
+			if (strings.HasPrefix(raw, "{") || strings.HasPrefix(raw, "[")) && !json.Valid([]byte(raw)) {
+				return false
+			}
 		case work.WorkContentPartTypeJSON:
 			if !json.Valid(part.JSON) {
 				return false

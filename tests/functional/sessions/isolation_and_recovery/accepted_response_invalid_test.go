@@ -18,6 +18,7 @@ import (
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -117,6 +118,10 @@ func invalidAcceptedRecording(t *testing.T, shape, session string) []byte {
 			response.OutputContent = &content
 			response.ModelRequestID = "different-model-request"
 		}
+		if shape == "complete" {
+			content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "accepted recorded output COMPLETE"}}
+			response.OutputContent = &content
+		}
 		addEvent(definitions.FactoryEventTypeModelResponse, response)
 	}
 	addEvent(definitions.FactoryEventTypeAgentRunResponse, workers.AgentRunResponseEventPayload{AgentRunID: dispatch + "/agent-run/1", Outcome: "ACCEPTED"})
@@ -128,4 +133,68 @@ func invalidAcceptedRecording(t *testing.T, shape, session string) []byte {
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func TestAcceptedResponseSurvivesRecordedCompletionWithoutRedispatch(t *testing.T) {
+	t.Parallel()
+	reusable := newSeededReplayResumeProcess(t)
+	for _, name := range []string{"first logical session", "independent logical session"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, acceptedResponsePauseFactory())
+			support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\nmodelProvider: CODEX\nmodel: gpt-5-codex\n---\n")
+			for _, station := range []string{"process", "finish"} {
+				support.WriteWorkstationConfig(t, dir, station, "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}\n")
+			}
+			session := uuid.NewString()
+			payload := invalidAcceptedRecording(t, "complete", session)
+			source := filepath.Join(dir, "accepted-source.json")
+			if err := os.WriteFile(source, payload, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			running := reusable.runForSession(t, dir, source, session, "--resume", source, "--record", filepath.Join(dir, "recovered.json"))
+			// Completion events precede publication of the final runtime snapshot.
+			// Observe the public terminal projection, which has no combined event
+			// signal, before reading Work and the already-retained event history.
+			support.WaitForSessionTerminalStatus(t, running.url, session, time.Minute)
+			listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(running.url, session, "/work"))
+			if !support.HasWorkAtCustomerState(listed, "work-seeded-replay-resume", "task:complete") {
+				t.Fatalf("recovered Work = %#v, want task:complete", listed.Results)
+			}
+			completions, originalRequests, processRequests := 0, 0, 0
+			for _, event := range support.GetFactoryEventsForSessionAt(t, running.url, session) {
+				if string(event.Type) == "DISPATCH_REQUEST" {
+					request, err := event.Payload.AsDispatchRequestEventPayload()
+					if err != nil {
+						t.Fatal(err)
+					}
+					if request.TransitionId == "process" {
+						processRequests++
+					}
+				}
+				if event.Context.DispatchId == nil || *event.Context.DispatchId != "dispatch-accepted" {
+					continue
+				}
+				switch string(event.Type) {
+				case "DISPATCH_REQUEST":
+					originalRequests++
+				case "DISPATCH_RESPONSE":
+					completions++
+					response, err := event.Payload.AsDispatchResponseEventPayload()
+					if err != nil || response.Output == nil || *response.Output != "accepted recorded output COMPLETE" {
+						t.Fatalf("recovered response output = %#v, %v", response.Output, err)
+					}
+				case "DISPATCH_INTERRUPTED":
+					t.Fatal("accepted dispatch was classified as interrupted")
+				}
+			}
+			if completions != 1 || originalRequests != 1 || processRequests != 1 {
+				t.Fatalf("original requests=%d completions=%d process requests=%d, want one recorded request and one recovered completion", originalRequests, completions, processRequests)
+			}
+			running.daemon.Stop(t)
+			if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, source)) {
+				t.Fatal("accepted recovery changed its source recording")
+			}
+		})
+	}
 }

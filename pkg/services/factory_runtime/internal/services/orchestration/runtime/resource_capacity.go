@@ -354,6 +354,11 @@ func reconcileRestoredDispatches(cfg *runtimeConfig, eventHistory recordings.Run
 		if restoredDispatchHasTerminalEvent(existingEvents, dispatchID) {
 			continue
 		}
+		if _, accepted := restoredAcceptanceIndex(existingEvents, dispatchID); accepted {
+			// Opening restores this claim and delivers its recorded result through
+			// the normal dispatch hook. Acceptance is never an interruption.
+			continue
+		}
 		// Historical dispatch reconstruction requires a transition-bearing
 		// DISPATCH_REQUEST. Older in-memory fixtures can describe an active
 		// dispatch without that field; preserve their existing association /

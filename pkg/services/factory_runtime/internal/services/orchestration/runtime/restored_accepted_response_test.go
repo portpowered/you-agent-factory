@@ -10,6 +10,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -267,6 +270,120 @@ func TestRecordedResponseTerminalCompletionPrecedesIncompleteAcceptance(t *testi
 	}
 	if len(ledger.CallsSnapshot()) != 0 {
 		t.Fatal("terminal dispatch was reconciled again")
+	}
+}
+
+func TestRecordedResponseAcceptedDispatchIsNotInterrupted(t *testing.T) {
+	t.Parallel()
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: acceptedResponseFixture(t)}
+	before := ledger.CanonicalEvents()
+	if err := reconcileRestoredDispatches(acceptedResponseConfig(), ledger); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ledger.CanonicalEvents(), before) || len(ledger.CallsSnapshot()) != 0 {
+		t.Fatal("valid accepted dispatch was reconciled as an interruption")
+	}
+}
+
+func TestRecordedResponseRestoresOriginalClaimsAndLineage(t *testing.T) {
+	t.Parallel()
+	cfg := acceptedResponseConfig()
+	cfg.restoredEventPrefix = acceptedResponseFixture(t)
+	cfg.net = &state.Net{Transitions: map[string]*petri.Transition{
+		"process": {ID: "process", Name: "process", WorkerType: "agent"},
+	}}
+	dispatch := cfg.restoredWorldState.ActiveDispatches["dispatch-1"]
+	dispatch.Resources = []interfaces.FactoryResourceUnit{{ResourceID: "agent-slot", TokenID: "old-process-resource"}}
+	dispatch.CurrentChainingTraceID = "original-trace"
+	dispatch.PreviousChainingTraceIDs = []string{"previous-trace"}
+	cfg.restoredWorldState.ActiveDispatches["dispatch-1"] = dispatch
+	marking := petri.NewMarking("restored")
+	marking.AddToken(&factorytoken.Token{ID: "restored-input", PlaceID: "task:init", Color: factorytoken.Color{
+		WorkID: "work-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+	}})
+	marking.AddToken(&factorytoken.Token{ID: "fresh-resource", PlaceID: "agent-slot:available", Color: factorytoken.Color{
+		WorkTypeID: "agent-slot", DataType: factorytoken.DataTypeResource,
+	}})
+	before, _ := json.Marshal(cfg.restoredEventPrefix)
+	if err := prepareRestoredAcceptedDispatches(cfg, marking); err != nil {
+		t.Fatal(err)
+	}
+	restored := cfg.restoredAcceptedDispatches["dispatch-1"]
+	if len(marking.Tokens) != 0 || len(restored.entry.ConsumedTokens) != 2 {
+		t.Fatal("accepted input and resource claims remain available for scheduling")
+	}
+	if restored.dispatch.CurrentChainingTraceID != "original-trace" || restored.dispatch.PreviousChainingTraceIDs[0] != "previous-trace" ||
+		restored.dispatch.Execution.ReplayKey != "process/original-trace/work-1" || restored.dispatch.Execution.WorkIDs[0] != "work-1" ||
+		restored.result.Output != "PRIVATE-PAYLOAD complete" {
+		t.Fatal("recorded result or original Work/trace lineage was lost")
+	}
+	after, _ := json.Marshal(cfg.restoredEventPrefix)
+	if string(before) != string(after) {
+		t.Fatal("preparation changed source facts")
+	}
+}
+
+func TestRecordedResponseRejectsTruncatedTypedText(t *testing.T) {
+	t.Parallel()
+	events := acceptedResponseFixture(t)
+	content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: `{"content":"PRIVATE-PAYLOAD`}}
+	events[2] = acceptedFixtureEvent(t, interfaces.FactoryEventTypeModelResponse, workers.ModelResponseEventPayload{
+		ModelRequestID: "model-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded, OutputContent: &content,
+	})
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	if err := reconcileRestoredDispatches(acceptedResponseConfig(), ledger); err == nil || strings.Contains(err.Error(), "PRIVATE-PAYLOAD") {
+		t.Fatalf("truncated typed text diagnostic = %v", err)
+	}
+	if len(ledger.CallsSnapshot()) != 0 {
+		t.Fatal("truncated typed text was interrupted or applied")
+	}
+}
+
+func TestRecordedResponsePreservesStructuredNullAndRequiresCompleteEnvelope(t *testing.T) {
+	t.Parallel()
+	cfg := acceptedResponseConfig()
+	station := &interfaces.FactoryWorkstationConfig{OutputSchema: `{"type":"null"}`}
+	cfg.runtimeConfig = runtimeProjectionConfig{Workstations: map[string]*interfaces.FactoryWorkstationConfig{"process": station}}
+	dispatch := work.WorkDispatch{DispatchID: "dispatch-1", TransitionID: "process", WorkstationName: "process"}
+	result, err := restoredAcceptedWorkResult(cfg, dispatch, interfaces.FactoryEventContext{}, []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "null"}})
+	if err != nil || result.StructuredResult != nil || !result.StructuredResultPresent {
+		t.Fatalf("structured null recovery = %#v, %v", result, err)
+	}
+	station.OutputSchema = ""
+	station.OutcomeFormat = interfaces.WorkstationOutcomeFormatDecisionEnvelope
+	cfg.restoredEventPrefix = acceptedResponseFixture(t)
+	_, err = restoredAcceptedWorkResult(cfg, dispatch, cfg.restoredEventPrefix[3].Context,
+		[]work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "PRIVATE-PAYLOAD complete"}})
+	if err == nil || strings.Contains(err.Error(), "PRIVATE-PAYLOAD") {
+		t.Fatalf("missing full decision envelope diagnostic = %v", err)
+	}
+}
+
+func TestRecordedResponseFullInferenceMatchesAcceptedSessionAndAttempt(t *testing.T) {
+	t.Parallel()
+	for _, shape := range []string{"complete", "wrong session", "wrong attempt", "truncated"} {
+		t.Run(shape, func(t *testing.T) {
+			t.Parallel()
+			events := acceptedResponseFixture(t)
+			raw := `{"decision":"ACCEPTED","output":"full output","feedback":"preserved"}`
+			request := acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceRequest, workers.InferenceRequestEventPayload{InferenceRequestID: "raw-1", Attempt: 1})
+			response := acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceResponse, workers.InferenceResponseEventPayload{InferenceRequestID: "raw-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded, Response: &raw})
+			switch shape {
+			case "wrong session":
+				other := "other-session"
+				response.Context.SessionID = &other
+			case "wrong attempt":
+				response = acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceResponse, workers.InferenceResponseEventPayload{InferenceRequestID: "raw-1", Attempt: 2, Outcome: workers.InferenceOutcomeSucceeded, Response: &raw})
+			case "truncated":
+				raw = raw[:len(raw)-1]
+				response = acceptedFixtureEvent(t, interfaces.FactoryEventTypeInferenceResponse, workers.InferenceResponseEventPayload{InferenceRequestID: "raw-1", Attempt: 1, Outcome: workers.InferenceOutcomeSucceeded, Response: &raw})
+			}
+			events = append(append(events[:3:3], request, response), events[3])
+			got, ok := restoredAcceptedInferenceResponse(events, events[5].Context)
+			if ok != (shape == "complete") || (ok && got != raw) {
+				t.Fatalf("full inference recovery available=%v, want %v", ok, shape == "complete")
+			}
+		})
 	}
 }
 

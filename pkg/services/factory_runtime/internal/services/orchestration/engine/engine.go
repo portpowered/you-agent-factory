@@ -199,6 +199,20 @@ func (e *FactoryEngine) drainPendingResults() {
 }
 
 func (e *FactoryEngine) appendObservedResult(result workerexecution.WorkResult) {
+	if result.DispatchID != "" {
+		for _, pending := range e.runtimeState.Results {
+			if pending.DispatchID == result.DispatchID {
+				return
+			}
+		}
+		if _, active := e.runtimeState.Dispatches[result.DispatchID]; !active {
+			for _, completed := range e.runtimeState.DispatchHistory {
+				if completed.DispatchID == result.DispatchID {
+					return
+				}
+			}
+		}
+	}
 	index := len(e.runtimeState.Results)
 	e.runtimeState.Results = append(e.runtimeState.Results, result)
 	if e.recordCompletion != nil {

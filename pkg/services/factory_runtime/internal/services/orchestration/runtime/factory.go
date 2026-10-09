@@ -118,6 +118,7 @@ type runtimeConfig struct {
 	completionDeliveryPlanner          factory.CompletionDeliveryPlanner
 	replayEvents                       []interfaces.FactoryEvent
 	restoredEventPrefix                []interfaces.FactoryEvent
+	restoredAcceptedDispatches         map[string]restoredAcceptedDispatch
 	inlineDispatch                     bool
 	quorumPolicy                       interfaces.QuorumPolicyService
 	outputShaping                      interfaces.InvocationOutputShapingService
@@ -276,6 +277,9 @@ func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factory
 	if err != nil {
 		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)
 	}
+	if err := prepareRestoredAcceptedDispatches(cfg, marking); err != nil {
+		return nil, err
+	}
 	historicalWorkIDs := restoredHistoricalWorkIDs(cfg)
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, opening.newID, seededRestoredWorkIDs, historicalWorkIDs)
 	replayHistoricalWorks := restoredHistoricalAdmissionWorks(cfg)
@@ -362,6 +366,9 @@ func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factory
 		runtimeEngine.SetReplayHistoricalWorks(replayHistoricalWorks)
 	}
 	impl.engine = runtimeEngine
+	if err := impl.restoreAcceptedDispatches(); err != nil {
+		return nil, err
+	}
 	return impl, nil
 }
 
@@ -511,6 +518,11 @@ func (opening *EngineOpening) configureRuntimeDispatch(
 ) {
 	var resultHook *dispatchPlanningResultHook
 	publisher := func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
+		if restored, ok := cfg.restoredAcceptedDispatches[request.Execution.Dispatch.DispatchID]; ok {
+			resultHook.acceptPlannedWorkersResult(ctx, request, restored.dispatch.DispatchID,
+				workers.WorkstationDispatchResult{TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted}, restored.result)
+			return nil
+		}
 		// Accepted planned dispatches belong to Runtime. Resume can drain this
 		// outbox from an HTTP control request whose context ends with its response;
 		// only the Runtime cancellation edge may stop the admitted execution.

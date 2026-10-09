@@ -29,11 +29,13 @@ to the addressed session id.
 
 When a session has a configured retained current-board Recording, a clean
 daemon restart restores that session's Work board before the session is ready.
-Process-bound dispatches that were active at stop are recorded as interrupted,
-their old Worker Sessions are not exposed as live `RUNNING`, and associated
-non-terminal Work is re-armed at its saved logical state for normal guards and
-scheduling. Work and session inspection therefore keep the original
-identities and interruption history without requiring an explicit resume.
+An active dispatch with a complete recorded accepted agent response completes
+from that output without running the agent again. Dispatches without a recorded
+agent response are recorded as interrupted, their old Worker Sessions are not
+exposed as live `RUNNING`, and associated non-terminal Work is re-armed at its
+saved logical state for normal guards and scheduling. Work and session
+inspection keep the original identities and interruption history without
+requiring an explicit resume.
 
 For the end-to-end agent playbook (read order, submission ingress, operator
 loop), see `you docs agents`. For submitted-work contracts
