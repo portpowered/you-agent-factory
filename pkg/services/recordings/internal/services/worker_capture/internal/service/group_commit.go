@@ -149,6 +149,7 @@ func (writer *FileWriter) stagePendingRecords(entry *recordingEntry, group []*pe
 		}
 		delta := workerJournalEntry{Version: 1, Kind: "record", RecordingID: record.RecordingID, WorkerSessionID: record.WorkerSessionID, Record: &record.Record}
 		if previous.LastPosition == 0 {
+			delta.WorkName = record.WorkName
 			ownerEpoch := writer.captureOwnerEpoch()
 			identity, _ := json.Marshal([]string{ownerEpoch, record.RecordingID, record.WorkerSessionID, string(record.Record.SourceEventID)})
 			generation := sha256.Sum256(identity)

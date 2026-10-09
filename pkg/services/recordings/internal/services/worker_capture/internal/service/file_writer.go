@@ -70,6 +70,7 @@ type recordingEntry struct {
 	operations      map[string][]recordings.WorkerControlOperationRecord
 }
 type recordingSession struct {
+	workName            string
 	originatingArtifact string
 	generation          string
 	ownerEpoch          string
@@ -82,6 +83,7 @@ type recordingSession struct {
 	catalogSummary      *recordings.WorkerCapturedCatalogItem
 }
 type workerJournalEntry struct {
+	WorkName              string                                   `json:"workName,omitempty"`
 	OriginatingArtifact   string                                   `json:"originatingArtifact,omitempty"`
 	RecordingGenerationID string                                   `json:"recordingGenerationId,omitempty"`
 	OwnerEpoch            string                                   `json:"ownerEpoch,omitempty"`
@@ -425,6 +427,9 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 		return fmt.Errorf("%w: %v", recordings.ErrWorkerRecordingReplay, err)
 	}
 	if delta.Kind == "control-operation" || delta.Kind == "owner-loss" {
+		if delta.WorkName != "" {
+			return recordings.ErrWorkerRecordingReplay
+		}
 		decoder := json.NewDecoder(bytes.NewReader(line))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&delta); err != nil {
@@ -463,7 +468,7 @@ func (entry *recordingEntry) applyLine(id string, line []byte) error {
 			return err
 		}
 	case "failure":
-		if delta.Record != nil {
+		if delta.Record != nil || delta.WorkName != "" {
 			return recordings.ErrWorkerRecordingReplay
 		}
 		projection, err := session.prepareFailure(delta)
@@ -485,6 +490,9 @@ func (session *recordingSession) applyRecordDelta(delta workerJournalEntry) erro
 	if (delta.RecordingGenerationID == "") != (delta.OwnerEpoch == "") || (len(session.records) > 0 && delta.RecordingGenerationID != "") {
 		return recordings.ErrWorkerRecordingReplay
 	}
+	if len(session.records) > 0 && delta.WorkName != "" {
+		return recordings.ErrWorkerRecordingReplay
+	}
 	projection, duplicate, err := session.prepareRecord(*delta.Record)
 	if err != nil {
 		return err
@@ -499,6 +507,7 @@ func (session *recordingSession) applyRecordDelta(delta workerJournalEntry) erro
 
 func (session *recordingSession) acceptMetadata(delta workerJournalEntry) {
 	if len(session.records) == 1 {
+		session.workName = delta.WorkName
 		session.originatingArtifact = delta.OriginatingArtifact
 		session.generation = delta.RecordingGenerationID
 		session.ownerEpoch = delta.OwnerEpoch
