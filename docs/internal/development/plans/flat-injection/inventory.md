@@ -302,3 +302,23 @@ T17Q registration completion retains the canonical LiveSession returned directly
 T17Q C02/C04 opening retains only its consumed Assembly operations; historical capability selection stays at the existing Assembly owner. Completion and final binding expose an OpeningState mutation alias, keeping projection/runtime peers private to the exact selected SessionState. Detached OpeningMetadata clones recovery pointers and observation slices, clears absent facts and preserves existing locked settings/observations. Wire projects the same Assembly once; no new owner or graph. Full transitive contract closure, 15-cell/four-session matrix and active static proof remain unproven.
 
 T17Q dead-helper retirement removes the unused paired LegacyInvocationSourcesForService adapter and activationRequest forwarding wrapper; invocation retains its individually consumed snapshot/event selectors, while activation uses activationRequestWithInputs directly. The four unused compatibility gateway constructors (New, NewWithResponseStreams, NewWithStreamDependencies and NewWithReconnectValidation) and their legacy host contracts are removed; canonical composition continues to inject the completed stream manager, durable owner and other peers into NewWithLiveChangeCoordinator. Models presentation remains a selected-facts adapter at the existing HTTP boundary, and acquired SessionState runtime handles plus still-consumed T28 getters remain retained. Complete T17Q matrix/consumer closure and aggregate T28/T29 proof remain unproven.
+
+### Retained T17 opening consumers
+
+These current dispositions supersede the opening/products remainder wording in
+the historical T17a–T17o rows above. They describe the retained implementation,
+not completion of the T17Q behavior matrix or the later T28/T29 gates.
+
+| Surface | Current disposition | Production consumer and retained boundary |
+| --- | --- | --- |
+| Root opening and historical inspection | Opening construction edges removed from Root. | `Root.Start` calls its fixed `start` operation; historical application inspection calls its fixed `inspectHistorical` operation. Canonical Wire selects both method values from the same `RuntimeOpening`, projecting the existing Assembly once through `RuntimeOpeningAssembly`. |
+| `runtimeProducts` and products-only peer forwarding | Removed, including the declaration and its return/copy consumers. | `RuntimeOpening.openRuntimeWithOptions` passes the exact completion-selected mutation handle into final binding. It returns acquired lifecycle, replay, cleanup, activation and optional publication handles; acquisition owns retryable cleanup. |
+| Opening registration and metadata | Acquired canonical record and detached facts retained. | `RegisterOpening` returns its exact `LiveSession`; completion exposes only `OpeningState` mutations to opening. `bindSelectedState` writes detached `OpeningMetadata`. Projection ownership remains private to the selected record. |
+| `SessionState.Invoker`, `InputResolver`, `ModelInvoker`, `FactoryRuntime` | Removed, including replacement inheritance. | Invocation/input resolution consumes fixed Assembly operations. State retains `Instance`, `Handle`, `Owner`, process lifecycle, Models scope and model invocation facts; replacement inherits selected facts and resources rather than reusable invocation peers. |
+| Root retained in model presentation | Removed. | `SessionPresentation` creates `selectedModelInvocation` from selected model facts and the fixed model operation. Models HTTP retains that value adapter. Other still-consumed presentation getters remain the T28 boundary. |
+| Cut-made compatibility constructors and forwarding helpers | Removed. | Canonical gateway composition uses `NewWithLiveChangeCoordinator`; activation uses `activationRequestWithInputs`; invocation uses its separately consumed snapshot/event selectors. Removed wrappers have no production caller to preserve. |
+
+Generation cleanup remains an acquired owner-private operation. Public
+`SessionStartResult` and `SessionOpenResult` return detached opening outcomes,
+not cleanup closures. Repeated generation release has component witnesses;
+the exact F04-release compound functional witness remains unproved.
