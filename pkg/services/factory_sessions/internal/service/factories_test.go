@@ -104,6 +104,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*Root, error) {
 		fixture.preparation(),
 		fixture.Assembly,
 		fixture.DurableOpening,
+		fixture.resourceAcquisition(),
 		fixture.ProcessRuntimeFactory,
 		fixture.GenerateSessionID,
 		fixture.GenerateRuntimeInstanceID,
@@ -613,4 +614,12 @@ func TestRuntimePreparationRejectsInvalidSelectionsBeforeLoading(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (fixture runtimeOpeningFixture) resourceAcquisition() *RuntimeResourceAcquisition {
+	var open DurableResourceOpening
+	if fixture.DurableOpening != nil {
+		open = fixture.DurableOpening.Open
+	}
+	return NewRuntimeResourceAcquisition(open, fixture.ModelService, fixture.ProviderOverride)
 }

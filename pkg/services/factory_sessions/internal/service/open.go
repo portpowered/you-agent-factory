@@ -66,9 +66,17 @@ func (r *Root) openRuntimeWithOptions(
 			}
 		}
 	}()
-	if err = r.openSessionDurableScopes(ctx, opening, cleanup); err != nil {
+	resources, err := r.resourceAcquisition.Acquire(ctx, RuntimeResourceRequest{
+		Configured: opening.configured, FactoryRootDir: opening.root.FactoryRootDir,
+		ModelsRuntime: modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg),
+	}, opening.clock, opening.logger, cleanup)
+	if err != nil {
 		return runtimeProducts{}, err
 	}
+	opening.operatorSettingsPath = resources.OperatorSettingsPath
+	opening.durableExecution = resources.DurableExecution
+	opening.observations = resources.Observations
+	opening.modelsBind = modelsRuntimeBind{Scope: resources.ModelsScope}
 	if err = r.openSessionEngine(ctx, opening, cleanup); err != nil {
 		return runtimeProducts{}, err
 	}
@@ -89,7 +97,6 @@ type sessionRuntimeOpening struct {
 	canonicalSessionIDGenerated bool
 	sessionSelection            *factorysessions.SessionRuntimeSelection
 	operatorSettingsPath        string
-	providerForDurable          providers.Service
 	durableExecution            DurableExecution
 	observations                factoryruntime.SessionObservations
 	modelsBind                  modelsRuntimeBind
@@ -238,92 +245,6 @@ func (r *Root) openHistoricalSessionRuntime(ctx context.Context, opening *sessio
 		opening.load.ReplayMetadataWarnings...,
 	)
 	return historicalProducts, nil
-}
-
-func (r *Root) openSessionDurableScopes(ctx context.Context, opening *sessionRuntimeOpening, cleanup *runtimeOpeningCleanup) error {
-	var err error
-	opening.operatorSettingsPath, err = operatorConfigPath(opening.sessionSelection.SystemConfigPath, opening.sessionSelection.SystemConfigHome)
-	if err != nil {
-		return fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
-	}
-	if opening.clock == nil {
-		return fmt.Errorf("construct runtime scope: Factory Runtime clock is required")
-	}
-	if r.durableOpening == nil {
-		return fmt.Errorf("construct runtime scope: durable execution operation is required")
-	}
-	opening.providerForDurable = r.providerOverride
-	opening.durableExecution, err = r.durableOpening.Open(
-		ctx, opening.sessionID,
-		opening.configured.Definition,
-		opening.configured.Session.Persistence,
-		opening.sessionSelection.SystemConfigHome,
-		opening.sessionSelection.SystemConfigPath,
-		opening.configured.OperatorDefaults,
-		opening.root,
-		opening.clock,
-		opening.providerForDurable,
-		opening.configured.Workers.MockWorkers,
-	)
-	if release := opening.durableExecution.Release; release != nil {
-		cleanup.Add(func() error {
-			if err := release(context.WithoutCancel(ctx)); err != nil {
-				return fmt.Errorf("release durable Factory Session execution: %w", err)
-			}
-			return nil
-		})
-	}
-	if err != nil {
-		return err
-	}
-	if err := opening.bindSessionObservations(); err != nil {
-		return err
-	}
-	if r.factorySessionsRuntimeAssembly == nil {
-		return fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
-	}
-	currentRuntimeConfig := func() *models.RuntimeConfig {
-		// The Models scope must snapshot the Factory Definition selected by this
-		// opening. CurrentRuntime is process-global and can belong to another
-		// concurrently opening Factory Session, which would bind this session's
-		// host launcher to the other session's worker endpoint.
-		return modelinvocation.ProjectModelsRuntimeConfig(opening.load.LoadedFactoryCfg)
-	}
-	opening.modelsBind, err = bindModelsRuntimeScope(
-		ctx,
-		r.modelService,
-		opening.configured.ModelCacheDirectory,
-		currentRuntimeConfig,
-		opening.durableExecution.OperatorModels,
-	)
-	cleanup.OwnModelsScope(context.WithoutCancel(ctx), opening.modelsBind)
-	if err != nil {
-		return err
-	}
-	if r.workService == nil {
-		return fmt.Errorf("construct runtime scope: Work service is required")
-	}
-	if r.workerService == nil {
-		return fmt.Errorf("construct runtime scope: Workers service is required")
-	}
-	if r.automationService == nil {
-		return fmt.Errorf("construct runtime scope: Automations service is required")
-	}
-	return nil
-}
-
-// bindSessionObservations resolves the required scoped handoff while the
-// durable owner is acquired, before any Models or engine resources open.
-// Only this opening retains it; the reusable Root never stores observations.
-func (opening *sessionRuntimeOpening) bindSessionObservations() error {
-	observations, ok := opening.durableExecution.Service.(factoryruntime.SessionObservations)
-	if !ok {
-		return fmt.Errorf(
-			"compose runtime: durable execution owner must record mutations and publish worker progress",
-		)
-	}
-	opening.observations = observations
-	return nil
 }
 
 func (r *Root) restoreSessionOpeningHistory(ctx context.Context, opening *sessionRuntimeOpening) error {
@@ -652,7 +573,7 @@ func (r *Root) bindSessionOpeningProducts(
 		opening.configured.Runtime.RuntimeInstanceID,
 		opening.startupRuntime.StreamGeneration(),
 		opening.startupRuntime.RecordingLedger(),
-		opening.providerForDurable,
+		r.providerOverride,
 		opening.configured.Workers.MockWorkers,
 		r.providerCommandRunner,
 		runtimeProgressPublisher(opening.startupRuntime),

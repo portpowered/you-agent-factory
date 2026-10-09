@@ -231,9 +231,6 @@ func (opening *DurableOpening) resolveWorkerSettings(
 	operatorConfig operatorconfig.Config,
 	resolvedDefaults operatorconfig.ResolvedDefaults,
 ) (map[string]struct{}, factoryruntime.JavaScriptWorkerSettings, error) {
-	if opening.providerIdentities == nil {
-		return nil, factoryruntime.JavaScriptWorkerSettings{}, fmt.Errorf("compose durable session worker presets: provider identity resolver is required")
-	}
 	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
 	workerPresets := make(map[string]factoryruntime.JavaScriptWorkerPreset, len(operatorConfig.WorkerPresets))
 	for index, preset := range operatorConfig.WorkerPresets {

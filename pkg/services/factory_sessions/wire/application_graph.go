@@ -78,6 +78,7 @@ type (
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
 	ProviderOverrideService      = service.ProviderOverrideService
+	RuntimeResourceAcquisition   = service.RuntimeResourceAcquisition
 	DurableOpening               = service.DurableOpening
 	DurableExecution             = service.DurableExecution
 	WorkerCommandRunnerAdapter   = service.WorkerCommandRunnerAdapter
@@ -133,6 +134,7 @@ func NewRoot(
 
 	assembly RuntimeAssembly,
 	durableOpening *DurableOpening,
+	resourceAcquisition *RuntimeResourceAcquisition,
 	processRuntimeFactory ProcessRuntimeFactory,
 	generateSessionID factorysessions.SessionIDGenerator,
 	generateRuntimeInstanceID factorysessions.RuntimeInstanceIDGenerator,
@@ -173,6 +175,7 @@ func NewRoot(
 
 		assembly,
 		durableOpening,
+		resourceAcquisition,
 		processRuntimeFactory,
 		generateSessionID,
 		generateRuntimeInstanceID,
@@ -278,4 +281,8 @@ func NewRuntimePreparation(
 	return service.NewRuntimePreparation(loading.Load, paths.ResolveCurrentDir,
 		generateRuntimeInstanceID, resolveHome, ensureBackendScope,
 		providerIdentities, validator, replay.ReplayClock, resolveClock)
+}
+
+func NewRuntimeResourceAcquisition(opening *DurableOpening, modelService models.Service, providerOverride ProviderOverrideService) *RuntimeResourceAcquisition {
+	return service.NewRuntimeResourceAcquisition(opening.Open, modelService, providerOverride)
 }
