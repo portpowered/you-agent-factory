@@ -1,6 +1,7 @@
 package runtime_metrics_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,12 +17,126 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// M4-S/F: the same process and metrics root serve overlapping sessions. Each
+// invocation owns its listener, profile and provider gate. Lifecycle controls
+// use their API-owned contract; metrics reads use the customer CLI.
+func TestActiveMetricsSessionsPreservePeerOnCompletionOrCancellation(t *testing.T) {
+	t.Parallel()
+	routes := &activeMetricsProviderRoutes{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: routes,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return ctx.Value(retainedMetricsServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	for _, cancelFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel first=%t", cancelFirst), func(t *testing.T) {
+			t.Parallel()
+			root := filepath.Join(t.TempDir(), "metrics")
+			first := startActiveMetricsSession(t, process, routes, root)
+			firstPaths := functionalMetricArtifactPaths(t, root)
+			if len(firstPaths) != 1 {
+				t.Fatalf("first active artifacts = %v, want one", firstPaths)
+			}
+			peer := startActiveMetricsSession(t, process, routes, root)
+			assertRetainedMetricsTokens(t, t.TempDir(), first.url, first.id, 0)
+			assertRetainedMetricsTokens(t, t.TempDir(), peer.url, peer.id, 0)
+			if _, err := os.Stat(firstPaths[0]); err != nil {
+				t.Fatalf("peer startup removed active artifact: %v", err)
+			}
+			if cancelFirst {
+				control := selectedCancellationControl(t, first.url, first.id)
+				if string(control.Outcome) != "ACCEPTED" {
+					t.Fatalf("cancel outcome = %s", control.Outcome)
+				}
+				awaitSelectedTimeSignal(t, first.runner.cancelled)
+				support.WaitForSessionStopped(t, first.url, first.id, 30*time.Second)
+				assertSelectedCancellationState(t, first.url, first.id)
+			} else {
+				close(first.runner.release)
+				support.WaitForSessionTerminalStatus(t, first.url, first.id, 30*time.Second)
+				assertCompletedSessionMetrics(t, first.url, first.id)
+			}
+			// The peer is still gated: the first session's terminal provider facts
+			// must not appear in the peer's selected report.
+			assertRetainedMetricsTokens(t, t.TempDir(), peer.url, peer.id, 0)
+			close(peer.runner.release)
+			support.WaitForSessionTerminalStatus(t, peer.url, peer.id, 30*time.Second)
+			assertCompletedSessionMetrics(t, peer.url, peer.id)
+			assertSelectedTimeWork(t, selectedTimeFixture{url: peer.url, session: peer.id})
+			first.command.Stop(t)
+			peer.command.Stop(t)
+			for _, path := range functionalMetricArtifactPaths(t, root) {
+				if path != firstPaths[0] || !cancelFirst {
+					assertFunctionalRuntimeMetricsRecords(t, path)
+				}
+			}
+		})
+	}
+}
+
+type activeMetricsProviderRoutes struct{ runners sync.Map }
+
+func (routes *activeMetricsProviderRoutes) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner, ok := routes.runners.Load(filepath.Clean(request.WorkDir))
+	if !ok {
+		return platformprocess.CommandResult{}, fmt.Errorf("no active metrics provider route for %s", request.WorkDir)
+	}
+	return runner.(*activeMetricsProvider).Run(ctx, request)
+}
+
+type activeMetricsProvider struct {
+	started, release, cancelled chan struct{}
+	once                        sync.Once
+}
+
+func (runner *activeMetricsProvider) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.once.Do(func() { close(runner.started) })
+	result, err := support.NewGatedSuccessCommandRunner("active metrics COMPLETE", runner.release).Run(ctx, request)
+	if errors.Is(err, context.Canceled) {
+		close(runner.cancelled)
+	}
+	return result, err
+}
+
+type activeMetricsSession struct {
+	id, url string
+	command *support.ProcessCommand
+	runner  *activeMetricsProvider
+}
+
+func startActiveMetricsSession(t *testing.T, process support.ApplicationProcess, routes *activeMetricsProviderRoutes, root string) activeMetricsSession {
+	t.Helper()
+	home := t.TempDir()
+	inputs, id := runtimeMetricsRunInputs(t, home, root,
+		"--continuously", "--with-server", "--server", "http://127.0.0.1:1",
+		"--runtime-metrics-max-size-mb", "1", "--runtime-metrics-max-age-days", "1")
+	dir := inputs.Args[3]
+	inputs.WorkingDirectory = dir
+	inputs.Env = []string{"HOME=" + home, "USERPROFILE=" + home,
+		"APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"),
+		"XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"),
+		"XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
+	runner := &activeMetricsProvider{started: make(chan struct{}), release: make(chan struct{}), cancelled: make(chan struct{})}
+	routes.runners.Store(filepath.Clean(dir), runner)
+	t.Cleanup(func() { routes.runners.Delete(filepath.Clean(dir)) })
+	server := support.NewProcessAPIServer()
+	inputs.Context = context.WithValue(t.Context(), retainedMetricsServerKey{}, server)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	url := server.WaitForURL(t)
+	awaitSelectedTimeSignal(t, runner.started)
+	return activeMetricsSession{id: id, url: url, command: command, runner: runner}
+}
 
 const functionalRuntimeArtifactTimeLayout = "150405.000000000"
 
