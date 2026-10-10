@@ -3,8 +3,7 @@
 `RegisteredConstruction` and `DurableConstruction` run in the shared
 golangci module plugin. `make golangci` invokes the pinned built-in linters and
 strict shared analyzers in ordinary and complete-tag configurations, including
-baseline growth. The temporary `make repolint` dependency retains compiler
-ownership checking until its analyzer migration. T20/T29 consumers use these analyzers. The former
+baseline growth and compiler ownership. T20/T29 consumers use these analyzers. The former
 `internal/contractguard` construction Scan APIs and durable command are removed.
 
 ## Metadata and composition
@@ -108,13 +107,30 @@ their existing Wire, deadcode and independent review gates.
 
 The maintained `ci-smoke` cohort uses the production registry with minimal,
 compiler-valid declarations for the Chat catalog and Events. Its
-clean/seeded/recovered plugin invocations distinguish lawful owning Wire
+ordinary and complete-tag clean/seeded/recovered plugin invocations distinguish lawful owning Wire
 construction and scoped map allocation from same-owner construction,
 cross-owner construction, and an unlisted constructor returning a classified
 type. Events also checks required logger guards independently of the legitimate
 non-positive retention default and topic-state allocation. These fixtures prove
 diagnostics and qualified symbols for those sets; they do not prove that
 unclassified repository owners conform.
+
+Events fixtures also trace an unlisted constructor's required `events.Service`
+parameter into stored peer state. Seeds exercise the parameter guard, stored
+guard, zero-argument getter call and escaped getter reference. A parameterized
+peer view remains lawful. The fixture adds no production constructor or owner
+classification; it proves the existing registry's typed guard/getter rules.
+
+Final inventory auditing must distinguish retired construction paths from
+surviving requiredness guards. Provider Sessions' captured-only `service.New`
+still checks its required Recordings reader. Its HTTP `NewAdapter`, `Details`
+and `NewHandler` still guard required collaborators/receivers. Operator Settings'
+private `Service` still guards its receiver in `LoadDocument`,
+`ApplyDocumentUpdate` and `ResolveEffective`. These are unresolved production
+findings, not domain validation or analysis exclusions. T29 cannot enable those
+classifications with a suppression or fix production outside its authorized
+scope. The original owners must supply the smallest correction before final
+repository enforcement can pass.
 
 Events classifies the public `events.Service`, private `service.Store` and
 private `topicState` as behavior, behavior and scoped state respectively.

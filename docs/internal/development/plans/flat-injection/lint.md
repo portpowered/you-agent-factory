@@ -77,10 +77,25 @@ scoped state. Its exact NewWithRetention signature requires logger parameter 1;
 retention remains domain policy. PR #3126 removed the Wire logger fallback and
 private New wrapper. The witness rejects Events construction and a required
 logger guard while accepting its retention default and topic-state allocation.
+The Events peer fixture also rejects an inferred required parameter guard,
+its traced stored guard, a zero-argument getter call and an escaped getter
+reference. A parameterized peer view stays lawful. The existing ci-smoke
+cohort runs clean/seeded/recovered controls under both ordinary and complete
+tags; execution evidence belongs in the PR conversation.
 These two sets do not prove repository coverage. Remaining owner, Platform
 effect and transport classifications, complete inventory dispositions and the
 full S1-S9 plugin matrix remain T29 obligations; no allowance or baseline growth
 is authorized.
+
+Current production findings remain blocking. Provider Sessions' captured-only
+`internal/service.New` guards the required Recordings reader; HTTP `NewAdapter`,
+`Details` and `NewHandler` guard required collaborators/receivers. Operator
+Settings' `internal/service.Service` guards its receiver in `LoadDocument`,
+`ApplyDocumentUpdate` and `ResolveEffective`. Reader-path retirement does not
+close these requiredness findings. Original owners must remove them while
+preserving supported boundary validation, context and domain checks. T29
+must not suppress them, call them terminal, or make production changes in a
+checker-only lane.
 
 The constructor inventory names qualified service constructors, effects, their required parameters, returned service interfaces, and approved focused provider operations. It is enforcement metadata with exact semantic meaning, not a broad exception list. Validate references against source and reject stale entries. Derive provider references from authored Wire sets where possible and resolve exported aliases in owner Wire packages. Go internal visibility still applies: canonical composition consumes focused owner exports rather than importing private implementation packages.
 

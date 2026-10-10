@@ -260,8 +260,9 @@ type Service interface { Observe() }
 `,
 		owner + "/store.go": `package service
 import "github.com/portpowered/infinite-you/pkg/platform/logging"
+import "github.com/portpowered/infinite-you/pkg/services/events"
 type topicState struct { values map[string]string }
-type Store struct { logger logging.Logger; topics map[string]*topicState }
+type Store struct { logger logging.Logger; topics map[string]*topicState; peer events.Service }
 func NewWithRetention(retention int, logger logging.Logger) *Store {
  if logger == nil { return nil } // want "required-dependency-guard:.*NewWithRetention"
  if retention <= 0 { retention = 10000 }
@@ -272,6 +273,18 @@ func (s *Store) Observe() {
 }
 func (s *Store) Topic() { s.topics["topic"] = &topicState{values: make(map[string]string)} }
 func NewAlternate(logger logging.Logger) *Store { return &Store{logger: logger} }
+func NewPeer(peer events.Service) *Store {
+ if peer == nil { return nil } // want "required-dependency-guard:.*NewPeer"
+ return &Store{peer: peer}
+}
+func (s *Store) Peer() events.Service { return s.peer } // want Peer:"construction-getter=service-getter-locator"
+func (s *Store) UsePeer() {
+ if s.peer != nil { s.peer.Observe() } // want "required-dependency-guard:.*UsePeer.*NewPeer"
+ s.Peer() // want "service-getter-locator:.*UsePeer.*Peer"
+}
+func (s *Store) EscapePeer() any { return s.Peer } // want "unresolved-service-getter-reference:.*EscapePeer.*Peer"
+func (s *Store) PeerView(_ string) events.Service { return s.peer }
+func (s *Store) View() { s.PeerView("scope") }
 func Operation(logger logging.Logger) {
  NewWithRetention(0, logger) // want "registered-construction:.*Operation.*NewWithRetention"
  NewAlternate(logger) // want "registered-construction:.*Operation.*NewAlternate"
