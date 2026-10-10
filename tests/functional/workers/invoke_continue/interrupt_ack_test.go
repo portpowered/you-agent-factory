@@ -233,6 +233,17 @@ func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context
 	return execution, err
 }
 
+func (store *interruptPhaseAckStore) ReadWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	if target.WorkerSessionID == "revival-missing-recipe" {
+		return recordings.WorkerContinuationSource{}, errors.New("private-revival-missing-recipe")
+	}
+	source, err := store.WorkerRecordingStore.ReadWorkerContinuationSource(ctx, target)
+	if target.WorkerSessionID == "revival-stale-recipe" {
+		source.Execution.Execution.Dispatch.DispatchID = "stale-physical-attempt"
+	}
+	return source, err
+}
+
 // Preserve the real store's bounded read and activation capabilities while
 // keeping this decorator's controlled write/activity faults.
 func (store *interruptPhaseAckStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {

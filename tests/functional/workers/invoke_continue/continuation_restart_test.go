@@ -250,7 +250,7 @@ func assertNativeContinuationCommand(t *testing.T, requests []platformprocess.Co
 // store. No native provider files exist; only the command edge is substituted.
 func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"completed", "failed", "lost-input-ack", "uncertain-opening", "unadmitted-recipe"} {
+	for _, name := range []string{"completed", "failed", "lost-input-ack", "uncertain-opening", "unadmitted-recipe", "missing-recipe", "stale-recipe"} {
 		t.Run(name, func(t *testing.T) { t.Parallel(); runCapturedProviderContinueAfterHostRestart(t, name) })
 	}
 }
@@ -282,9 +282,13 @@ func runDurableRevivalFactorySource(t *testing.T, restart bool) {
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "initial COMPLETE")},
 		continuationRestartCommandResult(false),
 	)
-	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+	peerRunner := &t7GatedProviderRunner{}
+	peerRunner.reset()
+	commandRunner := &durableRevivalCommandRunner{source: runner, peer: peerRunner}
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: commandRunner}}}
 	first := startContinuationRestartHost(t, root, host, home, route)
 	t7WriteFactorySibling(t, dir)
+	writeDurableRevivalCapacity(t, dir)
 	opened := support.OpenFactorySessionAt(t, first.baseURL, dir)
 	if !restart {
 		defer support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
@@ -313,6 +317,15 @@ func runDurableRevivalFactorySource(t *testing.T, restart bool) {
 		}
 		fresh = startContinuationRestartHost(t, root, host, home, route)
 	}
+	peerSession := opened.Session.Id
+	if restart {
+		peerSession = support.OpenFactorySessionAt(t, fresh.baseURL, dir).Session.Id
+		defer support.CloseFactorySessionAt(t, fresh.baseURL, peerSession)
+	}
+	defer t7ReleaseAndJoin(t, t.Context(), peerRunner)()
+	peer := startDurableRevivalPeer(t, fresh, peerSession, peerRunner)
+	peerEvents := support.GetFactoryEventsForSessionAt(t, fresh.baseURL, peerSession)
+	peerWork := support.GetJSON[factoryapi.ListWorkResponse](t, fresh.baseURL+"/factory-sessions/"+peerSession+"/work")
 	var factoryEvents []factoryapi.FactoryEvent
 	var factoryWork factoryapi.ListWorkResponse
 	if !restart {
@@ -333,6 +346,26 @@ func runDurableRevivalFactorySource(t *testing.T, restart bool) {
 	if !restart {
 		assertFactoryRevivalIndependence(t, first, opened.Session.Id, *work.WorkId, rows.Sessions[0], factoryEvents, factoryWork)
 	}
+	assertFactoryRevivalIndependence(t, fresh, peerSession, *peer.WorkId, peer.Observation, peerEvents, peerWork)
+	assertDurableRevivalPeerCompletion(t, fresh, peerSession, peer.Observation.WorkerSessionId, peerRunner)
+}
+
+type durableRevivalPeer struct {
+	WorkId      *string
+	Observation factoryapi.WorkerSessionObservation
+}
+
+func startDurableRevivalPeer(t *testing.T, host invokeContinueStartedProcess, session string, runner *t7GatedProviderRunner) durableRevivalPeer {
+	t.Helper()
+	work := support.SubmitSessionWorkAt(t, host.baseURL, session, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task", Payload: "durable occupied peer input",
+	})
+	t19AwaitSignal(t, t.Context(), runner.started, "Factory peer occupies executor slot")
+	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.baseURL+"/factory-sessions/"+session+"/worker-sessions?workId="+*work.WorkId)
+	if len(rows.Sessions) != 1 || rows.Sessions[0].State != "RUNNING" || rows.Sessions[0].Direct {
+		t.Fatalf("occupied Factory peer: %+v", rows)
+	}
+	return durableRevivalPeer{WorkId: work.WorkId, Observation: rows.Sessions[0]}
 }
 
 func assertFactoryRevivalIndependence(t *testing.T, host invokeContinueStartedProcess, sessionID, workID string, source factoryapi.WorkerSessionObservation, events []factoryapi.FactoryEvent, work factoryapi.ListWorkResponse) {
@@ -491,6 +524,10 @@ func executeHeadRestartCLI(t *testing.T, host invokeContinueStartedProcess, home
 func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	failed := name == "failed"
 	requestID := continuationRestartRequestID(name)
+	sourceID := "restart-source"
+	if name == "missing-recipe" || name == "stale-recipe" {
+		sourceID = "revival-" + name
+	}
 	dir, root := t.TempDir(), t.TempDir()
 	host, home, err := prepareInvokeContinuePackageRoot(t, root)
 	if err != nil {
@@ -504,7 +541,7 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	first := startContinuationRestartHost(t, root, host, home, route)
 	path := filepath.Join(dir, "execution.json")
 	writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{
-		requestID: "restart-source-request", workerSessionID: "restart-source", dispatchID: "restart-source-attempt",
+		requestID: "restart-source-request", workerSessionID: sourceID, dispatchID: "restart-source-attempt",
 		workingDirectory: dir, userMessage: "initial input",
 	})
 	invoke := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
@@ -517,7 +554,7 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	if !source.Accepted || source.State != "COMPLETED" || runner.CallCount() != 1 {
 		t.Fatalf("source was not joined: %#v calls=%d", source, runner.CallCount())
 	}
-	awaitContinuationRestartLogs(t, first, home, dir, "restart-source")
+	awaitContinuationRestartLogs(t, first, home, dir, sourceID)
 	var transcript *factoryapi.WorkerSessionTranscriptResponse
 	if name == "completed" {
 		captured := readCapturedRestartTranscript(t, first, home, dir)
@@ -539,11 +576,15 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		assertCapturedRestartScopeDenial(t, fresh)
 	}
 
+	if sourceID != "restart-source" {
+		assertDurableRevivalRecipeRefusal(t, fresh, home, dir, sourceID, runner)
+		return
+	}
 	if successor := continuationRestartUnadmittedSuccessor(name); successor != "" {
 		assertUncertainContinuationAfterRestart(t, fresh, root, host, home, dir, route, runner, successor)
 		return
 	}
-	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-source",
+	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", sourceID,
 		"--request-id", requestID, "--successor-worker-session-id", "restart-successor", "--user-message", "fresh host follow-up"})
 	continued.Input.Env, continued.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 	if err := fresh.process.Execute(continued.Input); !failed && err != nil {
@@ -555,10 +596,10 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		assertContinuationRestartResult(t, continued.Stdout(), runner.Requests(), dir)
 	}
 	logs := awaitContinuationRestartLogs(t, fresh, home, dir, "restart-successor")
-	if !strings.Contains(logs, "restart-source") {
+	if !strings.Contains(logs, sourceID) {
 		t.Fatalf("successor logs omitted predecessor: %s", logs)
 	}
-	show := support.FakeInputs(t.Context(), []string{"you", "--server", fresh.baseURL, "--json", "worker-sessions", "show", "--worker-session-id", "restart-source"})
+	show := support.FakeInputs(t.Context(), []string{"you", "--server", fresh.baseURL, "--json", "worker-sessions", "show", "--worker-session-id", sourceID})
 	show.Input.Env, show.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 	if err := fresh.process.Execute(show.Input); err != nil || !strings.Contains(show.Stdout(), "restart-successor") {
 		t.Fatalf("archived source lost public successor link: %v stdout=%s stderr=%s", err, show.Stdout(), show.Stderr())

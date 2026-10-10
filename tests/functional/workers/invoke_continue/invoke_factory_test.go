@@ -7,14 +7,118 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
+
+// The same immutable command edge serves source/resume and the occupied peer.
+// Only the peer waits; source revival must finish before the peer is released.
+type durableRevivalCommandRunner struct {
+	source *testutil.ProviderCommandRunner
+	peer   *t7GatedProviderRunner
+}
+
+func (runner *durableRevivalCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner.RunStreaming(ctx, request, nil)
+}
+
+func (runner *durableRevivalCommandRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	if strings.Contains(string(request.Stdin), "durable occupied peer input") {
+		return runner.peer.RunStreaming(ctx, request, observe)
+	}
+	result, err := runner.source.Run(ctx, request)
+	if observe != nil && len(result.Stdout) != 0 {
+		observe(platformprocess.OutputStreamStdout, result.Stdout)
+	}
+	return result, err
+}
+
+func writeDurableRevivalCapacity(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "factory.json")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var definition map[string]any
+	if err := json.Unmarshal(content, &definition); err != nil {
+		t.Fatal(err)
+	}
+	resource := []map[string]any{{"name": "executor-slot", "capacity": 1}}
+	definition["resources"] = resource
+	definition["workstations"].([]any)[0].(map[string]any)["resources"] = resource
+	writeInvokeContinueJSON(t, path, definition)
+}
+
+func assertDurableRevivalPeerCompletion(t *testing.T, host invokeContinueStartedProcess, session, id string, runner *t7GatedProviderRunner) {
+	t.Helper()
+	t7AssertFactorySibling(t, t.Context(), host.baseURL, id, session, "RUNNING")
+	if runner.CallCount() != 1 {
+		t.Fatalf("revival changed peer admission: calls=%d", runner.CallCount())
+	}
+	close(runner.release)
+	t19AwaitSignal(t, t.Context(), runner.stopped, "Factory peer completed independently")
+	support.WaitForSessionTerminalStatus(t, host.baseURL, session, 30*time.Second)
+	t7AssertFactorySibling(t, t.Context(), host.baseURL, id, session, "COMPLETED")
+}
+
+// F-10 retains real healthy capture history while the external store returns
+// missing or stale execution authority. Restart, observation and refusal cross
+// production wiring; no Worker Sessions or Provider Sessions peer is replaced.
+func assertDurableRevivalRecipeRefusal(t *testing.T, host invokeContinueStartedProcess, home, dir, sourceID string, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+	awaitContinuationRestartLogs(t, host, home, dir, sourceID)
+	status, logs := t7HTTP(t, t.Context(), http.MethodGet, host.baseURL+"/worker-sessions/"+sourceID+"/logs", nil)
+	if status != http.StatusOK || !strings.Contains(logs, `"health":"COMPLETE"`) {
+		t.Fatalf("recipe refusal lost healthy history: %s", logs)
+	}
+	observation := support.GetJSON[api.WorkerSessionObservation](t, host.baseURL+"/worker-sessions/"+sourceID)
+	if observation.State != "COMPLETED" || observation.Revivable == nil || *observation.Revivable || observation.SuccessorWorkerSessionId != nil {
+		t.Fatalf("unavailable recipe granted revival authority: %+v", observation)
+	}
+	rows := support.GetJSON[api.ListWorkerSessionsResponse](t, host.baseURL+"/worker-sessions?history=archived")
+	if len(rows.Sessions) != 1 || !reflect.DeepEqual(observation, rows.Sessions[0]) {
+		t.Fatalf("archived recipe capability disagrees with show: %+v", rows)
+	}
+	assertDurableRevivalCLIRefusal(t, host, home, dir, sourceID)
+	status, body := t7HTTP(t, t.Context(), http.MethodPost, host.baseURL+"/worker-sessions/"+sourceID+"/continue",
+		map[string]any{"resolveHead": true, "requestId": "recipe-http-request", "successorWorkerSessionId": "recipe-http-successor", "followUpInput": "follow-up"})
+	if status != http.StatusServiceUnavailable || !strings.Contains(body, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED") || runner.CallCount() != 1 {
+		t.Fatalf("recipe refusal: status=%d body=%s calls=%d", status, body, runner.CallCount())
+	}
+	after := support.GetJSON[api.WorkerSessionObservation](t, host.baseURL+"/worker-sessions/"+sourceID)
+	if !reflect.DeepEqual(observation, after) {
+		t.Fatalf("recipe refusal mutated source: before=%+v after=%+v", observation, after)
+	}
+}
+
+func assertDurableRevivalCLIRefusal(t *testing.T, host invokeContinueStartedProcess, home, dir, sourceID string) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		flags := []string{"you", "--json"}
+		if remote {
+			flags = append(flags, "--remote", "--server", host.baseURL)
+		}
+		request := support.FakeInputs(t.Context(), append(flags, "worker-sessions", "continue", sourceID,
+			"--head", "--request-id", "recipe-refusal-request", "--successor-worker-session-id", "recipe-refusal-successor", "--user-message", "follow-up"))
+		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+		if err := host.process.Execute(request.Input); err == nil {
+			t.Fatal("unavailable recipe admitted a successor")
+		}
+		assertDirectWorkerSessionCLIError(t, request, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED")
+		if strings.Contains(request.Stderr()+request.Stdout(), "private-revival") {
+			t.Fatal("recipe diagnostics exposed private persistence detail")
+		}
+	}
+}
 
 // F6-04 admits actual Factory Work beside a direct invocation through one
 // assembled host. Each attempt has its own command gate and captured identity.
