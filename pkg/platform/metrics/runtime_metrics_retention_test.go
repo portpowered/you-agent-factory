@@ -316,6 +316,134 @@ func TestRuntimeMetricsCoordinationRejectsSymlinkMarkerAndRecovers(t *testing.T)
 	assertRetentionPreservedContent(t, marker, "regular marker")
 }
 
+func TestRuntimeMetricsCoordinationRejectsSymlinkRootAndRecovers(t *testing.T) {
+	t.Parallel()
+	parent := t.TempDir()
+	target := filepath.Join(parent, "customer-directory")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	customer := filepath.Join(target, "customer-file")
+	const content = "preserve customer directory contents"
+	if err := os.WriteFile(customer, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(parent, "selected-root")
+	if err := os.Symlink(target, root); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	coordination := runtimeMetricsCoordination{}
+	lock, err := coordination.TryLockRoot(root)
+	if lock != nil || err == nil || !strings.Contains(err.Error(), "is not a directory") || !strings.Contains(err.Error(), strconv.Quote(root)) {
+		t.Fatalf("symlink root acquisition = %v, %v, want identity rejection", lock, err)
+	}
+	assertRetentionPathAbsent(t, rootLockPath(target), "rejected root must not create a target lock")
+	assertRetentionPreservedContent(t, customer, content)
+	if got, err := os.Readlink(root); err != nil || got != target {
+		t.Fatalf("rejected root changed: %q, %v", got, err)
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	lock, err = coordination.TryLockRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertRetentionPreservedContent(t, customer, content)
+}
+
+func TestRuntimeMetricsCoordinationRejectsMarkerPermissionsAndRecovers(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission rejection requires Linux CI")
+	}
+	for _, denied := range []string{"inspect", "open"} {
+		t.Run(denied, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			marker := filepath.Join(root, "selected.active")
+			const content = "preserve rejected marker bytes"
+			if err := os.WriteFile(marker, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			blocked := marker
+			if denied == "inspect" {
+				blocked = root
+			}
+			if err := os.Chmod(blocked, 0); err != nil {
+				t.Fatal(err)
+			}
+			// Restore permissions before TempDir cleanup even on assertion failure.
+			t.Cleanup(func() { _ = os.Chmod(blocked, 0o700) })
+			coordination := runtimeMetricsCoordination{}
+			lock, err := coordination.TryClaimMarker(marker)
+			if err == nil && lock != nil {
+				_ = lock.Close()
+				t.Skip("host identity bypasses POSIX permissions")
+			}
+			if lock != nil || !errors.Is(err, os.ErrPermission) || !strings.Contains(err.Error(), denied+" runtime metrics coordination file") || !strings.Contains(err.Error(), strconv.Quote(marker)) {
+				t.Fatalf("denied marker %s = %v, %v, want permission cause and operation", denied, lock, err)
+			}
+			if err := os.Chmod(blocked, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			assertRetentionPreservedContent(t, marker, content)
+			lock, err = coordination.TryClaimMarker(marker)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := lock.Close(); err != nil {
+				t.Fatal(err)
+			}
+			assertRetentionPreservedContent(t, marker, content)
+		})
+	}
+}
+
+func TestRuntimeMetricsCoordinationCloseRetainsFailureAndRecovers(t *testing.T) {
+	t.Parallel()
+	marker := filepath.Join(t.TempDir(), "selected.active")
+	const content = "preserve closed-owner marker"
+	if err := os.WriteFile(marker, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	coordination := runtimeMetricsCoordination{}
+	owner, err := coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock, ok := owner.(*runtimeMetricsLock)
+	if !ok {
+		t.Fatalf("unexpected owning lock type %T", owner)
+	}
+	if err := lock.file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	first := owner.Close()
+	var nativeError syscall.Errno
+	if !errors.Is(first, os.ErrClosed) || !errors.As(first, &nativeError) || nativeError == 0 {
+		t.Fatalf("close lost native unlock or file-close cause: %v", first)
+	}
+	recovered, err := coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = recovered.Close() })
+	if again := owner.Close(); !errors.Is(again, first) {
+		t.Fatalf("repeated close changed retained failure: %v, want %v", again, first)
+	}
+	if peer, err := coordination.TryClaimMarker(marker); peer != nil || !errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
+		t.Fatalf("failed old close disturbed recovered owner: %v, %v", peer, err)
+	}
+	if err := recovered.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertRetentionPreservedContent(t, marker, content)
+}
+
 func TestRuntimeMetricsCoordinationRejectsClosedHandleAndRecovers(t *testing.T) {
 	t.Parallel()
 	marker := filepath.Join(t.TempDir(), "selected.active")
