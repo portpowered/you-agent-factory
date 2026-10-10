@@ -790,18 +790,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	remoteInvocationOperation := provideRemoteInvocationOperation(wireStandardCLIHTTPProtocol)
 	operations := provideACPCLIService(operatorsettingsService, service, idGenerator)
-	chatsessionsService, err := provideChatSessionsService(eventsService, loggingLogger, source)
-	if err != nil {
-		return nil, err
-	}
+	chatsessionsService := provideChatSessionsService(eventsService, loggingLogger, source)
 	catalogPathsService, err := wire7.NewCatalogPathsService(effectiveFactoryCatalogOperation, v, v4, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
-	factoryTargetCatalogService, err := provideChatSessionsFactoryTargetCatalogService(operatorsettingsService, catalogPathsService, loggingLogger)
-	if err != nil {
-		return nil, err
-	}
+	factoryTargetCatalogService := provideChatSessionsFactoryTargetCatalogService(operatorsettingsService, catalogPathsService, loggingLogger)
 	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir(edges2)
 	v205 := provideChatSessionsResponseBridge(chatsessionsService, v182, eventsService, loggingLogger)
 	responseBridge := provideACPServerResponseBridge(v205)

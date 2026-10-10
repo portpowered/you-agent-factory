@@ -274,10 +274,13 @@ func TestStore_SelectedLoggerPreservesQuietOperationResults(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	capture, calls := newCaptureLogger()
-	captured := NewStore(sequentialIDs("session"), fixedClock(at), nil, nil, capture)
-	quiet := NewStore(sequentialIDs("session"), fixedClock(at), nil, nil, logging.NoopLogger{})
-	if len(*calls) != 0 {
-		t.Fatal("construction logged")
+	ids := sequentialIDs("session")
+	idCalls, clockCalls := 0, 0
+	capturedEvents, quietEvents := newFakeEventsAppender(), newFakeEventsAppender()
+	captured := NewStore(func() string { idCalls++; return ids() }, func() time.Time { clockCalls++; return at }, capturedEvents, capturedEvents, capture)
+	quiet := NewStore(sequentialIDs("session"), fixedClock(at), quietEvents, quietEvents, logging.NoopLogger{})
+	if idCalls != 0 || clockCalls != 0 || len(*calls) != 0 || len(capturedEvents.topics) != 0 || len(quietEvents.topics) != 0 {
+		t.Fatal("construction invoked effects")
 	}
 	got := exerciseStoreLoggerOperations(t, captured)
 	want := exerciseStoreLoggerOperations(t, quiet)

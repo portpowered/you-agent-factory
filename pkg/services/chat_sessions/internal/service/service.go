@@ -24,8 +24,8 @@ type Service struct {
 var _ chatsessions.FactoryTargetCatalogService = (*Service)(nil)
 
 // New stores concrete collaborator roots and the selected operation logger.
-// The owning Wire provider validates required peers and selects nil compatibility
-// before calling this inert constructor.
+// All collaborators are required; quiet callers supply logging.NoopLogger{}.
+// Construction stores dependencies without invoking them.
 func New(
 	operatorSettings operatorsettings.Service,
 	factoryDefinitions factorydefinitions.CatalogPathsService,

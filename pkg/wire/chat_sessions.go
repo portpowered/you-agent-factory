@@ -23,7 +23,7 @@ func provideChatSessionsFactoryTargetCatalogService(
 	operatorSettings operatorsettings.Service,
 	catalogPaths factorydefinitions.CatalogPathsService,
 	logger logging.Logger,
-) (chatsessions.FactoryTargetCatalogService, error) {
+) chatsessions.FactoryTargetCatalogService {
 	return chatsessionswire.NewFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
 }
 
@@ -34,6 +34,6 @@ func provideChatSessionsFactoryTargetCatalogService(
 // AcknowledgeAttachment operation's EventsReader dependency. It is the one
 // construction path to a Service value in production code: no alternate
 // constructor, dependency bag, or secondary injector exists.
-func provideChatSessionsService(eventsService events.Service, logger logging.Logger, source platformclock.Source) (chatsessions.Service, error) {
+func provideChatSessionsService(eventsService events.Service, logger logging.Logger, source platformclock.Source) chatsessions.Service {
 	return chatsessionswire.NewService(uuid.NewString, source.Now, eventsService, eventsService, logger)
 }
