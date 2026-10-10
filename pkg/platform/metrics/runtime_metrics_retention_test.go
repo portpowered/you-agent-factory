@@ -2022,6 +2022,115 @@ func (filesystem *retentionTransitionFileSystem) Remove(path string) error {
 	return filesystem.Local.Remove(path)
 }
 
+// Cancellation is delivered at the existing filesystem boundary, after Sweep
+// has acquired its root. A fresh context must recover on the same component.
+func TestRuntimeMetricsRetentionCancelsActiveStagesAndRecovers(t *testing.T) {
+	for _, stage := range []string{"inventory", "age pruning", "size pruning", "marker cleanup"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			assertRetentionCanceledStageRecovery(t, stage)
+		})
+	}
+}
+
+func assertRetentionCanceledStageRecovery(t *testing.T, stage string) {
+	t.Helper()
+	root, retained, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+	expired := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "expired-runtime-expired", 7)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	filesystem := &cancelStageRetentionFileSystem{stage: stage, cancel: cancel}
+	rootLock, artifactLock, markerLock := &metricsTestCloser{}, &metricsTestCloser{}, &metricsTestCloser{}
+	retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	}, &metricsTestCoordination{tryRootLock: rootLock, tryClaim: artifactLock, tryClaimMarker: markerLock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
+	if stage == "size pruning" {
+		request.Config.MaxAge, request.Config.MaxBackups = 0, 1
+	}
+	report, err := retention.Sweep(ctx, request)
+	wantClaims := 0
+	if stage == "marker cleanup" {
+		wantClaims = 1
+	}
+	assertRetentionCanceledStageReport(t, stage, report, err, wantClaims)
+	if ctx.Err() != context.Canceled || rootLock.closed != 1 || artifactLock.closed != wantClaims || markerLock.closed != 0 {
+		t.Fatalf("canceled %s = %#v, %v; releases root/artifact/marker=%d/%d/%d", stage, report, err, rootLock.closed, artifactLock.closed, markerLock.closed)
+	}
+	if wantClaims == 0 {
+		assertRetentionPreservedContent(t, expired, "mmmmmmm")
+	} else {
+		assertRetentionPathAbsent(t, expired, "safely pruned artifact before cancellation")
+	}
+	assertRetentionPathExists(t, marker, "orphan marker after cancellation")
+	assertRetentionPreservedContent(t, retained, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+	filesystem.cancel = nil
+	request.Config.MaxAge = 1
+	report, err = retention.Sweep(t.Context(), request)
+	assertRetentionRecoveredStageReport(t, report, err, wantClaims)
+	if rootLock.closed != 2 || artifactLock.closed != 1 || markerLock.closed != 1 {
+		t.Fatalf("recovered %s = %#v, %v; releases root/artifact/marker=%d/%d/%d", stage, report, err, rootLock.closed, artifactLock.closed, markerLock.closed)
+	}
+	assertRetentionPathAbsent(t, expired, "expired artifact after recovery")
+	assertRetentionPathAbsent(t, marker, "orphan marker after recovery")
+	assertRetentionPreservedContent(t, retained, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+}
+
+func assertRetentionCanceledStageReport(t *testing.T, stage string, report RuntimeMetricsRetentionReport, err error, wantClaims int) {
+	t.Helper()
+	operation := "prune runtime metrics:"
+	switch stage {
+	case "inventory":
+		operation = "inventory runtime metrics under"
+	case "marker cleanup":
+		operation = "reap runtime metrics claim markers:"
+	}
+	if !errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), operation) || len(report.Failures) != 0 ||
+		report.Removed != (RuntimeMetricsRetentionTotals{Files: wantClaims, Bytes: int64(wantClaims * 7)}) {
+		t.Fatalf("canceled %s report = %#v, %v, want %q cancellation", stage, report, err, operation)
+	}
+}
+
+func assertRetentionRecoveredStageReport(t *testing.T, report RuntimeMetricsRetentionReport, err error, priorClaims int) {
+	t.Helper()
+	if err != nil || len(report.Failures) != 0 || report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) ||
+		report.Removed != (RuntimeMetricsRetentionTotals{Files: 1 - priorClaims, Bytes: int64((1 - priorClaims) * 7)}) {
+		t.Fatalf("recovered sweep = %#v, %v", report, err)
+	}
+}
+
+type cancelStageRetentionFileSystem struct {
+	platformfilesystem.Local
+	stage  string
+	cancel context.CancelFunc
+}
+
+func (filesystem *cancelStageRetentionFileSystem) WalkDir(root string, visit fs.WalkDirFunc) error {
+	err := filesystem.Local.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if filesystem.cancel != nil && filesystem.stage == "inventory" && entry != nil && isRuntimeMetricsArtifact(entry.Name()) {
+			filesystem.cancel()
+		}
+		return visit(path, entry, walkErr)
+	})
+	if filesystem.cancel != nil && (filesystem.stage == "age pruning" || filesystem.stage == "size pruning") {
+		filesystem.cancel()
+	}
+	return err
+}
+
+func (filesystem *cancelStageRetentionFileSystem) ReadDir(path string) ([]fs.DirEntry, error) {
+	entries, err := filesystem.Local.ReadDir(path)
+	if filesystem.cancel != nil && filesystem.stage == "marker cleanup" && filepath.Base(path) == runtimeMetricsClaimsDirectory {
+		filesystem.cancel()
+	}
+	return entries, err
+}
+
 func writeRetentionArtifact(t *testing.T, root, date, clock, suffix string, size int) string {
 	t.Helper()
 	datePath := filepath.Join(root, filepath.FromSlash(date))
