@@ -644,6 +644,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "cli"
         }
       ]
     },
@@ -737,6 +741,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
           "boundary": "cli"
         }
       ]
@@ -856,6 +864,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
           "boundary": "cli"
         }
       ]
@@ -1132,10 +1144,15 @@
       "name": "continueWorkerSession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/getCurrentFactoryBySessionId",

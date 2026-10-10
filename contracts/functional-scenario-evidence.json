@@ -236,6 +236,15 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show",
+        "rest/continueWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
       "stableIds": [
         "cli/you.worker-sessions.cancel",

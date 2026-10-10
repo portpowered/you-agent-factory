@@ -438,6 +438,92 @@ func TestContinuationHeadCompetingAdmissionPreservesActiveHead(t *testing.T) {
 	t19AwaitSignal(t, t.Context(), active.stopped, "active head joined")
 }
 
+// M8: distinct local/HTTP head requests compete over an attributed terminal
+// source. The loser cannot change the admitted metadata or the running caller.
+func TestRequesterCompetingHead(t *testing.T) {
+	t.Parallel()
+	root, dir, parentDir := t.TempDir(), t.TempDir(), t.TempDir()
+	host, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "initial COMPLETE")})
+	active, parentRunner := &t7GatedProviderRunner{}, &t7GatedProviderRunner{}
+	active.reset()
+	parentRunner.reset()
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{
+		{workingDirectory: dir, runner: &durableRevivalCommandRunner{source: source, peer: active}},
+		{workingDirectory: parentDir, runner: parentRunner},
+	}}
+	started := startContinuationRestartHost(t, root, host, home, route)
+	defer t7ReleaseAndJoin(t, t.Context(), active)()
+	defer t7ReleaseAndJoin(t, t.Context(), parentRunner)()
+	fixture := &invokeContinuePackageFixture{process: started.process, baseURL: started.baseURL, hostDir: host}
+	parent := &invokeContinueScenario{fixture: fixture, name: "requester-race-parent", runNumber: 1, workingDirectory: parentDir, homeDirectory: home, providerRunner: parentRunner, session: fixture.openSession(t)}
+	child := &invokeContinueScenario{fixture: fixture, name: "requester-race-child", runNumber: 1, workingDirectory: dir, homeDirectory: home, providerRunner: source, session: fixture.openSession(t)}
+	defer parent.close(t)
+	defer child.close(t)
+	parentID := scenarioScopedID(parent, "requester")
+	start := t7RemoteCLIInputs(parent, t.Context(), started.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := started.process.Execute(start.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, t.Context(), parentRunner.started, "competing-head requester running")
+	parentToken := requesterSourceToken(t, parentRunner, parentID)
+	invoke := t7RemoteCLIInputs(child, t.Context(), started.baseURL, "invoke", "--execution", requesterExecutionPath(t, child, "active-source"))
+	invoke.Input.Env = append(invoke.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+parentToken)
+	if err := started.process.Execute(invoke.Input); err != nil {
+		t.Fatal(err)
+	}
+	sourceBefore := requesterObservation(t, fixture, child, t.Context(), "active-source")
+	parentBefore := requesterObservation(t, fixture, parent, t.Context(), parentID)
+	awaitContinuationRestartLogs(t, started, home, dir, "active-source", "opaque-restart-thread")
+	winner, accepted := raceCompetingHeadRequests(t, started, home, dir)
+	t19AwaitSignal(t, t.Context(), active.started, "attributed winning head active")
+	assertActiveHeadRefusal(t, started, home, dir)
+	retry := support.FakeInputs(t.Context(), winner.Input.Args)
+	retry.Input.Env, retry.Input.WorkingDirectory = winner.Input.Env, winner.Input.WorkingDirectory
+	if err := started.process.Execute(retry.Input); err != nil {
+		t.Fatal(err)
+	}
+	assertRequesterHeadRace(t, fixture, parent, child, active, accepted.SuccessorWorkerSessionID, sourceBefore, parentBefore)
+	if source.CallCount() != 1 || active.CallCount() != 1 || parentRunner.CallCount() != 1 {
+		t.Fatal("competing admission or replay launched an extra provider")
+	}
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.show", "rest/continueWorkerSession")
+}
+
+func assertRequesterHeadRace(t *testing.T, fixture *invokeContinuePackageFixture, parent, child *invokeContinueScenario, active *t7GatedProviderRunner, successorID string, source, parentBefore api.WorkerSessionObservation) {
+	t.Helper()
+	head := requesterObservation(t, fixture, child, t.Context(), successorID)
+	if head.State != "RUNNING" || source.Requester == nil || source.Requester.WorkerSessionId == "" ||
+		!reflect.DeepEqual(source.Requester, head.Requester) || !reflect.DeepEqual(source.Correlation, head.Correlation) || !reflect.DeepEqual(source.Labels, head.Labels) {
+		t.Fatal("competing head lost the exact attributed metadata")
+	}
+	environment := requesterEnvironment(active.Requests()[0].Env)
+	sourceToken := requesterEnvironment(child.providerRunner.Requests()[0].Env)["YOU_WORKER_SESSION_TOKEN"]
+	assertRequesterSuccessorEnvironment(t, environment, successorID, source.Requester.WorkerSessionId, sourceToken)
+	sourceAfter := requesterObservation(t, fixture, child, t.Context(), "active-source")
+	if sourceAfter.SuccessorWorkerSessionId == nil || *sourceAfter.SuccessorWorkerSessionId != successorID ||
+		!reflect.DeepEqual(source.Requester, sourceAfter.Requester) || !reflect.DeepEqual(source.Correlation, sourceAfter.Correlation) || !reflect.DeepEqual(source.Labels, sourceAfter.Labels) || source.State != sourceAfter.State || source.AttemptId != sourceAfter.AttemptId {
+		t.Fatal("competing admission mutated the source or branched its chain")
+	}
+	assertRequesterHeadRacePeer(t, fixture, parent, parentBefore)
+}
+
+func assertRequesterHeadRacePeer(t *testing.T, fixture *invokeContinuePackageFixture, parent *invokeContinueScenario, parentBefore api.WorkerSessionObservation) {
+	t.Helper()
+	parentAfter := requesterObservation(t, fixture, parent, t.Context(), parentBefore.WorkerSessionId)
+	// The caller's elapsed active time advances while head admission runs.
+	if parentBefore.DurationMillis == nil || parentAfter.DurationMillis == nil || *parentAfter.DurationMillis < *parentBefore.DurationMillis {
+		t.Fatal("independent requester lost its active clock")
+	}
+	parentBefore.DurationMillis, parentAfter.DurationMillis = nil, nil
+	if !reflect.DeepEqual(parentBefore, parentAfter) {
+		t.Fatal("competing continuation mutated the independent requester")
+	}
+}
+
 func raceCompetingHeadRequests(t *testing.T, started invokeContinueStartedProcess, home, dir string) (*support.CapturedInputs, directWorkerSessionCLIResult) {
 	t.Helper()
 	requests := make([]*support.CapturedInputs, 2)
