@@ -2,12 +2,13 @@ package service
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestT7LiveProgressUsesBoundedDiagnosticRedaction(t *testing.T) {
+func TestRecordingContentPreservesOrdinaryEchoAndRedactsDeclaredSecrets(t *testing.T) {
 	t.Parallel()
 	var observed []providers.ExecuteProgress
 	request := providers.ExecuteRequest{
@@ -21,12 +22,26 @@ func TestT7LiveProgressUsesBoundedDiagnosticRedaction(t *testing.T) {
 	for count := 0; count < maxProgressFacts+1; count++ {
 		safe.ObserveProgress(progress)
 	}
-	if len(observed) != maxProgressFacts || observed[0].Detail != "visible <redacted> <redacted> <redacted> <redacted> <redacted>" ||
+	if len(observed) != maxProgressFacts || observed[0].Detail != "visible system-secret prompt-secret schema-secret <redacted> <redacted>" ||
 		observed[0].Metadata["safe"] != "<redacted>" || observed[0].Metadata["api_key"] != "<redacted>" {
 		t.Fatalf("live bounded redaction = %+v", observed)
 	}
 	if progress.Metadata["safe"] != "environment-secret" {
 		t.Fatal("observer mutated provider metadata")
+	}
+}
+
+func TestRecordingContentKeepsAdmittedDetailAndShortSecrets(t *testing.T) {
+	t.Parallel()
+	ordinary := strings.Repeat("ordinary echo ", 100)
+	request := providers.ExecuteRequest{UserMessage: ordinary, EnvVars: map[string]string{"API_KEY": "xyz"}}
+	progress := sanitizeCapturedProgress(providers.ExecuteProgress{Phase: "message.completed", Detail: ordinary + "xyz"}, request)
+	if progress.Detail != ordinary+redactedValue {
+		t.Fatal("capture lost ordinary text or retained a short declared secret")
+	}
+	diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{Phase: "message.completed", Detail: ordinary}}}, request)
+	if diagnostics.Progress[0].Detail != redactedValue {
+		t.Fatal("diagnostic prompt redaction was weakened")
 	}
 }
 

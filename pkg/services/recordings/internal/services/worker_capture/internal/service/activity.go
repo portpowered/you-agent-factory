@@ -380,13 +380,27 @@ func capturedUsage(session *recordingSession, head uint64) *workers.UsagePayload
 	if index == 0 {
 		return nil
 	}
-	position := session.usagePositions[index-1]
-	var draft workers.Draft
-	var usage workers.UsagePayload
-	if json.Unmarshal(session.records[position-1].Payload, &draft) != nil || json.Unmarshal(draft.Payload, &usage) != nil {
-		return nil
+	var model string
+	for index > 0 {
+		index--
+		position := session.usagePositions[index]
+		var draft workers.Draft
+		var usage workers.UsagePayload
+		if json.Unmarshal(session.records[position-1].Payload, &draft) != nil || json.Unmarshal(draft.Payload, &usage) != nil {
+			return nil
+		}
+		if model == "" {
+			model = usage.Model
+		}
+		// Model-only notifications do not supersede the last accounting fact,
+		// including its optional origin. A new counter fact with no origin stays
+		// unlabelled rather than inheriting a synthetic claim.
+		if capturedUsageCountersPresent(draft.Payload) {
+			usage.Model = model
+			return &usage
+		}
 	}
-	return &usage
+	return &workers.UsagePayload{Model: model}
 }
 
 func timePointer(value time.Time) *time.Time { stamp := value.UTC(); return &stamp }

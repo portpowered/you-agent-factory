@@ -391,6 +391,8 @@ func draftFromProgressFragment(fragment workers.ProgressFragment) (workers.Draft
 		Payload:      encoded,
 		DispatchID:   strings.TrimSpace(fragment.DispatchID),
 		ItemID:       strings.TrimSpace(fragment.Metadata["item_id"]),
+		RunID:        strings.TrimSpace(fragment.Metadata["run_id"]),
+		TurnID:       strings.TrimSpace(fragment.Metadata["turn_id"]),
 		ParentItemID: progressDraftParentItemID(kind, fragment.Metadata),
 	}
 	// The Kind/Phase pair policy and the per-pair payload rules are owned by
@@ -625,6 +627,7 @@ func progressDraftPayload(
 // canonicalUsageDraftPayload preserves token-class presence from canonical
 // payloads and native Codex usage observations before durable publication.
 type canonicalUsagePayload struct {
+	Origin                string `json:"origin,omitempty"`
 	InputTokens           *int64 `json:"inputTokens,omitempty"`
 	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
 	OutputTokens          *int64 `json:"outputTokens,omitempty"`

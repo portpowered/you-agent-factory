@@ -2,15 +2,95 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
+
+func TestRecordingContentDirectEchoAndNonEcho(t *testing.T) {
+	for _, name := range []string{"recording-echo", "recording-other", "recording-equal"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fixture := ensureInvokeContinuePackageFixture(t)
+			scenario := fixture.scenario(t, name)
+			defer scenario.close(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+			defer cancel()
+			runner := scenario.providerRunner.(*t7GatedProviderRunner)
+			defer t7ReleaseAndJoin(t, ctx, runner)()
+			id := scenarioScopedID(scenario, "content")
+			prompt := "ordinary nonoverlapping prompt"
+			if name == "recording-echo" {
+				prompt = "DIRECT_CAPTURE_BETA"
+			}
+			path := filepath.Join(scenario.workingDirectory, "content.json")
+			writeInvokeContinueJSON(t, path, invokeContinueExecutionDocument(invokeContinueExecutionSpec{
+				requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt",
+				workingDirectory: scenario.workingDirectory, userMessage: prompt,
+			}))
+			start := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)
+			if err := fixture.process.Execute(start.Input); err != nil {
+				t.Fatalf("invoke: %v: %s", err, start.Stderr())
+			}
+			t19AwaitSignal(t, ctx, runner.started, "ordinary output")
+			// The durable reader commits asynchronously after provider observation.
+			// Await this session's public prefix rather than provider callback timing.
+			if body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+				_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+				return body, nil
+			}, func(body string) bool { return strings.Contains(body, "DIRECT_CAPTURE_BETA") }); err != nil {
+				t.Fatalf("live content: %v: %s", err, body)
+			}
+			close(runner.release)
+			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+			if err := fixture.process.Execute(join.Input); err != nil {
+				t.Fatalf("join: %v: %s", err, join.Stderr())
+			}
+			_, summary := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id, nil)
+			var observation factoryapi.WorkerSessionObservation
+			if err := json.Unmarshal([]byte(summary), &observation); err != nil {
+				t.Fatal(err)
+			}
+			if observation.TokenUsage != nil {
+				t.Fatalf("unknown native-path usage became known: %+v", observation.TokenUsage)
+			}
+			for _, view := range []string{"logs", "transcript"} {
+				read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
+				if err := fixture.process.Execute(read.Input); err != nil {
+					t.Fatalf("read %s: %v: %s", view, err, read.Stderr())
+				}
+				status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/"+view, nil)
+				if status != http.StatusOK || !strings.Contains(read.Stdout(), "DIRECT_CAPTURE_BETA") || !strings.Contains(body, "DIRECT_CAPTURE_BETA") {
+					t.Fatalf("completed %s lost ordinary output: %d %s / %s", view, status, read.Stdout(), body)
+				}
+				if view == "transcript" {
+					var cli, httpResult factoryapi.WorkerSessionTranscriptResponse
+					if err := json.Unmarshal([]byte(read.Stdout()), &cli); err != nil {
+						t.Fatal(err)
+					}
+					if err := json.Unmarshal([]byte(body), &httpResult); err != nil {
+						t.Fatal(err)
+					}
+					wantEntries := 1
+					if name == "recording-equal" {
+						wantEntries = 2
+					}
+					if !reflect.DeepEqual(cli, httpResult) || len(cli.Entries) != wantEntries || cli.Entries[0].Text == nil || *cli.Entries[0].Text != "DIRECT_CAPTURE_BETA" {
+						t.Fatalf("transcript parity/content = %+v / %+v", cli, httpResult)
+					}
+				}
+			}
+		})
+	}
+}
 
 const (
 	t7SecretPrompt = "synthetic-private-t7-user-message"
@@ -37,7 +117,9 @@ func TestT7CapturedProgressRedactsRequestSecrets(t *testing.T) {
 	})
 	execution := document["execution"].(map[string]any)
 	execution["systemPrompt"] = t7SecretSystem
-	execution["envVars"] = map[string]string{"T7_API_TOKEN": t7SecretToken}
+	// These prompt values are explicitly classified secrets in this cell.
+	// Ordinary prompts are exercised separately by RecordingContent.
+	execution["envVars"] = map[string]string{"T7_API_TOKEN": t7SecretToken, "T7_PROMPT_SECRET": t7SecretPrompt, "T7_SYSTEM_SECRET": t7SecretSystem}
 	path := filepath.Join(scenario.workingDirectory, "private.json")
 	writeInvokeContinueJSON(t, path, document)
 	start := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)

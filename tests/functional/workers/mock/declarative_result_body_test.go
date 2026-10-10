@@ -546,6 +546,9 @@ func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, work
 		t.Fatalf("execution state=%s cause=%s scope=%s wantScope=%s", observation.State, support.StringPointerValue((*string)(observation.TerminalCause)), support.StringPointerValue(observation.FactorySessionId), sessionID)
 	}
 	assertDeclaredUsage(t, observation.TokenUsage, tokens)
+	if observation.TokenUsage != nil && (observation.TokenUsage.Origin == nil || *observation.TokenUsage.Origin != factoryapi.ProviderSessionTokenUsageOriginSYNTHETIC) {
+		t.Fatalf("declared counters lost origin: %+v", observation.TokenUsage)
+	}
 	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/"+workerID+"/logs")
 	data, err := json.Marshal(page.Events)
 	if err != nil {

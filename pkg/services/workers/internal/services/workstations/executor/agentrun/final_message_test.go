@@ -29,7 +29,7 @@ func TestPublishAgentFinalMessagePublishesCanonicalDraft(t *testing.T) {
 		draft.Phase != workerexecution.PhaseCompleted || draft.Kind != workerexecution.KindMessage ||
 		draft.Provenance != (workerexecution.Provenance{
 			Provider: "agent-run", NativeEventType: "agent_final_response",
-			Delivery: workerexecution.DeliveryNativeFinal, Fidelity: workerexecution.FidelityFinalOnly,
+			Delivery: workerexecution.DeliverySynthesized, Fidelity: workerexecution.FidelityFinalOnly,
 			Representation: workerexecution.RepresentationSnapshot,
 		}) {
 		t.Fatalf("draft = %#v, want final agent message metadata", draft)
@@ -46,4 +46,12 @@ func TestPublishAgentFinalMessagePublishesCanonicalDraft(t *testing.T) {
 	publishAgentFinalMessage(func(workerexecution.ProgressFragment) {
 		t.Fatal("empty final message was published")
 	}, "dispatch-1", correlation, " ")
+}
+
+func TestRecordingContentFinalSnapshotRedactsDeclaredEnvironment(t *testing.T) {
+	t.Parallel()
+	request := workerexecution.RunnerExecutionRequest{UserMessage: "ordinary", EnvVars: map[string]string{"API_KEY": "xyz", "LANG": "visible"}, ProcessEnvironment: []string{"SECRET=long-private-value"}}
+	if got := capturedFinalContent("ordinary xyz long-private-value visible", request); got != "ordinary <redacted> <redacted> visible" {
+		t.Fatalf("captured final = %q", got)
+	}
 }
