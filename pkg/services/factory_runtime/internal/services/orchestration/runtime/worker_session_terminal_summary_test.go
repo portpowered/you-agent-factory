@@ -1,12 +1,62 @@
 package runtime
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+func TestCapturedTerminalSummaryRetainsDetachedMetadata(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"completed", "failed", "owner-loss", "legacy", "wrong-attempt"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			metadata := &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"}, Correlation: &workersessions.Correlation{WorkID: "work", FactorySessionID: "original"}, Labels: []string{"project:example"}}
+			captured := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "original", AttemptID: "attempt", State: workersessions.StateCompleted, Requester: metadata.Requester, Correlation: metadata.Correlation, Labels: metadata.Labels}
+			item := recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{FactorySessionID: "original", CommittedPosition: 3}, Terminal: &recordings.WorkerRecordingTerminal{Position: 3}}
+			service := &recordedWorkerSessionObservation{}
+			switch name {
+			case "failed":
+				captured.State = workersessions.StateFailed
+			case "owner-loss":
+				captured.State = workersessions.StateFailed
+				service.restoredWorkerScopes = map[string]string{"worker": "original"}
+				item.Terminal, item.Health = nil, recordings.WorkerRecordingStatusIncomplete
+			case "legacy":
+				captured.Requester, captured.Correlation, captured.Labels = nil, nil, nil
+			case "wrong-attempt":
+				captured.AttemptID = "foreign"
+			}
+			service.Service = &capturedForceService{observation: captured}
+			got, err := service.withSelectedCapturedTerminal(t.Context(), workersessions.Observation{WorkerSessionID: "worker", AttemptID: "attempt", State: workersessions.StateCompleted}, item)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertCapturedTerminalMetadata(t, name, got, metadata)
+		})
+	}
+}
+
+func assertCapturedTerminalMetadata(t *testing.T, name string, got workersessions.Observation, metadata *workersessions.SessionMetadata) {
+	t.Helper()
+	if name == "legacy" || name == "wrong-attempt" {
+		if got.Requester != nil || got.Correlation != nil || got.Labels != nil {
+			t.Fatalf("invented metadata: %+v", got)
+		}
+		return
+	}
+	actual := &workersessions.SessionMetadata{Requester: got.Requester, Correlation: got.Correlation, Labels: got.Labels}
+	if !reflect.DeepEqual(actual, metadata) {
+		t.Fatalf("captured metadata lost: %+v", got)
+	}
+	got.Requester.WorkerSessionID, got.Correlation.WorkID, got.Labels[0] = "changed", "changed", "changed"
+	if metadata.Requester.WorkerSessionID != "lead" || metadata.Correlation.WorkID != "work" || metadata.Labels[0] != "project:example" {
+		t.Fatal("returned metadata aliases capture")
+	}
+}
 
 func TestCapturedTerminalSummaryUsesExactOriginalScopeAndCaptureTiming(t *testing.T) {
 	t.Parallel()

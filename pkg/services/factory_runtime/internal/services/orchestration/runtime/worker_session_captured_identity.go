@@ -151,6 +151,10 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 	}
 	if capturedWorkerAliasOwner(item, observation.WorkerSessionID, observation.AttemptID) != "" {
 		observation.FactorySessionID = opening.FactorySessionID
+		observation, err = withCapturedSessionMetadata(observation, opening.SessionMetadata)
+		if err != nil {
+			return workersessions.Observation{}, err
+		}
 	}
 	if restoredScope != "" {
 		observation, err = s.withRestoredCaptureHealth(observation, item)
@@ -163,6 +167,23 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 		observation, err = s.withSelectedCapturedTerminal(ctx, observation, item)
 	}
 	return observation, err
+}
+
+// The prepared opening is selected only after the physical owner and attempt
+// fences. Its descriptive facts never rebind canonical Work or grant authority.
+func withCapturedSessionMetadata(observation workersessions.Observation, raw json.RawMessage) (workersessions.Observation, error) {
+	var metadata *workersessions.SessionMetadata
+	if len(raw) != 0 {
+		if json.Unmarshal(raw, &metadata) != nil || metadata.Validate() != nil {
+			return workersessions.Observation{}, workersessions.ErrObservationRecordingCorrupt
+		}
+	}
+	metadata = metadata.Clone()
+	observation.Requester, observation.Correlation, observation.Labels = nil, nil, nil
+	if metadata != nil {
+		observation.Requester, observation.Correlation, observation.Labels = metadata.Requester, metadata.Correlation, metadata.Labels
+	}
+	return observation, nil
 }
 
 // Canonical Work state stays independent of execution capture. Only an exact,
@@ -182,6 +203,8 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedTerminal(ctx cont
 	if captured.AttemptID != observation.AttemptID || !captured.State.Terminal() {
 		return observation, nil
 	}
+	captured = captured.Clone()
+	observation.Requester, observation.Correlation, observation.Labels = captured.Requester, captured.Correlation, captured.Labels
 	observation.FactorySessionID, observation.State = captured.FactorySessionID, captured.State
 	observation.Provider = captured.Provider
 	observation.ContinuationHeadWorkerSessionID = captured.ContinuationHeadWorkerSessionID
