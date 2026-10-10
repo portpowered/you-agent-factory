@@ -777,3 +777,17 @@ func TestWorkerSessionWorkRequiresSelectedCapability(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkReadsPreserveResolverErrorWithoutHistoricalReader(t *testing.T) {
+	t.Parallel()
+	unavailable := errors.New("selected session not found")
+	svc := internalservice.New(stubSessionResolver{err: unavailable}, nil, nil)
+	_, err := svc.ListWork(context.Background(), "missing", work.ListOptions{})
+	if !errors.Is(err, unavailable) {
+		t.Fatalf("list error = %v, want resolver error", err)
+	}
+	_, err = svc.GetWork(context.Background(), "missing", "work-1")
+	if !errors.Is(err, unavailable) {
+		t.Fatalf("show error = %v, want resolver error", err)
+	}
+}

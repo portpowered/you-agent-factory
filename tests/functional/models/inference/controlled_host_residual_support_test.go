@@ -16,6 +16,7 @@ import (
 type residualHostRoute struct {
 	fault     atomic.Bool
 	mode      string
+	specs     chan serviceedges.HostProcessStartSpec
 	starts    atomic.Int64
 	stops     atomic.Int64
 	exits     atomic.Int64
@@ -34,7 +35,7 @@ type residualHosts struct {
 func (hosts *residualHosts) register(name, mode string) *residualHostRoute {
 	hosts.mu.Lock()
 	defer hosts.mu.Unlock()
-	route := &residualHostRoute{mode: mode, probed: make(chan struct{}), ready: make(chan struct{}, 1), stopped: make(chan struct{})}
+	route := &residualHostRoute{specs: make(chan serviceedges.HostProcessStartSpec, 4), mode: mode, probed: make(chan struct{}), ready: make(chan struct{}, 1), stopped: make(chan struct{})}
 	route.fault.Store(mode != "ready")
 	hosts.routes[name] = route
 	return route
@@ -55,6 +56,8 @@ func (hosts *residualHosts) Start(_ context.Context, spec serviceedges.HostProce
 	if route == nil {
 		return nil, errors.New("unexpected controlled host route")
 	}
+	spec.Args = append([]string(nil), spec.Args...)
+	route.specs <- spec
 	route.starts.Add(1)
 	if route.mode == "launch" && route.fault.Load() {
 		return nil, errors.New("controlled host launch failure")

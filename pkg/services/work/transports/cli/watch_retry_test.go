@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,6 +18,42 @@ const (
 	watchRetryModelRequestEventID  = "factory-event/model-request/dispatch-retry/model-request/1"
 	watchRetryModelResponseEventID = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
 )
+
+// Natural dispatch completion changes Work state without emitting an operator
+// WORK_STATE_CHANGE. It must not manufacture a watch transition or establish a
+// finite cohort from a state-less admission. This is distinct from a malformed
+// stream or a reducer rejection; a later disconnect remains an EOF/retry error.
+func TestWatchDispatchOnlyTerminalHistoryHasNoTransitionCohort(t *testing.T) {
+	t.Parallel()
+	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 0,
+		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+			}}},
+		}})
+	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "admission", 1,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
+			WorkId: watchStringPtr("work-1"), WorkTypeName: watchStringPtr("task"),
+		}}})
+	response := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "dispatch", 2,
+		factoryapi.DispatchResponseEventPayload{Outcome: factoryapi.WorkOutcomeAccepted,
+			OutputWork: &[]factoryapi.Work{{WorkId: watchStringPtr("work-1"), WorkTypeName: watchStringPtr("task"),
+				State:            &factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				StructuredResult: map[string]any{"message": "completed"},
+			}},
+		})
+	stream := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{metadata, request, response}}
+	var output bytes.Buffer
+	reducer := newWatchReducer("session-dispatch-only")
+	result := consumeWatchStream(WatchConfig{Context: context.Background(), Output: &output}, reducer, stream)
+	if result.completed || !result.retryable || !errors.Is(result.err, io.EOF) || output.Len() != 0 {
+		t.Fatalf("dispatch-only history: completed=%t retryable=%t error=%v output=%q", result.completed, result.retryable, result.err, output.String())
+	}
+	if len(reducer.cohort) != 0 || reducer.Cursor().EventID != response.Id {
+		t.Fatalf("dispatch-only cohort/cursor=%+v %+v", reducer.cohort, reducer.Cursor())
+	}
+}
 
 func TestWatchReducerDefersWorkRequestsWithoutAuthoritativeState(t *testing.T) {
 	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 1,

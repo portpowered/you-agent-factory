@@ -29,6 +29,42 @@ type cancelFixture struct {
 	port        int
 	serverURL   string
 	environment []string
+	mockPath    string
+}
+
+// Only declarative accept/gate mocks are admitted here. There are no scripts,
+// native providers, passthrough rules or test-created capture records.
+func writeRecordedParityFixture(t *testing.T) cancelFixture {
+	t.Helper()
+	root := t.TempDir()
+	f := cancelFixture{root: root, factoryDir: filepath.Join(root, "factory"), homeDir: filepath.Join(root, "home"), recordPath: filepath.Join(root, "board.json"), mockPath: filepath.Join(root, "mock.json")}
+	for _, path := range []string{f.factoryDir, f.homeDir} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	definition := `{"name":"recorded-parity","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"completed","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"},{"name":"lost","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"}],"workstations":[{"name":"process","type":"AGENT_RUN","worker":"completed","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`
+	if err := os.WriteFile(filepath.Join(f.factoryDir, "factory.json"), []byte(definition), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mock := map[string]any{"mockWorkers": []any{
+		map[string]any{"workerName": "completed", "runType": "accept", "usage": map[string]any{"provider": "codex", "model": "test-model", "inputTokens": 1, "outputTokens": 1}, "resultBody": map[string]any{"decision": "ACCEPTED", "output": "recorded parity completed marker"}},
+		map[string]any{"workerName": "lost", "runType": "accept", "gateConfig": map[string]any{"arrivedFile": filepath.Join(root, "arrived"), "releaseFile": filepath.Join(root, "release"), "timeout": "5m"}},
+	}}
+	body, err := json.Marshal(mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f.mockPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.port, err = reserveCancelPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.serverURL = "http://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(f.port))
+	f.environment = builtcliacceptance.ProcessEnvForIsolatedHome(f.homeDir)
+	return f
 }
 
 func writeCancelFixture(t *testing.T) (cancelFixture, error) {

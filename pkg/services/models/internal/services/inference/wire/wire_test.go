@@ -3,6 +3,7 @@ package wire_test
 import (
 	"context"
 	"errors"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"strings"
 	"testing"
 	"time"
@@ -319,3 +320,11 @@ func TestNewExecutionDeadlinePreservesSelectedPolicy(t *testing.T) {
 		t.Fatalf("execution deadline = %v, want 30 minutes", got)
 	}
 }
+
+func (h recordingRuntimeHostService) EnsureModelHostWithConfiguration(ctx context.Context, c modelseffects.ResolvedHostConfiguration) (models.EnsureModelHostResult, error) {
+	return h.EnsureModelHost(ctx, models.EnsureModelHostRequest{Scope: c.Scope, Name: c.ModelName})
+}
+func (recordingRuntimeHostService) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
+}
+func (recordingRuntimeHostService) Shutdown(context.Context) error { return nil }

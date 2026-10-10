@@ -5,6 +5,7 @@ import (
 	"context"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 // Service supervises scoped model-host capacity behind the singular Models root.
@@ -37,4 +38,7 @@ type Service interface {
 	) (models.ReleaseModelLeaseResult, error)
 	ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error)
 	ReleaseInvocationLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error)
+	EnsureModelHostWithConfiguration(context.Context, modelseffects.ResolvedHostConfiguration) (models.EnsureModelHostResult, error)
+	CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
+	Shutdown(context.Context) error
 }

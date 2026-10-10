@@ -41,7 +41,6 @@ type workRuntimeAdapter struct {
 	// It is initialized by Assembly from the runtime's ledger and advances from
 	// appended events instead of replaying the full event history per read.
 	admissions  *workAdmissionProjection
-	ledger      recordings.Ledger
 	readMetrics factorysessions.InvocationMetricsRecorder
 }
 
@@ -134,6 +133,7 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	materialized := factoryruntime.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
 	names := runtimeWorkNames(materialized.Tokens)
 	sessionSummary := sessionprojection.ProjectFactorySessionStopSummary(a.sessionID, snapshot, nil)
+	stopTokens := runtimeStopSummaryTokens(materialized.Tokens)
 	result := work.ReadSnapshot{
 		StreamGenerationID: snapshot.StreamGenerationID,
 		Items:              make([]work.ReadModel, 0, len(materialized.Tokens)),
@@ -144,15 +144,14 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 			dispatches: snapshot.Dispatches, dispatchHistory: snapshot.DispatchHistory, results: snapshot.Results,
 		})
 		item.HumanApproval = runtimeHumanApprovalForWork(a.sessionID, token.Color.WorkID, snapshot.Dispatches, snapshot.Topology)
-		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
+		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary, stopTokens))
 		result.Items = append(result.Items, item)
 	}
-	annotateRuntimeWorkStateSequences(&result, a.ledger)
 	mappingDuration := a.clock.Now().Sub(mappingStarted)
 	admissionStarted := a.clock.Now()
 	admissionStats := workAdmissionReadStats{}
 	if a.admissions != nil {
-		result.Admissions, admissionStats.projectionEventsVisited, admissionStats.projectionLockWait, admissionStats.projectionCatchup = a.admissions.SnapshotWithStats()
+		result.Admissions, admissionStats.projectionEventsVisited, admissionStats.projectionLockWait, admissionStats.projectionCatchup = a.admissions.snapshotWithStats(&result)
 	} else {
 		admissions, stats, err := a.readWorkAdmissionsWithStats(ctx)
 		if err != nil {
@@ -224,7 +223,7 @@ func workRuntimeSnapshot(
 
 // workAdmissionProjection is the session-scoped admission read view used by
 // Work list reads. The canonical ledger replays its existing prefix once when
-// it is bound, then applies only newly appended Work Request events. Readers
+// it is bound, then applies newly appended admission and state facts. Readers
 // receive a detached copy and never hold the projection lock while selecting
 // or mapping Work rows.
 type workAdmissionProjection struct {
@@ -235,6 +234,8 @@ type workAdmissionProjection struct {
 
 	mu                sync.RWMutex
 	admissions        []work.WorkAdmission
+	stateSequences    map[string]int64
+	streamGeneration  string
 	seenEvents        map[string]struct{}
 	binding           *workAdmissionProjectionBinding
 	generationRuntime *factorysessions.LiveRuntime
@@ -296,6 +297,7 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 	if p == nil || ledger == nil {
 		return
 	}
+	generation := ledger.StreamGenerationID()
 	for {
 		p.mu.Lock()
 		if p.closed {
@@ -317,6 +319,8 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 		}
 		p.binding = binding
 		p.admissions = nil
+		p.stateSequences = make(map[string]int64)
+		p.streamGeneration = generation
 		p.seenEvents = make(map[string]struct{})
 		p.mu.Unlock()
 
@@ -353,6 +357,10 @@ func (p *workAdmissionProjection) Snapshot() []work.WorkAdmission {
 }
 
 func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int, time.Duration, time.Duration) {
+	return p.snapshotWithStats(nil)
+}
+
+func (p *workAdmissionProjection) snapshotWithStats(snapshot *work.ReadSnapshot) ([]work.WorkAdmission, int, time.Duration, time.Duration) {
 	if p == nil {
 		return nil, 0, 0, 0
 	}
@@ -364,6 +372,7 @@ func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int
 		binding := p.binding
 		if binding == nil {
 			admissions := append([]work.WorkAdmission(nil), p.admissions...)
+			annotateRuntimeWorkStateSequences(snapshot, p.stateSequences, p.streamGeneration)
 			p.mu.RUnlock()
 			return admissions, 0, lockWait, 0
 		}
@@ -379,6 +388,7 @@ func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int
 			continue
 		}
 		admissions := append([]work.WorkAdmission(nil), p.admissions...)
+		annotateRuntimeWorkStateSequences(snapshot, p.stateSequences, p.streamGeneration)
 		eventsVisited := binding.eventsVisited
 		binding.callbackMu.RLock()
 		catchup := binding.catchup
@@ -403,6 +413,7 @@ func (p *workAdmissionProjection) Release() {
 	p.generationRuntime = nil
 	p.generationLedger = nil
 	p.seenEvents = nil
+	p.stateSequences = nil
 	p.mu.Unlock()
 	if binding != nil {
 		binding.callbackMu.Lock()
@@ -427,17 +438,18 @@ func (p *workAdmissionProjection) applyEvent(
 	}
 	binding.eventsVisited++
 	p.mu.Unlock()
-	if event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
+	if !workEventBelongsToSession(p.sessionID, p.sessionAliases, event.Context.SessionID) {
 		return
 	}
+	workIDs := runtimeWorkIDsFromEvent(event)
 	admissions := workAdmissionsFromFactoryEvents(p.sessionID, p.sessionAliases, []factorydefinitions.FactoryEvent{event})
-	if len(admissions) == 0 {
+	if len(admissions) == 0 && len(workIDs) == 0 {
 		return
 	}
 	eventKey := workAdmissionEventKey(event)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.binding != binding {
+	if p.binding != binding || p.closed {
 		return
 	}
 	if eventKey != "" {
@@ -445,6 +457,12 @@ func (p *workAdmissionProjection) applyEvent(
 			return
 		}
 		p.seenEvents[eventKey] = struct{}{}
+	}
+	for _, workID := range workIDs {
+		sequence := int64(event.Context.Sequence)
+		if previous, known := p.stateSequences[workID]; !known || sequence > previous {
+			p.stateSequences[workID] = sequence
+		}
 	}
 	for _, admission := range admissions {
 		admission.Order = len(p.admissions)
@@ -730,34 +748,23 @@ func runtimeWorkNames(tokens []*workers.Token) map[string]string {
 }
 
 // annotateRuntimeWorkStateSequences preserves the latest canonical sequence
-// that can have produced each live Work state. Runtime snapshots already carry
-// the current values; the ledger supplies only the detached cursor needed for
-// the durability comparison at the Work state-access boundary.
-func annotateRuntimeWorkStateSequences(snapshot *work.ReadSnapshot, ledger recordings.Ledger) {
-	if snapshot == nil || ledger == nil {
+// that can have produced each live Work state. The append-maintained projection
+// supplies the cursor for durability comparison without reading the recording.
+// Its caller holds the projection read lock; only detached response rows change.
+func annotateRuntimeWorkStateSequences(snapshot *work.ReadSnapshot, positions map[string]int64, generation string) {
+	if snapshot == nil {
 		return
 	}
 	if snapshot.StreamGenerationID == "" {
-		snapshot.StreamGenerationID = ledger.StreamGenerationID()
-	}
-	positions := make(map[string]int64)
-	known := make(map[string]bool)
-	for _, event := range ledger.CanonicalEvents() {
-		ids := runtimeWorkIDsFromEvent(event)
-		sequence := int64(event.Context.Sequence)
-		for _, workID := range ids {
-			if !known[workID] || sequence > positions[workID] {
-				positions[workID] = sequence
-				known[workID] = true
-			}
-		}
+		snapshot.StreamGenerationID = generation
 	}
 	for index := range snapshot.Items {
 		workID := snapshot.Items[index].WorkID
-		if !known[workID] {
+		sequence, known := positions[workID]
+		if !known {
 			continue
 		}
-		snapshot.Items[index].CurrentStateSequence = positions[workID]
+		snapshot.Items[index].CurrentStateSequence = sequence
 		snapshot.Items[index].CurrentStateSequenceKnown = true
 	}
 }
@@ -838,4 +845,19 @@ func runtimeWorkStopSummary(summary *factorysessions.StopSummary) *work.StopSumm
 		}
 	}
 	return result
+}
+
+// Preserve first-token matching while sharing one detached snapshot index.
+func runtimeStopSummaryTokens(tokens []*workers.Token) map[string]*workers.Token {
+	byID := make(map[string]*workers.Token, len(tokens))
+	for _, token := range tokens {
+		if token == nil {
+			continue
+		}
+		id := strings.TrimSpace(token.Color.WorkID)
+		if _, found := byID[id]; !found {
+			byID[id] = token
+		}
+	}
+	return byID
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -21,6 +22,7 @@ func TestRootErrorResponse_MapsNotFoundFailures(t *testing.T) {
 		err  error
 	}{
 		{name: "factory session", err: apisurface.ErrFactorySessionNotFound},
+		{name: "wrapped selected session", err: fmt.Errorf("resolve Work session: %w", factorysessions.ErrSessionNotFound)},
 		{name: "work", err: work.ErrWorkNotFound},
 		{name: "moved work", err: work.ErrMoveWorkNotFound},
 	}

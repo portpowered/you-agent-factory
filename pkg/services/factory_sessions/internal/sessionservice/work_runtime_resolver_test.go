@@ -812,7 +812,8 @@ func TestWorkAdmissionProjectionSupportsConcurrentSnapshotsAndAppends(t *testing
 		go func() {
 			defer readers.Done()
 			for range 250 {
-				_ = projection.Snapshot()
+				snapshot := work.ReadSnapshot{Items: []work.ReadModel{{WorkID: "work-0"}}}
+				_, _, _, _ = projection.snapshotWithStats(&snapshot)
 			}
 		}()
 	}
@@ -887,13 +888,14 @@ func TestAnnotateRuntimeWorkStateSequencesUsesLatestCanonicalStateFact(t *testin
 			{
 				Type:    interfaces.FactoryEventTypeWorkStateChange,
 				Context: interfaces.FactoryEventContext{Sequence: 5, WorkIDs: &workIDs},
-				Payload: []byte(`{"workId":"work-live"}`),
 			},
 		},
 	}
 	snapshot := work.ReadSnapshot{Items: []work.ReadModel{{WorkID: "work-live"}}}
 
-	annotateRuntimeWorkStateSequences(&snapshot, ledger)
+	projection := newWorkAdmissionProjection("", platformclock.Real{})
+	projection.Bind(ledger)
+	_, _, _, _ = projection.snapshotWithStats(&snapshot)
 
 	if snapshot.StreamGenerationID != "generation-live" {
 		t.Fatalf("stream generation = %q, want generation-live", snapshot.StreamGenerationID)
@@ -1069,5 +1071,51 @@ func TestWorkAdmissionsAreSelectorIndependentForDefaultSession(t *testing.T) {
 				})
 			})
 		}
+	}
+}
+
+func TestWorkStateSequenceProjectionTracksScopedFactsAndReplacement(t *testing.T) {
+	t.Parallel()
+	ledger := &admissionProjectionLedger{streamGeneration: "generation-1"}
+	projection := newWorkAdmissionProjection("session-1", platformclock.Real{})
+	projection.sessionAliases = []string{"~default"}
+	ledger.AppendRecordedEvent(admissionProjectionEvent(t, "admit", "~default", 0, work.WorkRequestEventWork{Name: "first", WorkID: "work-1"}))
+	projection.Bind(ledger)
+	read := func() work.ReadSnapshot {
+		snapshot := work.ReadSnapshot{Items: []work.ReadModel{{WorkID: "work-1"}, {WorkID: "output"}, {WorkID: "unknown"}}}
+		_, _, _, _ = projection.snapshotWithStats(&snapshot)
+		return snapshot
+	}
+	initial := read()
+	if !initial.Items[0].CurrentStateSequenceKnown || initial.Items[0].CurrentStateSequence != 0 || initial.Items[2].CurrentStateSequenceKnown {
+		t.Fatalf("initial known/unknown facts: %#v", initial.Items)
+	}
+	appendState := func(target *admissionProjectionLedger, id, session string, sequence int) {
+		target.AppendRecordedEvent(recordings.FactoryEvent{Id: id, Type: interfaces.FactoryEventTypeWorkStateChange, Context: interfaces.FactoryEventContext{SessionID: &session, Sequence: sequence}, Payload: []byte(`{"workId":"work-1"}`)})
+	}
+	appendState(ledger, "move", "session-1", 5)
+	appendState(ledger, "earlier", "session-1", 2)
+	appendState(ledger, "peer", "session-2", 99)
+	session := "session-1"
+	ledger.AppendRecordedEvent(recordings.FactoryEvent{Id: "response", Type: interfaces.FactoryEventTypeDispatchResponse, Context: interfaces.FactoryEventContext{SessionID: &session, Sequence: 6}, Payload: []byte(`{"output_work":[{"id":"output"}]}`)})
+	current := read()
+	if current.Items[0].CurrentStateSequence != 5 || !current.Items[1].CurrentStateSequenceKnown || current.Items[1].CurrentStateSequence != 6 || current.StreamGenerationID != "generation-1" {
+		t.Fatalf("append/scoping facts: %#v", current)
+	}
+	if initial.Items[0].CurrentStateSequence != 0 {
+		t.Fatal("prior response mutated after append")
+	}
+	replacement := &admissionProjectionLedger{streamGeneration: "generation-2"}
+	appendState(replacement, "replacement", "session-1", 1)
+	projection.Bind(replacement)
+	appendState(ledger, "late-old", "session-1", 100)
+	replaced := read()
+	if replaced.StreamGenerationID != "generation-2" || replaced.Items[0].CurrentStateSequence != 1 || replaced.Items[1].CurrentStateSequenceKnown {
+		t.Fatalf("replacement retained old facts: %#v", replaced)
+	}
+	projection.Release()
+	appendState(replacement, "late-released", "session-1", 101)
+	if released := read(); released.Items[0].CurrentStateSequenceKnown {
+		t.Fatalf("released facts: %#v", released.Items)
 	}
 }

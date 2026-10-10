@@ -14,7 +14,20 @@ func TestModelsControlledHostResidual(t *testing.T) {
 	t.Parallel()
 	hosts := &residualHosts{routes: map[string]*residualHostRoute{}}
 	routes := newFixedLeafRoutes()
+	t.Cleanup(func() {
+		hosts.mu.Lock()
+		defer hosts.mu.Unlock()
+		for name, host := range hosts.routes {
+			if host.mode == "ready" && (host.starts.Load() != host.stops.Load() || host.starts.Load() != host.exits.Load()) {
+				t.Errorf("process close did not drain %s: starts=%d stops=%d joins=%d", name, host.starts.Load(), host.stops.Load(), host.exits.Load())
+			}
+		}
+	})
 	server := startResidualHostServer(t, hosts, routes)
+	t.Run("distinct configuration survives repeat while peer is accepted", func(t *testing.T) {
+		t.Parallel()
+		runResidualScopedConfigurations(t, server.URL(), hosts, routes)
+	})
 	t.Run("readiness withholds inference then reuses host", func(t *testing.T) {
 		t.Parallel()
 		runResidualHostReadiness(t, server.URL(), hosts, routes)
@@ -153,4 +166,42 @@ func assertResidualHostFailureEvent(t *testing.T, baseURL, session, requestID, m
 		return
 	}
 	t.Fatal("missing public host crash event")
+}
+
+func runResidualScopedConfigurations(t *testing.T, baseURL string, hosts *residualHosts, routes *fixedLeafRoutes) {
+	t.Helper()
+	selectedHost := hosts.register("config-selected", "ready")
+	peerHost := hosts.register("config-peer", "ready")
+	selected := openResidualHostSession(t, baseURL, "config-selected")
+	peer := openResidualHostSession(t, baseURL, "config-peer")
+	peerRoute := routes.registerBlocked("config-peer-held")
+	t.Cleanup(func() { close(peerRoute.release) })
+	submitFixedLeafWork(t, baseURL, peer, "config-peer-held")
+	peerScope := waitFixedLeafAccepted(t, peerRoute)
+	var selectedScope string
+	for _, name := range []string{"config-selected-first", "config-selected-repeat"} {
+		route := routes.register(name, false)
+		result := invokeFixedLeafSession(t, baseURL, selected, name, name)
+		assertFixedLeafSuccess(t, result, route.output)
+		scope := waitFixedLeafAccepted(t, route)
+		if scope == peerScope || (selectedScope != "" && scope != selectedScope) {
+			t.Fatalf("configuration scopes: selected=%s previous=%s peer=%s", scope, selectedScope, peerScope)
+		}
+		selectedScope = scope
+		assertFixedLeafModelEvent(t, baseURL, selected, name, false)
+	}
+	for endpoint, host := range map[string]*residualHostRoute{"config-selected": selectedHost, "config-peer": peerHost} {
+		select {
+		case spec := <-host.specs:
+			if spec.HealthEndpoint != endpoint || spec.Command != "controlled-embed" || spec.ModelPath == "" {
+				t.Fatalf("scoped host selection: %#v, want %s", spec, endpoint)
+			}
+		default:
+			t.Fatalf("no host selection for %s", endpoint)
+		}
+		if host.starts.Load() != 1 {
+			t.Fatalf("host %s starts=%d, want reuse", endpoint, host.starts.Load())
+		}
+	}
+	assertResidualPeerAfterCleanup(t, baseURL, peer, peerScope, peerRoute, peerHost, routes, "config-selected")
 }

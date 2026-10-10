@@ -127,9 +127,6 @@ func NewService(
 	runtimeEvidence RuntimeEvidenceRecorder, resolveRevision func(context.Context, string) (string, error),
 	backendResolver BackendArtifactResolver, assetPlatform models.AssetHostPlatform,
 ) (models.Service, error) {
-	if isNilDependency(localExecution) {
-		return nil, fmt.Errorf("construct Models: scoped local execution is required")
-	}
 	return modelsservice.NewRoot(
 		resources, localExecution.PullModelForScope,
 		localExecution.CloseScope, localExecution.Close,

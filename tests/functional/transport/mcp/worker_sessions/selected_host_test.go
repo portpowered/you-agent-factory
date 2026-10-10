@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -104,6 +105,14 @@ func runSelectedHostScenarios(t *testing.T) {
 	t.Run("real host history recovery", func(t *testing.T) {
 		t.Parallel()
 		runRealHostHistoryRecovery(t, process)
+	})
+	t.Run("recorded unavailable parity", func(t *testing.T) {
+		t.Parallel()
+		runAdmittedCaptureRecovery(t, process)
+	})
+	t.Run("recorded unavailable error envelope", func(t *testing.T) {
+		t.Parallel()
+		runRecordedUnavailableEnvelope(t, process)
 	})
 	t.Run("real host captured metadata recovery", func(t *testing.T) {
 		t.Parallel()
@@ -269,6 +278,51 @@ func runSelectedHostScenarios(t *testing.T) {
 }
 
 type rejectLocalProvider struct{ t *testing.T }
+
+// This schema-shaped host proves the folded public error envelope and safe
+// translation only. Actual capture loss/recovery is a separate real-host proof.
+func runRecordedUnavailableEnvelope(t *testing.T, process support.Process) {
+	for _, test := range []struct {
+		name, body, code string
+		status           int
+		retryable        bool
+	}{
+		{"unavailable", `{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE","message":"secret-from-host","workerSessionId":"secret-from-host"}`, "unavailable", 500, false},
+		{"unknown", `{"code":"secret-from-host","message":"secret-from-host"}`, "internal_error", 500, false},
+		{"malformed", `{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"} secret-from-host`, "internal_error", 500, false},
+		{"transient", `{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"}`, "unavailable", 503, true},
+		{"foreign denial", `{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"}`, "permission_denied", 403, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("read caused effect: %s", r.Method)
+				}
+				if r.URL.Path == "/worker-sessions/host-worker" {
+					_, _ = io.WriteString(w, observationJSON)
+					return
+				}
+				if r.URL.Path != "/worker-sessions/host-worker/transcript" {
+					t.Errorf("unexpected read: %s", r.URL.Path)
+				}
+				w.WriteHeader(test.status)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			t.Cleanup(host.Close)
+			session, ctx := startMCP(t, process, host.URL)
+			result := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "host-worker", "view": "transcript"})
+			assertToolError(t, result, "worker_session."+test.code, test.retryable)
+			encoded, err := json.Marshal(result.StructuredContent)
+			if err != nil || !strings.Contains(string(encoded), `"workerSessionId":"host-worker"`) || !strings.Contains(string(encoded), `"status":`+fmt.Sprint(test.status)) {
+				t.Fatalf("requested identity/status missing: %s err=%v", encoded, err)
+			}
+			if len(result.Content) != 1 || strings.Contains(result.Content[0].(*mcp.TextContent).Text, "secret-from-host") {
+				t.Fatalf("unsafe content=%v", result.Content)
+			}
+		})
+	}
+}
 
 type subagentScenarioRunner struct{ t *testing.T }
 
