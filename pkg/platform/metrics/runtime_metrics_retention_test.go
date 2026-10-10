@@ -875,10 +875,108 @@ type retentionFailureFileSystem struct {
 }
 
 func (filesystem *retentionFailureFileSystem) Remove(path string) error {
-	if filesystem.removeErr != nil {
+	if filesystem.removeErr != nil && (filesystem.failPath == "" || path == filesystem.failPath) {
 		return filesystem.removeErr
 	}
 	return filesystem.Local.Remove(path)
+}
+
+func TestRuntimeMetricsRetentionRetriesRejectedArtifactWithoutBlockingPeerPruning(t *testing.T) {
+	for _, failure := range []string{"busy claim", "claim error", "claimed inspection", "removal"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			selected := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "selected-runtime-selected", 9)
+			peer := writeRetentionArtifact(t, root, "2026/07/02", "010000.000000000", "peer-runtime-peer", 7)
+			unknown := filepath.Join(root, "customer-note.txt")
+			if err := os.WriteFile(unknown, []byte("preserve customer content"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cause := errors.New("selected artifact operation failed")
+			rootLock, claim := &metricsTestCloser{}, &metricsTestCloser{}
+			filesystem := &retentionFailureFileSystem{Local: platformfilesystem.Local{}}
+			coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaim: claim}
+			coordination.onTryClaim = func(path string) {
+				configureRejectedArtifactClaim(failure, path, selected, cause, filesystem, coordination)
+			}
+			retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+				return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+			}, coordination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
+			report, err := retention.Sweep(t.Context(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRejectedArtifactSweep(t, failure, report, selected, cause, rootLock, claim)
+			assertRetentionPathAbsent(t, peer, "independently pruned peer")
+			assertRetentionPreservedContent(t, selected, "mmmmmmmmm")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+			coordination.onTryClaim, coordination.tryClaimErr = nil, nil
+			filesystem.failPath, filesystem.lstatErr, filesystem.removeErr = "", nil, nil
+			report, err = retention.Sweep(t.Context(), request)
+			if err != nil || len(report.Failures) != 0 || report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) || report.After.Files != 0 {
+				t.Fatalf("recovered sweep = %#v, %v", report, err)
+			}
+			wantClosed := 2
+			if failure == "claimed inspection" || failure == "removal" {
+				wantClosed++
+			}
+			if rootLock.closed != 2 || claim.closed != wantClosed {
+				t.Fatalf("recovery releases: root=%d claim=%d, want 2/%d", rootLock.closed, claim.closed, wantClosed)
+			}
+			assertRetentionPathAbsent(t, selected, "pruned recovered artifact")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+		})
+	}
+}
+
+func configureRejectedArtifactClaim(
+	failure, path, selected string, cause error,
+	filesystem *retentionFailureFileSystem, coordination *metricsTestCoordination,
+) {
+	coordination.tryClaimErr = nil
+	if path != selected {
+		return
+	}
+	switch failure {
+	case "busy claim":
+		coordination.tryClaimErr = ErrRuntimeMetricsArtifactBusy
+	case "claim error":
+		coordination.tryClaimErr = cause
+	case "claimed inspection":
+		filesystem.failPath, filesystem.lstatErr = selected, cause
+	case "removal":
+		filesystem.failPath, filesystem.removeErr = selected, cause
+	}
+}
+
+func assertRejectedArtifactSweep(
+	t *testing.T, failure string, report RuntimeMetricsRetentionReport,
+	selected string, cause error, rootLock, claim *metricsTestCloser,
+) {
+	t.Helper()
+	if report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) {
+		t.Fatalf("removed = %#v, want only the healthy peer", report.Removed)
+	}
+	if failure == "busy claim" {
+		if report.Protected != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) || len(report.Failures) != 0 || report.Failed.Files != 0 {
+			t.Fatalf("busy artifact report = %#v", report)
+		}
+	} else {
+		if report.Failed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) || len(report.Failures) == 0 || report.Failures[0].Path != selected || !errors.Is(report.Failures[0].Error, cause) {
+			t.Fatalf("failed artifact report = %#v, want selected path and cause", report)
+		}
+	}
+	wantClosed := 1
+	if failure == "claimed inspection" || failure == "removal" {
+		wantClosed++
+	}
+	if rootLock.closed != 1 || claim.closed != wantClosed {
+		t.Fatalf("failed sweep releases: root=%d claim=%d, want 1/%d", rootLock.closed, claim.closed, wantClosed)
+	}
 }
 
 func (filesystem *retentionFailureFileSystem) Lstat(path string) (fs.FileInfo, error) {
