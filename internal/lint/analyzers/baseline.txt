@@ -1845,9 +1845,6 @@ testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_pr
 testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_process_order_test.go::awaitInvocation::deadline::1
 testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_process_order_test.go::awaitRPCStart::deadline::1
 testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_process_order_test.go::awaitSignal::deadline::1
-testsleep-deadline-test|pkg/services/operator_settings/transports/http_test|pkg/services/operator_settings/transports/http/request_context_test.go::TestAdapter_LoadDocumentCanceledDuringRootCallCompletesWithoutHang::deadline::1
-testsleep-deadline-test|pkg/services/operator_settings/transports/http_test|pkg/services/operator_settings/transports/http/request_context_test.go::TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang::deadline::1
-testsleep-deadline-test|pkg/services/operator_settings/transports/http_test|pkg/services/operator_settings/transports/http/request_context_test.go::TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang::deadline::2
 testsleep-deadline-test|pkg/services/provider_sessions/transports/http|pkg/services/provider_sessions/transports/http/handler_test.go::TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot::deadline::1
 testsleep-deadline-test|pkg/services/provider_sessions/transports/http|pkg/services/provider_sessions/transports/http/handler_test.go::TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot::deadline::2
 testsleep-deadline-test|pkg/services/provider_sessions/transports/http|pkg/services/provider_sessions/transports/http/handler_test.go::TestHandlerGetProviderSessionDetailsMapsDeadlineExceededRequestContextDuringRoot::deadline::1
