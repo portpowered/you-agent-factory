@@ -171,15 +171,20 @@ func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process,
 	if err := os.WriteFile(configPath, before, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	assertMCPHealthyProviderRecovery(t, call, runner, server.root)
+	server.closeInput(t)
+}
+
+func assertMCPHealthyProviderRecovery(t *testing.T, call func(string) mcpJSONRPCResponse, runner *mcpRootResultRunner, workingRoot string) {
+	t.Helper()
 	result := decodeComposedTool[factorysessionmcp.SubagentResult](t, call("codex"))
-	if result.SessionID == "" || result.Status != "COMPLETED" || !strings.Contains(result.Text, "completed at "+filepath.Clean(server.root)) {
+	if result.SessionID == "" || result.Status != "COMPLETED" || !strings.Contains(result.Text, "completed at "+filepath.Clean(workingRoot)) {
 		t.Fatalf("configured provider result = %#v", result)
 	}
-	request, invoked := runner.requests.LoadAndDelete(filepath.Clean(server.root))
+	request, invoked := runner.requests.LoadAndDelete(filepath.Clean(workingRoot))
 	if !invoked || request.(platformprocess.CommandRequest).Command != "codex" {
 		t.Fatalf("selected provider request = %#v", request)
 	}
-	server.closeInput(t)
 }
 
 func (server *composedMemoryMCP) closeInput(t *testing.T) {

@@ -112,6 +112,36 @@ func runModelsCLIFileInputScenario(t *testing.T, process support.Process, protoc
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	writeGenericBackendCache(t, home, "localai-llamacpp", genericLlamaBackendSelection(), []byte("localai-llamacpp/linux-amd64"))
 	directory := functionalScaffoldFactory(t, singleOutputModelFactoryConfig("http://127.0.0.1:1"))
+	inputPath, outputPath, payload := prepareModelsCLIFileInputScenario(t, scenario, createDirectory, renameTarget)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--operation", "OMNI",
+		"--input", "prompt=@" + inputPath, "--output-map", "text=" + outputPath,
+		"--output-map", "usage=" + filepath.Join(filepath.Dir(outputPath), "usage.json"),
+	})
+	inputs.Input.Env = functionalHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = directory
+	err := process.Execute(inputs.Input)
+	if scenario == "success" {
+		if err != nil {
+			t.Fatalf("file input invocation: %v; stderr=%s", err, inputs.Stderr())
+		}
+		assertFileInputReplacement(t, process, protocol, inputs, inputPath, outputPath, payload)
+		return
+	}
+	assertModelsCLIFileFailure(t, inputs, err, scenario, outputPath)
+	if scenario == "injected read failure" {
+		diagnostic := decodeFirstDiagnostic(t, inputs.Stderr())
+		if diagnostic.Code != "CLI_LOCAL_INPUT_FAILED" || diagnostic.Family != "BAD_REQUEST" {
+			t.Fatalf("input-read diagnostic = %#v", diagnostic)
+		}
+		if protocol.callsFor(payload) != 0 {
+			t.Fatal("unreadable input reached inference")
+		}
+	}
+}
+
+func prepareModelsCLIFileInputScenario(t *testing.T, scenario, createDirectory, renameTarget string) (string, string, string) {
+	t.Helper()
 	inputPath := filepath.Join(functionalTempDir(t), "prompt.txt")
 	payload := "customer input " + scenario + "\nsecond line\n"
 	if scenario == "injected read failure" {
@@ -141,31 +171,7 @@ func runModelsCLIFileInputScenario(t *testing.T, process support.Process, protoc
 	if err := os.WriteFile(outputPath, []byte("prior destination"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=@" + inputPath, "--output-map", "text=" + outputPath,
-		"--output-map", "usage=" + filepath.Join(filepath.Dir(outputPath), "usage.json"),
-	})
-	inputs.Input.Env = functionalHomeEnvironment(home)
-	inputs.Input.WorkingDirectory = directory
-	err := process.Execute(inputs.Input)
-	if scenario == "success" {
-		if err != nil {
-			t.Fatalf("file input invocation: %v; stderr=%s", err, inputs.Stderr())
-		}
-		assertFileInputReplacement(t, process, protocol, inputs, inputPath, outputPath, payload)
-		return
-	}
-	assertModelsCLIFileFailure(t, inputs, err, scenario, outputPath)
-	if scenario == "injected read failure" {
-		diagnostic := decodeFirstDiagnostic(t, inputs.Stderr())
-		if diagnostic.Code != "CLI_LOCAL_INPUT_FAILED" || diagnostic.Family != "BAD_REQUEST" {
-			t.Fatalf("input-read diagnostic = %#v", diagnostic)
-		}
-		if protocol.callsFor(payload) != 0 {
-			t.Fatal("unreadable input reached inference")
-		}
-	}
+	return inputPath, outputPath, payload
 }
 
 func assertFileInputReplacement(t *testing.T, process support.Process, protocol *fileInputProtocolClient, inputs *support.CapturedInputs, inputPath, outputPath, payload string) {
