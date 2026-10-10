@@ -171,14 +171,14 @@ type SubmitTarget interface {
 }
 
 func SubmitFile(ctx context.Context, path string, target SubmitTarget, readFile work.SubmittedFileReader) error {
+	if readFile == nil {
+		return fmt.Errorf("submitted Work Request file reader is required")
+	}
 	_, err := submitFile(ctx, path, target, readFile)
 	return err
 }
 
 func submitFile(ctx context.Context, path string, target SubmitTarget, readFile work.SubmittedFileReader) (work.WorkRequestSubmitResult, error) {
-	if readFile == nil {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("submitted Work Request file reader is required")
-	}
 	data, err := readFile(path)
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("read work file %s: %w", path, err)
