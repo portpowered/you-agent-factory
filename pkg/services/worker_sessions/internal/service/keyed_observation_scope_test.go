@@ -102,6 +102,77 @@ func TestRuntimeIdentityHandoffIsDetachedScopedAndAbsentOnRejectedAdmission(t *t
 	}
 }
 
+func TestRuntimeCallerRetainsChildCorrelationAndOnlyVerifiedRequester(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"begin", "invoke"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			testRuntimeCallerMetadata(t, mode)
+		})
+	}
+}
+
+func testRuntimeCallerMetadata(t *testing.T, mode string) {
+	t.Helper()
+	r := newTestRegistry(t)
+	caller := runningCaller(t, r, "source")
+	metadata := &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "untrusted"},
+		Correlation: &workersessions.Correlation{WorkID: "child-work", FactorySessionID: "child-factory"},
+		Labels:      []string{"tag:child=value"},
+	}
+	request := workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "caller-dispatch"},
+		ID:  "caller-child", Execution: runtimeAttemptHandoff("caller-dispatch"), Metadata: metadata, Caller: caller,
+	}
+	var environment []string
+	request.BindEnvironment = func(value []string) { environment = append([]string(nil), value...) }
+	var attempt workersessions.RuntimeAttempt
+	var err error
+	if mode == "begin" {
+		attempt, err = r.BeginRuntimeAttempt(t.Context(), request, r.execution, r.clock, r.scheduler, runtimeAttemptNoopCancellation)
+	} else {
+		executor := coverageExecution{execute: func(_ context.Context, input workers.ExecuteRequest) (workers.ExecuteResult, error) {
+			environment = append([]string(nil), input.Target.Environment.SupervisedEnvironment...)
+			token := strings.TrimPrefix(environment[len(environment)-1], "YOU_WORKER_SESSION_TOKEN=")
+			output := coverageExecutionResult(input, workers.ExecutionOutcomeAccepted)
+			output.Output.Primary = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "ordinary " + token}}
+			output.ProposedOutputPresent = true
+			return output, nil
+		}}
+		_, err = r.InvokeRuntimeSession(t.Context(), request, workersessions.RetryPolicy{}, executor, r.clock, r.scheduler)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := metadata.Clone()
+	want.Requester = &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "source", WorkID: "lane"}
+	want.Labels = append(want.Labels, "parent:source")
+	key := scopedWorkerAddress(request.ID, request.Execution.Execution.FactorySessionID)
+	session, err := r.Get(t.Context(), workersessions.GetRequest{ID: request.ID, FactorySessionID: request.Execution.Execution.FactorySessionID})
+	if err != nil || !reflect.DeepEqual(session.Metadata, want) {
+		t.Fatalf("runtime child metadata = %+v, %v; want %+v", session.Metadata, err, want)
+	}
+	token := assertIdentityTokenEnvironment(t, environment, (workersessions.Session{ID: request.ID, Metadata: want}).IdentityEnvironment())
+	encoded, err := json.Marshal(request)
+	if err != nil || bytes.Contains(encoded, []byte(caller.Token)) {
+		t.Fatal("runtime caller authority entered serialized request")
+	}
+	metadata.Correlation.WorkID = "mutated"
+	metadata.Labels[0] = "mutated"
+	if !reflect.DeepEqual(r.sessions[key].Metadata, want) || r.sessions["source"].Metadata.Correlation.WorkID != "lane" {
+		t.Fatal("runtime admission changed or aliased caller/child facts")
+	}
+	if attempt != nil {
+		result := runtimeAttemptCompletedDispatch("caller-dispatch")
+		result.Result.Output = "ordinary " + token
+		if err := attempt.Complete(t.Context(), result, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	assertTokenPublicationAbsent(t, r, r.sessions[key], token)
+}
+
 func TestKeyedRuntimeControlsRejectForeignFactoryScopeBeforeEffects(t *testing.T) {
 	t.Parallel()
 	for _, action := range []workersessions.ControlAction{workersessions.ControlActionPause, workersessions.ControlActionResume, workersessions.ControlActionCancel, workersessions.ControlActionTerminate} {

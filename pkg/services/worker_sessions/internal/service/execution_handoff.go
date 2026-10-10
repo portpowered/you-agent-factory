@@ -815,6 +815,13 @@ func (r *registry) BeginRuntimeAttempt(
 	if r == nil {
 		return nil, workersessions.ErrStartAdmissionFailed
 	}
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
+	if _, err := r.resolveCallerMetadata(req.Caller, nil); err != nil {
+		return nil, err
+	}
 	execution, resolved, err := prepareRuntimeAttemptExecution(req)
 	if err != nil {
 		return nil, err
@@ -857,7 +864,7 @@ func (r *registry) BeginRuntimeAttempt(
 
 	prepared, err := r.prepareInvocation(
 		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Metadata: req.Metadata},
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Metadata: req.Metadata, Caller: req.Caller},
 		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID},
 		executor,
 		clock,
@@ -887,7 +894,7 @@ func (r *registry) BeginRuntimeAttempt(
 		}
 		return nil, err
 	}
-	identity, identityErr := r.bindExecutionIdentityEnvironment(req.ID, nil)
+	identity, identityErr := r.bindExecutionIdentityEnvironment(req.ID, req.Caller)
 	if identityErr != nil {
 		_ = handle.Complete(ctx, workers.WorkstationDispatchResult{DispatchID: attemptID, TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed}, identityErr)
 		return nil, identityErr
@@ -1028,7 +1035,7 @@ func (r *registry) prepareRuntimeInvocation(
 	}
 	execution := cloneWorkstationDispatchRequest(req.Execution)
 	execution.Execution.Dispatch.DispatchID = attemptID
-	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry, Metadata: req.Metadata.Clone()}
+	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry, Metadata: req.Metadata.Clone(), Caller: req.Caller}
 	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
 		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID}, executor, clock, scheduler)
 	if err != nil {

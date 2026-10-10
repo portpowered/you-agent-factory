@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -56,6 +57,34 @@ func (r *registry) resolveCallerMetadata(caller *workersessions.CallerIdentity, 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.callerMetadataLocked(caller, metadata)
+}
+
+// Runtime children retain their actual Work, Factory Session and labels. Only
+// the requester is derived from the admitted caller, under the reservation lock.
+func (r *registry) reserveInvocation(req workersessions.InvokeSessionRequest, runtimeOwned bool) error {
+	if !runtimeOwned || req.Caller == nil {
+		return r.reserveWithCaller(req.ID, req.Metadata, req.Caller)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	verified, err := r.callerMetadataLocked(req.Caller, nil)
+	if err != nil {
+		return err
+	}
+	metadata := req.Metadata.Clone()
+	if metadata == nil {
+		metadata = &workersessions.SessionMetadata{}
+	}
+	metadata.Requester = verified.Requester
+	parent := "parent:" + req.Caller.WorkerSessionID
+	if !slices.Contains(metadata.Labels, parent) {
+		metadata.Labels = append(metadata.Labels, parent)
+	}
+	if err := metadata.Validate(); err != nil {
+		return err
+	}
+	r.reserveIfAbsentLocked(req.ID, metadata)
+	return nil
 }
 
 // Caller verification and metadata capture share the reservation lock,

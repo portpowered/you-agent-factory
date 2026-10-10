@@ -75,10 +75,29 @@ func TestCallerInvalidRefusesBeforeAdmissionEffects(t *testing.T) {
 			if !errors.Is(err, workersessions.ErrCallerInvalid) || executor.validations.Load() != 0 || executor.executions.Load() != 0 {
 				t.Fatal("invalid caller reached admission or execution")
 			}
+			assertInvalidRuntimeCaller(t, r, executor, caller)
 			if _, exists := r.sessions[req.ID]; exists {
 				t.Fatal("invalid caller reserved a child")
 			}
 		})
+	}
+}
+
+func assertInvalidRuntimeCaller(t *testing.T, r *registry, executor workers.Service, caller *workersessions.CallerIdentity) {
+	t.Helper()
+	request := workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "runtime-child"},
+		ID:  "runtime-child", Execution: runtimeAttemptHandoff("runtime-child"), Caller: caller,
+		BindEnvironment: func([]string) { t.Error("invalid caller reached runtime handoff") },
+	}
+	if _, err := r.BeginRuntimeAttempt(t.Context(), request, executor, r.clock, r.scheduler, runtimeAttemptNoopCancellation); !errors.Is(err, workersessions.ErrCallerInvalid) {
+		t.Fatalf("runtime caller refusal = %v", err)
+	}
+	if _, err := r.InvokeRuntimeSession(t.Context(), request, workersessions.RetryPolicy{}, executor, r.clock, r.scheduler); !errors.Is(err, workersessions.ErrCallerInvalid) {
+		t.Fatalf("runtime invocation caller refusal = %v", err)
+	}
+	if _, err := r.Get(t.Context(), workersessions.GetRequest{ID: request.ID}); !errors.Is(err, workersessions.ErrSessionNotFound) || len(r.runtimeAttemptOwners) != 0 {
+		t.Fatal("invalid caller acquired a runtime child or logical attempt")
 	}
 }
 
@@ -331,7 +350,7 @@ func TestT7ConcurrentPreflightReservesAndExecutesOnce(t *testing.T) {
 // an early preflight check. The final credential binding must refuse the launch.
 func TestCallerLossDuringOpeningRefusesExecution(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"start", "invoke"} {
+	for _, mode := range []string{"start", "invoke", "runtime", "runtime-invoke"} {
 		for _, loss := range []string{"ended", "lost-token", "healthy-detached"} {
 			t.Run(mode+"/"+loss, func(t *testing.T) {
 				t.Parallel()
@@ -345,11 +364,28 @@ func TestCallerLossDuringOpeningRefusesExecution(t *testing.T) {
 				r.logger = gate
 				result := make(chan error, 1)
 				go func() {
-					if mode == "start" {
+					switch mode {
+					case "start":
 						_, err := r.Start(ctx, req)
 						result <- err
-					} else {
+					case "invoke":
 						_, err := r.InvokeSession(ctx, workersessions.InvokeSessionRequest{ID: req.ID, Execution: req.Execution, Caller: caller})
+						result <- err
+					default:
+						runtime := workersessions.RuntimeAttemptRequest{
+							Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "runtime-child"},
+							ID:  req.ID, Execution: runtimeAttemptHandoff("runtime-child"), Caller: caller,
+							BindEnvironment: func([]string) { executor.executions.Add(1) },
+						}
+						if mode == "runtime-invoke" {
+							_, err := r.InvokeRuntimeSession(ctx, runtime, workersessions.RetryPolicy{}, executor, r.clock, r.scheduler)
+							result <- err
+							return
+						}
+						attempt, err := r.BeginRuntimeAttempt(ctx, runtime, executor, r.clock, r.scheduler, runtimeAttemptNoopCancellation)
+						if err == nil {
+							err = attempt.Complete(ctx, runtimeAttemptCompletedDispatch("runtime-child"), nil)
+						}
 						result <- err
 					}
 				}()
@@ -383,15 +419,15 @@ func TestCallerLossDuringOpeningRefusesExecution(t *testing.T) {
 
 func assertCallerOpeningOutcome(t *testing.T, r *registry, id, loss string, executor *preflightExecution, err error) {
 	t.Helper()
+	if joinErr := r.waitForSupervisionDriver(t.Context(), id); joinErr != nil {
+		t.Fatal(joinErr)
+	}
 	if loss == "healthy-detached" {
 		if err != nil || executor.executions.Load() != 1 {
 			t.Fatalf("detached valid caller failed: %v", err)
 		}
 	} else if !errors.Is(err, workersessions.ErrCallerInvalid) || executor.executions.Load() != 0 {
 		t.Fatalf("opening owner loss launched execution or lost refusal: %v", err)
-	}
-	if err := r.waitForSupervisionDriver(t.Context(), id); err != nil {
-		t.Fatal(err)
 	}
 	child, err := r.Get(t.Context(), workersessions.GetRequest{ID: id})
 	if err != nil || !child.Terminal() || child.Metadata == nil || child.Metadata.Requester == nil || child.Metadata.Requester.WorkerSessionID != "source" {

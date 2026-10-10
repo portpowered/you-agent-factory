@@ -490,6 +490,13 @@ func (r *registry) InvokeRuntimeSession(
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 ) (workersessions.InvokeSessionResult, error) {
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
+	if _, err := r.resolveCallerMetadata(req.Caller, nil); err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
 	if err := req.Validate(); err != nil {
 		return workersessions.InvokeSessionResult{}, err
 	}

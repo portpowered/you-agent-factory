@@ -64,6 +64,9 @@ type RuntimeAttemptRequest struct {
 	AttemptID                   string
 	Execution                   workers.WorkstationDispatchRequest
 	Metadata                    *SessionMetadata
+	// Caller is execution-only authority for an invocation-local Factory child.
+	// Its correlation remains the child's own, rather than the caller's.
+	Caller *CallerIdentity `json:"-"`
 	// BindEnvironment installs detached execution-only identity and credentials
 	// after safe recipe preparation and admission, before provider handoff.
 	BindEnvironment func([]string) `json:"-"`
