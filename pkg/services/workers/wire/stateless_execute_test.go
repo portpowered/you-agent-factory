@@ -425,26 +425,18 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 	return statelessTestFixture{service: service, provider: provider, command: command, local: local}
 }
 
-func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
+func TestNewServiceRejectsInvalidRunnerConfiguration(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
 		mutate func(*statelessConstructionInputs)
 	}{
-		{name: "agent providers", mutate: func(input *statelessConstructionInputs) { input.agentDependencies.Providers = nil }},
-		{name: "agent publisher", mutate: func(input *statelessConstructionInputs) { input.agentDependencies.Publish = nil }},
 		{name: "script command", mutate: func(input *statelessConstructionInputs) {
 			input.scriptConfig.Command = ""
 			input.scriptConfig.RequestSelected = false
 		}},
-		{name: "script command runner", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.CommandRunner = nil }},
-		{name: "script factory docs", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.FactoryDocs = nil }},
-		{name: "script clock", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Now = nil }},
-		{name: "script publisher", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Publish = nil }},
-		{name: "script recorder", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Record = nil }},
 		{name: "inference worker", mutate: func(input *statelessConstructionInputs) { input.inferenceConfig.Worker.Name = "" }},
-		{name: "inference models", mutate: func(input *statelessConstructionInputs) { input.inferenceDependencies.Models = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

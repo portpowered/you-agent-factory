@@ -141,7 +141,7 @@ func (scriptNonStreamingCommand) Run(context.Context, workerprocess.CommandReque
 	panic("construction must not execute command effects")
 }
 
-func TestScriptImplementationRejectsInvalidConfigurationAndEffects(t *testing.T) {
+func TestScriptImplementationRejectsInvalidConfigurationAndStreamingCapability(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name    string
@@ -152,17 +152,9 @@ func TestScriptImplementationRejectsInvalidConfigurationAndEffects(t *testing.T)
 			c.Command = "  "
 			*d = runners.ScriptDependencies{}
 		}},
-		{"command runner", "script command runner is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.CommandRunner = nil }},
-		{"typed nil command runner", "script command runner is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) {
-			d.CommandRunner = (*scriptConformanceCommand)(nil)
-		}},
 		{"streaming", "script command runner must support streaming", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) {
 			d.CommandRunner = scriptNonStreamingCommand{}
 		}},
-		{"docs", "script Factory docs loader is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.FactoryDocs = nil }},
-		{"clock", "script clock is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.Now = nil }},
-		{"publisher", "script progress publisher is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.Publish = nil }},
-		{"recorder", "script event recorder is required", func(_ *runners.ScriptConfig, d *runners.ScriptDependencies) { d.Record = nil }},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

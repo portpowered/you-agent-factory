@@ -118,9 +118,6 @@ func provideStatelessWorkersServiceWithMock(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	mockWorkers *workers.MockWorkersConfig,
 ) (workers.Service, error) {
-	if clock == nil {
-		return nil, fmt.Errorf("construct stateless Workers: clock is required")
-	}
 	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
 	if err != nil {
 		return nil, fmt.Errorf("construct stateless Workers: %w", err)

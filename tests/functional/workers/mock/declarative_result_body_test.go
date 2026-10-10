@@ -60,6 +60,72 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 			})
 		}
 	}
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run("empty-config/"+mode, func(t *testing.T) {
+			t.Parallel()
+			runTypedEmptyMockAcceptance(t, host, mode)
+		})
+	}
+}
+
+// M3 observes default acceptance with an explicitly empty configuration on
+// both typed paths. The shared host denies every native execution effect.
+func runTypedEmptyMockAcceptance(t *testing.T, host *support.FunctionalAPIServer, mode string) {
+	dir := matchedMockRejectionFactory(t, mode)
+	id := uuid.NewString()
+	for _, name := range []string{"target", "sibling"} {
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkID: name, WorkTypeID: "task", TraceID: id + "-" + name, Payload: []byte(name),
+		})
+	}
+	path := filepath.Join(dir, "empty-mock.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--session=" + id, "--dir", dir,
+		"--with-mock-workers=" + path, "--continuously", "--quiet", "--no-record"})
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	joined := make(chan struct{})
+	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-joined:
+		case <-time.After(30 * time.Second):
+			t.Error("empty-mock invocation did not join")
+		}
+	})
+	// Continuous execution retains the session for public terminal inspection;
+	// this wait observes committed Work state rather than delaying the command.
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	base := host.URL() + "/factory-sessions/" + url.PathEscape(id)
+	assertDeclaredWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work"), false)
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	if len(dispatches) != 2 {
+		t.Fatalf("default acceptance dispatch count = %d, want two", len(dispatches))
+	}
+	seen := map[string]bool{}
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != "process-task" || dispatch.Response == nil ||
+			dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted ||
+			support.StringPointerValue(dispatch.Response.Output) != "mock worker accepted" ||
+			dispatch.Response.FailureDetail != nil || dispatch.Response.Error != nil {
+			t.Fatalf("empty-config terminal dispatch = %+v", dispatch)
+		}
+		for _, name := range []string{"target", "sibling"} {
+			if support.DispatchObservationIncludesWork(dispatch, name) {
+				if seen[name] {
+					t.Fatalf("duplicate default acceptance for %s", name)
+				}
+				seen[name] = true
+			}
+		}
+	}
+	if !seen["target"] || !seen["sibling"] {
+		t.Fatalf("default acceptance Work correlation = %v", seen)
+	}
 }
 
 // The matched worker/workstation pair and both documented flag forms must

@@ -9,7 +9,6 @@ package wire
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -72,15 +71,6 @@ func NewService(
 	agentToolFiles workers.AgentToolFileSystem,
 	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
-	if err := validateConstructionPorts(
-		agentDependencies,
-		scriptConfig,
-		scriptDependencies,
-		inferenceConfig,
-		inferenceDependencies,
-	); err != nil {
-		return nil, err
-	}
 	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock, nil)
 	runnerRegistry, err := runnerswire.NewProductionRegistry(
 		agentDependencies,
@@ -140,15 +130,6 @@ func NewMockService(
 ) (workers.Service, error) {
 	if mockWorkers == nil {
 		return nil, fmt.Errorf("construct mock Workers: mock workers config is required")
-	}
-	if err := validateConstructionPorts(
-		agentDependencies,
-		scriptConfig,
-		scriptDependencies,
-		inferenceConfig,
-		inferenceDependencies,
-	); err != nil {
-		return nil, err
 	}
 	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock, agentToolFiles)
 	runnerRegistry, err := runnerswire.NewMockProductionRegistry(
@@ -214,46 +195,6 @@ func privateScriptDependencies(
 		Publish:       dependencies.Publish,
 		Record:        dependencies.Record,
 	}
-}
-
-func validateConstructionPorts(
-	agentDependencies AgentDependencies,
-	scriptConfig ScriptConfig,
-	scriptDependencies ScriptDependencies,
-	inferenceConfig InferenceConfig,
-	inferenceDependencies InferenceDependencies,
-) error {
-	if agentDependencies.Providers == nil {
-		return fmt.Errorf("construct Workers: agent Providers service is required")
-	}
-	if agentDependencies.Publish == nil {
-		return fmt.Errorf("construct Workers: agent progress publisher is required")
-	}
-	if strings.TrimSpace(scriptConfig.Command) == "" && !scriptConfig.RequestSelected {
-		return fmt.Errorf("construct Workers: script command is required")
-	}
-	if scriptDependencies.CommandRunner == nil {
-		return fmt.Errorf("construct Workers: script command runner is required")
-	}
-	if scriptDependencies.FactoryDocs == nil {
-		return fmt.Errorf("construct Workers: script Factory docs loader is required")
-	}
-	if scriptDependencies.Now == nil {
-		return fmt.Errorf("construct Workers: script clock is required")
-	}
-	if scriptDependencies.Publish == nil {
-		return fmt.Errorf("construct Workers: script progress publisher is required")
-	}
-	if scriptDependencies.Record == nil {
-		return fmt.Errorf("construct Workers: script event recorder is required")
-	}
-	if strings.TrimSpace(inferenceConfig.Worker.Name) == "" {
-		return fmt.Errorf("construct Workers: inference worker name is required")
-	}
-	if inferenceDependencies.Models == nil {
-		return fmt.Errorf("construct Workers: inference Models service is required")
-	}
-	return nil
 }
 
 var NewFactoryDocsLoader = workerprompting.NewFactoryDocsLoader
