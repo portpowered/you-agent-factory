@@ -170,6 +170,9 @@ func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
+	if r.restart == nil {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
 	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
 	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
 		captured.Execution.Execution.Dispatch.DispatchID != target.ExpectedAttemptID ||
