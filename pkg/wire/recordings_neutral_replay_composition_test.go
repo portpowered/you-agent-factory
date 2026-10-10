@@ -135,6 +135,92 @@ func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
 
 type workerRecordingReaderCompositionProbe struct{}
 
+// These adapter tests control the recording owner rather than composing it.
+// Public replay/session journeys retain responsibility for durable recovery.
+func TestWorkerRecordingReaderPreservesFailureAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name string
+		err  error
+	}{
+		{name: "unavailable recording", err: os.ErrNotExist},
+		{name: "canceled read", err: context.Canceled},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			owner := &workerRecordingReadProbe{snapshot: selectedWorkerRecordingSnapshot(), err: cell.err}
+			adapter := workerRecordingReaderCapability{reader: owner}
+			ctx := t.Context()
+			payload, err := adapter.LoadWorkerRecording(ctx, "selected-recording")
+			if !errors.Is(err, cell.err) || payload != nil {
+				t.Fatalf("failed read = %s, %v; want original cause and no payload", payload, err)
+			}
+			if owner.ctx != ctx || owner.id != "selected-recording" {
+				t.Fatal("read did not preserve the caller context and selected recording")
+			}
+			owner.err = nil
+			assertSelectedWorkerRecordingRead(t, adapter)
+		})
+	}
+}
+
+func TestWorkerRecordingReaderRejectsMalformedPayloadAndRecovers(t *testing.T) {
+	t.Parallel()
+	owner := &workerRecordingReadProbe{snapshot: selectedWorkerRecordingSnapshot()}
+	owner.snapshot.Sessions[0].Records[0].Payload = json.RawMessage(`{"private":"unfinished`)
+	adapter := workerRecordingReaderCapability{reader: owner}
+	payload, err := adapter.LoadWorkerRecording(t.Context(), "selected-recording")
+	var encodingError *json.MarshalerError
+	if payload != nil || !errors.As(err, &encodingError) || !strings.HasPrefix(err.Error(), "encode Worker recording snapshot: ") {
+		t.Fatalf("invalid snapshot = %s, %v; want contextual encoding failure and no payload", payload, err)
+	}
+	if strings.Contains(err.Error(), "unfinished") {
+		t.Fatal("encoding diagnostic exposed the recording payload")
+	}
+	owner.snapshot = selectedWorkerRecordingSnapshot()
+	assertSelectedWorkerRecordingRead(t, adapter)
+}
+
+type workerRecordingReadProbe struct {
+	snapshot recordings.WorkerRecordingSnapshot
+	err      error
+	ctx      context.Context
+	id       string
+}
+
+func (probe *workerRecordingReadProbe) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
+	probe.ctx, probe.id = ctx, id
+	return probe.snapshot, probe.err
+}
+
+func selectedWorkerRecordingSnapshot() recordings.WorkerRecordingSnapshot {
+	return recordings.WorkerRecordingSnapshot{
+		RecordingID: "selected-recording",
+		Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+			WorkerSessionID: "selected-worker",
+			Records: []events.Record{{
+				ID:      events.RecordID{Topic: "worker-session/selected-worker/events", Position: 7},
+				Payload: json.RawMessage(`{"result":"selected output"}`),
+			}},
+		}},
+	}
+}
+
+func assertSelectedWorkerRecordingRead(t *testing.T, adapter workerRecordingReaderCapability) {
+	t.Helper()
+	payload, err := adapter.LoadWorkerRecording(t.Context(), "selected-recording")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot recordings.WorkerRecordingSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(snapshot, selectedWorkerRecordingSnapshot()) {
+		t.Fatalf("decoded snapshot = %#v; want selected identity, position and payload", snapshot)
+	}
+}
+
 func (workerRecordingReaderCompositionProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
 	return nil
 }
