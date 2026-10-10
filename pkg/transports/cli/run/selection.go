@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 // prepareCanonicalSessionIDForRun allocates the identity used by the
@@ -31,6 +32,9 @@ func prepareCanonicalSessionIDForRun(cfg RunConfig) (RunConfig, error) {
 	canonicalID := strings.TrimSpace(generator())
 	if canonicalID == "" {
 		return RunConfig{}, fmt.Errorf("canonical Factory Session ID generator returned an empty identity")
+	}
+	if !factorysessions.SessionIdentity(canonicalID).Valid() {
+		return RunConfig{}, fmt.Errorf("canonical Factory Session ID generator returned an invalid identity")
 	}
 	cfg.CanonicalSessionID = canonicalID
 	return cfg, nil
@@ -128,6 +132,9 @@ func (s *selection) Run(
 	if s == nil {
 		return fmt.Errorf("run selection is required")
 	}
+	if err := ValidateRunSessionIdentity(s.cfg); err != nil {
+		return err
+	}
 	cfg, err := applyRunIntent(s.cfg, intent)
 	if err != nil {
 		return err
@@ -204,4 +211,16 @@ func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig,
 		cfg.Port = 0
 	}
 	return cfg, nil
+}
+
+// ValidateRunSessionIdentity rejects unsupported selectors before startup effects.
+func ValidateRunSessionIdentity(cfg RunConfig) error {
+	id := strings.TrimSpace(cfg.FactorySessionID)
+	if id == "" {
+		id = factorysessions.DefaultSessionID
+	}
+	if !factorysessions.SessionIdentity(id).Valid() {
+		return &clidiag.LocalFailure{Code: "BAD_REQUEST", Message: "--session must be " + factorysessions.SessionIdentityForm}
+	}
+	return nil
 }

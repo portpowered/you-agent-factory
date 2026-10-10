@@ -351,6 +351,9 @@ func RunSelected(
 	presentations factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) error {
+	if err := ValidateRunSessionIdentity(cfg); err != nil {
+		return err
+	}
 	canonicalReasoningEffort, err := NormalizeWorkerReasoningEffort(cfg.WorkerReasoningEffort)
 	if err != nil {
 		return err

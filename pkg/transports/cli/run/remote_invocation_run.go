@@ -46,6 +46,9 @@ func runRemoteInvocation(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	presentations ...factoryvisualization.ResponsePresentation,
 ) error {
+	if err := ValidateRunSessionIdentity(cfg); err != nil {
+		return err
+	}
 	if remote == nil {
 		return fmt.Errorf("run remote durable start: operation is required")
 	}

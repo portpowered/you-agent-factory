@@ -42,6 +42,13 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
+For `you run --session <session-id>`, use `~default`, a lowercase hyphenated
+UUID, or `dur-sess-` followed by 32 lowercase hexadecimal digits. Omission or
+blank input selects `~default` locally. Unsupported names such as
+`validation-factory` fail before Work starts with `BAD_REQUEST` and exit code 1.
+Local runs open the selected session; remote runs target an already-open
+session. For example, use `--session 12345678-1234-1234-1234-1234567890ab`.
+
 ## List recorded history
 
 Run `you --json session list --history-only` to inspect retained Factory Session

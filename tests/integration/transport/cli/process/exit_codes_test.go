@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"os"
 	"os/exec"
 	"runtime"
@@ -190,6 +192,41 @@ func TestBuiltCLIExitStatusForNonWorkerCommands(t *testing.T) {
 			}
 			if (err != nil) != tc.wantError {
 				t.Fatalf("built CLI error = %v, want error=%t", err, tc.wantError)
+			}
+		})
+	}
+}
+
+// TestBuiltCLIRunSessionIdentityAdmission consumes the build lane's immutable
+// artifact and limits real process proof to the two invalid startup cases.
+func TestBuiltCLIRunSessionIdentityAdmission(t *testing.T) {
+	t.Parallel()
+	binary := quietShutdownArtifact(t)
+	for _, id := range []string{"validation-factory", "../escape"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			factoryDir := writeStdinRunFactory(t, dir)
+			cmd := exec.CommandContext(t.Context(), binary, "run", "--dir", factoryDir, "--continuously", "--with-server", "--listen", "127.0.0.1:0", "--session", id)
+			cmd.Dir = dir
+			cmd.Env = append(os.Environ(), "HOME="+dir, "USERPROFILE="+dir)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			err := cmd.Run()
+			var exit *exec.ExitError
+			if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+				t.Fatalf("exit = %v, want 1", err)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("startup stdout = %q", stdout.String())
+			}
+			var diagnostic factoryapi.ErrorResponse
+			if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil {
+				t.Fatalf("diagnostic %q: %v", stderr.String(), err)
+			}
+			if diagnostic.Code != "BAD_REQUEST" || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || diagnostic.Message != "--session must be "+factorysessions.SessionIdentityForm {
+				t.Fatalf("diagnostic = %#v", diagnostic)
 			}
 		})
 	}

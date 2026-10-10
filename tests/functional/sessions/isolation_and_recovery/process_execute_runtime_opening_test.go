@@ -2,9 +2,11 @@ package isolation_and_recovery_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"io"
 	"net/http"
 	"os"
@@ -328,4 +330,49 @@ func postSessionsJSON[T any](t *testing.T, endpoint string, request any, failure
 		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
 	}
 	return decoded
+}
+
+// TestRunSessionIdentityAdmission observes rejection through the reusable public
+// process boundary. Each parallel cell owns its profile, Factory and streams.
+func TestRunSessionIdentityAdmission(t *testing.T) {
+	t.Parallel()
+	var providerCalls atomic.Int32
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, identityAdmissionRunner{calls: &providerCalls}, nil)
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	for _, id := range []string{"validation-factory", "../escape"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			dir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
+			home := t.TempDir()
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--listen", "127.0.0.1:0", "--session", id})
+			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+			inputs.Input.WorkingDirectory = dir
+			err := process.Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("invalid identity admitted")
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("startup stdout = %q", inputs.Stdout())
+			}
+			var diagnostic factoryapi.ErrorResponse
+			if decodeErr := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); decodeErr != nil {
+				t.Fatalf("diagnostic %q: %v", inputs.Stderr(), decodeErr)
+			}
+			if diagnostic.Code != "BAD_REQUEST" || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || diagnostic.Message != "--session must be "+factorysessions.SessionIdentityForm {
+				t.Fatalf("diagnostic = %#v", diagnostic)
+			}
+			if providerCalls.Load() != 0 {
+				t.Fatal("invalid identity reached provider")
+			}
+		})
+	}
+}
+
+type identityAdmissionRunner struct{ calls *atomic.Int32 }
+
+func (r identityAdmissionRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.calls.Add(1)
+	return platformprocess.CommandResult{}, errors.New("provider must not run for invalid session identity")
 }

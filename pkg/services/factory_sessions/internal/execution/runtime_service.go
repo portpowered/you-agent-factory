@@ -32,7 +32,11 @@ func NewDurableSessionID(generateID internalcontracts.SessionIDGenerator) (strin
 	if identity == "" {
 		return "", errors.New("Factory Session ID generator returned an empty identity")
 	}
-	return "dur-sess-" + identity, nil
+	id := "dur-sess-" + identity
+	if !internalcontracts.SessionIdentity(id).Valid() {
+		return "", errors.New("Factory Session ID generator returned an invalid identity")
+	}
+	return id, nil
 }
 
 type runtimeSessionState struct {

@@ -1003,6 +1003,10 @@ paths:
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
       description: >-
+        Session selectors accept ~default, a lowercase hyphenated UUID, or
+        dur-sess- followed by 32 lowercase hexadecimal digits. Unsupported
+        selectors return BAD_REQUEST before Work admission; valid absent
+        identities retain NOT_FOUND.
         Live-session compatibility API for invocations against an already-open
         factory session. This route is not the primary durable workflow
         execution entrypoint; use POST /factory-sessions/async or POST

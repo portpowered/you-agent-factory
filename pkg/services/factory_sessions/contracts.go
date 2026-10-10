@@ -28,6 +28,12 @@ type InvocationMetric = internalcontracts.InvocationMetric
 // sessions, and session-owned invocation requests.
 type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
+// SessionIdentity is the persistence-compatible Factory Session selector.
+type SessionIdentity = internalcontracts.SessionIdentity
+
+// SessionIdentityForm describes the accepted normalized identity.
+const SessionIdentityForm = internalcontracts.SessionIdentityForm
+
 // RuntimeMetricsScope and RuntimeMetricsScopeResolver are implementation
 // contracts published here as aliases so the Factory Sessions root retains its
 // singular service-interface inventory.

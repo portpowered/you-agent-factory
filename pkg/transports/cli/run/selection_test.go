@@ -12,6 +12,7 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) {
@@ -304,4 +305,23 @@ func (s *selectionDirectJavaScriptStub) Run(
 		discloseStartup()
 	}
 	return nil
+}
+
+func TestRunSessionIdentity(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"validation-factory", "../escape"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: id})
+			var invalid *clidiag.LocalFailure
+			if !errors.As(err, &invalid) || invalid.Code != "BAD_REQUEST" || invalid.Message != "--session must be "+factorysessions.SessionIdentityForm {
+				t.Fatalf("identity error = %v", err)
+			}
+		})
+	}
+	for _, id := range []string{"", "  ", "~default", "12345678-1234-1234-1234-1234567890ab"} {
+		if err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: id}); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

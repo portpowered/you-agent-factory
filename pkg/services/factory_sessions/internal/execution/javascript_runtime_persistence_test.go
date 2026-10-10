@@ -975,3 +975,20 @@ func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
 		t.Fatalf("provider session = %#v, want live-provider-session-1", providerSession)
 	}
 }
+
+func TestSessionIdentityGeneratedDurableID(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{"validation-factory", "../escape", "", "12345678-1234-1234-1234-1234567890AB"} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			if id, err := NewDurableSessionID(func() string { return value }); err == nil {
+				t.Fatalf("generated invalid durable ID %q", id)
+			}
+		})
+	}
+	const uuid = "12345678-1234-1234-1234-1234567890ab"
+	id, err := NewDurableSessionID(func() string { return uuid })
+	if err != nil || id != "dur-sess-123456781234123412341234567890ab" {
+		t.Fatalf("durable ID = %q, %v", id, err)
+	}
+}

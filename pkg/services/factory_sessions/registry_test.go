@@ -802,3 +802,22 @@ func TestSingularRootServiceAuthority_PeerFakeReadNotFound(t *testing.T) {
 		t.Fatalf("Start result = %#v, want reachable live start path through singular root", opened)
 	}
 }
+
+func TestSessionIdentity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		id    string
+		valid bool
+	}{
+		{"~default", true}, {" 12345678-1234-1234-1234-1234567890ab ", true},
+		{"dur-sess-0123456789abcdef0123456789abcdef", true}, {"validation-factory", false},
+		{"../escape", false}, {"", false}, {"12345678-1234-1234-1234-1234567890AB", false},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+			if got := SessionIdentity(tc.id).Valid(); got != tc.valid {
+				t.Fatalf("Valid() = %v, want %v", got, tc.valid)
+			}
+		})
+	}
+}

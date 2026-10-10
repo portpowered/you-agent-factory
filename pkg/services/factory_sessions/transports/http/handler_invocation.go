@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -28,6 +29,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 
 	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req)
 	if err != nil {
+		var identityError *factorysessions.DetachedRequestError
+		if errors.As(err, &identityError) {
+			s.writeError(w, http.StatusBadRequest, identityError.Error(), "BAD_REQUEST")
+			return
+		}
 		var payloadSize *work.PayloadSizeError
 		if errors.As(err, &payloadSize) {
 			s.writeError(w, http.StatusBadRequest, payloadSize.Error(), "BAD_REQUEST")

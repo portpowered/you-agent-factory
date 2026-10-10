@@ -35,6 +35,14 @@ func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.Sess
 	if r == nil || r.assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("factory sessions opening owner is required")
 	}
+	if id := strings.TrimSpace(request.SessionID); id != "" && !factorysessions.SessionIdentity(id).Valid() {
+		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+	}
+	if request.RuntimeSelection != nil {
+		if id := strings.TrimSpace(request.RuntimeSelection.CanonicalSessionID); id != "" && !factorysessions.SessionIdentity(id).Valid() {
+			return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "canonicalSessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+		}
+	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
 		return r.startDurable(ctx, r.prepareDurableStartRequest(request))
 	}
@@ -184,6 +192,10 @@ func inheritCurrentMockWorkers(request factorysessions.SessionStartRequest, curr
 }
 
 func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	selectedID, err := r.sessionIDForStart(request)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
 	if request.InitNewFactory {
 		factoryDir, err := r.assembly.PrepareNewFactoryScaffold(request.FolderPath)
 		if err != nil {
@@ -192,10 +204,6 @@ func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.
 		selection := runtimeSelectionForStart(request)
 		selection.DefinitionSourcePath = filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
 		request.RuntimeSelection = &selection
-	}
-	selectedID, err := r.sessionIDForStart(request)
-	if err != nil {
-		return factorysessions.SessionStartResult{}, err
 	}
 	selected, err := r.prepareLiveStartRequest(ctx, request, selectedID)
 	if err != nil {
@@ -462,6 +470,9 @@ func (r *RuntimeOpening) startedForRequestID(requestID string) (factorysessions.
 
 func (r *RuntimeOpening) sessionIDForStart(request factorysessions.SessionStartRequest) (string, error) {
 	if id := strings.TrimSpace(request.SessionID); id != "" {
+		if !factorysessions.SessionIdentity(id).Valid() {
+			return "", &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+		}
 		return id, nil
 	}
 	if !request.ActivationOnly {
@@ -471,7 +482,7 @@ func (r *RuntimeOpening) sessionIDForStart(request factorysessions.SessionStartR
 		return "", fmt.Errorf("start Factory Session: session ID generator is required")
 	}
 	id := strings.TrimSpace(r.generateSessionID())
-	if id == "" || id == factorysessions.DefaultSessionID {
+	if !factorysessions.SessionIdentity(id).Valid() || id == factorysessions.DefaultSessionID {
 		return "", fmt.Errorf("start Factory Session: session ID generator returned an invalid identity")
 	}
 	return id, nil
