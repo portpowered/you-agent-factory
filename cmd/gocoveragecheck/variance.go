@@ -22,6 +22,7 @@ type coverageVarianceSample struct {
 	label  string
 	header string
 	totals map[string]packageCoverageTotals
+	blocks map[string]coverageBlock
 }
 
 type coverageVarianceCurrentFloor struct {
@@ -176,6 +177,13 @@ func readCoverageVarianceProfile(profilePath string, repoRoot string) (coverageV
 	if header != countCoverageProfileHeader {
 		return coverageVarianceSample{}, fmt.Errorf("aggregate coverage variance: profile %q uses %q; count-mode profiles are required", profilePath, header)
 	}
+	backendBlocks := make(map[string]coverageBlock)
+	for key, block := range blocks {
+		if !isBackendCoveragePackage(block.importPath) {
+			continue
+		}
+		backendBlocks[key] = block
+	}
 	totals := make(map[string]packageCoverageTotals)
 	for importPath, packageTotals := range coverageTotals(blocks) {
 		if !isBackendCoveragePackage(importPath) {
@@ -194,6 +202,7 @@ func readCoverageVarianceProfile(profilePath string, repoRoot string) (coverageV
 		label:  coverageVarianceProfileLabel(profilePath),
 		header: header,
 		totals: totals,
+		blocks: backendBlocks,
 	}, nil
 }
 
@@ -229,6 +238,30 @@ func validateVarianceSampleCompatibility(samples []coverageVarianceSample) error
 			if wantTotal != gotTotal {
 				return fmt.Errorf("aggregate coverage variance: inconsistent total statements for package %s between %q and %q: expected %d, got %d", importPath, first.path, sample.path, wantTotal, gotTotal)
 			}
+		}
+		if err := validateVarianceBlockCompatibility(first, sample); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Counts can vary between executions, but the source block universe cannot.
+// Equal package denominators alone do not detect a moved or replaced block.
+func validateVarianceBlockCompatibility(first, sample coverageVarianceSample) error {
+	if len(first.blocks) != len(sample.blocks) {
+		return fmt.Errorf("aggregate coverage variance: incompatible source block universe between %q and %q", first.path, sample.path)
+	}
+	keys := make([]string, 0, len(first.blocks))
+	for key := range first.blocks {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		want := first.blocks[key]
+		got, ok := sample.blocks[key]
+		if !ok || got.statementCount != want.statementCount || got.importPath != want.importPath {
+			return fmt.Errorf("aggregate coverage variance: incompatible source block %s between %q and %q", key, first.path, sample.path)
 		}
 	}
 	return nil

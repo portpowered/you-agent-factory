@@ -196,12 +196,16 @@ func planCoverageManifestUpdate(manifest coverageManifest, minimums map[string]p
 		}
 		status := "unchanged"
 		switch {
+		case candidate < oldFloor && manifest.Lane == functionalCoverageSuite:
+			// Functional samples may reveal lost behavior coverage; they must
+			// never turn that loss into an accepted lower policy floor.
+			status = "skipped-decrease"
 		case candidate < oldFloor:
 			status = "lowered"
 		case candidate > oldFloor:
 			status = "raised"
 		}
-		if status != "unchanged" {
+		if status == "raised" || status == "lowered" {
 			updated.Packages[len(updated.Packages)-1].Minimum = json.RawMessage(candidate.String())
 		}
 		updates = append(updates, coverageManifestUpdate{

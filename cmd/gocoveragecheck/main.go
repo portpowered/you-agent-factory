@@ -757,6 +757,9 @@ func scanCoverageProfile(profile io.Reader, repoRoot string) (string, map[string
 		if err != nil {
 			return "", nil, fmt.Errorf("parse go coverage profile execution count on line %d: %w", lineNumber, err)
 		}
+		if statementCount < 0 || executionCount < 0 {
+			return "", nil, fmt.Errorf("parse go coverage profile: invalid counts on line %d for %s", lineNumber, filePathWithRanges)
+		}
 
 		importPath, err := coverageImportPath(filePathWithRanges[:rangeSeparator], repoRoot)
 		if err != nil {

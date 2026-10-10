@@ -1,13 +1,133 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestFunctionalFloorUpdaterNeverDecreases(t *testing.T) {
+	t.Parallel()
+	lower, same, higher := modulePath+"/pkg/config", modulePath+"/pkg/service", modulePath+"/pkg/factory"
+	exempt := modulePath + "/pkg/empty"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion, Lane: functionalCoverageSuite,
+		DefaultFloorPercent: json.RawMessage("15.00"),
+		FloorHolds: []coverageManifestFloorHold{{
+			Package: lower, Justification: "restore retained behavior", Owner: "backend-quality",
+			Deadline: "2027-07-15", RemovalGate: "functional coverage restored",
+		}},
+		Packages: []coverageManifestEntry{
+			{Package: lower, Minimum: json.RawMessage("80.06")},
+			{Package: same, Minimum: json.RawMessage("50.00")},
+			{Package: higher, Minimum: json.RawMessage("30.00")},
+			{Package: exempt, Exception: &coverageManifestException{
+				Kind: "measurement", Justification: "no measurable statements", Owner: "backend-quality",
+				Deadline: "2027-07-15", RemovalGate: "profile reports statements",
+			}},
+		},
+	}
+	slices.SortFunc(manifest.Packages, func(a, b coverageManifestEntry) int { return strings.Compare(a.Package, b.Package) })
+	data, err := renderCoverageManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filename := filepath.Join(t.TempDir(), "minimums.json")
+	if err := os.WriteFile(filename, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var totals []map[string]packageCoverageTotals
+	for index := 0; index < minimumVarianceSamples; index++ {
+		totals = append(totals, map[string]packageCoverageTotals{
+			lower:  {coveredStatements: 71 + index, totalStatements: 100},
+			same:   {coveredStatements: 1, totalStatements: 2},
+			higher: {coveredStatements: 1 + index%2, totalStatements: 3},
+		})
+	}
+	samples := coverageManifestSampleSet(totals)
+	updates, err := updateCoverageManifestFile(filename, functionalCoverageSuite, samples)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(coverageManifestUpdateStrings(updates), []string{
+		"package coverage update: package=" + lower + " lane=functional status=skipped-decrease old=80.06% candidate=71.00%",
+		"package coverage update: package=" + exempt + " lane=functional status=unchanged old=exception candidate=unmeasurable",
+		"package coverage update: package=" + higher + " lane=functional status=raised old=30.00% candidate=33.33%",
+		"package coverage update: package=" + same + " lane=functional status=unchanged old=50.00% candidate=50.00%",
+	}) {
+		t.Fatalf("unexpected update report: %v", updates)
+	}
+	manifest.Packages[2].Minimum = json.RawMessage("33.33")
+	want, err := renderCoverageManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := os.ReadFile(filename)
+	if err != nil || !bytes.Equal(first, want) {
+		t.Fatalf("updated policy = %s, error = %v; want %s", first, err, want)
+	}
+	if _, err := updateCoverageManifestFile(filename, functionalCoverageSuite, samples); err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.ReadFile(filename)
+	if err != nil || !bytes.Equal(first, second) {
+		t.Fatalf("second update changed bytes: %s, error = %v", second, err)
+	}
+}
+
+func TestFunctionalFloorUpdaterRejectsIncompleteProfiles(t *testing.T) {
+	t.Parallel()
+	alpha := modulePath + "/pkg/config"
+	block := alpha + "/fixture.go:1.1,1.2 2 1\n"
+	cases := []struct {
+		name, last, diagnostic string
+	}{
+		{"mode", "mode: set\n" + block, "count-mode"},
+		{"package", "mode: count\n" + modulePath + "/pkg/service/fixture.go:1.1,1.2 2 1\n", "package universe"},
+		{"range", "mode: count\n" + alpha + "/fixture.go:2.1,2.2 2 1\n", "source block"},
+		{"file", "mode: count\n" + alpha + "/other.go:1.1,1.2 2 1\n", "source block"},
+		{"same total different blocks", "mode: count\n" + alpha + "/fixture.go:1.1,1.2 1 1\n" + alpha + "/fixture.go:2.1,2.2 1 0\n", "source block universe"},
+		{"statements", "mode: count\n" + alpha + "/fixture.go:1.1,1.2 3 1\n", "inconsistent total statements"},
+		{"negative statements", "mode: count\n" + alpha + "/fixture.go:1.1,1.2 -2 1\n", "invalid counts"},
+		{"negative executions", "mode: count\n" + alpha + "/fixture.go:1.1,1.2 2 -1\n", "invalid counts"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			manifest := []byte(fmt.Sprintf("{\"version\":1,\"lane\":\"functional\",\"packages\":[{\"package\":%q,\"minimum\":50.00}]}\n", alpha))
+			filename := filepath.Join(root, "minimums.json")
+			if err := os.WriteFile(filename, manifest, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var paths []string
+			for index := 0; index < minimumVarianceSamples; index++ {
+				profile := "mode: count\n" + block
+				if index == minimumVarianceSamples-1 {
+					profile = tc.last
+				}
+				profilePath := filepath.Join(root, fmt.Sprintf("run-%d.out", index))
+				if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				paths = append(paths, profilePath)
+			}
+			err := executeSampledManifestUpdate(config{suite: functionalCoverageSuite, updateManifest: filename, updateProfiles: strings.Join(paths, ",")})
+			if err == nil || !strings.Contains(err.Error(), tc.diagnostic) {
+				t.Fatalf("update error = %v, want %q", err, tc.diagnostic)
+			}
+			after, err := os.ReadFile(filename)
+			if err != nil || !bytes.Equal(manifest, after) {
+				t.Fatalf("rejected update mutated policy: %s, error = %v", after, err)
+			}
+		})
+	}
+}
 
 func TestPlanCoverageManifestUpdateUsesMinimumAndPreservesException(t *testing.T) {
 	t.Parallel()
@@ -63,15 +183,15 @@ func TestPlanCoverageManifestUpdateUsesMinimumAndPreservesException(t *testing.T
 		t.Fatalf("planCoverageManifestUpdate() error = %v", err)
 	}
 	wantUpdates := []string{
-		"package coverage update: package=" + alpha + " lane=functional status=lowered old=50.00% candidate=33.33%",
+		"package coverage update: package=" + alpha + " lane=functional status=skipped-decrease old=50.00% candidate=33.33%",
 		"package coverage update: package=" + gamma + " lane=functional status=added old=missing candidate=50.00%",
 		"package coverage update: package=" + beta + " lane=functional status=unchanged old=exception candidate=25.00%",
 	}
 	if got := coverageManifestUpdateStrings(updates); !slices.Equal(got, wantUpdates) {
 		t.Fatalf("updates = %v, want %v", got, wantUpdates)
 	}
-	if got := string(updated.Packages[0].Minimum); got != "33.33" {
-		t.Fatalf("minimum = %s, want exact minimum-sample floor 33.33", got)
+	if got := string(updated.Packages[0].Minimum); got != "50.00" {
+		t.Fatalf("minimum = %s, want retained floor 50.00", got)
 	}
 	if int64(coverageFloor(3333))*3 > 1*10000 {
 		t.Fatal("two-decimal floor exceeds exact 1/3 sample ratio")
@@ -97,7 +217,7 @@ func TestPlanCoverageManifestUpdateUsesMinimumAndPreservesException(t *testing.T
 		t.Fatalf("idempotent plan changed manifest:\n%s\n---\n%s", firstData, secondData)
 	}
 	for _, update := range secondUpdates {
-		if update.Status != "unchanged" {
+		if update.Status != "unchanged" && update.Status != "skipped-decrease" {
 			t.Fatalf("idempotent status = %s for %s, want unchanged", update.Status, update.Package)
 		}
 	}
