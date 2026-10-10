@@ -410,6 +410,87 @@ func TestRuntimeMetricsReadErrorPreservesCause(t *testing.T) {
 	}
 }
 
+func TestRuntimeMetricsReaderSelectedEnvelopeRejectsCompleteInvalidRecords(t *testing.T) {
+
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		tail string
+		want string
+	}{
+		{name: "torn tail", tail: `{"record_id":`, want: ""},
+		{name: "complete malformed", tail: `{"record_id":` + "\n", want: "decode runtime metrics envelope"},
+		{name: "null object", tail: "null\n", want: "runtime metrics envelope must be an object"},
+		{name: "array", tail: "[]\n", want: "decode runtime metrics envelope"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			path := filepath.Join(root, readerActiveName)
+			if err := os.WriteFile(path, []byte(`{"record_id":"keep"}`+"\n"+test.tail), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			filesystem := &trackingArtifactFileSystem{}
+			reader, err := NewRuntimeMetricsReader(filesystem)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var records []RuntimeMetricRecord
+			envelopes := 0
+			err = reader.StreamSelected(context.Background(), root, StreamSelection{
+				EnvelopeFields: []string{"record_id"},
+				IncludeEnvelope: func(envelope RuntimeMetricRecordEnvelope) bool {
+					envelopes++
+					return envelope.Fields["record_id"] == "keep"
+				},
+			}, func(record RuntimeMetricRecord) error {
+				records = append(records, record)
+				return nil
+			})
+			if test.want == "" {
+				if err != nil {
+					t.Fatalf("torn-tail stream: %v", err)
+				}
+			} else {
+				var typed *RuntimeMetricsReadError
+				if !errors.As(err, &typed) || typed.Path != path || !strings.Contains(err.Error(), test.want) {
+					t.Fatalf("invalid-envelope error = %v, want typed artifact context and %q", err, test.want)
+				}
+			}
+			if len(records) != 1 || records[0]["record_id"] != "keep" || envelopes != 1 {
+				t.Fatalf("records=%#v envelopes=%d, want only the valid record", records, envelopes)
+			}
+			if filesystem.opened != 1 || filesystem.closed != 1 {
+				t.Fatalf("opened=%d closed=%d, want released artifact", filesystem.opened, filesystem.closed)
+			}
+		})
+	}
+}
+
+func TestRuntimeMetricsReaderCloseFailureDiscardsCollectedRecordsAndPreservesVisitorError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, readerActiveName), []byte(`{"record_id":"one"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	closeErr := errors.New("close failed")
+	reader, err := NewRuntimeMetricsReader(&closeErrorArtifactFileSystem{closeErr: closeErr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := reader.Read(context.Background(), root)
+	if records != nil || !errors.Is(err, closeErr) {
+		t.Fatalf("Read() = (%#v, %v), want no partial records and close failure", records, err)
+	}
+	visitorErr := errors.New("consumer rejected record")
+	err = reader.Stream(context.Background(), root, func(RuntimeMetricRecord) error { return visitorErr })
+	if !errors.Is(err, visitorErr) || errors.Is(err, closeErr) {
+		t.Fatalf("Stream() error = %v, want original visitor failure", err)
+	}
+	if got, err := newRuntimeMetricsReader(t).Read(context.Background(), root); err != nil || len(got) != 1 || got[0]["record_id"] != "one" {
+		t.Fatalf("healthy reread = (%#v, %v), want preserved artifact", got, err)
+	}
+}
+
 func containsPath(paths []string, want string) bool {
 	for _, path := range paths {
 		if path == want {
