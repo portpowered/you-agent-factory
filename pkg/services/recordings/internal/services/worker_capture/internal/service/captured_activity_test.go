@@ -383,7 +383,7 @@ func assertCapturedUsageHead(t *testing.T, writer recordings.WorkerRecordingStor
 		if err != nil || page.Catalog.CommittedPosition != 3 || len(page.Records) != 1 || uint64(page.Records[0].Record.ID.Position) != position || page.TokenUsage == nil {
 			t.Fatalf("frozen page %d: %+v, %v", position, page, err)
 		}
-		if page.TokenUsage.TotalTokens != 12 || page.TokenUsage.Model != "first" || page.Terminal != nil {
+		if page.TokenUsage.TotalTokens != 12 || page.TokenUsage.Model != "first" || page.TokenUsage.Origin != "" || page.Terminal != nil {
 			t.Fatalf("later commit leaked into frozen usage: %+v", page)
 		}
 		page.TokenUsage.TotalTokens = 999

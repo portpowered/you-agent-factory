@@ -595,3 +595,51 @@ func TestRecordingContentFinalIdentityBelongsToLastProviderTurn(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordingContentReusedItemHasDistinctTurnAndAttemptIdentity(t *testing.T) {
+	t.Parallel()
+	for _, canonical := range []bool{false, true} {
+		t.Run(fmt.Sprintf("canonical=%t", canonical), func(t *testing.T) {
+			t.Parallel()
+			var all []workerexecution.Draft
+			metadata := map[string]string{"item_id": "reused-native-item"}
+			for _, attemptID := range []string{"first-attempt", "second-attempt"} {
+				attempt := detachedAttempt()
+				attempt.Dispatch.DispatchID = attemptID
+				fragment := workerexecution.ProgressFragment{Kind: workerexecution.ProgressFragmentKind, Type: "message.completed", DispatchID: attemptID, Metadata: metadata}
+				if canonical {
+					fragment.CanonicalDraft = workerexecution.Draft{Kind: workerexecution.KindMessage, Phase: workerexecution.PhaseCompleted, DispatchID: attemptID, ItemID: "reused-native-item", Payload: []byte(`{"role":"assistant","text":"equal text"}`)}
+				}
+				var observed []workerexecution.Draft
+				runner := &detachedRunnerStub{results: []workerexecution.RunnerExecutionResult{{Content: "equal text"}}, fragments: [][]workerexecution.ProgressFragment{{fragment}, {fragment}}}
+				_, err := ExecuteDetached(t.Context(), &inferencingHarnessStub{turns: 2}, runner, DetachedRequest{Attempt: attempt, ProgressPublisher: func(f workerexecution.ProgressFragment) {
+					identity, ok := assistantMessageIdentity(f)
+					if !ok || identity == nil {
+						t.Fatal("published message lost identity")
+					}
+					observed = append(observed, *identity)
+				}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertRecordingTurnIdentities(t, observed, attemptID)
+				all = append(all, observed...)
+			}
+			if all[0].DispatchID == all[3].DispatchID || metadata["turn_id"] != "" {
+				t.Fatal("attempt scope collapsed or provider metadata mutated")
+			}
+		})
+	}
+}
+
+func assertRecordingTurnIdentities(t *testing.T, observed []workerexecution.Draft, attemptID string) {
+	t.Helper()
+	if len(observed) != 3 || observed[0].TurnID == "" || observed[0].TurnID == observed[1].TurnID || observed[1].TurnID != observed[2].TurnID {
+		t.Fatalf("two turns and final snapshot lost scope: %+v", observed)
+	}
+	for _, message := range observed {
+		if message.ItemID != "reused-native-item" || message.DispatchID != attemptID {
+			t.Fatalf("native identity changed: %+v", message)
+		}
+	}
+}

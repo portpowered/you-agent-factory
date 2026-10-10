@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -42,7 +43,7 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 			t.Errorf("external effects: command=%d native=%d", denied.calls.Load(), native.Load())
 		}
 	})
-	for _, name := range []string{"F-M1-declared-gated-usage", "F-M2-business-failure-sibling", "F-M3-omitted-unmatched", "F-M4-invalid-preflight", "F-M5-opaque-unknown", "F-M6-concurrent-isolation"} {
+	for _, name := range []string{"F-M1-declared-gated-usage", "F-M2-business-failure-sibling", "F-M3-omitted-unmatched", "F-M4-invalid-preflight", "F-M5-opaque-unknown", "F-M6-concurrent-isolation", "F-M7-recording-zero-omitted", "F-M8-recording-optional-omitted"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			if strings.HasPrefix(name, "F-M6") {
@@ -382,7 +383,6 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 		marker = "mock worker accepted"
 	}
 	path := declaredResultConfig(t, dir, name, body, gate)
-	tokens := int64(11)
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "target", WorkTypeID: "task", TraceID: id, Payload: []byte(marker)})
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "sibling", WorkTypeID: "task", TraceID: id + "-sibling", Payload: []byte("sibling input")})
 	ctx, cancel := context.WithCancel(t.Context())
@@ -432,7 +432,7 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 	assertDeclaredWork(t, listed, businessFailure)
 	events := support.GetFactoryEventsForSessionAt(t, host.URL(), id)
 	assertDeclaredDispatch(t, events, businessFailure, marker)
-	assertDeclaredCapture(t, host, workerID, id, marker, tokens)
+	assertDeclaredCapture(t, host, workerID, id, marker, name)
 	assertDeclaredSiblingCapture(t, host, base, workerID, marker)
 	if strings.HasPrefix(name, "F-M5") {
 		cancel()
@@ -534,7 +534,7 @@ func assertDeclaredDispatch(t *testing.T, events []factoryapi.FactoryEvent, fail
 	}
 }
 
-func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, workerID, sessionID, marker string, tokens int64) {
+func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, workerID, sessionID, marker, name string) {
 	t.Helper()
 	observation, err := support.WaitForObservation(5*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
 		return support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+workerID), nil
@@ -545,9 +545,8 @@ func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, work
 	if observation.State != "COMPLETED" || observation.TerminalCause == nil || *observation.TerminalCause != "COMPLETED" || observation.FactorySessionId == nil || *observation.FactorySessionId != sessionID {
 		t.Fatalf("execution state=%s cause=%s scope=%s wantScope=%s", observation.State, support.StringPointerValue((*string)(observation.TerminalCause)), support.StringPointerValue(observation.FactorySessionId), sessionID)
 	}
-	assertDeclaredUsage(t, observation.TokenUsage, tokens)
-	if observation.TokenUsage != nil && (observation.TokenUsage.Origin == nil || *observation.TokenUsage.Origin != factoryapi.ProviderSessionTokenUsageOriginSYNTHETIC) {
-		t.Fatalf("declared counters lost origin: %+v", observation.TokenUsage)
+	if !strings.HasPrefix(name, "F-M7") && !strings.HasPrefix(name, "F-M8") {
+		assertDeclaredUsage(t, observation.TokenUsage, 11)
 	}
 	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/"+workerID+"/logs")
 	data, err := json.Marshal(page.Events)
@@ -556,6 +555,54 @@ func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, work
 	}
 	if !strings.Contains(string(data), marker) || page.Health != "COMPLETE" {
 		t.Fatalf("captured logs = %s, health=%s", data, page.Health)
+	}
+	if strings.HasPrefix(name, "F-M7") || strings.HasPrefix(name, "F-M8") {
+		assertRecordingOptionalUsage(t, observation.TokenUsage, page, name)
+	}
+}
+
+func assertRecordingOptionalUsage(t *testing.T, usage *factoryapi.ProviderSessionTokenUsage, page factoryapi.WorkerSessionLogPage, name string) {
+	t.Helper()
+	want := map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(0), "totalTokens": float64(0)}
+	if strings.HasPrefix(name, "F-M8") {
+		want = map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(11), "outputTokens": float64(7), "totalTokens": float64(18)}
+	}
+	encoded, err := json.Marshal(usage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(encoded, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(summary, want) {
+		t.Fatalf("zero/omitted summary counters changed: %+v want %+v", summary, want)
+	}
+	want["model"] = "gpt-5"
+	count := 0
+	for _, frame := range page.Events {
+		encoded, err := json.Marshal(frame.Event.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var draft workers.Draft
+		if err := json.Unmarshal(encoded, &draft); err != nil {
+			t.Fatal(err)
+		}
+		if draft.Kind != workers.KindUsage {
+			continue
+		}
+		count++
+		var fact map[string]any
+		if err := json.Unmarshal(draft.Payload, &fact); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(fact, want) || draft.Provenance.Delivery != workers.DeliverySynthesized {
+			t.Fatalf("zero/omitted captured counters/provenance changed: %+v want %+v", fact, want)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("configured usage facts=%d, want one", count)
 	}
 }
 
@@ -577,6 +624,13 @@ func declaredResultConfig(t *testing.T, dir, name string, body json.RawMessage, 
 	entry := workers.MockWorkerConfig{RunType: workers.MockWorkerRunTypeAccept, WorkInputs: []workers.MockWorkInputSelector{{WorkID: "target"}}, ResultBody: body, GateConfig: gate.Config(30 * time.Second)}
 	zero, tokens := int64(0), int64(11)
 	entry.Usage = &workers.MockWorkerUsageConfig{Provider: "codex", Model: "gpt-5", InputTokens: &tokens, OutputTokens: &zero}
+	if strings.HasPrefix(name, "F-M7") {
+		entry.Usage.InputTokens, entry.Usage.OutputTokens = &zero, nil
+	}
+	if strings.HasPrefix(name, "F-M8") {
+		output := int64(7)
+		entry.Usage.OutputTokens = &output
+	}
 	config := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{entry}}
 	data, err := json.Marshal(config)
 	if err != nil {
@@ -643,6 +697,9 @@ func assertDeclaredUsage(t *testing.T, usage *factoryapi.ProviderSessionTokenUsa
 	t.Helper()
 	if usage == nil || usage.InputTokens == nil || int64(*usage.InputTokens) != tokens || usage.OutputTokens == nil || *usage.OutputTokens != 0 {
 		t.Fatalf("usage = %+v", usage)
+	}
+	if usage.Origin == nil || *usage.Origin != factoryapi.ProviderSessionTokenUsageOriginSYNTHETIC {
+		t.Fatalf("declared counters lost origin: %+v", usage)
 	}
 }
 

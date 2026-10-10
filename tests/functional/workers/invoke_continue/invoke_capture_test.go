@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,131 +12,228 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
+type recordingPrivateProfile struct {
+	host                         invokeContinueStartedProcess
+	home, dir, id, marker, token string
+	runner                       *testutil.ProviderCommandRunner
+}
+
+// FC6 needs two independently owned profiles: a shared host cannot prove that
+// a cursor for the same Worker ID is fenced by the durable profile owner.
+func TestRecordingContentPrivateProfilesFenceReadsAndCursors(t *testing.T) {
+	t.Parallel()
+	profiles := make([]recordingPrivateProfile, 2)
+	for i, name := range []string{"private-alpha", "private-beta"} {
+		root, dir := t.TempDir(), t.TempDir()
+		host, home, err := prepareInvokeContinuePackageRoot(t, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		marker := name + "-captured-content"
+		result := platformprocess.CommandResult{Stdout: directCodexSessionOutput(name+"-thread", marker)}
+		runner := testutil.NewProviderCommandRunner(result, result)
+		route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+		started := startContinuationRestartHost(t, root, host, home, route)
+		for _, id := range []string{name, "same-worker-id"} {
+			path := filepath.Join(dir, id+".json")
+			writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt", workingDirectory: dir, userMessage: "ordinary private-profile prompt"})
+			summaryRestartCLI(t, started, home, dir, "invoke", "--execution", path)
+		}
+		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, started.baseURL+"/worker-sessions/same-worker-id/logs?limit=1")
+		if page.NextToken == nil {
+			t.Fatal("private recording has no continuation cursor")
+		}
+		profiles[i] = recordingPrivateProfile{host: started, home: home, dir: dir, id: name, marker: marker, token: *page.NextToken, runner: runner}
+	}
+	for i, profile := range profiles {
+		foreign := profiles[1-i]
+		for _, view := range []string{"", "/logs", "/transcript"} {
+			code := "NOT_FOUND"
+			if view == "/logs" {
+				code = "WORKER_SESSION_NOT_FOUND"
+			}
+			assertRecordingReadDenial(t, profile.host.baseURL+"/worker-sessions/"+foreign.id+view, http.StatusNotFound, code, foreign.marker, foreign.id)
+		}
+		// Same Worker ID, different profile: this isolates the profile fence.
+		assertRecordingReadDenial(t, profile.host.baseURL+"/worker-sessions/same-worker-id/logs?nextToken="+url.QueryEscape(foreign.token), http.StatusBadRequest, "BAD_REQUEST", foreign.marker, foreign.id)
+		// Same profile, different Worker ID: this isolates the session fence.
+		assertRecordingReadDenial(t, profile.host.baseURL+"/worker-sessions/"+profile.id+"/logs?nextToken="+url.QueryEscape(profile.token), http.StatusBadRequest, "BAD_REQUEST", foreign.marker, foreign.id)
+		for _, suffix := range []string{"", "/transcript"} {
+			assertRecordingReadDenial(t, profile.host.baseURL+"/factory-sessions/foreign/worker-sessions/"+profile.id+suffix, http.StatusNotFound, "NOT_FOUND", profile.marker, profile.id)
+		}
+		assertRecordingPrivateProfileReadable(t, profile, foreign)
+	}
+}
+
+func assertRecordingPrivateProfileReadable(t *testing.T, profile, foreign recordingPrivateProfile) {
+	t.Helper()
+	for _, id := range []string{profile.id, "same-worker-id"} {
+		for _, view := range []string{"summary", "logs", "transcript"} {
+			args := []string{"read", "--worker-session-id", id, "--view", view}
+			if view == "summary" {
+				args = []string{"show", "--worker-session-id", id}
+			}
+			body := summaryRestartCLI(t, profile.host, profile.home, profile.dir, args...)
+			if strings.Contains(body, foreign.marker) || strings.Contains(body, foreign.id) || (view != "summary" && !strings.Contains(body, profile.marker)) {
+				t.Fatalf("private peer read changed or leaked: %s", body)
+			}
+		}
+	}
+	if profile.runner.CallCount() != 2 {
+		t.Fatal("read denials caused provider execution")
+	}
+}
+
+func assertRecordingReadDenial(t *testing.T, endpoint string, wantStatus int, wantCode string, privateValues ...string) {
+	t.Helper()
+	status, body := t7HTTP(t, t.Context(), http.MethodGet, endpoint, nil)
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(body), &failure); err != nil || status != wantStatus || string(failure.Code) != wantCode {
+		t.Fatalf("recording read denial: status=%d error=%v body=%s", status, err, body)
+	}
+	for _, value := range privateValues {
+		if strings.Contains(body, value) {
+			t.Fatalf("denied read exposed private content or identity: %s", body)
+		}
+	}
+}
+
 func TestRecordingContentDirectEchoAndNonEcho(t *testing.T) {
 	for _, name := range []string{"recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only"} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			fixture := ensureInvokeContinuePackageFixture(t)
-			scenario := fixture.scenario(t, name)
-			defer scenario.close(t)
-			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-			defer cancel()
-			runner := scenario.providerRunner.(*t7GatedProviderRunner)
-			defer t7ReleaseAndJoin(t, ctx, runner)()
-			id := scenarioScopedID(scenario, "content")
-			prompt := "ordinary nonoverlapping prompt"
-			if name == "recording-echo" {
-				prompt = "DIRECT_CAPTURE_BETA"
-			}
-			path := filepath.Join(scenario.workingDirectory, "content.json")
-			writeInvokeContinueJSON(t, path, invokeContinueExecutionDocument(invokeContinueExecutionSpec{
-				requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt",
-				workingDirectory: scenario.workingDirectory, userMessage: prompt,
-			}))
-			start := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)
-			if err := fixture.process.Execute(start.Input); err != nil {
-				t.Fatalf("invoke: %v: %s", err, start.Stderr())
-			}
-			t19AwaitSignal(t, ctx, runner.started, "ordinary output")
-			// The durable reader commits asynchronously after provider observation.
-			// Await this session's public prefix rather than provider callback timing.
-			liveMarker := "DIRECT_CAPTURE_BETA"
-			if name == "recording-snapshot" {
-				liveMarker = "DIRECT_CAPTURE_"
-			}
-			if name != "recording-final-only" {
-				if body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
-					_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
-					return body, nil
-				}, func(body string) bool { return strings.Contains(body, liveMarker) }); err != nil {
-					t.Fatalf("live content: %v: %s", err, body)
-				}
-			} else {
-				// This command emits only session association before the release
-				// gate. There is no message prefix for a reader to await.
-			}
-			close(runner.release)
-			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
-			if err := fixture.process.Execute(join.Input); err != nil {
-				t.Fatalf("join: %v: %s", err, join.Stderr())
-			}
-			_, summary := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id, nil)
-			var observation factoryapi.WorkerSessionObservation
-			if err := json.Unmarshal([]byte(summary), &observation); err != nil {
-				t.Fatal(err)
-			}
-			if observation.TokenUsage != nil {
-				t.Fatalf("unknown native-path usage became known: %+v", observation.TokenUsage)
-			}
-			page := recordingContentPages(t, ctx, fixture.baseURL, id)
-			assertRecordingMessageProvenance(t, page, false, name == "recording-final-only")
-			for _, view := range []string{"logs", "transcript"} {
-				read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
-				if err := fixture.process.Execute(read.Input); err != nil {
-					t.Fatalf("read %s: %v: %s", view, err, read.Stderr())
-				}
-				status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/"+view, nil)
-				if status != http.StatusOK || !strings.Contains(read.Stdout(), "DIRECT_CAPTURE_BETA") || !strings.Contains(body, "DIRECT_CAPTURE_BETA") {
-					t.Fatalf("completed %s lost ordinary output: %d %s / %s", view, status, read.Stdout(), body)
-				}
-				if view == "transcript" {
-					var cli, httpResult factoryapi.WorkerSessionTranscriptResponse
-					if err := json.Unmarshal([]byte(read.Stdout()), &cli); err != nil {
-						t.Fatal(err)
-					}
-					if err := json.Unmarshal([]byte(body), &httpResult); err != nil {
-						t.Fatal(err)
-					}
-					wantEntries := 1
-					if name == "recording-equal" {
-						wantEntries = 2
-					}
-					if !reflect.DeepEqual(cli, httpResult) || len(cli.Entries) != wantEntries || cli.Entries[0].Text == nil || *cli.Entries[0].Text != "DIRECT_CAPTURE_BETA" {
-						t.Fatalf("transcript parity/content = %+v / %+v", cli, httpResult)
-					}
-					for i, entry := range cli.Entries {
-						if entry.Order != i+1 || entry.Text == nil || *entry.Text != "DIRECT_CAPTURE_BETA" || entry.Timestamp == nil {
-							t.Fatalf("distinct ordered messages lost: %+v", cli.Entries)
-						}
-					}
-				}
-			}
-		})
+		t.Run(name, func(t *testing.T) { t.Parallel(); runRecordingContentDirect(t, name) })
+	}
+}
+
+func runRecordingContentDirect(t *testing.T, name string) {
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, name)
+	defer scenario.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := scenario.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	id := scenarioScopedID(scenario, "content")
+	prompt := "ordinary nonoverlapping prompt"
+	if name == "recording-echo" {
+		prompt = "DIRECT_CAPTURE_BETA"
+	}
+	path := filepath.Join(scenario.workingDirectory, "content.json")
+	writeInvokeContinueJSON(t, path, invokeContinueExecutionDocument(invokeContinueExecutionSpec{
+		requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt",
+		workingDirectory: scenario.workingDirectory, userMessage: prompt,
+	}))
+	start := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatalf("invoke: %v: %s", err, start.Stderr())
+	}
+	t19AwaitSignal(t, ctx, runner.started, "ordinary output")
+	// The durable reader commits asynchronously after provider observation.
+	// Await this session's public prefix rather than provider callback timing.
+	liveMarker := "DIRECT_CAPTURE_BETA"
+	if name == "recording-snapshot" {
+		liveMarker = "DIRECT_CAPTURE_"
+	}
+	if name != "recording-final-only" {
+		if body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+			_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+			return body, nil
+		}, func(body string) bool { return strings.Contains(body, liveMarker) }); err != nil {
+			t.Fatalf("live content: %v: %s", err, body)
+		}
+	} else {
+		// This command emits only session association before the release
+		// gate. There is no message prefix for a reader to await.
+	}
+	close(runner.release)
+	join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+	if err := fixture.process.Execute(join.Input); err != nil {
+		t.Fatalf("join: %v: %s", err, join.Stderr())
+	}
+	assertRecordingDirectReads(t, ctx, fixture, scenario, id, name)
+}
+
+func assertRecordingDirectReads(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, name string) {
+	t.Helper()
+	_, summary := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id, nil)
+	var observation factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(summary), &observation); err != nil {
+		t.Fatal(err)
+	}
+	if observation.TokenUsage != nil {
+		t.Fatalf("unknown native-path usage became known: %+v", observation.TokenUsage)
+	}
+	page := recordingContentPages(t, ctx, fixture.baseURL, id)
+	for _, frame := range page.Events {
+		if frame.Event.Payload["kind"] == string(workers.KindUsage) {
+			t.Fatal("unknown provider accounting invented a captured usage fact")
+		}
+	}
+	assertRecordingMessageProvenance(t, page, false, name == "recording-final-only")
+	for _, view := range []string{"logs", "transcript"} {
+		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
+		if err := fixture.process.Execute(read.Input); err != nil {
+			t.Fatalf("read %s: %v: %s", view, err, read.Stderr())
+		}
+		status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/"+view, nil)
+		if status != http.StatusOK || !strings.Contains(read.Stdout(), "DIRECT_CAPTURE_BETA") || !strings.Contains(body, "DIRECT_CAPTURE_BETA") {
+			t.Fatalf("completed %s lost ordinary output: %d %s / %s", view, status, read.Stdout(), body)
+		}
+		if view == "transcript" {
+			assertRecordingDirectTranscript(t, read.Stdout(), body, name)
+		}
+	}
+}
+
+func assertRecordingDirectTranscript(t *testing.T, cliBody, body, name string) {
+	t.Helper()
+	var cli, httpResult factoryapi.WorkerSessionTranscriptResponse
+	if err := json.Unmarshal([]byte(cliBody), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(body), &httpResult); err != nil {
+		t.Fatal(err)
+	}
+	wantEntries := 1
+	if name == "recording-equal" {
+		wantEntries = 2
+	}
+	if !reflect.DeepEqual(cli, httpResult) || len(cli.Entries) != wantEntries || cli.Entries[0].Text == nil || *cli.Entries[0].Text != "DIRECT_CAPTURE_BETA" {
+		t.Fatalf("transcript parity/content = %+v / %+v", cli, httpResult)
+	}
+	for i, entry := range cli.Entries {
+		if entry.Order != i+1 || entry.Text == nil || *entry.Text != "DIRECT_CAPTURE_BETA" || entry.Timestamp == nil {
+			t.Fatalf("distinct ordered messages lost: %+v", cli.Entries)
+		}
 	}
 }
 
 // FC2 crosses actual Factory admission and the agent loop using the shared
 // process. The command gate lets the observer read the first committed item.
 func TestRecordingContentFactoryResultAppearsOnce(t *testing.T) {
-	t.Parallel()
+	for _, name := range []string{"recording-factory", "recording-factory-retry"} {
+		t.Run(name, func(t *testing.T) { t.Parallel(); runRecordingContentFactoryResult(t, name) })
+	}
+}
+
+func runRecordingContentFactoryResult(t *testing.T, name string) {
 	fixture := ensureInvokeContinuePackageFixture(t)
-	scenario := fixture.scenario(t, "recording-factory")
+	scenario := fixture.scenario(t, name)
 	defer scenario.close(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-	runner := scenario.providerRunner.(*t7GatedProviderRunner)
-	defer t7ReleaseAndJoin(t, ctx, runner)()
-	t7WriteFactorySibling(t, scenario.workingDirectory)
-	// FC2 requires the Factory agent loop, which is selected by both kinds.
-	for path, replacements := range map[string][2]string{
-		filepath.Join("workers", "worker", "AGENTS.md"):       {"MODEL_WORKER", "AGENT_WORKER"},
-		filepath.Join("workstations", "process", "AGENTS.md"): {"MODEL_WORKSTATION", "AGENT_RUN"},
-	} {
-		file := filepath.Join(scenario.workingDirectory, path)
-		body, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(file, []byte(strings.ReplaceAll(string(body), replacements[0], replacements[1])), 0o600); err != nil {
-			t.Fatal(err)
-		}
+	runner, gated := scenario.providerRunner.(*t7GatedProviderRunner)
+	if gated {
+		defer t7ReleaseAndJoin(t, ctx, runner)()
 	}
+	writeRecordingContentAgentFactory(t, scenario.workingDirectory)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, scenario.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
 	item := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, factoryapi.SubmitWorkRequest{
@@ -144,7 +242,12 @@ func TestRecordingContentFactoryResultAppearsOnce(t *testing.T) {
 	if item.WorkId == nil {
 		t.Fatal("Factory Work has no identity")
 	}
-	t19AwaitSignal(t, ctx, runner.started, "Factory content")
+	if gated {
+		t19AwaitSignal(t, ctx, runner.started, "Factory content")
+	}
+	if !gated {
+		support.WaitForSessionTerminalStatus(t, fixture.baseURL, opened.Session.Id, 30*time.Second)
+	}
 	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/worker-sessions?workId="+*item.WorkId)
 	if len(rows.Sessions) != 1 {
 		t.Fatalf("Factory attempts = %+v", rows)
@@ -157,22 +260,73 @@ func TestRecordingContentFactoryResultAppearsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	close(runner.release)
+	if gated {
+		close(runner.release)
+	}
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, opened.Session.Id, 30*time.Second)
 	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", "transcript", "--worker-session-id", id)
 	if err := fixture.process.Execute(read.Input); err != nil {
 		t.Fatalf("Factory transcript: %v %s", err, read.Stderr())
 	}
+	assertRecordingFactoryTranscript(t, read.Stdout(), fixture.baseURL, id, gated)
+	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), true, false)
+	if !gated && scenario.providerRunner.CallCount() != 2 {
+		t.Fatal("retry witness did not execute two provider turns")
+	}
+}
+
+func writeRecordingContentAgentFactory(t *testing.T, directory string) {
+	t.Helper()
+	t7WriteFactorySibling(t, directory)
+	// FC2 requires the Factory agent loop, which is selected by both kinds.
+	for path, replacements := range map[string][2]string{
+		filepath.Join("workers", "worker", "AGENTS.md"):       {"MODEL_WORKER", "AGENT_WORKER"},
+		filepath.Join("workstations", "process", "AGENTS.md"): {"MODEL_WORKSTATION", "AGENT_RUN"},
+	} {
+		file := filepath.Join(directory, path)
+		body, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(strings.ReplaceAll(string(body), replacements[0], replacements[1])), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertRecordingFactoryTranscript(t *testing.T, body, baseURL, id string, gated bool) {
+	t.Helper()
 	var transcript factoryapi.WorkerSessionTranscriptResponse
-	if err := json.Unmarshal([]byte(read.Stdout()), &transcript); err != nil {
+	if err := json.Unmarshal([]byte(body), &transcript); err != nil {
 		t.Fatal(err)
 	}
-	httpTranscript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, fixture.baseURL+"/worker-sessions/"+id+"/transcript")
-	if !reflect.DeepEqual(transcript, httpTranscript) || len(transcript.Entries) != 1 ||
-		transcript.Entries[0].Text == nil || *transcript.Entries[0].Text != "FACTORY_CAPTURE_ALPHA COMPLETE" || transcript.Entries[0].Order != 1 {
+	httpTranscript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, baseURL+"/worker-sessions/"+id+"/transcript")
+	wantEntries := 1
+	if !gated {
+		wantEntries = 2
+	}
+	if !reflect.DeepEqual(transcript, httpTranscript) || len(transcript.Entries) != wantEntries {
 		t.Fatalf("Factory result identity/parity: %+v / %+v", transcript, httpTranscript)
 	}
-	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), true, false)
+	for i, entry := range transcript.Entries {
+		if entry.Order != i+1 || entry.Text == nil || *entry.Text != "FACTORY_CAPTURE_ALPHA COMPLETE" {
+			t.Fatalf("equal text from separate provider turns collapsed: %+v", transcript)
+		}
+	}
+}
+
+// A failed inference turn still delivered its prefix through the command edge.
+// Both physical commands reuse the native item ID; the loop must scope it.
+type recordingStreamingRetryRunner struct {
+	*invokeContinueResettableProviderCommandRunner
+}
+
+func (r *recordingStreamingRetryRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if observer != nil {
+		observer(platformprocess.OutputStreamStdout, result.Stdout)
+	}
+	return result, err
 }
 
 func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string) factoryapi.WorkerSessionLogPage {
@@ -246,7 +400,11 @@ func assertRecordingMessageProvenance(t *testing.T, page factoryapi.WorkerSessio
 		}
 		return
 	}
-	last, final := native[len(native)-1], synthesized[0]
+	assertRecordingFinalSnapshotIdentity(t, native[len(native)-1], synthesized[0])
+}
+
+func assertRecordingFinalSnapshotIdentity(t *testing.T, last, final workers.Draft) {
+	t.Helper()
 	if last.ItemID == "" || last.ItemID != final.ItemID || last.TurnID != final.TurnID || last.RunID != final.RunID || last.DispatchID != final.DispatchID || final.Provenance.Fidelity != workers.FidelityNormalized {
 		t.Fatalf("final snapshot lost last stream identity: %+v / %+v", last, final)
 	}
@@ -325,32 +483,37 @@ func runRecordingContentSecrets(t *testing.T, name string) {
 	}
 	t7AssertSecretsAbsent(t, observation)
 	if name == "recording-failure" {
-		var summary factoryapi.WorkerSessionObservation
-		if err := json.Unmarshal([]byte(observation), &summary); err != nil || summary.State != "FAILED" || summary.Failure == nil {
-			t.Fatalf("failed prefix fabricated completion: error=%v summary=%s", err, observation)
-		}
-		page := recordingContentPages(t, ctx, fixture.baseURL, id)
-		encoded, err := json.Marshal(page)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t7AssertSecretsAbsent(t, string(encoded))
-		if !strings.Contains(string(encoded), "ordinary prefix") || !strings.Contains(string(encoded), "public progress") {
-			t.Fatal("failed attempt lost ordinary captured neighbors")
-		}
-		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", "transcript", "--worker-session-id", id)
-		if err := fixture.process.Execute(read.Input); err != nil {
-			t.Fatalf("failed prefix transcript: %v %s", err, read.Stderr())
-		}
-		httpTranscript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, fixture.baseURL+"/worker-sessions/"+id+"/transcript")
-		var transcript factoryapi.WorkerSessionTranscriptResponse
-		if err := json.Unmarshal([]byte(read.Stdout()), &transcript); err != nil || !reflect.DeepEqual(transcript, httpTranscript) || transcript.State != "FAILED" {
-			t.Fatalf("failed transcript parity: error=%v transcript=%s", err, read.Stdout())
-		}
-		t7AssertSecretsAbsent(t, read.Stdout())
-		if !strings.Contains(read.Stdout(), "ordinary prefix") || !strings.Contains(read.Stdout(), "public progress") {
-			t.Fatal("failed transcript lost committed prefix")
-		}
+		assertRecordingFailedPrefix(t, ctx, fixture, scenario, id, observation)
+	}
+}
+
+func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, observation string) {
+	t.Helper()
+	var summary factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(observation), &summary); err != nil || summary.State != "FAILED" || summary.Failure == nil {
+		t.Fatalf("failed prefix fabricated completion: error=%v summary=%s", err, observation)
+	}
+	page := recordingContentPages(t, ctx, fixture.baseURL, id)
+	encoded, err := json.Marshal(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t7AssertSecretsAbsent(t, string(encoded))
+	if !strings.Contains(string(encoded), "ordinary prefix") || !strings.Contains(string(encoded), "public progress") {
+		t.Fatal("failed attempt lost ordinary captured neighbors")
+	}
+	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", "transcript", "--worker-session-id", id)
+	if err := fixture.process.Execute(read.Input); err != nil {
+		t.Fatalf("failed prefix transcript: %v %s", err, read.Stderr())
+	}
+	httpTranscript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, fixture.baseURL+"/worker-sessions/"+id+"/transcript")
+	var transcript factoryapi.WorkerSessionTranscriptResponse
+	if err := json.Unmarshal([]byte(read.Stdout()), &transcript); err != nil || !reflect.DeepEqual(transcript, httpTranscript) || transcript.State != "FAILED" {
+		t.Fatalf("failed transcript parity: error=%v transcript=%s", err, read.Stdout())
+	}
+	t7AssertSecretsAbsent(t, read.Stdout())
+	if !strings.Contains(read.Stdout(), "ordinary prefix") || !strings.Contains(read.Stdout(), "public progress") {
+		t.Fatal("failed transcript lost committed prefix")
 	}
 }
 

@@ -137,6 +137,13 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		}
 	}
 	unreachable := newInvokeContinueResettableProviderCommandRunner()
+	factoryRetryOutput := directCodexSessionOutput("reused-thread", "FACTORY_CAPTURE_ALPHA COMPLETE")
+	factoryRetryPrefix := []byte("{\"type\":\"thread.started\",\"thread_id\":\"reused-thread\"}\n{\"type\":\"item.updated\",\"item\":{\"id\":\"reused-thread-message\",\"type\":\"agent_message\",\"text\":\"FACTORY_CAPTURE_ALPHA COMPLETE\"}}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"provider timeout\"}}\n")
+	factoryRetryFailure := platformprocess.CommandResult{Stdout: factoryRetryPrefix, Stderr: []byte("controlled provider timeout"), ExitCode: 124}
+	factoryRetry := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(factoryRetryFailure, platformprocess.CommandResult{Stdout: factoryRetryOutput})}
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "recording-factory-retry", factoryRetry, factoryRetry, nil, nil, nil, factoryRetry.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}

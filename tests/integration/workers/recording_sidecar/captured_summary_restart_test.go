@@ -52,7 +52,7 @@ func TestRecordingContentIntegrityRestart(t *testing.T) {
 	env = append(env, "PATH="+temp)
 	factory, config := writeRecordingIntegrityMock(t, project)
 	first := startHistoryHost(t, ctx, binary, project, env, "--dir", factory, "--continuously", "--with-mock-workers", config)
-	for _, name := range []string{"direct", "omitted"} {
+	for _, name := range []string{"direct", "zero", "omitted"} {
 		document := map[string]any{
 			"requestId": name + "-request", "workerSessionId": name,
 			"execution": map[string]any{
@@ -85,7 +85,11 @@ func TestRecordingContentIntegrityRestart(t *testing.T) {
 		if !reflect.DeepEqual(expected, actual) {
 			t.Fatalf("restart changed %s content/usage/order/provenance", id)
 		}
-		assertHistoryMCPViews(t, ctx, binary, project, env, second.url, actual.Observation, actual.Logs, []string{"READ", "logs"})
+		views := []string{"READ", "logs"}
+		if id != "omitted" {
+			views = append(views, "transcript")
+		}
+		assertHistoryMCPViews(t, ctx, binary, project, env, second.url, actual.Observation, actual.Logs, views, actual.Transcript)
 	}
 	second.stop(t, ctx, binary, project, env)
 }
@@ -122,6 +126,7 @@ func writeRecordingIntegrityMock(t *testing.T, project string) (string, string) 
 	config := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{
 		{WorkstationName: "direct", RunType: workers.MockWorkerRunTypeAccept, ResultBody: json.RawMessage(`{"output":"DIRECT_CAPTURE_BETA"}`), Usage: usage},
 		{WorkstationName: "omitted", RunType: workers.MockWorkerRunTypeAccept, ResultBody: json.RawMessage(`{"output":"DIRECT_CAPTURE_BETA"}`)},
+		{WorkstationName: "zero", RunType: workers.MockWorkerRunTypeAccept, ResultBody: json.RawMessage(`{"output":"DIRECT_CAPTURE_BETA"}`), Usage: &workers.MockWorkerUsageConfig{Provider: "codex", Model: "integrity-model", InputTokens: &cached}},
 		{WorkstationName: "process", RunType: workers.MockWorkerRunTypeAccept, ResultBody: json.RawMessage(`{"output":"FACTORY_CAPTURE_ALPHA COMPLETE"}`), Usage: usage},
 	}}
 	configPath := filepath.Join(project, "mock.json")
@@ -136,7 +141,7 @@ func readRecordingIntegritySnapshots(t *testing.T, ctx context.Context, binary, 
 	defer deadline.Stop()
 	for {
 		rows = historyRows(t, ctx, binary, project, env, server, "archived")
-		ready := len(rows) == 3
+		ready := len(rows) == 4
 		for _, row := range rows {
 			ready = ready && row.RecordingHealth != nil && *row.RecordingHealth == "COMPLETE"
 		}
@@ -151,101 +156,132 @@ func readRecordingIntegritySnapshots(t *testing.T, ctx context.Context, binary, 
 	}
 	result := make(map[string]capturedSummaryArtifactSnapshot)
 	for _, row := range rows {
-		var snapshot capturedSummaryArtifactSnapshot
-		id := row.WorkerSessionId
-		read := func(view string, into any) {
-			args := []string{"--remote", "--server", server, "--json", "worker-sessions"}
-			if view == "summary" {
-				args = append(args, "show", "--worker-session-id", id)
-			} else {
-				args = append(args, "read", "--worker-session-id", id, "--view", view)
-			}
-			body := historyCLI(t, ctx, binary, project, env, args...)
-			if err := json.Unmarshal(body, into); err != nil {
-				t.Fatal(err)
-			}
-		}
-		read("summary", &snapshot.Observation)
-		read("logs", &snapshot.Logs)
-		if id == "omitted" {
-			// A mock without usage has no third-party association. Preserve the
-			// existing explicit transcript-unavailable result; logs hold content.
-			command := exec.CommandContext(ctx, binary, "--remote", "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", id, "--view", "transcript")
-			command.Dir, command.Env = project, env
-			body, err := command.CombinedOutput()
-			if err == nil || !strings.Contains(string(body), `"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"`) {
-				t.Fatalf("unassociated transcript: error=%v body=%s", err, body)
-			}
-		} else {
-			read("transcript", &snapshot.Transcript)
-		}
-		if row.State != "COMPLETED" || (id != "omitted" && len(snapshot.Transcript.Entries) != 1) {
-			t.Fatalf("single completed logical result: %+v", snapshot)
-		}
-		marker := "DIRECT_CAPTURE_BETA"
-		if !row.Direct {
-			marker = "FACTORY_CAPTURE_ALPHA COMPLETE"
-		}
-		if id != "omitted" && (snapshot.Transcript.Entries[0].Text == nil || *snapshot.Transcript.Entries[0].Text != `{"output":"`+marker+`"}`) {
-			t.Fatalf("exact content lost: %+v", snapshot.Transcript)
-		}
-		encoded, err := json.Marshal(snapshot.Logs.Events)
-		if err != nil || !strings.Contains(string(encoded), marker) {
-			t.Fatalf("captured content lost: %v", err)
-		}
-		f := invokeArtifactFixture{ctx: ctx, binary: binary, project: project, env: env}
-		var httpSummary api.WorkerSessionObservation
-		var httpLogs api.WorkerSessionLogPage
-		readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id, &httpSummary)
-		readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id+"/logs", &httpLogs)
-		if !reflect.DeepEqual(snapshot.Observation, httpSummary) || !reflect.DeepEqual(snapshot.Logs, httpLogs) {
-			t.Fatal("CLI/HTTP capture facts differ")
-		}
-		if id != "omitted" {
-			var httpTranscript api.WorkerSessionTranscriptResponse
-			readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id+"/transcript", &httpTranscript)
-			if !reflect.DeepEqual(snapshot.Transcript, httpTranscript) {
-				t.Fatal("CLI/HTTP transcript differs")
-			}
-		}
-		assertRecordingIntegrityUsage(t, snapshot, id == "omitted")
-		for i, frame := range snapshot.Logs.Events {
-			if frame.Event.Position != int64(i+1) || frame.Event.CapturedAt == nil || frame.Event.SourceEventId == "" {
-				t.Fatal("captured positions/identity/time lost")
-			}
-		}
-		if snapshot.Logs.NextToken != nil || snapshot.Logs.CommittedPosition != int64(len(snapshot.Logs.Events)) {
-			t.Fatal("incomplete capture snapshot")
-		}
-		result[id] = snapshot
+		result[row.WorkerSessionId] = readRecordingIntegritySnapshot(t, ctx, binary, project, env, server, row)
 	}
 	return result
 }
 
-func assertRecordingIntegrityUsage(t *testing.T, snapshot capturedSummaryArtifactSnapshot, omitted bool) {
+func readRecordingIntegritySnapshot(t *testing.T, ctx context.Context, binary, project string, env []string, server string, row api.WorkerSessionObservation) capturedSummaryArtifactSnapshot {
+	t.Helper()
+	var snapshot capturedSummaryArtifactSnapshot
+	id := row.WorkerSessionId
+	read := func(view string, into any) {
+		args := []string{"--remote", "--server", server, "--json", "worker-sessions"}
+		if view == "summary" {
+			args = append(args, "show", "--worker-session-id", id)
+		} else {
+			args = append(args, "read", "--worker-session-id", id, "--view", view)
+		}
+		body := historyCLI(t, ctx, binary, project, env, args...)
+		if err := json.Unmarshal(body, into); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read("summary", &snapshot.Observation)
+	read("logs", &snapshot.Logs)
+	if id == "omitted" {
+		// A mock without usage has no third-party association. Preserve the
+		// existing explicit transcript-unavailable result; logs hold content.
+		command := exec.CommandContext(ctx, binary, "--remote", "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", id, "--view", "transcript")
+		command.Dir, command.Env = project, env
+		body, err := command.CombinedOutput()
+		if err == nil || !strings.Contains(string(body), `"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"`) {
+			t.Fatalf("unassociated transcript: error=%v body=%s", err, body)
+		}
+	} else {
+		read("transcript", &snapshot.Transcript)
+	}
+	assertRecordingIntegrityContent(t, snapshot, row)
+	assertRecordingIntegrityHTTPParity(t, ctx, binary, project, env, server, snapshot, id)
+	assertRecordingIntegrityUsage(t, snapshot, id)
+	for i, frame := range snapshot.Logs.Events {
+		if frame.Event.Position != int64(i+1) || frame.Event.CapturedAt == nil || frame.Event.SourceEventId == "" {
+			t.Fatal("captured positions/identity/time lost")
+		}
+	}
+	if snapshot.Logs.NextToken != nil || snapshot.Logs.CommittedPosition != int64(len(snapshot.Logs.Events)) {
+		t.Fatal("incomplete capture snapshot")
+	}
+	return snapshot
+}
+
+func assertRecordingIntegrityContent(t *testing.T, snapshot capturedSummaryArtifactSnapshot, row api.WorkerSessionObservation) {
+	t.Helper()
+	id := row.WorkerSessionId
+	if row.State != "COMPLETED" || (id != "omitted" && len(snapshot.Transcript.Entries) != 1) {
+		t.Fatalf("single completed logical result: %+v", snapshot)
+	}
+	marker := "DIRECT_CAPTURE_BETA"
+	if !row.Direct {
+		marker = "FACTORY_CAPTURE_ALPHA COMPLETE"
+	}
+	if id != "omitted" && (snapshot.Transcript.Entries[0].Text == nil || *snapshot.Transcript.Entries[0].Text != `{"output":"`+marker+`"}`) {
+		t.Fatalf("exact content lost: %+v", snapshot.Transcript)
+	}
+	encoded, err := json.Marshal(snapshot.Logs.Events)
+	if err != nil || !strings.Contains(string(encoded), marker) {
+		t.Fatalf("captured content lost: %v", err)
+	}
+}
+
+func assertRecordingIntegrityHTTPParity(t *testing.T, ctx context.Context, binary, project string, env []string, server string, snapshot capturedSummaryArtifactSnapshot, id string) {
+	t.Helper()
+	f := invokeArtifactFixture{ctx: ctx, binary: binary, project: project, env: env}
+	var httpSummary api.WorkerSessionObservation
+	var httpLogs api.WorkerSessionLogPage
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id, &httpSummary)
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id+"/logs", &httpLogs)
+	if !reflect.DeepEqual(snapshot.Observation, httpSummary) || !reflect.DeepEqual(snapshot.Logs, httpLogs) {
+		t.Fatal("CLI/HTTP capture facts differ")
+	}
+	if id != "omitted" {
+		var httpTranscript api.WorkerSessionTranscriptResponse
+		readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id+"/transcript", &httpTranscript)
+		if !reflect.DeepEqual(snapshot.Transcript, httpTranscript) {
+			t.Fatal("CLI/HTTP transcript differs")
+		}
+	}
+}
+
+func assertRecordingIntegrityUsage(t *testing.T, snapshot capturedSummaryArtifactSnapshot, id string) {
 	t.Helper()
 	usage := snapshot.Observation.TokenUsage
 	data, err := json.Marshal(snapshot.Logs.Events)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if omitted {
-		if usage != nil || strings.Contains(string(data), `"origin":"SYNTHETIC"`) {
+	if id == "omitted" {
+		if usage != nil || strings.Contains(string(data), `"kind":"USAGE"`) {
 			t.Fatal("omitted usage was invented")
 		}
 		return
 	}
-	if usage == nil || usage.Origin == nil || *usage.Origin != api.ProviderSessionTokenUsageOriginSYNTHETIC ||
-		usage.InputTokens == nil || *usage.InputTokens != 17 || usage.OutputTokens == nil || *usage.OutputTokens != 9 ||
-		usage.CachedInputTokens == nil || *usage.CachedInputTokens != 0 || usage.ReasoningOutputTokens == nil || *usage.ReasoningOutputTokens != 2 ||
-		usage.TotalTokens == nil || *usage.TotalTokens != 26 || !strings.Contains(string(data), `"origin":"SYNTHETIC"`) || !strings.Contains(string(data), `"delivery":"SYNTHESIZED"`) {
-		t.Fatalf("synthetic counters/zero/origin changed: %+v", usage)
+	want := map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(17), "outputTokens": float64(9), "cachedInputTokens": float64(0), "reasoningOutputTokens": float64(2), "totalTokens": float64(26)}
+	if id == "zero" {
+		want = map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(0), "totalTokens": float64(0)}
 	}
+	encoded, err := json.Marshal(usage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(encoded, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(summary, want) {
+		t.Fatalf("synthetic summary counters/zero/omission/origin changed: %+v want %+v", summary, want)
+	}
+	want["model"] = "integrity-model"
 	if snapshot.Observation.Provider == nil || !strings.EqualFold(*snapshot.Observation.Provider, "codex") || snapshot.Observation.Model == nil || *snapshot.Observation.Model != "integrity-model" {
 		t.Fatal("mock usage lost configured provider/model")
 	}
+	assertRecordingIntegrityCapturedCounters(t, snapshot.Logs, want)
+}
+
+func assertRecordingIntegrityCapturedCounters(t *testing.T, logs api.WorkerSessionLogPage, want map[string]any) {
+	t.Helper()
 	count := 0
-	for _, frame := range snapshot.Logs.Events {
+	for _, frame := range logs.Events {
 		payload, err := json.Marshal(frame.Event.Payload)
 		if err != nil {
 			t.Fatal(err)
@@ -262,7 +298,6 @@ func assertRecordingIntegrityUsage(t *testing.T, snapshot capturedSummaryArtifac
 		if err := json.Unmarshal(draft.Payload, &fact); err != nil {
 			t.Fatal(err)
 		}
-		want := map[string]any{"origin": "SYNTHETIC", "model": "integrity-model", "inputTokens": float64(17), "outputTokens": float64(9), "cachedInputTokens": float64(0), "reasoningOutputTokens": float64(2), "totalTokens": float64(26)}
 		if !reflect.DeepEqual(fact, want) || draft.Provenance.Delivery != workers.DeliverySynthesized {
 			t.Fatalf("captured configured usage fact changed: %+v", fact)
 		}
