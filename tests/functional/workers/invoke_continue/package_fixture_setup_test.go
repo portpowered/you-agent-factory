@@ -461,6 +461,9 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--server", "http://127.0.0.1:1", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = invokeContinueEnvironment(homeDir)
+	// Omitted subagent selections resolve on this selected host, independently
+	// of the MCP client's profile or ambient operator configuration.
+	inputs.Input.Env = append(inputs.Input.Env, "YOU_DEFAULT_WORKER_MODEL_PROVIDER=codex", "YOU_DEFAULT_WORKER_MODEL=requester-host-default")
 	inputs.Input.WorkingDirectory = hostDir
 	command := startInvokeContinuePackageCommand(process, inputs)
 	baseURL, err := api.WaitForBaseURL(invokeContinuePackageFixtureTimeout)

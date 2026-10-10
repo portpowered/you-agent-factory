@@ -59,7 +59,7 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 		return err
 	}
 	result := platformprocess.CommandResult{Stdout: directCodexSessionOutput("mcp-child-thread", "selected host MCP output COMPLETE")}
-	child := newInvokeContinueResettableProviderCommandRunner(result, result, result, result)
+	child := newInvokeContinueResettableProviderCommandRunner(result, result, result, result, result, result, result, result, result, result, result, result, result, result, result, result)
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-child", child, child, nil, nil, nil, child.Reset); err != nil {
 		return err
 	}
@@ -424,13 +424,7 @@ func TestRequesterMCPSelectedHostDefaultsAndRefusals(t *testing.T) {
 	}
 	t19AwaitSignal(t, ctx, runner.started, "MCP caller running")
 	token := requesterSourceToken(t, runner, parentID)
-	for _, explicit := range []bool{true, false} {
-		result := executeRequesterMCP(t, fixture, child, ctx, "", "", explicit)
-		if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
-			t.Fatalf("selected-host RUN failed: %#v", result.Error)
-		}
-		assertRequesterMCPUnattributedChild(t, fixture, child, ctx, result.Result.SessionID)
-	}
+	assertRequesterMCPUnattributedCalls(t, fixture, child, ctx)
 	assertRequesterMCPRunningCalls(t, fixture, child, parent, ctx, parentID, token)
 	before := child.providerRunner.CallCount()
 	refused := executeRequesterMCP(t, fixture, child, ctx, parentID, strings.Repeat("A", 43), true)
@@ -467,15 +461,52 @@ func assertRequesterMCPPartialCredentials(t *testing.T, fixture *invokeContinueP
 	}
 }
 
+func assertRequesterMCPUnattributedCalls(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context) {
+	t.Helper()
+	for _, explicit := range []bool{true, false} {
+		for _, selection := range requesterMCPSelections() {
+			result := executeRequesterMCPTimeout(t, fixture, child, ctx, "", "", explicit, 30000, selection)
+			if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
+				t.Fatalf("selected-host RUN failed: %#v", result.Error)
+			}
+			assertRequesterMCPSelection(t, child, selection)
+			assertRequesterMCPUnattributedChild(t, fixture, child, ctx, result.Result.SessionID)
+		}
+	}
+}
+
 func assertRequesterMCPRunningCalls(t *testing.T, fixture *invokeContinuePackageFixture, child, parent *invokeContinueScenario, ctx context.Context, parentID, token string) {
 	t.Helper()
 	for _, explicit := range []bool{true, false} {
-		result := executeRequesterMCP(t, fixture, child, ctx, parentID, token, explicit)
-		if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
-			t.Fatalf("running-caller selected-host RUN failed: %#v", result.Error)
+		for _, selection := range requesterMCPSelections() {
+			result := executeRequesterMCPTimeout(t, fixture, child, ctx, parentID, token, explicit, 30000, selection)
+			if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
+				t.Fatalf("running-caller selected-host RUN failed: %#v", result.Error)
+			}
+			assertRequesterMCPSelection(t, child, selection)
+			assertRequesterMCPChild(t, fixture, child, ctx, result.Result.SessionID, parentID, token)
+			assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
 		}
-		assertRequesterMCPChild(t, fixture, child, ctx, result.Result.SessionID, parentID, token)
-		assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
+	}
+}
+
+type requesterMCPSelection struct{ provider, model string }
+
+func requesterMCPSelections() []requesterMCPSelection {
+	return []requesterMCPSelection{{provider: "codex", model: "gpt-5-codex"}, {provider: "codex"}, {model: "gpt-5-codex"}, {}}
+}
+
+func assertRequesterMCPSelection(t *testing.T, child *invokeContinueScenario, selection requesterMCPSelection) {
+	t.Helper()
+	requests := child.providerRunner.Requests()
+	command := requests[len(requests)-1]
+	model := selection.model
+	if model == "" {
+		model = "requester-host-default"
+	}
+	modelFlag := slices.Index(command.Args, "--model")
+	if !strings.Contains(command.Command, "codex") || modelFlag < 0 || modelFlag+1 >= len(command.Args) || command.Args[modelFlag+1] != model {
+		t.Fatal("MCP provider/model selection did not reach the selected host's provider command")
 	}
 }
 
@@ -491,10 +522,13 @@ func executeRequesterMCP(t *testing.T, fixture *invokeContinuePackageFixture, ch
 	return executeRequesterMCPTimeout(t, fixture, child, ctx, callerID, token, explicit, 30000)
 }
 
-func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, callerID, token string, explicit bool, timeoutMillis int) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
+func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, callerID, token string, explicit bool, timeoutMillis int, selections ...requesterMCPSelection) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
 	t.Helper()
 	input := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "server", "mcp", "--project-root", child.workingDirectory})
 	input.Input.Env = child.environment()
+	// The selected server owns omitted provider/model defaults. A conflicting
+	// client default must not select another provider or model on its behalf.
+	input.Input.Env = append(input.Input.Env, "YOU_DEFAULT_WORKER_MODEL_PROVIDER=claude", "YOU_DEFAULT_WORKER_MODEL=requester-client-default")
 	if callerID != "" || token != "" {
 		input.Input.Env = append(input.Input.Env, "YOU_WORKER_SESSION_ID="+callerID, "YOU_WORKER_SESSION_TOKEN="+token)
 	}
@@ -532,7 +566,17 @@ func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixt
 		return response.Result
 	}
 	call(1, "initialize", map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "requester-functional", "version": "test"}})
-	args := map[string]any{"prompt": "MCP selected host prompt", "provider": "codex", "model": "gpt-5-codex", "timeoutMillis": timeoutMillis}
+	selection := requesterMCPSelection{provider: "codex", model: "gpt-5-codex"}
+	if len(selections) > 0 {
+		selection = selections[0]
+	}
+	args := map[string]any{"prompt": "MCP selected host prompt", "timeoutMillis": timeoutMillis}
+	if selection.provider != "" {
+		args["provider"] = selection.provider
+	}
+	if selection.model != "" {
+		args["model"] = selection.model
+	}
 	if explicit {
 		args["action"] = "RUN"
 	}
