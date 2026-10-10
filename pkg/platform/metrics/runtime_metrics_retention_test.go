@@ -1276,6 +1276,7 @@ func TestRuntimeMetricsRetentionPreservesFailureReportsDuringInventoryAndRemoval
 
 type retentionFailureFileSystem struct {
 	platformfilesystem.Local
+	removedPaths  []string
 	removeErr     error
 	failPath      string
 	lstatErr      error
@@ -1451,6 +1452,9 @@ func assertIncompleteRetentionInventory(t *testing.T, report RuntimeMetricsReten
 }
 
 func (filesystem *retentionFailureFileSystem) Remove(path string) error {
+	if isRuntimeMetricsArtifact(filepath.Base(path)) {
+		filesystem.removedPaths = append(filesystem.removedPaths, path)
+	}
 	if filesystem.removeErr != nil && (filesystem.failPath == "" || path == filesystem.failPath) {
 		return filesystem.removeErr
 	}
@@ -2129,6 +2133,104 @@ func (filesystem *cancelStageRetentionFileSystem) ReadDir(path string) ([]fs.Dir
 		filesystem.cancel()
 	}
 	return entries, err
+}
+
+func TestRuntimeMetricsRetentionPrunesInStableOrderDespiteRemovalFailure(t *testing.T) {
+	for _, ordering := range []string{"complete dates", "times within date", "equal times with unknown entry"} {
+		for _, reject := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/reject=%t", ordering, reject), func(t *testing.T) {
+				t.Parallel()
+				proveRetentionRemovalOrder(t, ordering, reject)
+			})
+		}
+	}
+}
+
+func proveRetentionRemovalOrder(t *testing.T, ordering string, reject bool) {
+	t.Helper()
+	root := t.TempDir()
+	want := make([]string, 3)
+	// Create newest first so directory enumeration cannot substitute for the
+	// retention policy's timestamp and filename ordering.
+	for index := 2; index >= 0; index-- {
+		date, clock := "2026/07/01", "010000.000000000"
+		switch ordering {
+		case "complete dates":
+			date = fmt.Sprintf("2026/07/%02d", index+1)
+		case "times within date":
+			clock = fmt.Sprintf("0%d0000.000000000", index+1)
+		}
+		want[index] = writeRetentionArtifact(t, root, date, clock, fmt.Sprintf("session-runtime-%d", index), 7)
+	}
+	customerPath := filepath.Join(root, "customer.txt")
+	if ordering == "equal times with unknown entry" {
+		// An unknown date entry requires individual-file pruning, preserving
+		// this customer file while equal timestamps use the filename tiebreak.
+		customerPath = filepath.Join(filepath.Dir(want[0]), "customer.txt")
+	}
+	if err := os.WriteFile(customerPath, []byte("customer bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removeErr := errors.New("selected removal denied")
+	filesystem := &retentionFailureFileSystem{Local: platformfilesystem.Local{}}
+	if reject {
+		filesystem.failPath, filesystem.removeErr = want[0], removeErr
+	}
+	retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+		return time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1}}
+	report, err := retention.Sweep(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Sweep(): %v", err)
+	}
+	if !reflect.DeepEqual(filesystem.removedPaths, want) {
+		t.Fatalf("removal attempts = %v, want oldest-first %v", filesystem.removedPaths, want)
+	}
+	assertRetentionOrderedReport(t, report, want[0], reject, removeErr)
+	assertRetentionPathAbsent(t, want[1], "middle artifact")
+	assertRetentionPathAbsent(t, want[2], "newest expired artifact")
+	if reject {
+		assertRetentionPreservedContent(t, want[0], "mmmmmmm")
+		proveRetentionOrderedRecovery(t, retention, filesystem, request, want[0])
+	}
+	assertRetentionPathAbsent(t, want[0], "oldest artifact after healthy sweep")
+	assertRetentionPreservedContent(t, customerPath, "customer bytes")
+}
+
+func assertRetentionOrderedReport(t *testing.T, report RuntimeMetricsRetentionReport, selected string, reject bool, removeErr error) {
+	t.Helper()
+	removed, remaining := 3, 0
+	if reject {
+		removed, remaining = 2, 1
+		if len(report.Failures) != 1 || report.Failures[0].Path != selected || !errors.Is(report.Failures[0].Error, removeErr) {
+			t.Fatalf("Failures = %#v, want selected removal cause", report.Failures)
+		}
+		if report.Failed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) {
+			t.Fatalf("Failed = %#v, want only selected artifact", report.Failed)
+		}
+	} else if len(report.Failures) != 0 || report.Failed != (RuntimeMetricsRetentionTotals{}) {
+		t.Fatalf("healthy sweep reports failure: %#v", report)
+	}
+	if report.Removed != (RuntimeMetricsRetentionTotals{Files: removed, Bytes: int64(removed * 7)}) ||
+		report.After != (RuntimeMetricsRetentionTotals{Files: remaining, Bytes: int64(remaining * 7)}) {
+		t.Fatalf("sweep totals = %#v", report)
+	}
+}
+
+func proveRetentionOrderedRecovery(t *testing.T, retention *RuntimeMetricsRetention, filesystem *retentionFailureFileSystem,
+	request RuntimeMetricsRetentionRequest, selected string,
+) {
+	t.Helper()
+	filesystem.removeErr, filesystem.removedPaths = nil, nil
+	recovered, retryErr := retention.Sweep(t.Context(), request)
+	if retryErr != nil || len(recovered.Failures) != 0 || recovered.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) ||
+		recovered.After != (RuntimeMetricsRetentionTotals{}) || !reflect.DeepEqual(filesystem.removedPaths, []string{selected}) {
+		t.Fatalf("recovery = %#v, %v; attempts = %v", recovered, retryErr, filesystem.removedPaths)
+	}
 }
 
 func writeRetentionArtifact(t *testing.T, root, date, clock, suffix string, size int) string {
