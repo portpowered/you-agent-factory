@@ -17,16 +17,21 @@ import (
 )
 
 type capturedCodexFake struct {
-	catalog map[string]recordings.WorkerCapturedCatalogPage
-	pages   map[string]recordings.WorkerCapturedActivityPage
-	failure error
-	calls   int
+	catalog       map[string]recordings.WorkerCapturedCatalogPage
+	pages         map[string]recordings.WorkerCapturedActivityPage
+	failure       error
+	calls         int
+	activityCalls int
+	preparedOnly  bool
 }
 
 func (f *capturedCodexFake) ListWorkerSessionCaptures(ctx context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	f.calls++
 	if req.Limit != capturedPageLimit || !req.RequireCompleteMembership {
 		panic("unbounded catalog request")
+	}
+	if f.preparedOnly && !req.PreparedSummariesOnly {
+		panic("inspection must select prepared summaries")
 	}
 	if err := ctx.Err(); err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
@@ -36,6 +41,7 @@ func (f *capturedCodexFake) ListWorkerSessionCaptures(ctx context.Context, req r
 
 func (f *capturedCodexFake) ReadWorkerCapturedActivity(ctx context.Context, req recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
 	f.calls++
+	f.activityCalls++
 	if req.Limit != capturedPageLimit || req.BoundPayload {
 		panic("wrong complete-history request")
 	}
@@ -43,6 +49,90 @@ func (f *capturedCodexFake) ReadWorkerCapturedActivity(ctx context.Context, req 
 		return recordings.WorkerCapturedActivityPage{}, err
 	}
 	return f.pages[req.NextToken], f.failure
+}
+
+func TestCapturedInspectValidatesReusedReferenceChainWithoutActivity(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []providers.ID{providers.IDCodex, providers.IDCursor} {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Parallel()
+			fake, ref := capturedInspectChain(t, provider)
+			fake.preparedOnly = true
+			service := inspectionService{captured: capturedProvider{reader: fake}}
+			for range 2 {
+				got, err := service.Inspect(providersessions.InspectRequest{Context: t.Context(), Session: ref})
+				if err != nil || got.Session != ref || got.Source != (providersessions.SourceMetadata{}) {
+					t.Fatalf("Inspect=%+v err=%v", got, err)
+				}
+				got.Session.ID = "caller-mutation"
+			}
+			if fake.activityCalls != 0 {
+				t.Fatal("Inspect read activity")
+			}
+			fake.preparedOnly = false
+			if _, err := service.Details(string(provider), ref.Kind, ref.ID); !errors.Is(err, providersessions.ErrAmbiguousSessionFile) {
+				t.Fatalf("transcript ambiguity changed: %v", err)
+			}
+		})
+	}
+}
+
+func TestCapturedInspectRefusesUnprovedChain(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"unrelated", "scope", "missing", "cycle", "reverse mismatch", "previous attempt", "incomplete", "terminal", "generation", "conflicting journal", "storage", "canceled", "catalog generation", "catalog cursor"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fake, ref := capturedInspectChain(t, providers.IDCodex)
+			fake.preparedOnly = true
+			ctx, want := capturedInspectRefusal(t, name, fake)
+			service := inspectionService{captured: capturedProvider{reader: fake}}
+			_, err := service.Inspect(providersessions.InspectRequest{Context: ctx, Session: ref})
+			var lookup *providersessions.LookupError
+			if !errors.Is(err, want) || !errors.As(err, &lookup) || fake.activityCalls != 0 {
+				t.Fatalf("Inspect error=%v activity=%d want=%v", err, fake.activityCalls, want)
+			}
+		})
+	}
+}
+
+func capturedInspectChain(t *testing.T, provider providers.ID) (*capturedCodexFake, providers.SessionRef) {
+	t.Helper()
+	fake, ref := codexCaptureFixture(t, "factory", provider)
+	item := fake.catalog[""].Items[0]
+	source := inspectChainItem(t, item, "source", "factory", "", "")
+	second := inspectChainItem(t, item, "second", "factory", "source", "source-attempt")
+	third := inspectChainItem(t, item, "third", "factory", "second", "second-attempt")
+	source.SuccessorWorkerSessionID, second.SuccessorWorkerSessionID = "second", "third"
+	fake.catalog[""] = recordings.WorkerCapturedCatalogPage{GenerationID: "selected-generation", Items: []recordings.WorkerCapturedCatalogItem{source, second, third}}
+	return fake, ref
+}
+
+func inspectChainItem(t *testing.T, item recordings.WorkerCapturedCatalogItem, id, scope, predecessor, attempt string) recordings.WorkerCapturedCatalogItem {
+	t.Helper()
+	item.Catalog.WorkerSessionID, item.Catalog.FactorySessionID = id, scope
+	item.Opening = item.Opening.Detached()
+	item.MetadataRecords = []events.Record{item.MetadataRecords[0].Detached()}
+	for _, record := range []*events.Record{&item.Opening, &item.MetadataRecords[0]} {
+		var draft workers.Draft
+		var payload workers.SessionPayload
+		if json.Unmarshal(record.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+			t.Fatal("invalid fixture")
+		}
+		draft.DispatchID = id + "-attempt"
+		payload.WorkerSessionID, payload.FactorySessionID, payload.AttemptID = id, scope, draft.DispatchID
+		// Current lifecycle terminals retain only status; correlation is pinned
+		// by the opening and draft dispatch rather than repeated in the payload.
+		if record.ID.Position != 1 {
+			payload.WorkerSessionID, payload.FactorySessionID, payload.AttemptID = "", "", ""
+		}
+		payload.Lineage = nil
+		if predecessor != "" {
+			payload.Lineage = &workers.SessionLineage{PredecessorWorkerSessionID: predecessor, PreviousDispatchID: attempt, PreviousAttemptID: attempt}
+		}
+		draft.Payload = mustJSON(t, payload)
+		record.Payload = mustJSON(t, draft)
+	}
+	return item
 }
 
 func (*capturedCodexFake) LookupWorkerSessionCapture(context.Context, string) (recordings.WorkerSessionCatalogEntry, error) {
@@ -393,4 +483,52 @@ func TestCapturedCodexPeerMethodsShareProjectionAndCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func capturedInspectRefusal(t *testing.T, name string, fake *capturedCodexFake) (context.Context, error) {
+	t.Helper()
+	page := fake.catalog[""]
+	want := providersessions.ErrSessionStorageUnavailable
+	ctx := t.Context()
+	switch name {
+	case "unrelated":
+		page.Items[1] = inspectChainItem(t, page.Items[1], "second", "factory", "", "")
+		want = providersessions.ErrAmbiguousSessionFile
+	case "scope":
+		page.Items[1].Catalog.FactorySessionID = "foreign"
+	case "missing":
+		page.Items = page.Items[:1]
+	case "cycle":
+		page.Items[2].SuccessorWorkerSessionID = "source"
+	case "reverse mismatch":
+		page.Items[1] = inspectChainItem(t, page.Items[1], "second", "factory", "unknown", "source-attempt")
+	case "previous attempt":
+		page.Items[1] = inspectChainItem(t, page.Items[1], "second", "factory", "source", "wrong-attempt")
+	case "incomplete":
+		page.Items[1].Health = recordings.WorkerRecordingStatusIncomplete
+	case "terminal":
+		page.Items[1].Terminal = nil
+	case "generation":
+		page.Items[1].Catalog.RecordingGenerationID = ""
+	case "conflicting journal":
+		duplicate := page.Items[0]
+		duplicate.Catalog.RecordingID = "other-journal"
+		page.Items = append(page.Items, duplicate)
+		want = providersessions.ErrAmbiguousSessionFile
+	case "storage":
+		fake.failure = errors.New("private profile unavailable")
+	case "canceled":
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		cancel()
+		want = providersessions.ErrOperationCanceled
+	case "catalog generation":
+		page.NextToken = "next"
+		fake.catalog["next"] = recordings.WorkerCapturedCatalogPage{GenerationID: "changed"}
+	case "catalog cursor":
+		page.NextToken = "next"
+		fake.catalog["next"] = page
+	}
+	fake.catalog[""] = page
+	return ctx, want
 }

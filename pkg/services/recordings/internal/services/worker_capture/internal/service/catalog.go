@@ -63,7 +63,7 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	if err := ctx.Err(); err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
-	if err := writer.rebuildCatalog(ctx); err != nil {
+	if err := writer.prepareCatalogRead(ctx, request.PreparedSummariesOnly); err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
 	// Association queries need the complete membership set to prove absence or
@@ -88,7 +88,7 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 		start++
 	}
 	end := min(start+limit, len(entries))
-	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation)
+	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation, request.PreparedSummariesOnly)
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
@@ -104,6 +104,21 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 		page.NextToken = base64.RawURLEncoding.EncodeToString(data)
 	}
 	return page, ctx.Err()
+}
+
+func (writer *FileWriter) prepareCatalogRead(ctx context.Context, preparedOnly bool) error {
+	if !preparedOnly {
+		return writer.rebuildCatalog(ctx)
+	}
+	if err := writer.lockCatalogRebuild(ctx); err != nil {
+		return err
+	}
+	prepared := writer.catalogLoaded
+	writer.unlockCatalogRebuild()
+	if !prepared {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	return ctx.Err()
 }
 
 // catalogMembership returns an immutable identity snapshot. Existing-session

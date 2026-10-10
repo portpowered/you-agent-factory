@@ -100,10 +100,18 @@ func capturedUsageCountersPresent(payload json.RawMessage) bool {
 	return false
 }
 
-func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []recordings.WorkerSessionCatalogEntry, generation string) ([]recordings.WorkerCapturedCatalogItem, error) {
+func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []recordings.WorkerSessionCatalogEntry, generation string, preparedOnly bool) ([]recordings.WorkerCapturedCatalogItem, error) {
 	items := make([]recordings.WorkerCapturedCatalogItem, 0, len(entries))
 	for _, catalog := range entries {
-		item, err := writer.capturedCatalogItem(ctx, catalog)
+		var item recordings.WorkerCapturedCatalogItem
+		var err error
+		if preparedOnly {
+			var summary recordings.WorkerCapturedSummary
+			summary, err = writer.LookupWorkerSessionSummary(ctx, catalog.WorkerSessionID)
+			item = summary.Capture
+		} else {
+			item, err = writer.capturedCatalogItem(ctx, catalog)
+		}
 		if err != nil {
 			return nil, err
 		}

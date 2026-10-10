@@ -40,6 +40,9 @@ type Service interface {
 	// LookupError. This slice
 	// does not import Providers catalog/execution, enumeration, availability,
 	// capability, or Workers selection-policy types.
+	// Inspection uses committed materialized association facts, without reading
+	// transcript activity. Captures sharing the exact tuple are unambiguous only
+	// when their complete facts establish one validated continuation chain.
 	Inspect(InspectRequest) (InspectResult, error)
 
 	// Project returns a provider-independent normalized transcript/detail

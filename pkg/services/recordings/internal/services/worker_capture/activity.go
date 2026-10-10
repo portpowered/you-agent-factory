@@ -29,6 +29,9 @@ type WorkerCapturedCatalogRequest struct {
 	// RequireCompleteMembership fails closed when damage or ambiguity prevents
 	// proving association absence or uniqueness. Default reads retain healthy histories.
 	RequireCompleteMembership bool
+	// PreparedSummariesOnly refuses unprepared retained data instead of loading
+	// journals. Ordinary association/capability queries use this after activation.
+	PreparedSummariesOnly bool
 }
 
 type WorkerCapturedCatalogPage struct {

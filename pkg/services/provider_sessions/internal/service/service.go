@@ -35,16 +35,24 @@ func (s *inspectionService) Details(provider, kind, id string) (providersessions
 	return s.detailsForRef(context.Background(), providers.SessionRef{Provider: providerID, Kind: kind, ID: id})
 }
 
-// Inspect validates and inspects a detached typed SessionRef through the same
-// selected-profile lookup path as Details, returning a plain InspectResult.
+// Inspect validates committed association facts without reading activity.
+// Transcript selection remains the responsibility of Details and Project.
 func (s *inspectionService) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
-	detail, err := s.detailsForRef(req.Context, req.Session)
-	if err != nil {
+	ctx := req.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := validateSessionRef(req.Session); err != nil {
 		return providersessions.InspectResult{}, err
+	}
+	err := s.captured.inspectAssociation(ctx, req.Session)
+	if err != nil {
+		return providersessions.InspectResult{}, &providersessions.LookupError{
+			Provider: providersessions.Provider(req.Session.Provider), SessionID: req.Session.ID, Err: err,
+		}
 	}
 	return providersessions.InspectResult{
 		Session: req.Session.Clone(),
-		Source:  detail.Source,
 	}, nil
 }
 

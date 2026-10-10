@@ -114,3 +114,62 @@ func assertSelectedControls(t *testing.T, reader *FileWriter, want []recordings.
 		t.Fatalf("committed selected controls=%+v err=%v want=%+v", got.ControlOperations, err, want)
 	}
 }
+
+func TestPreparedCatalogRefusesHydrationAndReturnsDetachedSummaries(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	record := journalRecord(t, "prepared", "worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, "worker"), 2)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(probe, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := reopened.(*FileWriter)
+	request := recordings.WorkerCapturedCatalogRequest{PreparedSummariesOnly: true, RequireCompleteMembership: true}
+	probe.mu.Lock()
+	before := probe.reads
+	probe.mu.Unlock()
+	if _, err := reader.ListWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unprepared catalog=%v", err)
+	}
+	probe.mu.Lock()
+	if probe.reads != before {
+		t.Error("unprepared query read recording files")
+	}
+	probe.mu.Unlock()
+	if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	probe.mu.Lock()
+	before = probe.reads
+	probe.mu.Unlock()
+	page, err := reader.ListWorkerSessionCaptures(t.Context(), request)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Health != recordings.WorkerRecordingStatusComplete {
+		t.Fatalf("prepared catalog=%+v err=%v", page, err)
+	}
+	want := page.Items[0].Opening.Detached()
+	page.Items[0].Opening.Payload[0] = '!'
+	page, err = reader.ListWorkerSessionCaptures(t.Context(), request)
+	if err != nil || !reflect.DeepEqual(page.Items[0].Opening, want) {
+		t.Fatalf("summary aliases caller=%+v err=%v", page, err)
+	}
+	entry := reader.entry("prepared")
+	entry.mu.Lock()
+	entry.loaded = false
+	entry.mu.Unlock()
+	if _, err := reader.ListWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unavailable prepared summary=%v", err)
+	}
+	probe.mu.Lock()
+	if probe.reads != before {
+		t.Error("prepared query hydrated activity")
+	}
+	probe.mu.Unlock()
+}
