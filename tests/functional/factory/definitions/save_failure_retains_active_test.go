@@ -172,6 +172,18 @@ func assertSavedDefinitionPortableRoundTrip(t *testing.T, process support.Proces
 	assertImportExportPortableBundledFileInline(t, saved, factoryapi.BundledFileTypeDOC, importExportPortableDocPath, importExportPortableDocBody, "saved snapshot")
 	assertImportExportPortableBundledFileInline(t, saved, factoryapi.BundledFileTypeSCRIPT, importExportPortableScriptPath, importExportPortableScriptBody, "saved snapshot")
 	path := filepath.Join(root, "accepted-update", "factory.json")
+	durable, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	station := (*saved.Workstations)[0]
+	if strings.Contains(string(durable), stringValue(station.Body)) {
+		t.Fatal("saved factory.json retained inline workstation content")
+	}
+	authored, err := os.ReadFile(filepath.Join(filepath.Dir(path), "workstations", station.Name, "AGENTS.md"))
+	if err != nil || !strings.Contains(string(authored), stringValue(station.Body)) {
+		t.Fatalf("saved split workstation content = %s, %v", authored, err)
+	}
 	portable, err := support.FlattenFactoryConfigWithProcessAndEnv(t, process, env, path)
 	if err != nil {
 		t.Fatal(err)
