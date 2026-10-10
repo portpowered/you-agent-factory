@@ -108,6 +108,14 @@ func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan
 // Read outside the registry lock; reservation later rechecks the immutable
 // source attempt. A replay already reserved in this host needs no storage read.
 func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, callers ...context.Context) (*workers.WorkstationDispatchRequest, error) {
+	ctx := r.serverOwnedContext()
+	if len(callers) != 0 && callers[0] != nil {
+		ctx = callers[0]
+	}
+	return r.readContinuationRecipeContext(ctx, req)
+}
+
+func (r *registry) readContinuationRecipeContext(ctx context.Context, req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
 	r.mu.RLock()
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	source, exists := r.sessions[address]
@@ -126,12 +134,7 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 	if err := validateContinuationSourceAssociation(source); err != nil {
 		return nil, err
 	}
-	ctx := r.serverOwnedContext()
-	waitCtx := ctx
-	if len(callers) != 0 && callers[0] != nil {
-		waitCtx = callers[0]
-	}
-	if err := waitContinuationPublication(waitCtx, terminalPublished); err != nil {
+	if err := waitContinuationPublication(ctx, terminalPublished); err != nil {
 		return nil, err
 	}
 	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)

@@ -761,3 +761,17 @@ func assertTurnUsageJSONPresence(t *testing.T, observation any, wantPresent bool
 		t.Fatalf("turnUsage present = %t, want %t; payload=%s", present, wantPresent, payload)
 	}
 }
+
+func TestWorkerSessionContinuationCapabilityMappingPreservesFalseAndUnknownHead(t *testing.T) {
+	t.Parallel()
+	for _, revivable := range []bool{false, true} {
+		mapped := WorkerSessionObservationToAPI(workersessions.Observation{Revivable: revivable, ContinuationHeadWorkerSessionID: "newest"})
+		if mapped.Revivable == nil || *mapped.Revivable != revivable || mapped.ContinuationHeadWorkerSessionId == nil || *mapped.ContinuationHeadWorkerSessionId != "newest" {
+			t.Fatalf("capability mapping: %+v", mapped)
+		}
+	}
+	mapped := WorkerSessionObservationToAPI(workersessions.Observation{})
+	if mapped.Revivable == nil || *mapped.Revivable || mapped.ContinuationHeadWorkerSessionId != nil {
+		t.Fatalf("unknown capability became authority: %+v", mapped)
+	}
+}

@@ -1779,6 +1779,10 @@ export interface components {
       reasoningEffort?: string;
       /** @description Whether a provider-session identity is available for this attempt. */
       providerSessionAvailable: boolean;
+      /** @description Whether the validated continuation head can currently admit a direct successor using an available exact provider reference. */
+      revivable?: boolean;
+      /** @description Newest validated Worker Session in this continuation chain. Omitted when the chain cannot be resolved. */
+      continuationHeadWorkerSessionId?: string;
       /** @description Work identities correlated with this Worker Session attempt. */
       workIds: string[];
       /** @description Optional turn correlation identifier. */

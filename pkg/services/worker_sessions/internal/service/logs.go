@@ -120,7 +120,11 @@ func (r *registry) GetCapturedObservation(ctx context.Context, req workersession
 	if r.logs == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
-	return r.logs.GetObservationByWorkerSessionID(ctx, req)
+	projected, err := r.logs.GetObservationByWorkerSessionID(ctx, req)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return r.withContinuationCapability(ctx, projected), observationContextError(ctx)
 }
 
 // NewWithCapturedActivity constructs supervision and durable reads as one service.

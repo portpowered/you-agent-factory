@@ -15,6 +15,7 @@ import (
 )
 
 func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
+	revivable, head := true, "newest"
 	var gotPath string
 	var gotQuery map[string]string
 	started := time.Date(2026, 8, 8, 19, 0, 0, 0, time.UTC)
@@ -25,6 +26,7 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionObservation{
 			WorkerSessionId: "worker-session-1", ProviderSessionAvailable: true,
+			Revivable: &revivable, ContinuationHeadWorkerSessionId: &head,
 			Model: stringPtrForTest("gpt-5.6-luna"), ReasoningEffort: stringPtrForTest("high"),
 			ProviderSession: &generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-session-1"},
 			WorkIds:         []string{"work-1"}, TurnId: stringPtrForTest("turn-1"), AttemptId: "attempt-2",
@@ -58,6 +60,9 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 	}
 	if string(document["workerSessionId"]) != `"worker-session-1"` || string(document["attemptId"]) != `"attempt-2"` {
 		t.Fatalf("identity fields = %s/%s, want observation identity", document["workerSessionId"], document["attemptId"])
+	}
+	if string(document["revivable"]) != "true" || string(document["continuationHeadWorkerSessionId"]) != `"newest"` {
+		t.Fatalf("capability lost in show JSON: %s", output.String())
 	}
 	assertShowExecutionFacts(t, document)
 	if !strings.Contains(string(document["tokenUsage"]), `"totalTokens":12`) || string(document["durationMillis"]) != "2500" {

@@ -666,6 +666,8 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 }
 
 func mapWorkerSessionIdentity(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
+	result.Revivable = &observation.Revivable
+	result.ContinuationHeadWorkerSessionId = stringPointer(observation.ContinuationHeadWorkerSessionID)
 	result.PredecessorWorkerSessionId = stringPointer(observation.PredecessorWorkerSessionID)
 	result.SuccessorWorkerSessionId = stringPointer(observation.SuccessorWorkerSessionID)
 	result.Provider = stringPointer(observation.Provider)

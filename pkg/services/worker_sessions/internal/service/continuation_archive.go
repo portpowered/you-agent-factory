@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -15,9 +16,138 @@ type archivedContinuationSource struct {
 	target   recordings.WorkerControlTarget
 }
 
+// Capability is a detached read, never a reservation or restored supervision.
+// Refusals preserve history while removing any claim of execution authority.
+func (r *registry) withContinuationCapability(ctx context.Context, projected workersessions.Observation) workersessions.Observation {
+	projected.Revivable = false
+	projected.ContinuationHeadWorkerSessionID = ""
+	req, head, err := r.continuationObservationHead(ctx, projected)
+	if err != nil {
+		return projected
+	}
+	projected.ContinuationHeadWorkerSessionID = head.ID
+	if !head.Terminal() {
+		return projected
+	}
+
+	snapshot, _, err := r.continuationCapabilitySnapshot(ctx, req)
+	if err != nil || r.inspectContinuationReference(ctx, snapshot.session.ProviderSessionAssociation.Reference) != nil {
+		return projected
+	}
+	// A peer read runs without the registry lock. Never describe a source that
+	// acquired a successor or changed its exact association during that read.
+	_, currentHead, err := r.continuationObservationHead(ctx, projected)
+	if err != nil || currentHead.ID != head.ID || currentHead.State != head.State {
+		projected.ContinuationHeadWorkerSessionID = ""
+		return projected
+	}
+	current, _, err := r.continuationCapabilitySnapshot(ctx, req)
+	if err != nil || current.dispatchID != snapshot.dispatchID ||
+		*current.session.ProviderSessionAssociation != *snapshot.session.ProviderSessionAssociation {
+		projected.ContinuationHeadWorkerSessionID = ""
+		return projected
+	}
+	projected.Revivable = true
+	return projected
+}
+
+func (r *registry) continuationCapabilitySnapshot(ctx context.Context, req workersessions.ContinueRequest) (continuationSourceSnapshot, *archivedContinuationSource, error) {
+	captured, err := r.readContinuationRecipeContext(ctx, req)
+	if err != nil {
+		return continuationSourceSnapshot{}, nil, err
+	}
+	archived, err := r.readArchivedContinuationSourceContext(ctx, req)
+	if err != nil {
+		return continuationSourceSnapshot{}, nil, err
+	}
+	r.mu.Lock()
+	snapshot, err := r.continuationSnapshotLocked(req, archived)
+	snapshot.session = snapshot.session.Clone()
+	stopping := r.stopping
+	r.mu.Unlock()
+	if err != nil {
+		return snapshot, archived, err
+	}
+	if stopping {
+		return snapshot, archived, workersessions.ErrContinuationExecutionUnavailable
+	}
+	if captured != nil {
+		if captured.Execution.Dispatch.DispatchID != snapshot.dispatchID {
+			return snapshot, archived, workersessions.ErrContinuationExecutionUnavailable
+		}
+		snapshot.execution = *captured
+	}
+	// Validate the same recipe as admission without reserving a successor.
+	if err := (workersessions.InvokeSessionRequest{ID: snapshot.session.ID, Execution: snapshot.execution}).Validate(); err != nil {
+		return snapshot, archived, err
+	}
+	return snapshot, archived, r.validateContinuationSupport(ctx, snapshot.session.ProviderSessionAssociation.Reference)
+}
+
+func (r *registry) continuationObservationHead(ctx context.Context, projected workersessions.Observation) (workersessions.ContinueRequest, workersessions.Session, error) {
+	req := workersessions.ContinueRequest{SourceWorkerSessionID: projected.WorkerSessionID, FactorySessionID: projected.FactorySessionID}
+	seen := make(map[string]bool)
+	previous := ""
+	for {
+		if err := observationContextError(ctx); err != nil {
+			return req, workersessions.Session{}, err
+		}
+		if seen[req.SourceWorkerSessionID] {
+			return req, workersessions.Session{}, workersessions.ErrContinuationExecutionUnavailable
+		}
+		seen[req.SourceWorkerSessionID] = true
+		source, scope, err := r.continuationObservationSource(ctx, req)
+		if err != nil || !source.State.Valid() || (previous != "" && source.PredecessorWorkerSessionID != previous) ||
+			(!source.Terminal() && source.SuccessorWorkerSessionID != "") {
+			return req, workersessions.Session{}, workersessions.ErrContinuationExecutionUnavailable
+		}
+		if source.SuccessorWorkerSessionID == "" {
+			return req, source, nil
+		}
+		previous = source.ID
+		req.SourceWorkerSessionID, req.FactorySessionID = source.SuccessorWorkerSessionID, scope
+	}
+}
+
+func (r *registry) continuationObservationSource(ctx context.Context, req workersessions.ContinueRequest) (workersessions.Session, string, error) {
+	r.mu.RLock()
+	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	source, exists := r.sessions[address]
+	source = source.Clone()
+	scope := req.FactorySessionID
+	if metadata := r.observations[address]; metadata != nil {
+		scope = metadata.factorySessionID
+	}
+	r.mu.RUnlock()
+	if err != nil || exists {
+		return source, scope, err
+	}
+	if r.logs == nil {
+		return workersessions.Session{}, "", workersessions.ErrContinuationSourceNotFound
+	}
+	row, err := r.logs.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: req.SourceWorkerSessionID, FactorySessionID: req.FactorySessionID,
+	})
+	if err != nil || row.RecordingHealth != recordings.WorkerRecordingStatusComplete ||
+		row.ConfirmationState != workersessions.ConfirmationStateConfirmed {
+		return workersessions.Session{}, "", workersessions.ErrContinuationExecutionUnavailable
+	}
+	source = workersessions.Session{ID: row.WorkerSessionID, State: row.State,
+		PredecessorWorkerSessionID: row.PredecessorWorkerSessionID, SuccessorWorkerSessionID: row.SuccessorWorkerSessionID}
+	if row.ProviderSessionAvailable {
+		source.ProviderSessionAssociation = &workersessions.ProviderSessionAssociation{WorkerSessionID: row.WorkerSessionID,
+			DispatchID: row.AttemptID, AttemptID: row.AttemptID, TurnID: row.TurnID, Reference: row.ProviderSession}
+	}
+	return source, row.FactorySessionID, nil
+}
+
 // Historical input is detached data. Read it outside the registry lock and
 // select this host's execution services only when reserving a new successor.
 func (r *registry) readArchivedContinuationSource(req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
+	return r.readArchivedContinuationSourceContext(r.serverOwnedContext(), req)
+}
+
+func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
 	r.mu.RLock()
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	source, exists := r.sessions[address]
@@ -27,26 +157,14 @@ func (r *registry) readArchivedContinuationSource(req workersessions.ContinueReq
 	if (exists && !liveFactory) || replay || r.logs == nil {
 		return nil, nil
 	}
-	ctx := r.serverOwnedContext()
 	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
 	if !supported {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
 	summary, err := reader.LookupWorkerSessionSummary(ctx, req.SourceWorkerSessionID)
-	capture := summary.Capture
-	page := recordings.WorkerCapturedActivityPage{
-		Catalog: capture.Catalog, Opening: capture.Opening, Terminal: capture.Terminal,
-		Health: capture.Health, SuccessorWorkerSessionID: capture.SuccessorWorkerSessionID,
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, workersessions.ErrContinuationSourceNotFound
-	}
-	if err != nil || page.Catalog.WorkerSessionID != req.SourceWorkerSessionID ||
-		page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil {
-		return nil, workersessions.ErrContinuationExecutionUnavailable
-	}
-	if req.FactorySessionID != "" && page.Catalog.FactorySessionID != req.FactorySessionID {
-		return nil, workersessions.ErrContinuationSourceNotFound
+	page, err := archivedContinuationPage(req, summary, err)
+	if err != nil {
+		return nil, err
 	}
 	target, err := archivedContinuationTarget(page, req.SourceWorkerSessionID)
 	if err != nil {
@@ -59,6 +177,22 @@ func (r *registry) readArchivedContinuationSource(req workersessions.ContinueReq
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
 	return archivedContinuationSnapshot(page, target, captured)
+}
+
+func archivedContinuationPage(req workersessions.ContinueRequest, summary recordings.WorkerCapturedSummary, lookupErr error) (recordings.WorkerCapturedActivityPage, error) {
+	capture := summary.Capture
+	page := recordings.WorkerCapturedActivityPage{Catalog: capture.Catalog, Opening: capture.Opening, Terminal: capture.Terminal,
+		Health: capture.Health, SuccessorWorkerSessionID: capture.SuccessorWorkerSessionID}
+	if errors.Is(lookupErr, os.ErrNotExist) {
+		return page, workersessions.ErrContinuationSourceNotFound
+	}
+	if lookupErr != nil || page.Catalog.WorkerSessionID != req.SourceWorkerSessionID || page.Health != recordings.WorkerRecordingStatusComplete || page.Terminal == nil {
+		return page, workersessions.ErrContinuationExecutionUnavailable
+	}
+	if req.FactorySessionID != "" && page.Catalog.FactorySessionID != req.FactorySessionID {
+		return page, workersessions.ErrContinuationSourceNotFound
+	}
+	return page, nil
 }
 
 func archivedContinuationTarget(page recordings.WorkerCapturedActivityPage, sourceID string) (recordings.WorkerControlTarget, error) {

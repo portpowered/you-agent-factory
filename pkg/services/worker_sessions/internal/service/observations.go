@@ -150,9 +150,9 @@ func (r *registry) projectObservationList(ctx context.Context, ids []string) ([]
 		if err := projected.Validate(); err != nil {
 			return nil, err
 		}
-		observations = append(observations, projected)
+		observations = append(observations, r.withContinuationCapability(ctx, projected))
 	}
-	return observations, nil
+	return observations, observationContextError(ctx)
 }
 
 func observationListNextToken(allIDs, pageIDs []string) string {
@@ -358,11 +358,15 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 				projected.TokenUsage = captured
 			}
 			projected, err = r.completeListObservation(ctx, optionalCtx, projected)
+			projected = r.withContinuationCapability(ctx, projected)
 		}
 		if err != nil && !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 			return workersessions.ListObservationsResult{}, err
 		}
 		observations = append(observations, projected)
+	}
+	if err := observationContextError(ctx); err != nil {
+		return workersessions.ListObservationsResult{}, err
 	}
 	attemptComparisons := sortObservationAttempts(observations)
 	r.logger.Debug(
@@ -476,7 +480,11 @@ func (r *registry) projectObservation(ctx context.Context, id string, factorySes
 	if r.publicationFor(ownerID) != nil {
 		projected.TokenUsage = r.capturedObservationUsage(ctx, ownerID)
 	}
-	return r.completeObservation(ctx, projected)
+	projected, err = r.completeObservation(ctx, projected)
+	if err != nil {
+		return projected, err
+	}
+	return r.withContinuationCapability(ctx, projected), observationContextError(ctx)
 }
 
 func (r *registry) completeObservation(ctx context.Context, projected workersessions.Observation) (workersessions.Observation, error) {

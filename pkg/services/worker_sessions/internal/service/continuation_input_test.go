@@ -884,3 +884,82 @@ func TestContinuationHeadRejectsUnsafeChainsBeforeReservation(t *testing.T) {
 		})
 	}
 }
+
+// The registry owns capability policy; provider availability remains a controlled
+// peer. These reads must not reserve, launch, or restore supervision.
+func TestContinuationObservationCapabilityUsesValidatedHeadAndCurrentReference(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"available", "missing", "mismatch", "not-injected", "active", "cycle", "reverse", "missing-head", "reserved", "stopping", "stale-reference", "advanced-head"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			source := r.sessions[req.SourceWorkerSessionID]
+			source.SuccessorWorkerSessionID = "head"
+			head := source.Clone()
+			head.ID = "head"
+			head.PredecessorWorkerSessionID = source.ID
+			head.SuccessorWorkerSessionID = ""
+			head.ProviderSessionAssociation.WorkerSessionID = head.ID
+			r.sessions[source.ID], r.sessions[head.ID] = source, head
+			r.supervisions[head.ID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+			var wantHead string
+			wantRevivable := cell == "available"
+			r.inspection = continuationInspectionFake{inspect: func(got providersessions.InspectRequest) (providersessions.InspectResult, error) {
+				if _, err := r.Get(got.Context, workersessions.GetRequest{ID: head.ID}); err != nil {
+					t.Error(err)
+				}
+				if cell == "stale-reference" || cell == "advanced-head" {
+					r.mu.Lock()
+					changed := r.sessions[head.ID].Clone()
+					if cell == "stale-reference" {
+						changed.ProviderSessionAssociation.Reference.ID = "changed"
+					} else {
+						changed.SuccessorWorkerSessionID = "new-head"
+					}
+					r.sessions[head.ID] = changed
+					r.mu.Unlock()
+				}
+				return continuationInspectionCellResult(cell, got)
+			}}
+			wantHead = configureContinuationObservationCell(cell, r, source, head)
+			observed := r.withContinuationCapability(t.Context(), workersessions.Observation{WorkerSessionID: source.ID, State: source.State})
+			if observed.Revivable != wantRevivable || observed.ContinuationHeadWorkerSessionID != wantHead {
+				t.Fatalf("capability = revivable %v, head %q; want %v, %q", observed.Revivable, observed.ContinuationHeadWorkerSessionID, wantRevivable, wantHead)
+			}
+			if len(r.continueReplays) != 0 || r.activeStarts != 0 || len(r.sessions) != 2 && cell != "missing-head" {
+				t.Fatal("capability read acquired execution authority")
+			}
+		})
+	}
+}
+
+func configureContinuationObservationCell(cell string, r *registry, source, head workersessions.Session) string {
+	wantHead := head.ID
+	switch cell {
+	case "not-injected":
+		r.inspection = nil
+	case "active":
+		head.State = workersessions.StateRunning
+		r.sessions[head.ID] = head
+	case "cycle":
+		head.SuccessorWorkerSessionID = source.ID
+		r.sessions[head.ID] = head
+		wantHead = ""
+	case "reverse":
+		head.PredecessorWorkerSessionID = "foreign"
+		r.sessions[head.ID] = head
+		wantHead = ""
+	case "missing-head":
+		delete(r.sessions, head.ID)
+		wantHead = ""
+	case "reserved":
+		r.continuationSources[head.ID] = "competing"
+	case "stopping":
+		r.stopping = true
+	case "stale-reference", "advanced-head":
+		wantHead = ""
+	}
+
+	return wantHead
+}

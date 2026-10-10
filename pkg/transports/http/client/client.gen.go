@@ -9243,6 +9243,9 @@ type WorkerSessionObservation struct {
 	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
 	ConfirmationState ConfirmationState `json:"confirmationState"`
 
+	// ContinuationHeadWorkerSessionId Newest validated Worker Session in this continuation chain. Omitted when the chain cannot be resolved.
+	ContinuationHeadWorkerSessionId *string `json:"continuationHeadWorkerSessionId,omitempty"`
+
 	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
 	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
@@ -9276,9 +9279,12 @@ type WorkerSessionObservation struct {
 	RecordingHealth *WorkerSessionObservationRecordingHealth `json:"recordingHealth,omitempty"`
 
 	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
-	RecordingHealthReason *string                       `json:"recordingHealthReason,omitempty"`
-	StartedAt             *time.Time                    `json:"startedAt"`
-	State                 WorkerSessionObservationState `json:"state"`
+	RecordingHealthReason *string `json:"recordingHealthReason,omitempty"`
+
+	// Revivable Whether the validated continuation head can currently admit a direct successor using an available exact provider reference.
+	Revivable *bool                         `json:"revivable,omitempty"`
+	StartedAt *time.Time                    `json:"startedAt"`
+	State     WorkerSessionObservationState `json:"state"`
 
 	// SuccessorWorkerSessionId Successor admitted from this session by continue or interrupt, when known.
 	SuccessorWorkerSessionId *string `json:"successorWorkerSessionId,omitempty"`

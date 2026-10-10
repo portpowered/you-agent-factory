@@ -344,10 +344,14 @@ func (r *registry) inspectContinuationReference(ctx context.Context, reference p
 // must use current policy and already negotiated facts before recording input
 // or opening a successor, including when the source came from durable capture.
 func (r *registry) validateContinuationSupportLocked(reference providers.SessionRef) error {
+	return r.validateContinuationSupport(controlContext(r.lifecycleCtx), reference)
+}
+
+func (r *registry) validateContinuationSupport(ctx context.Context, reference providers.SessionRef) error {
 	if r.continuationSupport == nil {
 		return nil
 	}
-	supported, err := r.continuationSupport.SupportsContinuation(controlContext(r.lifecycleCtx), reference)
+	supported, err := r.continuationSupport.SupportsContinuation(ctx, reference)
 	if err != nil {
 		return fmt.Errorf("%w: %w", workersessions.ErrContinuationProviderSessionInvalid, err)
 	}

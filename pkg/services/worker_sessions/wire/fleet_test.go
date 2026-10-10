@@ -1004,5 +1004,5 @@ func (source *fleetObservationSource) inventorySnapshot() []workersessions.Obser
 // These fixtures exercise the omitted-selector compatibility path with an older
 // injected writer that has no durable read capability.
 func newLegacyFleetFixture(catalog ObservationServiceCatalog) *FleetObservationService {
-	return NewFleetObservationService(catalog, nil, platformclock.Real{}, logging.NoopLogger{}, &HistorySnapshotBudget{Entropy: rand.Reader})
+	return NewFleetObservationService(catalog, nil, platformclock.Real{}, logging.NoopLogger{}, &HistorySnapshotBudget{Entropy: rand.Reader}, nil)
 }

@@ -432,6 +432,7 @@ func TestContinuationHeadSurvivesRepeatedContinuationAndHostRestart(t *testing.T
 		t.Fatalf("head response lost resolved lineage: %+v", second)
 	}
 	awaitContinuationRestartLogs(t, first, home, dir, "head-second-successor")
+	assertContinuationHeadCapability(t, first, home, dir, "head-second-successor")
 	if err := first.command.stop(); err != nil {
 		t.Fatal(err)
 	}
@@ -439,6 +440,7 @@ func TestContinuationHeadSurvivesRepeatedContinuationAndHostRestart(t *testing.T
 		t.Fatal(err)
 	}
 	fresh := startContinuationRestartHost(t, root, host, home, route)
+	assertContinuationHeadCapability(t, fresh, home, dir, "head-second-successor")
 	replay := executeHeadRestartCLI(t, fresh, home, dir, headArgs...)
 	if replay.SourceWorkerSessionID != second.SourceWorkerSessionID || runner.CallCount() != 3 {
 		t.Fatalf("durable retry advanced head or repeated launch: %+v calls=%d", replay, runner.CallCount())
@@ -448,6 +450,7 @@ func TestContinuationHeadSurvivesRepeatedContinuationAndHostRestart(t *testing.T
 		t.Fatalf("restart did not resolve newest head: %+v calls=%d", third, runner.CallCount())
 	}
 	awaitContinuationRestartLogs(t, fresh, home, dir, "head-third-successor")
+	assertContinuationHeadCapability(t, fresh, home, dir, "head-third-successor")
 	assertOlderHeadRequestReplay(t, fresh, runner, home, dir, headArgs, second)
 	assertHeadContinuationExecution(t, runner, dir)
 }
@@ -845,4 +848,33 @@ func assertUnsupportedTerminalContinuation(t *testing.T, scenario *invokeContinu
 	if runner.CallCount() != 2 {
 		t.Fatalf("terminal policy refusal admitted provider: calls=%d", runner.CallCount())
 	}
+}
+
+// CLI/HTTP parity observes the durable original address after chain advancement
+// and process reconstruction. Metadata reads must never launch a provider.
+func assertContinuationHeadCapability(t *testing.T, host invokeContinueStartedProcess, home, dir, head string) {
+	t.Helper()
+	for _, flags := range [][]string{nil, {"--remote", "--server", host.baseURL}} {
+		args := append([]string{"you", "--json", "--server", host.baseURL, "worker-sessions", "show", "--worker-session-id", "head-source"}, flags...)
+		request := support.FakeInputs(t.Context(), args)
+		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+		if err := host.process.Execute(request.Input); err != nil {
+			t.Fatalf("head observation: %v %s %s", err, request.Stdout(), request.Stderr())
+		}
+		var row factoryapi.WorkerSessionObservation
+		decodeDirectWorkerSessionResult(t, request.Stdout(), &row)
+		if row.Revivable == nil || !*row.Revivable || row.ContinuationHeadWorkerSessionId == nil || *row.ContinuationHeadWorkerSessionId != head {
+			t.Fatalf("head capability lost after continuation/restart: %+v", row)
+		}
+	}
+	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.baseURL+"/worker-sessions?history=archived")
+	for _, row := range rows.Sessions {
+		if row.WorkerSessionId == "head-source" {
+			if row.Revivable == nil || !*row.Revivable || row.ContinuationHeadWorkerSessionId == nil || *row.ContinuationHeadWorkerSessionId != head {
+				t.Fatalf("archived list capability disagrees with show: %+v", row)
+			}
+			return
+		}
+	}
+	t.Fatal("archived list omitted original address")
 }
