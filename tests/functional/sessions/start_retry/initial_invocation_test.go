@@ -772,8 +772,21 @@ func assertSelectedHostedLegacyReplay(t *testing.T, sessions factorysessions.Ser
 	}
 	startInitialOpeningSession(t, sessions, request)
 	replayed := initialOpeningHistory(t, sessions, request.SessionID)
-	if len(replayed.History) < len(history.History) {
-		t.Fatalf("hosted replay lost selected history: got=%d want>=%d", len(replayed.History), len(history.History))
+	// Host readiness precedes replay completion. In particular the dispatch
+	// result wakes observers before its following canonical relocation. Join
+	// that retained/live cut rather than asserting a readiness-time count.
+	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
+	defer cancel()
+	for len(replayed.History) < len(history.History) {
+		select {
+		case event, ok := <-replayed.Events:
+			if !ok {
+				t.Fatal("hosted replay closed before restoring selected history")
+			}
+			replayed.History = append(replayed.History, event)
+		case <-ctx.Done():
+			t.Fatalf("hosted replay lost selected history: got=%d want>=%d: %v", len(replayed.History), len(history.History), ctx.Err())
+		}
 	}
 	for i, event := range history.History {
 		if replayed.History[i].Id != event.Id || replayed.History[i].Type != event.Type {
