@@ -21,3 +21,9 @@ type Service interface {
 	QueryDispatchesCanonical(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
 	SubscribeResponsesCanonical(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
 }
+
+// RecordingWriter is supported by the real durable owner. Synthetic owners
+// retain canonical execution without pretending to export durable recordings.
+type RecordingWriter interface {
+	WriteRecording(context.Context, string, string) error
+}

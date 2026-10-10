@@ -133,7 +133,7 @@ func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.R
 	}
 	attachInvocationScheduleFactory(ctx, a.automationService, instance)
 	result.Lifecycle = a.instanceHost.Scope(clock)
-	result.Sidecars = a.sidecars.Scope(request.Runtime.Mode == factorydefinitions.RuntimeModeService && !recovery.CheckpointContinuation)
+	result.Sidecars = a.sidecars.Scope(request.Runtime.Mode == factorydefinitions.RuntimeModeService && !recovery.CheckpointContinuation, request.Inputs.Recordings.ReplayPath != "")
 	return result, nil
 }
 

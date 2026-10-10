@@ -3,8 +3,10 @@ package factorysessionexecution
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -911,6 +913,76 @@ func assertCurrentPortableRecordingExport(t *testing.T, encoded []byte) {
 	if portable.WorkerHistory == nil || portable.WorkerHistory.Availability != recordings.PortableRecordingWorkerHistoryUnavailable ||
 		portable.WorkerHistory.Reason != recordings.PortableRecordingWorkerHistoryReasonNotCaptured {
 		t.Fatalf("recording Worker history = %#v, want explicit unavailable outcome", portable.WorkerHistory)
+	}
+}
+
+// The persisted envelope belongs to this owner contract, while the functional
+// journey observes identity, outcome, artifacts and ordered history via replay.
+func TestJavaScriptRuntimeServiceWriteRecordingPreservesChildArtifactEnvelope(t *testing.T) {
+	t.Parallel()
+	for _, extension := range []string{"json", "jsonl"} {
+		t.Run(extension, func(t *testing.T) {
+			t.Parallel()
+			const id = "dur-sess-1234567890abcdef1234567890abcdef"
+			at := time.Date(2026, 7, 12, 16, 30, 0, 0, time.UTC)
+			output := map[string]any{"text": "native-recorded-result", "answer": map[string]any{"count": 2}}
+			records := []factory.JavaScriptRuntimeRecord{{Kind: factory.JavaScriptRecordKindChildDispatch, ChildDispatch: &factory.JavaScriptChildDispatchRecord{
+				DispatchID: "dispatch-1", Status: factory.JavaScriptChildDispatchStatusCompleted,
+				ArtifactRef: factory.FormatArtifactURI(id, "child-artifact-1"), Output: output,
+			}}}
+			projection := ProjectRuntimeExecutionRecords(id, records, at)
+			content, err := json.Marshal(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantHash := fmt.Sprintf("sha256:%x", sha256.Sum256(content))
+			if len(projection.Artifacts) != 1 || projection.Artifacts[0].ContentHash != wantHash || projection.Artifacts[0].SizeBytes != int64(len(content)) {
+				t.Fatalf("child artifact content facts: %#v", projection.Artifacts)
+			}
+			service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+			session := SessionReadResult{SessionID: id, Status: LifecycleStatusSucceeded, OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+				ResolvedSource: ResolvedSource{SourceRef: "workflow/child.js"}, SourceHash: "sha256:" + strings.Repeat("1", 64), Policy: PolicyProjection{EffectiveHash: "sha256:" + strings.Repeat("2", 64)}}
+			result := ResultReadResult{SessionID: id, ResultStatus: ResultStatusFinal, Mode: ResultModeFinal, PrimaryResult: content, ArtifactIDs: []string{"child-artifact-1"}}
+			service.sessions[id] = &runtimeSessionState{session: session, result: result, artifacts: projection.Artifacts, events: BuildCanonicalRuntimeSessionEvents(session, result)}
+			path := filepath.Join(t.TempDir(), "native."+extension)
+			if err := service.WriteRecording(t.Context(), id, path); err != nil {
+				t.Fatal(err)
+			}
+			encoded, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			portable, err := recordings.DecodePortableRecording(bytes.NewReader(encoded))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertChildRecordingEnvelope(t, portable, id, content, wantHash)
+		})
+	}
+}
+
+func assertChildRecordingEnvelope(t *testing.T, portable recordings.PortableRecording, id string, content []byte, wantHash string) {
+	t.Helper()
+	if portable.Session.ID != id || portable.Session.Status != "SUCCEEDED" || portable.Result == nil || len(portable.Events) == 0 {
+		t.Fatalf("terminal envelope lost result: %#v", portable)
+	}
+	var gotResult, wantResult any
+	if err := json.Unmarshal(portable.Result.PrimaryResult, &gotResult); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(content, &wantResult); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotResult, wantResult) {
+		t.Fatalf("envelope result = %#v, want %#v", gotResult, wantResult)
+	}
+	if len(portable.Artifacts) != 1 || portable.Artifacts[0].ID != "child-artifact-1" || portable.Artifacts[0].ContentHash != wantHash || portable.Artifacts[0].SizeBytes != int64(len(content)) {
+		t.Fatalf("envelope lost child artifact identity/content: %#v", portable.Artifacts)
+	}
+	for index := 1; index < len(portable.Events); index++ {
+		if portable.Events[index].Sequence <= portable.Events[index-1].Sequence {
+			t.Fatal("envelope lost event order")
+		}
 	}
 }
 

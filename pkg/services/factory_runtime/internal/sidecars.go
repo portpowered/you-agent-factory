@@ -21,9 +21,10 @@ import (
 // RuntimeSidecars supplies metrics, input-listener and automation behavior.
 // Runtime handles own scoped state; Initializer decides when to start it.
 type RuntimeSidecars struct {
-	automation   automations.Service
-	enabled      bool
-	metricsClock platformclock.TimerSource
+	automation       automations.Service
+	enabled          bool
+	metricsClock     platformclock.TimerSource
+	historicalReplay bool
 }
 
 // runtimeAutomationService is the optional runtime-owned capability set
@@ -82,6 +83,7 @@ func PreseedRuntimeInputs(ctx context.Context, automation automations.Service, b
 type SidecarOpening struct {
 	foreground RuntimeSidecars
 	service    RuntimeSidecars
+	historical RuntimeSidecars
 }
 
 func NewSidecarOpening(
@@ -91,10 +93,14 @@ func NewSidecarOpening(
 	return &SidecarOpening{
 		foreground: RuntimeSidecars{automation: automation, metricsClock: metricsClock},
 		service:    RuntimeSidecars{automation: automation, enabled: true, metricsClock: metricsClock},
+		historical: RuntimeSidecars{automation: automation, metricsClock: metricsClock, historicalReplay: true},
 	}
 }
 
-func (s *SidecarOpening) Scope(serviceMode bool) factory.RuntimeSidecars {
+func (s *SidecarOpening) Scope(serviceMode, historicalReplay bool) factory.RuntimeSidecars {
+	if historicalReplay {
+		return &s.historical
+	}
 	if serviceMode {
 		return &s.service
 	}
@@ -105,6 +111,9 @@ func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeR
 	bundle, _ := instance.(*factoryhost.Bundle)
 	if instance != nil && bundle == nil {
 		return fmt.Errorf("factory runtime service requires a built runtime instance")
+	}
+	if s.historicalReplay {
+		return nil
 	}
 	if lifecycle, ok := s.automation.(runtimeAutomationLifecycle); ok {
 		if _, err := lifecycle.ActivateRuntime(ctx, runtimeActivationRequest(bundle, s.enabled)); err != nil {
@@ -120,7 +129,6 @@ func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeR
 	return PreseedRuntimeInputs(ctx, s.automation, bundle)
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) error {
 	handle, _ := hosted.(*factoryhost.Handle)
 	if handle == nil || handle.Bundle == nil {
@@ -134,15 +142,33 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) 
 
 	sidecarCtx, cancel := context.WithCancel(ctx)
 	handle.SidecarCancel = cancel
+	if !s.historicalReplay {
+		if err := s.startAdmission(sidecarCtx, handle, cancel); err != nil {
+			return err
+		}
+	}
+	// Start the observer after schedule recovery has finished. Recovery may
+	// replace handle.Bundle.Factory, and the observer reads that field from its
+	// goroutine; starting it earlier creates a startup data race.
+	handle.Sidecars.Add(1)
+	go func() {
+		defer handle.Sidecars.Done()
+		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle, s.metricsClock)
+	}()
+	return nil
+}
+
+// startAdmission activates live inputs and schedules for this runtime only.
+func (s *RuntimeSidecars) startAdmission(sidecarCtx context.Context, handle *factoryhost.Handle, cancel context.CancelFunc) error {
 	lifecycle, lifecycleActive := s.automation.(runtimeAutomationLifecycle)
 	var runtimeStarter runtimeAutomationStarter
 	if lifecycleActive {
 		if _, err := lifecycle.ActivateRuntime(sidecarCtx, runtimeActivationRequest(handle.Bundle, s.enabled)); err != nil {
-			return s.failStart(handle, cancel, fmt.Errorf("activate automation runtime for Factory Session %q (Runtime %q): %w", handle.Bundle.FactorySessionID, handle.Bundle.RuntimeInstanceID, err))
+			return s.failStart(sidecarCtx, handle, cancel, fmt.Errorf("activate automation runtime for Factory Session %q (Runtime %q): %w", handle.Bundle.FactorySessionID, handle.Bundle.RuntimeInstanceID, err))
 		}
 		starter, ok := s.automation.(runtimeAutomationStarter)
 		if !ok {
-			return s.failStart(handle, cancel, fmt.Errorf("automations runtime starter is required"))
+			return s.failStart(sidecarCtx, handle, cancel, fmt.Errorf("automations runtime starter is required"))
 		}
 		runtimeStarter = starter
 	} else if runtimeAutomation, ok := s.automation.(runtimeAutomationService); ok {
@@ -156,10 +182,53 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) 
 			}()
 		}
 	}
+	if err := s.recoverSchedules(sidecarCtx, handle); err != nil {
+		return s.failStart(sidecarCtx, handle, cancel, err)
+	}
+	if runtimeStarter != nil {
+		if err := runtimeStarter.StartRuntime(sidecarCtx, handle.Bundle.RuntimeInstanceID); err != nil {
+			return s.failStart(sidecarCtx, handle, cancel, fmt.Errorf("start automation runtime: %w", err))
+		}
+	}
+
+	if s.enabled && !lifecycleActive {
+		if err := s.startLegacySchedulers(sidecarCtx, handle); err != nil {
+			return s.failStart(sidecarCtx, handle, cancel, err)
+		}
+	}
+	return nil
+}
+
+func (s *RuntimeSidecars) startLegacySchedulers(sidecarCtx context.Context, handle *factoryhost.Handle) error {
+	runtimeAutomation, ok := s.automation.(runtimeAutomationService)
+	if !ok {
+		return fmt.Errorf("automation service is required")
+	}
+	runtimeCfg := handle.Bundle.RuntimeCfg
+	if runtimeCfg == nil {
+		return fmt.Errorf("runtime config is required")
+	}
+	if err := runtimeAutomation.StartSchedulerSidecarsForRuntime(
+		sidecarCtx,
+		&handle.Sidecars,
+		runtimeCfg.FactoryDir(),
+		runtimeCfg.FactoryConfig(),
+		runtimeCfg,
+		automations.WorkRequestSubmitter(func(ctx context.Context, request work.WorkRequest) error {
+			_, err := handle.Bundle.Factory.SubmitWorkRequest(ctx, request)
+			return err
+		}),
+	); err != nil {
+		return fmt.Errorf("attach automation sidecars: %w", err)
+	}
+	return nil
+}
+
+func (s *RuntimeSidecars) recoverSchedules(sidecarCtx context.Context, handle *factoryhost.Handle) error {
 	if schedules, ok := s.automation.(invocationScheduleService); ok {
 		runtimeCfg := handle.Bundle.RuntimeCfg
 		if runtimeCfg == nil {
-			return s.failStart(handle, cancel, fmt.Errorf("runtime config is required"))
+			return fmt.Errorf("runtime config is required")
 		}
 		var scheduleFactory *invocationScheduleFactory
 		if existing, wrapped := handle.Bundle.Factory.(*invocationScheduleFactory); wrapped {
@@ -175,46 +244,9 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) 
 			handle.Bundle.Factory = scheduleFactory
 		}
 		if err := scheduleFactory.recoverInvocationSchedules(sidecarCtx); err != nil {
-			return s.failStart(handle, cancel, fmt.Errorf("recover invocation schedules: %w", err))
+			return fmt.Errorf("recover invocation schedules: %w", err)
 		}
 	}
-	if runtimeStarter != nil {
-		if err := runtimeStarter.StartRuntime(sidecarCtx, handle.Bundle.RuntimeInstanceID); err != nil {
-			return s.failStart(handle, cancel, fmt.Errorf("start automation runtime: %w", err))
-		}
-	}
-
-	if s.enabled && !lifecycleActive {
-		runtimeAutomation, ok := s.automation.(runtimeAutomationService)
-		if !ok {
-			return s.failStart(handle, cancel, fmt.Errorf("automation service is required"))
-		}
-		runtimeCfg := handle.Bundle.RuntimeCfg
-		if runtimeCfg == nil {
-			return s.failStart(handle, cancel, fmt.Errorf("runtime config is required"))
-		}
-		if err := runtimeAutomation.StartSchedulerSidecarsForRuntime(
-			sidecarCtx,
-			&handle.Sidecars,
-			runtimeCfg.FactoryDir(),
-			runtimeCfg.FactoryConfig(),
-			runtimeCfg,
-			automations.WorkRequestSubmitter(func(ctx context.Context, request work.WorkRequest) error {
-				_, err := handle.Bundle.Factory.SubmitWorkRequest(ctx, request)
-				return err
-			}),
-		); err != nil {
-			return s.failStart(handle, cancel, fmt.Errorf("attach automation sidecars: %w", err))
-		}
-	}
-	// Start the observer after schedule recovery has finished. Recovery may
-	// replace handle.Bundle.Factory, and the observer reads that field from its
-	// goroutine; starting it earlier creates a startup data race.
-	handle.Sidecars.Add(1)
-	go func() {
-		defer handle.Sidecars.Done()
-		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle, s.metricsClock)
-	}()
 	return nil
 }
 
@@ -298,11 +330,11 @@ func validStatesForBundle(bundle *factoryhost.Bundle) map[string]map[string]bool
 	return state.ValidStatesByType(bundle.Net.WorkTypes)
 }
 
-func (s *RuntimeSidecars) failStart(handle *factoryhost.Handle, cancel context.CancelFunc, err error) error {
+func (s *RuntimeSidecars) failStart(ctx context.Context, handle *factoryhost.Handle, cancel context.CancelFunc, err error) error {
 	cancel()
 	handle.Sidecars.Wait()
 	if lifecycle, ok := s.automation.(runtimeAutomationLifecycle); ok && handle != nil && handle.Bundle != nil {
-		_, _ = lifecycle.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{
+		_, _ = lifecycle.DeactivateRuntime(context.WithoutCancel(ctx), automations.RuntimeDeactivationRequest{
 			RuntimeID: handle.Bundle.RuntimeInstanceID,
 		})
 	}
@@ -312,7 +344,7 @@ func (s *RuntimeSidecars) failStart(handle *factoryhost.Handle, cancel context.C
 
 func (s *RuntimeSidecars) Stop(hosted factory.RuntimeRun) {
 	handle, _ := hosted.(*factoryhost.Handle)
-	if handle != nil && handle.Bundle != nil {
+	if !s.historicalReplay && handle != nil && handle.Bundle != nil {
 		if lifecycle, ok := s.automation.(runtimeAutomationLifecycle); ok {
 			if _, err := lifecycle.DeactivateRuntime(context.Background(), automations.RuntimeDeactivationRequest{
 				RuntimeID: handle.Bundle.RuntimeInstanceID,

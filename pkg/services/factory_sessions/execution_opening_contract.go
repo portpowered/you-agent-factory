@@ -14,4 +14,5 @@ type DirectJavaScriptRunRequest struct {
 	JSONOutput         bool
 	Host               *RuntimeHostRequest
 	ScopeID            OpeningScopeID
+	RecordPath         string
 }
