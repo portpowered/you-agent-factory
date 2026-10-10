@@ -131,7 +131,8 @@ func (s *Service) MoveWorkAndRead(
 }
 
 func (s *Service) readSnapshot(ctx context.Context, sessionID string) (work.ReadSnapshot, error) {
-	if adapter, err := s.tryResolveSession(sessionID); err == nil && adapter != nil {
+	adapter, resolveErr := s.tryResolveSession(sessionID)
+	if resolveErr == nil && adapter != nil {
 		snapshot, err := adapter.ReadWorkSnapshot(ctx)
 		if err != nil {
 			return work.ReadSnapshot{}, fmt.Errorf("read Work snapshot: %w", err)
@@ -139,6 +140,9 @@ func (s *Service) readSnapshot(ctx context.Context, sessionID string) (work.Read
 		return snapshot, nil
 	}
 	if s == nil || s.snapshots == nil {
+		if resolveErr != nil {
+			return work.ReadSnapshot{}, resolveErr
+		}
 		return work.ReadSnapshot{}, errors.New("Work state access snapshot reader is required")
 	}
 	snapshot, err := s.snapshots.ReadWorkSnapshot(ctx, sessionID)

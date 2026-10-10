@@ -149,13 +149,14 @@ test("pinned real ACP evidence belongs to backend integration, not functional co
 	const workflow = readFileSync(workflowPath, "utf8");
 	const coverageJob = jobSection(workflow, "backend-coverage");
 	const integrationJob = jobSection(workflow, "backend-integration");
+	const integrationStep = stepSection(integrationJob, "      - name: Run backend integration tests with shared CLI artifact", "      - name: Upload restart characterization evidence");
 
 	assert.doesNotMatch(coverageJob, /INFINITE_YOU_RUN_ACPX_REAL_CLIENT|real-acpx-evidence/);
 	assert.match(integrationJob, /uses: actions\/setup-node@v4/);
 	assert.match(integrationJob, /name: Build shared CLI artifact for compiled integration evidence/);
 	assert.match(integrationJob, /go build -o \.artifacts\/integration\/bin\/you \.\/cmd\/factory/);
 	assert.match(integrationJob, /name: Run backend integration tests with shared CLI artifact/);
-	assert.match(integrationJob, /run: make test-integration/);
+	assert.match(integrationStep, /run: \|\r?\n          make test-work-list-load\r?\n          make test-integration\r?\n/);
 	assert.match(integrationJob, /INFINITE_YOU_PREBUILT_ARTIFACT: \$\{\{ github\.workspace \}\}\/\.artifacts\/integration\/bin\/you/);
 	assert.match(integrationJob, /INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"/);
 	assert.match(integrationJob, /name: Run required runtime metrics session probe/);
