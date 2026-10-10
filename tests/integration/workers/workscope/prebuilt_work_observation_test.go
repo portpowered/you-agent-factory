@@ -272,6 +272,34 @@ func readWorkArtifactEvent(t *testing.T, reader *bufio.Reader, kind factoryapi.F
 	}
 }
 
+type workArtifactLine struct {
+	SchemaVersion string    `json:"schemaVersion"`
+	SessionID     string    `json:"sessionId"`
+	WorkID        string    `json:"workId"`
+	EventID       string    `json:"eventId"`
+	Sequence      int64     `json:"sequence"`
+	EventTime     time.Time `json:"eventTime"`
+	FromState     string    `json:"fromState"`
+	ToState       string    `json:"toState"`
+	Source        string    `json:"source"`
+	Terminal      bool      `json:"terminal"`
+}
+
+func (line workArtifactLine) assertAttribution(t *testing.T, session, work string, previous int64, terminal bool) {
+	t.Helper()
+	if line.SchemaVersion != "you.work.watch.v1" || line.SessionID != session || line.WorkID != work || line.Sequence <= previous || line.EventTime.IsZero() || line.Terminal != terminal || line.Source != "api" {
+		t.Fatalf("NDJSON attribution/order mismatch: %+v", line)
+	}
+}
+
+func (line workArtifactLine) assertCanonicalParity(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	payload, err := event.Payload.AsWorkStateChangeEventPayload()
+	if err != nil || line.EventID != event.Id || line.Sequence != int64(event.Context.Sequence) || line.FromState != payload.FromState || line.ToState != payload.ToState {
+		t.Fatalf("NDJSON/canonical mismatch: %+v event=%+v err=%v", line, event, err)
+	}
+}
+
 func assertWorkArtifactLines(t *testing.T, output, session, work string, events *bufio.Reader) {
 	t.Helper()
 	if !strings.HasSuffix(output, "\n") {
@@ -283,26 +311,13 @@ func assertWorkArtifactLines(t *testing.T, output, session, work string, events 
 	}
 	var previous int64
 	for i, raw := range lines {
-		var line struct {
-			SchemaVersion string    `json:"schemaVersion"`
-			SessionID     string    `json:"sessionId"`
-			WorkID        string    `json:"workId"`
-			EventID       string    `json:"eventId"`
-			Sequence      int64     `json:"sequence"`
-			EventTime     time.Time `json:"eventTime"`
-			FromState     string    `json:"fromState"`
-			ToState       string    `json:"toState"`
-			Source        string    `json:"source"`
-			Terminal      bool      `json:"terminal"`
-		}
+		var line workArtifactLine
 		if err := json.Unmarshal([]byte(raw), &line); err != nil {
 			t.Fatal(err)
 		}
 		event := readWorkArtifactEvent(t, events, factoryapi.FactoryEventTypeWorkStateChange)
-		payload, err := event.Payload.AsWorkStateChangeEventPayload()
-		if err != nil || line.SchemaVersion != "you.work.watch.v1" || line.SessionID != session || line.WorkID != work || line.EventID != event.Id || line.Sequence != int64(event.Context.Sequence) || line.Sequence <= previous || line.EventTime.IsZero() || line.FromState != payload.FromState || line.ToState != payload.ToState || line.Terminal != (i == 1) || line.Source != "api" {
-			t.Fatalf("NDJSON/canonical mismatch: %s event=%+v err=%v", raw, event, err)
-		}
+		line.assertCanonicalParity(t, event)
+		line.assertAttribution(t, session, work, previous, i == 1)
 		previous = line.Sequence
 	}
 	t.Logf("compiled live/retained stdout=%s stderr=empty", output)

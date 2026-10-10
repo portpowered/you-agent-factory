@@ -356,6 +356,11 @@ func (s *liveObservation) assertCanonicalParity(t *testing.T, lines []workWatchL
 	if index != len(lines) {
 		t.Fatal("watch emitted a noncanonical transition")
 	}
+	s.assertTerminalWorkStates(t, lines)
+}
+
+func (s *liveObservation) assertTerminalWorkStates(t *testing.T, lines []workWatchLine) {
+	t.Helper()
 	for _, line := range lines {
 		if !line.Terminal {
 			continue
