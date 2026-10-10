@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -53,6 +54,7 @@ type liveObservation struct {
 	cancel           context.CancelFunc
 	response         *http.Response
 	reader           *bufio.Reader
+	gate             *selectedWatchDisconnectGate
 }
 
 func TestWorkWatchLiveProviderObservation(t *testing.T) {
@@ -225,6 +227,7 @@ func attachLiveObservation(t *testing.T, host *selectedWatchHost, session string
 	s.reader = bufio.NewReader(s.response.Body)
 	t.Cleanup(func() { _ = s.response.Body.Close() })
 	gate := newSelectedWatchDisconnectGate(t, host.endpoint, s.session)
+	s.gate = gate
 	input := controlledWatchInput(t, ctx, gate.server.URL, follow, s.out, s.diagnostics)
 	input.Args = []string{"you", "--server", gate.server.URL, "work", "watch"}
 	if session != "~default" {
@@ -539,4 +542,213 @@ func runAutomaticDefaultWatch(t *testing.T, host *selectedWatchHost, command *ob
 		t.Fatalf("retained default differs: live=%s retained=%s", s.out.String(), out.String())
 	}
 	return s.out.String()
+}
+
+func TestWorkWatchLateMixedCohort(t *testing.T) {
+	ensureWatchFixture(t)
+	host := startSelectedWatchHost(t, observationWatchProcess)
+	for _, state := range []string{"complete", "failed", "cancel"} {
+		t.Run("explicit late cohort "+state, func(t *testing.T) {
+			t.Parallel()
+			s := newLiveObservation(t, host, true, false)
+			runLateMixedCohort(t, s, state)
+		})
+	}
+}
+
+func TestWorkWatchLateDefaultMixedCohort(t *testing.T) {
+	ensureWatchFixture(t)
+	dir := support.ScaffoldFactory(t, observationFactoryConfig(true, "review"))
+	command := newHeldObservationCommand(t)
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	t.Cleanup(func() { observationCommands.routes.Delete(filepath.Clean(dir)) })
+	host, _ := startWatchHost(t, observationWatchProcess, dir, "--no-record")
+	s := attachLiveObservation(t, host, "~default", command, false)
+	runLateMixedCohort(t, s, "complete")
+}
+
+func TestWorkWatchResumedMixedCohort(t *testing.T) {
+	ensureWatchFixture(t)
+	dir := support.ScaffoldFactory(t, observationFactoryConfig(true, "complete"))
+	command := newHeldObservationCommand(t)
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	t.Cleanup(func() { observationCommands.routes.Delete(filepath.Clean(dir)) })
+	source := filepath.Join(t.TempDir(), "mixed.json")
+	host, run := startWatchHost(t, observationWatchProcess, dir, "--record", source)
+	output := runAutomaticDefaultWatch(t, host, command)
+	first := decodeWatchLines(t, output)[0].WorkID
+	command = newHeldObservationCommand(t)
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	original := &liveObservation{host: host, session: "~default", command: command}
+	second := original.submit(t, "held-before-public-resume")
+	original.awaitCommand(t)
+	run.Stop(t)
+	// The recovered attempt uses the same injected edge with a new owned gate.
+	command = newHeldObservationCommand(t)
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	resumed, _ := startWatchHost(t, observationWatchProcess, dir, "--resume", source, "--record", filepath.Join(t.TempDir(), "successor.json"))
+	late := attachLiveObservation(t, resumed, "~default", command, false)
+	late.awaitCommand(t)
+	var session factoryapi.FactorySession
+	if err := json.Unmarshal([]byte(resumed.execute(t, "session", "show", "~default")), &session); err != nil || session.Id == "" {
+		t.Fatalf("resolved resumed Session=%+v error=%v", session, err)
+	}
+	explicit := attachLiveObservation(t, resumed, session.Id, command, false)
+	assertHeldMixedReconnect(t, late, first, second)
+	assertHeldMixedReconnect(t, explicit, first, second)
+	close(command.release)
+	late.finish(t)
+	explicit.finish(t)
+	lines := decodeWatchLines(t, late.out.String())
+	if len(lines) != 2 || lines[0].WorkID != first || lines[1].WorkID != second || !lines[1].Terminal || string(lines[1].StructuredResult) != observationOutput(true) {
+		t.Fatalf("mixed recovery terminal/native results=%+v", lines)
+	}
+	late.assertCanonicalParity(t, lines)
+	explicit.assertCanonicalParity(t, decodeWatchLines(t, explicit.out.String()))
+	events := support.GetFactoryEventsForSessionAt(t, resumed.endpoint, "~default")
+	var dispatches int
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			dispatches++
+		}
+	}
+	if dispatches != 2 {
+		t.Fatalf("recovery duplicated completed dispatch: responses=%d", dispatches)
+	}
+}
+
+func newHeldObservationCommand(t *testing.T) *observationCommand {
+	t.Helper()
+	command := &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(true))}
+	return command
+}
+
+type observationFailureRunner struct{}
+
+func (observationFailureRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("authentication failed")}, nil
+}
+
+func holdNextObservationCommand(t *testing.T, s *liveObservation) *observationCommand {
+	t.Helper()
+	var session factoryapi.FactorySession
+	if err := json.Unmarshal([]byte(s.host.execute(t, "session", "show", s.session)), &session); err != nil {
+		t.Fatal(err)
+	}
+	// Select the same immutable provider edge by the public Factory directory.
+	if session.FactoryDir == "" {
+		t.Fatal("session has no Factory directory")
+	}
+	command := newHeldObservationCommand(t)
+	observationCommands.routes.Store(filepath.Clean(session.FactoryDir), command)
+	return command
+}
+
+func runLateMixedCohort(t *testing.T, original *liveObservation, destination string) {
+	t.Helper()
+	first := original.submit(t, "completed-before-attachment")
+	original.awaitCommand(t)
+	close(original.command.release)
+	original.awaitDispatches(t, 1)
+	original.move(t, first, "processing")
+	original.move(t, first, "complete")
+	original.finish(t)
+	original.command = holdNextObservationCommand(t, original)
+	if destination == "failed" {
+		original.command.result = observationFailureRunner{}
+	}
+	second := original.submit(t, "admitted-held-before-attachment")
+	original.awaitCommand(t)
+	late := attachLiveObservation(t, original.host, original.session, original.command, false)
+	assertHeldMixedReconnect(t, late, first, second)
+	if destination == "cancel" {
+		late.cancel()
+		late.watch.Stop(t)
+		if !errors.Is(late.watch.Err(), context.Canceled) {
+			t.Fatalf("mixed observer cancellation=%v", late.watch.Err())
+		}
+		late.watch.AcceptError()
+		assertExpectedWatchCancellationDiagnostic(t, late.diagnostics.String())
+		if len(decodeWatchLines(t, late.out.String())) != 3 {
+			t.Fatal("observer cancellation manufactured a Work terminal line")
+		}
+	}
+	close(original.command.release)
+	if destination != "failed" {
+		original.awaitDispatches(t, 1)
+		original.move(t, second, "processing")
+		original.move(t, second, "complete")
+	}
+	if destination == "cancel" {
+		late = attachLiveObservation(t, original.host, original.session, original.command, false)
+	}
+	late.finish(t)
+	lines := decodeWatchLines(t, late.out.String())
+	if destination != "failed" {
+		assertLiveObservationLines(t, lines, late.session, []string{first, second})
+	} else if len(lines) != 4 || lines[3].WorkID != second || lines[3].ToState != "failed" || !lines[3].Terminal || len(lines[3].StructuredResult) != 0 {
+		t.Fatalf("mixed failed cohort=%+v", lines)
+	}
+	late.assertCanonicalParity(t, lines)
+}
+
+func assertHeldMixedReconnect(t *testing.T, late *liveObservation, first, second string) {
+	t.Helper()
+	// Automatic completion has one transition; manually completed A has three.
+	events := support.GetFactoryEventsForSessionAt(t, late.host.endpoint, late.session)
+	var retainedTransitions int
+	var admissionSequence int
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeWorkStateChange {
+			retainedTransitions++
+		}
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest {
+			admissionSequence = event.Context.Sequence
+		}
+	}
+	waitForLedgerLines(t, late.out, retainedTransitions, "retained completed A")
+	peer := newLiveObservation(t, late.host, true, false)
+	id := peer.submit(t, "useful-peer-while-B-held")
+	peer.awaitCommand(t)
+	close(peer.command.release)
+	peer.awaitDispatches(t, 1)
+	peer.move(t, id, "processing")
+	peer.move(t, id, "complete")
+	peer.finish(t)
+	peerLines := decodeWatchLines(t, peer.out.String())
+	assertLiveObservationLines(t, peerLines, peer.session, []string{id})
+	peer.assertCanonicalParity(t, peerLines)
+	// Reconnection acknowledges consumption of the entire retained prefix.
+	// Early finite completion cannot issue this request while B remains held.
+	late.gate.disconnect()
+	query := late.gate.next(t)
+	events = support.GetFactoryEventsForSessionAt(t, late.host.endpoint, late.session)
+	var admission string
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
+			continue
+		}
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payload.Works != nil {
+			for _, work := range *payload.Works {
+				if work.WorkId != nil && *work.WorkId == second {
+					if work.State != nil {
+						t.Fatalf("expected state-less canonical admission for held Work: %+v", work)
+					}
+					admission = event.Id
+				}
+			}
+		}
+	}
+	sequence, err := strconv.Atoi(query.Get("after_sequence"))
+	if admission == "" || query.Get("after_event_id") == "" || err != nil || sequence < admissionSequence {
+		t.Fatalf("missing admitted cohort cursor: admission=%s reconnect=%v", admission, query)
+	}
+	lines := decodeWatchLines(t, late.out.String())
+	if len(lines) != retainedTransitions || lines[len(lines)-1].WorkID != first || !lines[len(lines)-1].Terminal {
+		t.Fatalf("peer or dispatch contaminated held cohort=%+v", lines)
+	}
 }

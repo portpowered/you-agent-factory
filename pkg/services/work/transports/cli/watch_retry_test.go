@@ -19,10 +19,8 @@ const (
 	watchRetryModelResponseEventID = "factory-event/model-response/2cf2a099-909b-4446-8e8d-1453054e093c/model-request/1"
 )
 
-// Natural dispatch completion changes Work state without emitting an operator
-// WORK_STATE_CHANGE. It must not manufacture a watch transition or establish a
-// finite cohort from a state-less admission. This is distinct from a malformed
-// stream or a reducer rejection; a later disconnect remains an EOF/retry error.
+// Legacy dispatch-only history reserves admission but cannot prove terminal
+// state or manufacture a transition. Disconnect remains an EOF/retry error.
 func TestWatchDispatchOnlyTerminalHistoryHasNoTransitionCohort(t *testing.T) {
 	t.Parallel()
 	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 0,
@@ -50,12 +48,12 @@ func TestWatchDispatchOnlyTerminalHistoryHasNoTransitionCohort(t *testing.T) {
 	if result.completed || !result.retryable || !errors.Is(result.err, io.EOF) || output.Len() != 0 {
 		t.Fatalf("dispatch-only history: completed=%t retryable=%t error=%v output=%q", result.completed, result.retryable, result.err, output.String())
 	}
-	if len(reducer.cohort) != 0 || reducer.Cursor().EventID != response.Id {
+	if len(reducer.cohort) != 1 || reducer.Completed() || reducer.Cursor().EventID != response.Id {
 		t.Fatalf("dispatch-only cohort/cursor=%+v %+v", reducer.cohort, reducer.Cursor())
 	}
 }
 
-func TestWatchReducerDefersWorkRequestsWithoutAuthoritativeState(t *testing.T) {
+func TestWatchReducerReservesWorkRequestsWithoutAuthoritativeState(t *testing.T) {
 	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 1,
 		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
 			WorkTypes: &[]factoryapi.WorkType{{
@@ -81,8 +79,52 @@ func TestWatchReducerDefersWorkRequestsWithoutAuthoritativeState(t *testing.T) {
 	if _, _, completed, err := reducer.Accept(request); err != nil || completed {
 		t.Fatalf("state-less Work request: completed=%t error=%v, want incomplete", completed, err)
 	}
+	if len(reducer.cohort) != 1 || reducer.cohort["work-1"].workTypeName != "task" {
+		t.Fatalf("admitted customer cohort=%+v", reducer.cohort)
+	}
 	if _, emit, completed, err := reducer.Accept(terminal); err != nil || !emit || !completed {
 		t.Fatalf("terminal transition: emit=%t completed=%t error=%v, want emitted completion", emit, completed, err)
+	}
+}
+
+func TestWatchMixedStatelessCohortSurvivesRetainedPrefixAndReconnect(t *testing.T) {
+	t.Parallel()
+	metadata, requestA, _ := watchReconnectSetup(t)
+	terminalA := watchTransitionEvent(t, "terminal-a", 3, "work-1", "ready", "done", true)
+	requestB := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "admitted-b", 4,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{{
+			WorkId: watchStringPtr("work-b"), WorkTypeName: watchStringPtr("task"),
+		}}})
+	reducer := newWatchReducer("mixed-session")
+	var output bytes.Buffer
+	cfg := WatchConfig{Context: context.Background(), Output: &output}
+	first := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{metadata, requestA, terminalA, requestB}, retainedEventCount: 4}
+	result := consumeWatchStream(cfg, reducer, first)
+	if result.completed || !errors.Is(result.err, io.EOF) || !result.retryable || reducer.Completed() {
+		t.Fatalf("mixed retained prefix completed early: %+v", result)
+	}
+	if cursor := reducer.Cursor(); cursor.EventID != requestB.Id || cursor.Sequence != 4 {
+		t.Fatalf("admitted cursor=%+v", cursor)
+	}
+	response := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "result-b", 5,
+		factoryapi.DispatchResponseEventPayload{Outcome: factoryapi.WorkOutcomeAccepted,
+			OutputWork: &[]factoryapi.Work{{WorkId: watchStringPtr("work-b"), StructuredResult: map[string]any{"message": "B"}}}})
+	terminalB := watchTransitionEvent(t, "terminal-b", 6, "work-b", "ready", "done", true)
+	second := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{requestB, response, terminalB}, retainedEventCount: 1}
+	result = consumeWatchStream(cfg, reducer, second)
+	if !result.completed || result.err != nil || !reducer.Completed() {
+		t.Fatalf("resumed mixed completion=%+v", result)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("canonical transitions duplicated/inferred: %s", output.String())
+	}
+	var last watchLine
+	if err := decodeWatchLine(lines[1], &last); err != nil {
+		t.Fatal(err)
+	}
+	if last.EventID != terminalB.Id || last.WorkID != "work-b" || !last.Terminal || !strings.Contains(lines[1], `"structuredResult":{"message":"B"}`) {
+		t.Fatalf("actual terminal/native result=%s", lines[1])
 	}
 }
 

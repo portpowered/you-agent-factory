@@ -44,7 +44,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	fixture := loadProductionLedgerFixture(t)
 	assertProductionLedgerFixture(t, fixture)
 
-	t.Run("CASE-WW-008 finite drains terminal retained history", func(t *testing.T) {
+	t.Run("CASE-WW-008 finite retains unresolved admitted history", func(t *testing.T) {
 		t.Parallel()
 		stream := newProductionLedgerStream(t, fixture.Events)
 		process := workWatchProcess
@@ -53,7 +53,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		inputs := productionLedgerWatchInput(t, stream.URL(), false, stdout, stderr)
 		command := support.StartProcessCommand(t, process, inputs)
 
-		waitForLedgerCommand(t, command, stdout, stderr)
+		waitForMixedProductionLedgerDetach(t, command, stream, stdout, stderr)
 		lines := decodeWatchLines(t, stdout.String())
 		assertProductionFiniteLines(t, lines)
 	})
@@ -68,7 +68,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		inputs := productionLedgerWatchInput(t, stream.URL(), false, stdout, stderr)
 		command := support.StartProcessCommand(t, process, inputs)
 
-		waitForLedgerCommand(t, command, stdout, stderr)
+		waitForMixedProductionLedgerDetach(t, command, stream, stdout, stderr)
 		lines := decodeWatchLines(t, stdout.String())
 		assertProductionFiniteLines(t, lines)
 		var result map[string]any
@@ -109,6 +109,20 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		}
 		support.RequireSafeCLIDiagnostic(t, stderr.String())
 	})
+}
+
+// The recording contains other admitted customer Works with no canonical
+// terminal transition. Its one terminal line cannot complete the whole cohort.
+func waitForMixedProductionLedgerDetach(t *testing.T, command *support.ProcessCommand, stream *productionLedgerStream, stdout, stderr *ledgerOutput) {
+	t.Helper()
+	waitForLedgerSignal(t, stream.historySent, "full mixed production history")
+	waitForLedgerLines(t, stdout, 1, "actual retained terminal line")
+	command.Stop(t)
+	if !errors.Is(command.Err(), context.Canceled) {
+		t.Fatalf("mixed history completed instead of detaching: %v", command.Err())
+	}
+	command.AcceptError()
+	assertExpectedWatchCancellationDiagnostic(t, stderr.String())
 }
 
 func runProductionLedgerFollowCase(t *testing.T, events []factoryapi.FactoryEvent) {
