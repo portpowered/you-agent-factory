@@ -187,28 +187,38 @@ func assertBTRCDispatchRelocations(t *testing.T, events []interfaces.FactoryEven
 		if err := event.DecodePayload(&change); err != nil {
 			t.Fatal(err)
 		}
-		if change.Source != work.WorkStateChangeSourceDispatch || change.FromState != "init" ||
-			change.WorkTypeName != "task" || change.FromPlaceID != "task:init" ||
-			change.ToPlaceID != "task:"+change.ToState || change.TriggerWorkID != nil ||
-			!reflect.DeepEqual(btrcStringSliceValue(event.Context.WorkIDs), []string{change.WorkID}) {
-			t.Fatalf("unexpected dispatch relocation: %#v context=%#v", change, event.Context)
-		}
-		if index == 0 || events[index-1].Type != interfaces.FactoryEventTypeDispatchResponse {
-			t.Fatal("dispatch relocation must follow its result")
-		}
-		var result workerexecution.DispatchResponseEventPayload
-		if err := events[index-1].DecodePayload(&result); err != nil {
-			t.Fatal(err)
-		}
-		if result.OutputWork == nil || len(*result.OutputWork) != 1 ||
-			(*result.OutputWork)[0].WorkID != change.WorkID || (*result.OutputWork)[0].State == nil ||
-			(*result.OutputWork)[0].State.Name != change.ToState {
-			t.Fatalf("relocation does not match dispatch output: change=%#v result=%#v", change, result)
-		}
+		assertBTRCDispatchRelocationPayload(t, event, change)
+		assertBTRCDispatchRelocationResult(t, events, index, change)
 		count++
 	}
 	if count != want {
 		t.Fatalf("dispatch relocations=%d, want %d", count, want)
+	}
+}
+
+func assertBTRCDispatchRelocationPayload(t *testing.T, event interfaces.FactoryEvent, change interfaces.WorkStateChangeEventPayload) {
+	t.Helper()
+	if change.Source != work.WorkStateChangeSourceDispatch || change.FromState != "init" ||
+		change.WorkTypeName != "task" || change.FromPlaceID != "task:init" ||
+		change.ToPlaceID != "task:"+change.ToState || change.TriggerWorkID != nil ||
+		!reflect.DeepEqual(btrcStringSliceValue(event.Context.WorkIDs), []string{change.WorkID}) {
+		t.Fatalf("unexpected dispatch relocation: %#v context=%#v", change, event.Context)
+	}
+}
+
+func assertBTRCDispatchRelocationResult(t *testing.T, events []interfaces.FactoryEvent, index int, change interfaces.WorkStateChangeEventPayload) {
+	t.Helper()
+	if index == 0 || events[index-1].Type != interfaces.FactoryEventTypeDispatchResponse {
+		t.Fatal("dispatch relocation must follow its result")
+	}
+	var result workerexecution.DispatchResponseEventPayload
+	if err := events[index-1].DecodePayload(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.OutputWork == nil || len(*result.OutputWork) != 1 ||
+		(*result.OutputWork)[0].WorkID != change.WorkID || (*result.OutputWork)[0].State == nil ||
+		(*result.OutputWork)[0].State.Name != change.ToState {
+		t.Fatalf("relocation does not match dispatch output: change=%#v result=%#v", change, result)
 	}
 }
 
