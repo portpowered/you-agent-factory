@@ -42,7 +42,8 @@ The `chat-target-catalog` capability set enforces. The analyzer returns
 Report mode remains available to controlled analyzer fixtures, without enabling
 an owner or entering the baseline. Enforced findings and conservative unresolved debt use the shared
 exact `baseline.txt`; stale entries fail and the `baselinegrowth` analyzer rejects
-growth. Other owner classifications remain current-slice work; this one set does not prove repository coverage.
+growth. Other owner classifications remain final-enforcement obligations; this
+checker increment does not prove repository coverage.
 
 ## Bounded typed rules
 
@@ -119,6 +120,12 @@ still selects an optional logger in `events/wire.NewService`, and
 Those sites require an owner delta before strict Events enablement; neither
 domain retention defaults nor per-topic state allocation justify a logger
 fallback or an internal service-construction exception.
+
+The Events prerequisite belongs to `fi-events-strict-construction-20261010`.
+The checker increment can ship independently; final owner classifications,
+terminal inventory reconciliation and repository-wide enforcement still require
+the lead's remaining final-enforcement slice after that prerequisite delivers.
+Neither the increment nor its fixture results satisfy those obligations.
 
 Compiler-invalid historical examples are rejected before lint analysis:
 initialization cycles, ambiguous selectors, recursive aliases, and undefined
