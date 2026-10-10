@@ -87,9 +87,10 @@ func TestHTTPCompletedRoles(t *testing.T) {
 		t.Parallel()
 		testCompletedLiveHTTP(t, baseURL)
 	})
-	t.Run("H05 invalid HTTP admission", func(t *testing.T) {
+	t.Run("H05 invalid admission controls and compatibility", func(t *testing.T) {
 		t.Parallel()
-		testCompletedHTTPValidation(t, baseURL)
+		sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+		testCompletedHTTPValidation(t, sessions, baseURL)
 	})
 	t.Run("H10 H11 overlapping HTTP Work and retained then live responses", func(t *testing.T) {
 		t.Parallel()
@@ -138,6 +139,8 @@ func testCompletedLiveHTTP(t *testing.T, baseURL string) {
 		t.Fatalf("H01: selected Work = %#v", work)
 	}
 	completedHTTPError(t, baseURL+"/factory-sessions/unknown-completed-role", http.StatusNotFound, "NOT_FOUND")
+	completedHTTPError(t, baseURL+"/factory-sessions/unknown-completed-role/status", http.StatusNotFound, "NOT_FOUND")
+	completedHTTPError(t, support.SessionResponseEventsURL(baseURL, "unknown-completed-role"), http.StatusNotFound, "RESPONSE_EVENT_SESSION_NOT_FOUND")
 }
 
 func testCompletedHTTPAuthoringAndControl(t *testing.T, baseURL, selected, projectRoot string) {
@@ -196,13 +199,94 @@ func testCompletedHTTPAuthoringAndControl(t *testing.T, baseURL, selected, proje
 	completedHTTPRequest(t, http.MethodGet, selected+"/status", "", http.StatusOK)
 }
 
-func testCompletedHTTPValidation(t *testing.T, baseURL string) {
+func testCompletedHTTPValidation(t *testing.T, sessions factorysessions.Service, baseURL string) {
 	t.Helper()
 	for _, body := range []string{`{`, `{}`, `{"folderPath":""}`} {
 		data := completedHTTPRequest(t, http.MethodPost, baseURL+"/factory-sessions", body, http.StatusBadRequest)
-		if !strings.Contains(string(data), `"code":"BAD_REQUEST"`) {
-			t.Fatalf("H05: invalid admission = %s", data)
+		assertCompletedHTTPErrorBody(t, data, "BAD_REQUEST")
+		if body != `{` {
+			assertCompletedHTTPValidationTarget(t, data, "folderPath", "factory.session.field.required")
 		}
+	}
+	scenario := newInitialOpeningScenario(t)
+	body, _ := json.Marshal(map[string]any{"folderPath": scenario.candidateDir, "ignoredProbe": "compatibility-secret-sentinel"})
+	for _, mediaType := range []string{"text/plain", "not-a-media-type"} {
+		data, headers := completedHTTPResponse(t, http.MethodPost, baseURL+"/factory-sessions", string(body), mediaType, http.StatusUnsupportedMediaType)
+		assertCompletedHTTPErrorBody(t, data, "UNSUPPORTED_MEDIA_TYPE")
+		if headers.Get("Warning") != "" {
+			t.Fatalf("H05: rejected media type emitted compatibility warning: %v", headers)
+		}
+	}
+	// A supported JSON suffix preserves forward compatibility. The header
+	// names ignored paths only, never their possibly sensitive values.
+	data, headers := completedHTTPResponse(t, http.MethodPost, baseURL+"/factory-sessions", string(body), "application/vnd.factory+json; charset=utf-8", http.StatusOK)
+	if warning := headers.Get("Warning"); warning != `299 - "ignored unknown request fields at $.ignoredProbe"` || strings.Contains(string(data), "compatibility-secret-sentinel") {
+		t.Fatalf("H05: accepted compatibility response = %s, Warning=%q", data, warning)
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(data, &opened); err != nil || opened.Session == nil {
+		t.Fatalf("H05: compatible admission = %s, %v", data, err)
+	}
+	t.Cleanup(func() { closeInitialOpeningSession(t, sessions, opened.Session.Id) })
+	selected := baseURL + "/factory-sessions/" + opened.Session.Id
+	for _, control := range []string{"pause", "resume", "cancel"} {
+		data := completedHTTPRequest(t, http.MethodPost, selected+"/"+control, `{`, http.StatusBadRequest)
+		assertCompletedHTTPErrorBody(t, data, "BAD_REQUEST")
+	}
+	testCompletedHTTPInvalidDefinition(t, selected, baseURL)
+	work := support.GetJSON[factoryapi.ListWorkResponse](t, selected+"/work")
+	if len(work.Results) != 0 {
+		t.Fatalf("H05: invalid controls or definition admitted Work: %#v", work)
+	}
+	completedHTTPRequest(t, http.MethodGet, selected+"/status", "", http.StatusOK)
+}
+
+func testCompletedHTTPInvalidDefinition(t *testing.T, selected, baseURL string) {
+	t.Helper()
+	before := completedHTTPRequest(t, http.MethodGet, selected+"/factory", "", http.StatusOK)
+	var definition factoryapi.Factory
+	if err := json.Unmarshal(before, &definition); err != nil || definition.WorkTypes == nil || len(*definition.WorkTypes) == 0 || definition.Version == nil {
+		t.Fatalf("H05: selected definition = %s, %v", before, err)
+	}
+	duplicate := append(*definition.WorkTypes, (*definition.WorkTypes)[0])
+	definition.WorkTypes = &duplicate
+	// Use a fresh version so validation, rather than the stale-save guard,
+	// rejects this definition and leaves the admitted Session unchanged.
+	definition.Version.Logical++
+	definition.Version.Physical = definition.Version.Physical.Add(time.Nanosecond)
+	body, _ := json.Marshal(map[string]any{"factory": definition})
+	rejected := completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusBadRequest)
+	assertCompletedHTTPValidationTarget(t, rejected, "", "factory.duplicateIdentifier")
+	body, _ = json.Marshal(definition)
+	validated := completedHTTPRequest(t, http.MethodPost, baseURL+"/factory-validations", string(body), http.StatusOK)
+	assertCompletedHTTPValidationTarget(t, validated, "", "factory.duplicateIdentifier")
+	after := completedHTTPRequest(t, http.MethodGet, selected+"/factory", "", http.StatusOK)
+	if string(after) != string(before) {
+		t.Fatalf("H05: rejected definition changed Current Factory: before=%s after=%s", before, after)
+	}
+}
+
+func assertCompletedHTTPValidationTarget(t *testing.T, body []byte, subjectID, code string) {
+	t.Helper()
+	var response struct {
+		Targets []factoryapi.FactoryValidationTarget `json:"targets"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range response.Targets {
+		if target.Code == code && (subjectID == "" || target.Subject.Id == subjectID) {
+			return
+		}
+	}
+	t.Fatalf("H05: response lacks validation target code=%s subject=%s: %s", code, subjectID, body)
+}
+
+func assertCompletedHTTPErrorBody(t *testing.T, body []byte, code string) {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &response); err != nil || string(response.Code) != code {
+		t.Fatalf("HTTP error = %s, %v, want %s", body, err, code)
 	}
 }
 
@@ -238,6 +322,7 @@ func testCompletedDurableHTTP(t *testing.T, process support.Process, server *sup
 	if !strings.Contains(string(read), id) || !strings.Contains(string(read), "SUCCEEDED") {
 		t.Fatalf("H02: durable read = %s", read)
 	}
+	testCompletedDurableHTTPControl(t, selected, id, read)
 	completedHTTPError(t, selected+"/status", http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE")
 	completedHTTPError(t, selected+"/factory", http.StatusInternalServerError, "INTERNAL_ERROR")
 	invoked := completedHTTPRequest(t, http.MethodPost, selected+"/invocations", `{}`, http.StatusInternalServerError)
@@ -260,6 +345,21 @@ func testCompletedDurableHTTP(t *testing.T, process support.Process, server *sup
 	}
 	// Durable host teardown leaves the concurrently hosted live profile usable.
 	completedHTTPRequest(t, http.MethodGet, liveURL+"/factory-sessions", "", http.StatusOK)
+}
+
+func testCompletedDurableHTTPControl(t *testing.T, selected, id string, before []byte) {
+	t.Helper()
+	for _, operation := range []string{"pause", "resume", "cancel", "terminate"} {
+		data := completedHTTPRequest(t, http.MethodPost, selected+"/"+operation, `{}`, http.StatusConflict)
+		var response factoryapi.FactorySessionLifecycleControlResponse
+		if err := json.Unmarshal(data, &response); err != nil || response.SessionId != id || string(response.Operation) != strings.ToUpper(operation) || response.Outcome != "TERMINAL_SESSION" || response.Status != "SUCCEEDED" {
+			t.Fatalf("H02: terminal durable %s = %s, %v", operation, data, err)
+		}
+	}
+	after := completedHTTPRequest(t, http.MethodGet, selected, "", http.StatusOK)
+	if string(after) != string(before) {
+		t.Fatalf("H02: rejected durable control changed completed result: before=%s after=%s", before, after)
+	}
 }
 
 func completedHTTPHostURL(t *testing.T, server *support.ProcessAPIServer, bound <-chan struct{}, command *support.ProcessCommand, inputs *support.CapturedInputs) string {
@@ -493,6 +593,12 @@ func completedHTTPError(t *testing.T, endpoint string, status int, code string) 
 
 func completedHTTPRequest(t *testing.T, method, endpoint, body string, status int) []byte {
 	t.Helper()
+	data, _ := completedHTTPResponse(t, method, endpoint, body, "application/json", status)
+	return data
+}
+
+func completedHTTPResponse(t *testing.T, method, endpoint, body, contentType string, status int) ([]byte, http.Header) {
+	t.Helper()
 	parent := t.Context()
 	if method == http.MethodDelete || strings.HasSuffix(endpoint, "/cancel") {
 		parent = context.WithoutCancel(parent)
@@ -503,7 +609,7 @@ func completedHTTPRequest(t *testing.T, method, endpoint, body string, status in
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Type", contentType)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -513,5 +619,5 @@ func completedHTTPRequest(t *testing.T, method, endpoint, body string, status in
 	if err != nil || response.StatusCode != status {
 		t.Fatalf("%s %s = %d %s, %v, want %d", method, endpoint, response.StatusCode, data, err, status)
 	}
-	return data
+	return data, response.Header.Clone()
 }
