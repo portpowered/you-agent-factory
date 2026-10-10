@@ -38,14 +38,11 @@ func joinedInvocationContextError(ctx context.Context, err error) error {
 }
 
 func joinedInvocationStart(o *Root) time.Time {
-	if o != nil && o.now != nil {
-		return o.now()
-	}
-	return time.Time{}
+	return o.now()
 }
 
 func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
-	if o == nil || o.now == nil || started.IsZero() {
+	if started.IsZero() {
 		return 0
 	}
 	ended := o.now()
@@ -56,9 +53,6 @@ func joinedInvocationElapsed(o *Root, started time.Time) time.Duration {
 }
 
 func nextJoinedInvocationCorrelation(o *Root) string {
-	if o == nil {
-		return "models-invocation-0"
-	}
 	sequence := atomic.AddUint64(&o.correlationSequence, 1)
 	return fmt.Sprintf("models-invocation-%d", sequence)
 }
@@ -84,9 +78,6 @@ func joinedInvocationLifecycleRecord(
 	elapsed time.Duration,
 	err error,
 ) {
-	if o == nil || o.logger == nil {
-		return
-	}
 	fields := []zap.Field{
 		zap.String("stage", boundedLifecycleIdentity(stage)),
 		zap.String("outcome", boundedLifecycleIdentity(outcome)),
@@ -156,9 +147,6 @@ func joinedInvocationRecord(
 	err error,
 	elapsed time.Duration,
 ) {
-	if o == nil || o.logger == nil {
-		return
-	}
 	fields := []zap.Field{
 		zap.String("stage", joinedLifecycleStageTerminal),
 		zap.String("evidence_kind", joinedLifecycleStageTerminal),
@@ -370,7 +358,7 @@ func (o *Root) releaseJoinedLease(
 	scope models.RuntimeScopeRef,
 	lease models.ModelLeaseRef,
 ) error {
-	if o == nil || o.runtimeHost == nil || lease.IsZero() {
+	if lease.IsZero() {
 		return nil
 	}
 	if ctx == nil {
@@ -415,8 +403,7 @@ func (o *Root) effectiveInvocationDefinition(
 	definition := resolved.Definition.Clone()
 	mediaSlot := genericRequestProjectorMediaSlot(request)
 	if mediaSlot == "" ||
-		!localmodels.VideoProjectorRequired(definition.Name, definition.Operations) ||
-		o == nil || o.assets == nil {
+		!localmodels.VideoProjectorRequired(definition.Name, definition.Operations) {
 		return definition, nil
 	}
 	inspection, err := o.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
@@ -424,11 +411,6 @@ func (o *Root) effectiveInvocationDefinition(
 		Name:  definition.Name,
 	})
 	if err != nil {
-		if errors.Is(err, models.ErrUnsupportedOperation) {
-			// Inert/unit collaborators may not expose cache inspection. Preserve
-			// the pre-existing operation path for those compatibility seams.
-			return definition, nil
-		}
 		if !isRemovableCacheAbsence(err) {
 			return models.ModelDefinition{}, err
 		}

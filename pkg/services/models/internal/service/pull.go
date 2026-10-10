@@ -89,9 +89,6 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 		}
 		return models.PullResult{}, err
 	}
-	if o == nil || o.assets == nil || o.runtimeScopes == nil {
-		return models.PullResult{}, catalogErr
-	}
 	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
 	if err != nil {
 		return models.PullResult{}, runtimeScopeError(err)
@@ -119,7 +116,7 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 				resolved,
 				o.backendArtifactPlatform,
 			)
-			if o.resolveBackendArtifact != nil && isJoinedManagedBackend(resolved.Definition.Backend) {
+			if isJoinedManagedBackend(resolved.Definition.Backend) {
 				var resolveErr error
 				configuration.BackendArtifact, resolveErr = o.resolveJoinedBackendArtifact(ctx, configuration, false)
 				if resolveErr != nil {
@@ -314,9 +311,6 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 }
 
 func removeModelCacheStartLog(o *Root, request models.RemoveModelAssetsRequest) {
-	if o == nil || o.logger == nil {
-		return
-	}
 	o.logger.Info(
 		"models cache removal started",
 		zap.String("model_name", strings.TrimSpace(request.Name)),
@@ -332,9 +326,6 @@ func removeModelCacheTerminalLog(
 	err error,
 	elapsed time.Duration,
 ) {
-	if o == nil || o.logger == nil {
-		return
-	}
 	outcome := string(result.Outcome)
 	if err != nil {
 		outcome = "FAILED"
