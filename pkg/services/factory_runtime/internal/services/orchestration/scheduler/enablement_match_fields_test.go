@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorResolves(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{"task:ready": {ID: "task:ready"}},
@@ -35,7 +36,14 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorRes
 		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
 	})
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -45,7 +53,7 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorRes
 }
 
 func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := matchesFieldsPairNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
@@ -53,7 +61,14 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t
 		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "beta"}}},
 	})
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -66,24 +81,38 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t
 }
 
 func TestEnablementEvaluator_MatchesFieldsGuardBlocksMismatchedTwoInputValues(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := matchesFieldsPairNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
 		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "beta"}}},
 	})
 
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	); len(enabled) != 0 {
 		t.Fatalf("enabled transitions = %d, want 0", len(enabled))
 	}
 }
 
 func TestEnablementEvaluator_MatchesFieldsGuardRequiresAllInputsToMatchSourceValue(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := matchesFieldsTripletNet()
 
 	matching := matchesFieldsTripletSnapshot("alpha", "alpha", map[string]string{"asset-alpha": "alpha", "asset-beta": "beta"})
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &matching)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: matching, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -92,7 +121,14 @@ func TestEnablementEvaluator_MatchesFieldsGuardRequiresAllInputsToMatchSourceVal
 	}
 
 	mismatched := matchesFieldsTripletSnapshot("alpha", "alpha", map[string]string{"asset-beta": "beta"})
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &mismatched); len(enabled) != 0 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: mismatched, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	); len(enabled) != 0 {
 		t.Fatalf("enabled transitions with mismatched third input = %d, want 0", len(enabled))
 	}
 }

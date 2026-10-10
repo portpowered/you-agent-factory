@@ -21,15 +21,12 @@ import (
 // it returns an explicit incomplete classification. It is intentionally
 // snapshot-driven and does not retain lifecycle state.
 type TerminationCheckSubsystem struct {
-	state       *state.Net
-	logger      logging.Logger
-	runtimeMode interfaces.RuntimeMode
-	evaluator   *scheduler.EnablementEvaluator
-}
-
-// NewTerminationCheck creates a new TerminationCheckSubsystem.
-func NewTerminationCheck(n *state.Net, logger logging.Logger, mode interfaces.RuntimeMode) *TerminationCheckSubsystem {
-	return NewTerminationCheckWithRuntime(n, logger, mode, nil, time.Now)
+	state         *state.Net
+	logger        logging.Logger
+	runtimeMode   interfaces.RuntimeMode
+	evaluator     scheduler.Enablement
+	now           func() time.Time
+	runtimeConfig interfaces.RuntimeDefinitionLookup
 }
 
 // NewTerminationCheckWithRuntime creates a termination checker using the same
@@ -40,18 +37,18 @@ func NewTerminationCheckWithRuntime(
 	mode interfaces.RuntimeMode,
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
 	now func() time.Time,
+	enablement scheduler.Enablement,
 ) *TerminationCheckSubsystem {
 	if mode == "" {
 		mode = interfaces.RuntimeModeBatch
 	}
-	if now == nil {
-		now = time.Now
-	}
 	return &TerminationCheckSubsystem{
-		state:       n,
-		logger:      logger,
-		runtimeMode: mode,
-		evaluator:   scheduler.NewEnablementEvaluator(logger, now, runtimeConfig),
+		state:         n,
+		logger:        logger,
+		runtimeMode:   mode,
+		evaluator:     enablement,
+		now:           now,
+		runtimeConfig: runtimeConfig,
 	}
 }
 
@@ -145,10 +142,10 @@ func (tc *TerminationCheckSubsystem) isCustomerWorkToken(token *factorytoken.Tok
 }
 
 func (tc *TerminationCheckSubsystem) hasImmediatelyRunnableActivity(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-	if tc.state == nil || tc.evaluator == nil || len(tc.state.Transitions) == 0 {
+	if tc.state == nil || len(tc.state.Transitions) == 0 {
 		return false
 	}
-	return len(tc.evaluator.FindEnabledTransitionsWithSnapshot(ctx, tc.state, snapshot)) > 0
+	return len(tc.evaluator.FindEnabledTransitionsWithSnapshot(ctx, tc.state, snapshot, tc.logger, tc.now, tc.runtimeConfig)) > 0
 }
 
 // isTerminalOrFailed returns true if the token is in a TERMINAL or FAILED place.

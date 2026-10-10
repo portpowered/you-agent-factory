@@ -1018,10 +1018,9 @@ func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 	var identities atomic.Int64
 	newID := func() string { return fmt.Sprintf("opening-%d", identities.Add(1)) }
 	dispatchOpening := &observedOutboxOpening{OutboxOpening: dispatchplanningwire.NewOpening()}
-	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil,
-		interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
-			return interfaces.WorkPropagationModeOutputAsPayload
-		}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open)
+	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
+		return interfaces.WorkPropagationModeOutputAsPayload
+	}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open, scheduler.NewEnablementEvaluator())
 	selectOpening := func(cfg *testFactoryConfig) { cfg.engineOpening = opening }
 	if _, err := newTestFactory(selectOpening); err == nil {
 		t.Fatal("opening without a net succeeded")

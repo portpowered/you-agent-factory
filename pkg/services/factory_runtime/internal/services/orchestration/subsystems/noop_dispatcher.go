@@ -31,6 +31,7 @@ type NoOpDispatcherSubsystem struct {
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	now          func() time.Time
 	newID        factoryruntime.IDGenerator
+	enablement   scheduler.Enablement
 }
 
 // NewNoOpDispatcher creates a NoOpDispatcherSubsystem that auto-accepts all
@@ -42,9 +43,10 @@ func NewNoOpDispatcher(
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	now func() time.Time,
 	newID factoryruntime.IDGenerator,
+	enablement scheduler.Enablement,
 ) *NoOpDispatcherSubsystem {
-	if now == nil || newID == nil {
-		panic("Factory Runtime no-op dispatcher clock and ID generator are required")
+	if newID == nil {
+		panic("Factory Runtime no-op dispatcher ID generator is required")
 	}
 	return &NoOpDispatcherSubsystem{
 		state:        n,
@@ -52,6 +54,7 @@ func NewNoOpDispatcher(
 		resultBuffer: resultBuffer,
 		now:          now,
 		newID:        newID,
+		enablement:   enablement,
 	}
 }
 
@@ -60,8 +63,14 @@ func NewNoOpDispatcher(
 // enqueueResult callback with pass-through token colors. No external executor
 // is invoked.
 func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
-	evaluator := scheduler.NewEnablementEvaluator(logging.NoopLogger{}, d.now, nil)
-	enabled := evaluator.FindEnabledTransitions(ctx, d.state, &snapshot.Marking)
+	enabled := d.enablement.FindEnabledTransitionsWithSnapshot(
+		ctx,
+		d.state,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: snapshot.Marking, Topology: d.state},
+		logging.NoopLogger{},
+		d.now,
+		nil,
+	)
 	if len(enabled) == 0 {
 		return nil, nil
 	}

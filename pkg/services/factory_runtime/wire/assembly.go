@@ -15,6 +15,7 @@ import (
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	runtime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -84,8 +85,11 @@ func NewRuntimeFactory(
 	worldStateProjector factoryruntime.WorldStateProjector,
 	recordingsRuntime recordings.RuntimeScopeService,
 ) *RuntimeFactory {
+	// Keep live engine types inside Runtime: select this stateless role once
+	// at owner composition, then pass each session scope to its operations.
+	enablement := scheduler.NewEnablementEvaluator()
 	engineOpening := runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping,
-		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening)
+		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, enablement)
 	return factoryruntimeinternal.NewRuntimeFactory(
 		loggerFactory,
 		runtimeLogs,

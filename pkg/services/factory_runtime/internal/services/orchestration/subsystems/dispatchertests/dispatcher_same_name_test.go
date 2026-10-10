@@ -57,7 +57,7 @@ func TestDispatcher_SameNameWakeDispatchesEveryEligiblePairExceptActiveAndStaleB
 		},
 		Results: []workers.WorkResult{{DispatchID: "completed-predecessor"}},
 	}
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		n,
 		scheduler.NewWorkInQueueScheduler(50, nil),
 		nil,
@@ -65,6 +65,9 @@ func TestDispatcher_SameNameWakeDispatchesEveryEligiblePairExceptActiveAndStaleB
 		nil,
 		time.Now,
 		testDispatchID,
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
 	)
 
 	result, err := dispatcher.Execute(context.Background(), snapshot)

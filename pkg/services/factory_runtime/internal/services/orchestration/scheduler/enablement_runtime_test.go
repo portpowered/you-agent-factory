@@ -2,6 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,19 +17,26 @@ import (
 )
 
 func TestEnablementEvaluator_SameNameGuardFailsClosedWithoutRegisteredParent(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := sameNameGuardNet()
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Name: "alpha"}},
 	})
 
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	); len(enabled) != 0 {
 		t.Fatalf("enabled transitions without a registered parent = %d, want 0", len(enabled))
 	}
 }
 
 func TestEnablementEvaluator_SameNameGuardDeduplicatesRegisteredParentCandidates(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := sameNameGuardNet()
 	parentA := &factorytoken.Token{ID: "a-parent", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "project-work"}}
 	parentB := &factorytoken.Token{ID: "b-parent", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha", WorkID: "project-work"}}
@@ -40,7 +50,14 @@ func TestEnablementEvaluator_SameNameGuardDeduplicatesRegisteredParentCandidates
 		"project-work": {Children: []factorytoken.Token{*current}, Complete: true},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions with duplicate registered parents = %d, want 1", len(enabled))
 	}
@@ -50,7 +67,7 @@ func TestEnablementEvaluator_SameNameGuardDeduplicatesRegisteredParentCandidates
 }
 
 func TestEnablementEvaluator_SameNameGuardUsesOrderedCurrentParentChild(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := sameNameGuardNet()
 	historical := &factorytoken.Token{
 		ID:      "a-token-history",
@@ -82,7 +99,14 @@ func TestEnablementEvaluator_SameNameGuardUsesOrderedCurrentParentChild(t *testi
 		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -92,7 +116,7 @@ func TestEnablementEvaluator_SameNameGuardUsesOrderedCurrentParentChild(t *testi
 }
 
 func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"project:waiting":       {ID: "project:waiting"},
@@ -153,7 +177,14 @@ func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *tes
 		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -163,7 +194,7 @@ func TestEnablementEvaluator_SameNameGuardOnParentUsesOrderedCurrentChild(t *tes
 }
 
 func TestEnablementEvaluator_SameNameGuardDoesNotFallbackToHistoricalChild(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"project:waiting":       {ID: "project:waiting"},
@@ -226,7 +257,14 @@ func TestEnablementEvaluator_SameNameGuardDoesNotFallbackToHistoricalChild(t *te
 		"project-work": {Children: []factorytoken.Token{*historical, current}, Complete: true},
 	}
 
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	); len(enabled) != 0 {
 		t.Fatalf("historical child enabled block-project while current child was in init: %#v", enabled)
 	}
 }
@@ -241,7 +279,7 @@ func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistratio
 		{name: "contradictory registration", complete: true, contradictory: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+			eval := NewEnablementEvaluator()
 			n := sameNameGuardNet()
 			transition := n.Transitions["match-items"]
 			transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
@@ -284,7 +322,14 @@ func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistratio
 				},
 			}
 
-			if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+			if enabled := eval.FindEnabledTransitionsWithSnapshot(
+				context.Background(),
+				n,
+				&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+				logging.NoopLogger{},
+				testNow,
+				nil,
+			); len(enabled) != 0 {
 				t.Fatalf("invalid registration enabled historical same-name transition: %#v", enabled)
 			}
 		})
@@ -292,7 +337,7 @@ func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistratio
 }
 
 func TestEnablementEvaluator_SameNameGuardIgnoresRetiredRegistrationAfterRework(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := sameNameGuardNet()
 	parent := &factorytoken.Token{ID: "task-token", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "t20", WorkID: "task-work"}}
 	consumed := factorytoken.Token{ID: "review-2", PlaceID: "task:ready", Color: factorytoken.Color{Name: "t20", WorkID: "review-2", ParentID: "task-work"}}
@@ -309,7 +354,14 @@ func TestEnablementEvaluator_SameNameGuardIgnoresRetiredRegistrationAfterRework(
 		"task-work": {Children: []factorytoken.Token{consumed}, Complete: true},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions after rework = %d, want 1", len(enabled))
 	}
@@ -319,7 +371,7 @@ func TestEnablementEvaluator_SameNameGuardIgnoresRetiredRegistrationAfterRework(
 }
 
 func TestEnablementEvaluator_SameNameParentGuardIgnoresRetiredRegistrationAfterRework(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := sameNameGuardNet()
 	transition := n.Transitions["match-items"]
 	transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
@@ -337,7 +389,14 @@ func TestEnablementEvaluator_SameNameParentGuardIgnoresRetiredRegistrationAfterR
 		"task-work": {Children: []factorytoken.Token{consumed}, Complete: true},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions after rework = %d, want 1", len(enabled))
 	}
@@ -482,12 +541,19 @@ func TestRepeatedBindingHelpers_FailClosedForUnsupportedInputs(t *testing.T) {
 	if _, _, _, _, ok := repeatedBindingTokensForInput(&petri.Arc{Cardinality: petri.ArcCardinality{Mode: petri.CardinalityAll}}, &marking, 0); ok {
 		t.Fatal("non-single repeated-binding cardinality unexpectedly matched")
 	}
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
-	if got := eval.ExpandRepeatedBindings(nil, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, nil); got != nil {
+	eval := NewEnablementEvaluator()
+	if got := eval.ExpandRepeatedBindings(nil, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, nil, logging.NoopLogger{}, testNow, nil); got != nil {
 		t.Fatalf("nil topology expansion = %#v, want nil", got)
 	}
 	base := []interfaces.EnabledTransition{{TransitionID: "unknown"}}
-	if got := eval.ExpandRepeatedBindings(&state.Net{Transitions: map[string]*petri.Transition{}}, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, base); len(got) != 1 || got[0].TransitionID != "unknown" {
+	if got := eval.ExpandRepeatedBindings(
+		&state.Net{Transitions: map[string]*petri.Transition{}},
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking},
+		base,
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	); len(got) != 1 || got[0].TransitionID != "unknown" {
 		t.Fatalf("unknown transition expansion = %#v, want base", got)
 	}
 	if got := runtimeTokens(nil); got != nil {
@@ -499,24 +565,27 @@ func TestRepeatedBindingHelpers_FailClosedForUnsupportedInputs(t *testing.T) {
 }
 
 func TestEnablementEvaluator_ContextPassedThrough(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	marking := makeTestSnapshot(map[string]*factorytoken.Token{})
-	enabled := eval.FindEnabledTransitions(ctx, &state.Net{Transitions: map[string]*petri.Transition{}}, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		ctx,
+		&state.Net{Transitions: map[string]*petri.Transition{}},
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: &state.Net{Transitions: map[string]*petri.Transition{}}},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
 	}
 }
 
 func TestEnablementEvaluator_NilSnapshotReturnsNoTransitions(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
-	if enabled := eval.FindEnabledTransitionsWithSnapshot(
-		context.Background(),
-		&state.Net{Transitions: map[string]*petri.Transition{"unused": {ID: "unused"}}},
-		nil,
-	); len(enabled) != 0 {
+	eval := NewEnablementEvaluator()
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(context.Background(), &state.Net{Transitions: map[string]*petri.Transition{"unused": {ID: "unused"}}}, nil, logging.NoopLogger{}, testNow, nil); len(enabled) != 0 {
 		t.Fatalf("enabled transitions for nil snapshot = %v, want none", enabled)
 	}
 }
@@ -546,7 +615,7 @@ func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.
 	dueAt := base.Add(2 * time.Minute)
 	expiresAt := base.Add(7 * time.Minute)
 	currentTime := dueAt.Add(-time.Nanosecond)
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return currentTime }, nil)
+	eval := NewEnablementEvaluator()
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{interfaces.SystemTimePendingPlaceID: {ID: interfaces.SystemTimePendingPlaceID}},
@@ -563,25 +632,53 @@ func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.
 		PlaceTokens: map[string][]string{interfaces.SystemTimePendingPlaceID: {"time-refresh"}},
 	}
 
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		func() time.Time { return currentTime },
+		nil,
+	); len(enabled) != 0 {
 		t.Fatalf("enabled before due = %d, want 0", len(enabled))
 	}
 	currentTime = dueAt
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 1 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		func() time.Time { return currentTime },
+		nil,
+	); len(enabled) != 1 {
 		t.Fatalf("enabled at due = %d, want 1", len(enabled))
 	}
 	currentTime = expiresAt.Add(-time.Nanosecond)
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 1 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		func() time.Time { return currentTime },
+		nil,
+	); len(enabled) != 1 {
 		t.Fatalf("enabled before expiry = %d, want 1", len(enabled))
 	}
 	currentTime = expiresAt
-	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
+	if enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		func() time.Time { return currentTime },
+		nil,
+	); len(enabled) != 0 {
 		t.Fatalf("enabled at expiry = %d, want 0", len(enabled))
 	}
 }
 
 func TestEnablementEvaluator_OrdersEnabledTransitionsByID(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 
 	n := &state.Net{
 		Places: map[string]*petri.Place{"p-alpha": {ID: "p-alpha"}, "p-beta": {ID: "p-beta"}, "p-zeta": {ID: "p-zeta"}},
@@ -597,7 +694,14 @@ func TestEnablementEvaluator_OrdersEnabledTransitionsByID(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+		enabled := eval.FindEnabledTransitionsWithSnapshot(
+			context.Background(),
+			n,
+			&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+			logging.NoopLogger{},
+			testNow,
+			nil,
+		)
 		if got, want := strings.Join(transitionIDs(enabled), ","), "transition-alpha,transition-beta,transition-zeta"; got != want {
 			t.Fatalf("iteration %d enabled transition order = %v, want %v", i, transitionIDs(enabled), []string{"transition-alpha", "transition-beta", "transition-zeta"})
 		}
@@ -605,7 +709,7 @@ func TestEnablementEvaluator_OrdersEnabledTransitionsByID(t *testing.T) {
 }
 
 func TestEnablementEvaluator_SelectsOrdinaryTokensByStableID(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := &state.Net{
 		Places: map[string]*petri.Place{"p-work": {ID: "p-work"}},
 		Transitions: map[string]*petri.Transition{
@@ -621,7 +725,14 @@ func TestEnablementEvaluator_SelectsOrdinaryTokensByStableID(t *testing.T) {
 		PlaceTokens: map[string][]string{"p-work": {"tok-c", "tok-a", "tok-b"}},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -631,7 +742,7 @@ func TestEnablementEvaluator_SelectsOrdinaryTokensByStableID(t *testing.T) {
 }
 
 func TestEnablementEvaluator_SelectsResourceTokensByStableID(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := &state.Net{
 		Places: map[string]*petri.Place{"slot:available": {ID: "slot:available"}},
 		Transitions: map[string]*petri.Transition{
@@ -646,7 +757,14 @@ func TestEnablementEvaluator_SelectsResourceTokensByStableID(t *testing.T) {
 		PlaceTokens: map[string][]string{"slot:available": {"slot-2", "slot-1"}},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("enabled transitions = %d, want 1", len(enabled))
 	}
@@ -656,7 +774,7 @@ func TestEnablementEvaluator_SelectsResourceTokensByStableID(t *testing.T) {
 }
 
 func TestEnablementEvaluator_ExpandsRepeatedWorkAndResourceBindingsForSameTransition(t *testing.T) {
-	eval := NewEnablementEvaluator(logging.NoopLogger{}, testNow, nil)
+	eval := NewEnablementEvaluator()
 	n := &state.Net{
 		Places: map[string]*petri.Place{"task:init": {ID: "task:init"}, "executor-slot:available": {ID: "executor-slot:available"}},
 		Transitions: map[string]*petri.Transition{
@@ -676,11 +794,18 @@ func TestEnablementEvaluator_ExpandsRepeatedWorkAndResourceBindingsForSameTransi
 		PlaceTokens: map[string][]string{"task:init": {"work-b", "work-a"}, "executor-slot:available": {"slot-2", "slot-1"}},
 	}
 
-	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		n,
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking, Topology: n},
+		logging.NoopLogger{},
+		testNow,
+		nil,
+	)
 	if len(enabled) != 1 {
 		t.Fatalf("base enabled candidates = %d, want 1", len(enabled))
 	}
-	expanded := eval.ExpandRepeatedBindings(n, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, enabled)
+	expanded := eval.ExpandRepeatedBindings(n, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking}, enabled, logging.NoopLogger{}, testNow, nil)
 	if len(expanded) != 2 {
 		t.Fatalf("expanded candidates = %d, want 2", len(expanded))
 	}
@@ -689,5 +814,58 @@ func TestEnablementEvaluator_ExpandsRepeatedWorkAndResourceBindingsForSameTransi
 	}
 	if got := strings.Join(append(tokenIDs(expanded[1].Bindings["work"]), tokenIDs(expanded[1].Bindings["slot"])...), ","); got != "work-b,slot-2" {
 		t.Fatalf("second candidate tokens = %v, want [work-b slot-2]", got)
+	}
+}
+
+func TestEnablementEvaluator_IsolatesSelectedClockAndWorkerLookup(t *testing.T) {
+	t.Parallel()
+	evaluator := NewEnablementEvaluator()
+	pausedAt := time.Date(2001, time.January, 2, 3, 4, 5, 0, time.UTC)
+	net := &state.Net{Transitions: map[string]*petri.Transition{
+		"writer": {ID: "writer", WorkerType: "writer", InputArcs: []petri.Arc{{
+			ID: "work", PlaceID: "task:ready", Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+			Guard: &petri.InferenceThrottleGuard{Provider: "claude", Model: "sonnet", WorkerName: "writer", RefreshWindow: 5 * time.Minute},
+		}}},
+	}}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Topology: net, Marking: makeTestSnapshot(map[string]*factorytoken.Token{
+			"work": {ID: "work", PlaceID: "task:ready", Color: factorytoken.Color{WorkID: "work"}},
+		}),
+		DispatchHistory: []interfaces.CompletedDispatch{{DispatchID: "prior", TransitionID: "writer", EndTime: pausedAt,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyThrottle, Type: workerexecution.WorkFailureTypeThrottled},
+		}},
+	}
+	matched := runtimefixtures.RuntimeDefinitionLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
+		"writer": {Name: "writer", ModelProvider: "claude", Model: "sonnet"},
+	}}
+	otherModel := runtimefixtures.RuntimeDefinitionLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
+		"writer": {Name: "writer", ModelProvider: "claude", Model: "opus"},
+	}}
+	otherProvider := runtimefixtures.RuntimeDefinitionLookupFixture{Workers: map[string]*interfaces.FactoryWorkerConfig{
+		"writer": {Name: "writer", ModelProvider: "codex", Model: "sonnet"},
+	}}
+	before := *snapshot.Marking.Tokens["work"]
+	for _, test := range []struct {
+		name   string
+		at     time.Time
+		lookup interfaces.RuntimeDefinitionLookup
+		want   int
+	}{
+		{"active matching lane", pausedAt.Add(4 * time.Minute), matched, 0},
+		{"different model", pausedAt.Add(4 * time.Minute), otherModel, 1},
+		{"different provider", pausedAt.Add(4 * time.Minute), otherProvider, 1},
+		{"matching lane still active after other scopes", pausedAt.Add(4 * time.Minute), matched, 0},
+		{"recorded clock reaches expiry", pausedAt.Add(5 * time.Minute), matched, 1},
+		{"earlier scope remains paused", pausedAt.Add(4 * time.Minute), matched, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := evaluator.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot, logging.NoopLogger{}, func() time.Time { return test.at }, test.lookup)
+			if len(got) != test.want {
+				t.Fatalf("enabled = %v, want count %d", got, test.want)
+			}
+		})
+	}
+	if !reflect.DeepEqual(*snapshot.Marking.Tokens["work"], before) || len(snapshot.DispatchHistory) != 1 || !snapshot.DispatchHistory[0].EndTime.Equal(pausedAt) {
+		t.Fatal("evaluation mutated the snapshot")
 	}
 }
