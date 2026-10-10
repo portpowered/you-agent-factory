@@ -132,6 +132,8 @@ func capturedHistoryIdentity(item recordings.WorkerCapturedCatalogItem, owners m
 	if item.Terminal == nil {
 		observation.ConfirmationState = workersessions.ConfirmationStateUnconfirmed
 		observation.RecordingHealth = recordings.WorkerRecordingStatusIncomplete
+		// A retained prefix from a former owner does not witness execution death.
+		// Only the recorded owner-loss terminal establishes that cause.
 		observation.Failure = &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone, Detail: "the recorded worker host is no longer the current owner"}
 	} else if item.Terminal.Position < 1 || uint64(item.Terminal.Position) > item.Catalog.CommittedPosition {
 		observation.ConfirmationState = workersessions.ConfirmationStateUnconfirmed

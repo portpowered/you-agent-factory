@@ -771,10 +771,12 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 		}
 	}
 	payload := terminalSessionPayload{Status: string(state)}
-	if result.Cause != nil {
-		payload.FailureCause = string(result.Cause.Kind)
-		payload.FailureDetail = result.Cause.Detail
-		payload.AgentRunFailureClass = result.Cause.AgentRunFailureClass
+	// Persist the same safe failure facts inspection exposes, without changing
+	// the authoritative control result (which may deliberately be empty).
+	if cause := observedTerminalCause(workersessions.Session{State: state, Result: &result}); cause != nil {
+		payload.FailureCause = string(cause.Kind)
+		payload.FailureDetail = cause.Detail
+		payload.AgentRunFailureClass = cause.AgentRunFailureClass
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	return workers.Draft{
