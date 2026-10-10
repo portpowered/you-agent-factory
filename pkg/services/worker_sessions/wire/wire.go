@@ -11,6 +11,8 @@
 package wire
 
 import (
+	"context"
+	"fmt"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -72,4 +74,15 @@ func NewService(
 		inspection,
 		tokenEntropy,
 	)
+}
+
+// CallerValidation selects the required live-owner capability at construction.
+func CallerValidation(service workersessions.Service) (workersessions.CallerValidator, error) {
+	validator, ok := service.(interface {
+		ValidateCaller(context.Context, *workersessions.CallerIdentity) error
+	})
+	if !ok || validator == nil {
+		return nil, fmt.Errorf("compose Worker Session caller validator: capability is required")
+	}
+	return validator.ValidateCaller, nil
 }

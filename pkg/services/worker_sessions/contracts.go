@@ -125,6 +125,10 @@ func (a RuntimeAttempt) Resolve(ctx context.Context, result workers.WorkstationD
 	return a(ctx, result, dispatchErr)
 }
 
+// CallerValidator checks execution-only authority against the running owner.
+// Validation grants no durable authority; each child admission revalidates.
+type CallerValidator func(context.Context, *CallerIdentity) error
+
 // Service is the W1+W2+W3 Worker Session identity, registry, supervision,
 // and Events publication foundation: stable identity reservation, immutable
 // deterministic inspection, supervised Start with exactly-once terminal

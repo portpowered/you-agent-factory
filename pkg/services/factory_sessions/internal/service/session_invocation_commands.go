@@ -23,6 +23,9 @@ func (r *Root) Invoke(ctx context.Context, request factorysessions.SessionInvoke
 	if r == nil || r.Assembly == nil {
 		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.InvocationResult{}, err
+	}
 	sessionID := strings.TrimSpace(request.SessionID)
 	if sessionID != "" && !factorysessions.SessionIdentity(sessionID).Valid() {
 		return factorysessions.InvocationResult{}, &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
@@ -41,6 +44,9 @@ func (r *Root) InvokeFactorySession(ctx context.Context, sessionID string, reque
 	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.InvocationResult{}, err
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if !factorysessions.SessionIdentity(sessionID).Valid() {

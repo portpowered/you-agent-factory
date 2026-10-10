@@ -27,6 +27,9 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
 	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
 	return r.start(ctx, request)
 }
 
@@ -148,6 +151,9 @@ func (r *Root) StartSync(ctx context.Context, request factorysessions.StartReque
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.SyncStartResult{}, err
+	}
 	if request.WorkerSettings == nil {
 		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))
 	}
@@ -164,6 +170,9 @@ func (r *Root) StartAsync(ctx context.Context, request factorysessions.StartRequ
 	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.AsyncStartResult{}, err
 	}
 	if request.WorkerSettings == nil {
 		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))

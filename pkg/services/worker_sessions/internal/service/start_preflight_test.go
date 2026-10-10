@@ -440,3 +440,28 @@ func assertCallerOpeningOutcome(t *testing.T, r *registry, id, loss string, exec
 		t.Fatal("admission changed source facts or retained child authority")
 	}
 }
+
+func TestValidateCallerUsesOnlyRunningOwnerAuthority(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	caller := runningCaller(t, r, "source")
+	if err := r.ValidateCaller(t.Context(), caller); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ValidateCaller(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	invalid := *caller
+	invalid.WorkerSessionID = "foreign"
+	if err := r.ValidateCaller(t.Context(), &invalid); !errors.Is(err, workersessions.ErrCallerInvalid) {
+		t.Fatalf("foreign refusal = %v", err)
+	}
+	r.mu.Lock()
+	session := r.sessions["source"]
+	session.State = workersessions.StateCompleted
+	r.sessions["source"] = session
+	r.mu.Unlock()
+	if err := r.ValidateCaller(t.Context(), caller); !errors.Is(err, workersessions.ErrCallerInvalid) {
+		t.Fatalf("terminal refusal = %v", err)
+	}
+}

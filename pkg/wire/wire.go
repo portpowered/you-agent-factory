@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -59,6 +60,7 @@ var servicesSet = wire.NewSet(
 	provideWorkerRecordingReader,
 	provideWorkerWorkAttributionReader,
 	provideWorkerSessionsService,
+	workersessionswire.CallerValidation,
 	provideWorkerHistorySnapshotBudget,
 	provideWorkerAttemptOpener,
 	provideApplicationProcessLifecycle,

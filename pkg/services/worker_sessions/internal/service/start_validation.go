@@ -53,6 +53,11 @@ func (r *registry) callerMetadataLocked(caller *workersessions.CallerIdentity, m
 	return derived, nil
 }
 
+func (r *registry) ValidateCaller(_ context.Context, caller *workersessions.CallerIdentity) error {
+	_, err := r.resolveCallerMetadata(caller.Clone(), nil)
+	return err
+}
+
 func (r *registry) resolveCallerMetadata(caller *workersessions.CallerIdentity, metadata *workersessions.SessionMetadata) (*workersessions.SessionMetadata, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
