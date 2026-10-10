@@ -331,7 +331,7 @@
       "path": "generated/schemas/factory-recording.schema.json"
     },
     "generated.schemas.mock-workers": {
-      "artifactHash": "3f4e829103f67dd223515c39a14c51f5ee5881b8f4f11cda215cee6e0de6cffd",
+      "artifactHash": "723673b4da2190e46a9b75107625931547615ec9962caebdf7a4e48d3a4887b9",
       "documentation": {
         "documentation": {
           "description": {
@@ -348,7 +348,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.mock-workers",
-        "sourceHash": "3f4e829103f67dd223515c39a14c51f5ee5881b8f4f11cda215cee6e0de6cffd",
+        "sourceHash": "723673b4da2190e46a9b75107625931547615ec9962caebdf7a4e48d3a4887b9",
         "visibility": "public"
       },
       "family": "config",

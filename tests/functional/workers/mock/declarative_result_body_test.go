@@ -62,7 +62,7 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 	body := json.RawMessage(`{"decision":"ACCEPTED","output":"` + marker + `"}`)
 	businessFailure := strings.HasPrefix(name, "F-M2")
 	if businessFailure {
-		body = json.RawMessage(`{"decision":"ACCEPTED","output":"` + marker + `","recorded_output_work":[{"workTypeId":"undeclared-output","state":"complete","content":[{"type":"text","text":"invalid proposal"}]}]}`)
+		body, marker = businessInvalidResultExample(t)
 	}
 	if strings.HasPrefix(name, "F-M3") {
 		body = nil
@@ -130,6 +130,26 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 		}
 		assertDeclaredOpaqueCapture(t, host, workerID)
 	}
+}
+
+func businessInvalidResultExample(t *testing.T) (json.RawMessage, string) {
+	t.Helper()
+	data, err := os.ReadFile(testutil.MustRepoPath(t, "docs/examples/mock-workers-result-body-business-invalid.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := workers.ParseMockWorkersConfig(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := config.MockWorkers[0].ResultBody
+	var declared struct {
+		Output string `json:"output"`
+	}
+	if err := json.Unmarshal(body, &declared); err != nil {
+		t.Fatal(err)
+	}
+	return body, declared.Output
 }
 
 func declaredResultFactory(t *testing.T) string {

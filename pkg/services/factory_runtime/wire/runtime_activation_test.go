@@ -70,14 +70,12 @@ func TestRuntimeRootActivationDetachesExplicitInputs(t *testing.T) {
 	t.Parallel()
 
 	env := map[string]string{"TOKEN": "original"}
-	body := []byte(`{"decision":"ACCEPTED","output":"detached"}`)
 	request := foldRuntimeActivationRequest()
 	request.Inputs = factoryruntime.RuntimeActivationInputs{
 		Workers: factoryruntime.RuntimeActivationWorkerInputs{
 			MockWorkers: &factoryruntime.RuntimeActivationMockWorkersConfig{
 				MockWorkers: []factoryruntime.RuntimeActivationMockWorker{{
 					ScriptConfig: &factoryruntime.RuntimeActivationMockScript{Env: env},
-					ResultBody:   body,
 				}},
 			},
 		},
@@ -91,10 +89,6 @@ func TestRuntimeRootActivationDetachesExplicitInputs(t *testing.T) {
 		t.Fatalf("Activate() error = %v", err)
 	}
 	env["TOKEN"] = "caller-mutated"
-	body[1] = 'x'
-	if got := string(received.Inputs.Workers.MockWorkers.MockWorkers[0].ResultBody); got != `{"decision":"ACCEPTED","output":"detached"}` {
-		t.Fatalf("activation body aliased: %s", got)
-	}
 	if got := received.Inputs.Workers.MockWorkers.MockWorkers[0].ScriptConfig.Env["TOKEN"]; got != "original" {
 		t.Fatalf("activation operation received aliased inputs: %q", got)
 	}

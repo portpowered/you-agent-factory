@@ -427,3 +427,26 @@ Factory Runtime validates the declared output using the workstation's existing o
 Inspect Worker Session logs for captured execution output and Work for its business outcome.
 Payload keys inside `resultBody` are opaque and do not produce ignored-field diagnostics.
 This example uses only `accept` mocks and does not launch scripts or live providers.
+
+### Completed execution with failed Work
+
+Use [the business-invalid result example](../examples/mock-workers-result-body-business-invalid.json) to test this distinction.
+Its `ACCEPTED` envelope proposes output Work with the undeclared type `undeclared-output`.
+
+1. Configure the target workstation with `"outcomeFormat": "decision-envelope"` in `factory.json`.
+2. Configure its input Work type with a `FAILED` state and route `onFailure` to that state.
+3. Keep `undeclared-output` absent from the Factory's `workTypes`.
+4. Submit input Work to the target workstation with the example configuration:
+
+   ```bash
+   you run --dir <factory> --work <work.json> --with-mock-workers docs/examples/mock-workers-result-body-business-invalid.json
+   ```
+
+5. Inspect the associated Worker Session and its captured logs.
+   The execution completes and the captured result contains `business-invalid mock output` and the unchanged proposal.
+6. Inspect the input Work and its dispatch result.
+   The Work enters the configured failure state because Factory Runtime cannot materialize the undeclared output Work type.
+
+The proposed output Work is not created.
+The Worker Session's completed execution remains separate from the Work failure.
+This fixture uses only `accept` mocks and launches no scripts or live providers.

@@ -1,0 +1,18 @@
+{
+  "mockWorkers": [
+    {
+      "runType": "accept",
+      "resultBody": {
+        "decision": "ACCEPTED",
+        "output": "business-invalid mock output",
+        "recorded_output_work": [
+          {
+            "workTypeId": "undeclared-output",
+            "state": "complete",
+            "content": [{ "type": "text", "text": "invalid proposal" }]
+          }
+        ]
+      }
+    }
+  ]
+}
