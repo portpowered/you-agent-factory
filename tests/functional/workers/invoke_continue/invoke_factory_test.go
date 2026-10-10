@@ -245,7 +245,9 @@ func assertRequesterFactoryListed(t *testing.T, fixture *invokeContinuePackageFi
 		}
 	}
 	if len(selected) != 1 || !reflect.DeepEqual(selected[0].Requester, observation.Requester) || !reflect.DeepEqual(selected[0].Correlation, observation.Correlation) || !reflect.DeepEqual(selected[0].Labels, observation.Labels) {
-		t.Fatal("CLI list lost exact Factory dispatch metadata")
+		got, _ := json.Marshal(selected)
+		want, _ := json.Marshal(observation)
+		t.Fatalf("CLI list lost exact Factory dispatch metadata: selected=%s want=%s", got, want)
 	}
 
 }
