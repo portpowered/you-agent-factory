@@ -703,18 +703,23 @@ func TestPrebuiltDefaultWorkerSessionCancelOwner(t *testing.T) {
 			}
 			host = startCancelDaemon(t, ctx, binary, f)
 			waitForCancelFactorySession(t, ctx, f.serverURL, host)
-			for _, remote := range []bool{false, true} {
-				result := runDefaultOwnerCancel(ctx, binary, f, "lost", remote)
-				if scenario == "terminal-restart" {
-					assertDefaultOwnerCancelResult(t, result, "NOOP")
-				} else if exitCode(result.err) != 1 || firstErrorCode(result.stdout, result.stderr) != "WORKER_SESSION_CONTROL_FAILED" || strings.TrimSpace(result.stdout) != "" {
-					t.Fatalf("owner-loss fabricated success: %+v", result)
-				}
-			}
-			if scenario == "terminal-restart" {
-				assertDefaultOwnerTransportParity(t, ctx, binary, f)
-			}
+			assertDefaultOwnerAfterRestart(t, ctx, binary, f, scenario)
 		})
+	}
+}
+
+func assertDefaultOwnerAfterRestart(t *testing.T, ctx context.Context, binary string, f cancelFixture, scenario string) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		result := runDefaultOwnerCancel(ctx, binary, f, "lost", remote)
+		if scenario == "terminal-restart" {
+			assertDefaultOwnerCancelResult(t, result, "NOOP")
+		} else if exitCode(result.err) != 1 || firstErrorCode(result.stdout, result.stderr) != "WORKER_SESSION_CONTROL_FAILED" || strings.TrimSpace(result.stdout) != "" {
+			t.Fatalf("owner-loss fabricated success: %+v", result)
+		}
+	}
+	if scenario == "terminal-restart" {
+		assertDefaultOwnerTransportParity(t, ctx, binary, f)
 	}
 }
 

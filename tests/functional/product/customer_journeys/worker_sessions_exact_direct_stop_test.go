@@ -375,7 +375,8 @@ func (store *exactStopIntentGate) RecoverWorkerOwners(ctx context.Context) error
 func TestDefaultWorkerSessionCancelSeparateOwner(t *testing.T) {
 	t.Parallel()
 	runner := newFleetCharacterizationRunner()
-	server := startExactFactoryStopServer(t, runner, uuid.NewString())
+	sessionID := uuid.NewString()
+	server := startExactFactoryStopServer(t, runner, sessionID)
 	caller := support.BuildProcess(t, serviceedges.Edges{})
 	for index, id := range []string{"default-target", "default-peer"} {
 		response := postDirectWorkerSession(t, t.Context(), server.URL(), id+"-request", id, id+"-dispatch")
@@ -386,6 +387,20 @@ func TestDefaultWorkerSessionCancelSeparateOwner(t *testing.T) {
 		waitFleetCharacterizationSignal(t, runner.slots[index].started, "owner admission")
 	}
 	joinedExactFactoryStop(t, server, runner.slots[0], routeCharacterizationDispatch{workerSessionID: "default-target", dispatchID: "default-target-dispatch"}, "cancel", true, caller)
+	assertDefaultOwnerTerminalAndMissing(t, caller, server, runner)
+	// Keep the peer live throughout target controls, then join its execution
+	// and durable terminal publication before closing the owning process.
+	joinedExactFactoryStop(t, server, runner.slots[1], routeCharacterizationDispatch{workerSessionID: "default-peer", dispatchID: "default-peer-dispatch"}, "cancel", false)
+	assertFleetCharacterizationTerminal(t, server, sessionID, "default-peer", "default-peer-dispatch", "CANCELED")
+	assertCapturedStopCause(t, server.URL(), "default-peer", "OPERATOR_CANCEL")
+	// Stop alone joins the daemon invocation; Close also drains resources
+	// retained by the reusable root before caller commands reuse this profile.
+	server.Close(t)
+	assertDefaultOwnerUnavailable(t, caller, server)
+}
+
+func assertDefaultOwnerTerminalAndMissing(t *testing.T, caller support.Process, server *fleetCharacterizationServer, runner *fleetCharacterizationRunner) {
+	t.Helper()
 	for _, remote := range []bool{false, true} {
 		result, err := executeDefaultOwnerCancel(t, caller, server, "default-target", remote)
 		if err != nil || string(result.Outcome) != "NOOP" || string(result.State) != "CANCELED" || result.DispatchId != "default-target-dispatch" {
@@ -409,7 +424,10 @@ func TestDefaultWorkerSessionCancelSeparateOwner(t *testing.T) {
 			t.Fatalf("unknown remote=%v: %v", remote, err)
 		}
 	}
-	server.Stop(t)
+}
+
+func assertDefaultOwnerUnavailable(t *testing.T, caller support.Process, server *fleetCharacterizationServer) {
+	t.Helper()
 	for _, remote := range []bool{false, true} {
 		_, err := executeDefaultOwnerCancel(t, caller, server, "default-target", remote)
 		var typed *workercli.CLIError
@@ -421,7 +439,6 @@ func TestDefaultWorkerSessionCancelSeparateOwner(t *testing.T) {
 			t.Fatalf("unreachable remote=%v: %v", remote, err)
 		}
 	}
-
 }
 
 func executeDefaultOwnerCancel(t *testing.T, caller support.Process, server *fleetCharacterizationServer, id string, remote bool) (factoryapi.WorkerSessionControlResponse, error) {
