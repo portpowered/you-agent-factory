@@ -147,14 +147,18 @@ func (r *registry) readArchivedContinuationSource(req workersessions.ContinueReq
 	return r.readArchivedContinuationSourceContext(r.serverOwnedContext(), req)
 }
 
-func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
+func (r *registry) continuationNeedsCapturedSource(req workersessions.ContinueRequest) bool {
 	r.mu.RLock()
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	source, exists := r.sessions[address]
 	liveFactory := exists && source.Terminal() && r.supervisions[address] == nil
 	_, replay := r.continueReplays[req.RequestID]
 	r.mu.RUnlock()
-	if (exists && !liveFactory) || replay || r.logs == nil {
+	return (!exists || liveFactory) && !replay && r.logs != nil
+}
+
+func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
+	if !r.continuationNeedsCapturedSource(req) {
 		return nil, nil
 	}
 	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
