@@ -11,8 +11,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/costs"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
@@ -123,13 +121,12 @@ func provideHTTPRuntimeBindingWithMetrics(
 	costsQuery costs.CostsQuery,
 	logs workersessions.Service,
 	recoverOwners recordings.WorkerOwnerRecoveryOperation,
-	writer recordings.WorkerRecordingWriter,
-	clock factoryruntime.Clock,
-	snapshots *workersessionswire.HistorySnapshotBudget,
+	fleet *workersessionswire.FleetObservationService,
+	fleetSources workersessionswire.ObservationServiceCatalog,
 	attribution recordings.WorkerWorkAttributionReader,
 	logger *zap.Logger,
 ) (httpRuntimeBinding, error) {
-	if root == nil || inspection == nil || definitions == nil || workService == nil || modelService == nil || recordingsService == nil || workflowPreview == nil || workerPrompts == nil || factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || logs == nil || clock == nil || attribution == nil || logger == nil || snapshots == nil {
+	if root == nil || inspection == nil || definitions == nil || workService == nil || modelService == nil || recordingsService == nil || workflowPreview == nil || workerPrompts == nil || factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || logs == nil || attribution == nil || logger == nil {
 		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
 	}
 	definitionMapping := factorydefinitionmapping.New(definitions)
@@ -150,7 +147,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 	modelsHandler := modelshttp.NewHandler(modelshttp.NewSessionAdapter(modelService, root, modelsContent, modelshttp.ModelsScope, modelshttp.SessionID), logger)
 	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(costsQuery, costshttp.RuntimePaths, metricsScopeResolver), logger)
 	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(metricsQuery, metricsScopeResolver, factoryvisualizationhttp.MetricsRoot), logger)
-	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, logs, writer, clock, snapshots, attribution, logger)
+	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, logs, fleet, fleetSources, attribution, logger)
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
@@ -222,17 +219,12 @@ func newHTTPWorkerSessionsHandler(
 	root *factorysessionwire.Root,
 	workService work.Service,
 	logs workersessions.Service,
-	writer recordings.WorkerRecordingWriter,
-	clock platformclock.Source,
-	snapshots *workersessionswire.HistorySnapshotBudget,
+	fleet *workersessionswire.FleetObservationService,
+	sources workersessionswire.ObservationServiceCatalog,
 	attribution recordings.WorkerWorkAttributionReader,
 	logger *zap.Logger,
 ) *workersessionshttp.Handler {
 	resolver := newWorkerSessionsFactorySessionScopeResolver(root)
-	sources := func(ctx context.Context) ([]workersessions.Service, error) {
-		hostID, _ := workersessionshttp.RuntimeHostSession(ctx)
-		return workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
-	}
 	controller := workerSessionControlRouter{
 		archived: logs,
 		sources:  sources,
@@ -241,8 +233,6 @@ func newHTTPWorkerSessionsHandler(
 		logs, logs, logs,
 		controller, logs, workService, attribution, resolver,
 	)
-	captured, _ := writer.(recordings.WorkerCapturedActivityReader)
-	fleet := workersessionswire.NewFleetObservationService(sources, captured, clock, logging.NewZapLogger(logger, false), snapshots, logs)
 	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), logger)
 }
 
