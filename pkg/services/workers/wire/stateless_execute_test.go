@@ -471,28 +471,6 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsMissingExecuteClock(t *testing.T) {
-	t.Parallel()
-
-	input := newStatelessConstructionInputs()
-	if _, err := NewService(
-		input.agentDependencies,
-		input.scriptConfig,
-		input.scriptDependencies,
-		input.inferenceConfig,
-		input.inferenceDependencies,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	); err == nil {
-		t.Fatal("NewService() error = nil, want missing Execute clock error")
-	}
-}
-
 type statelessConstructionInputs struct {
 	agentDependencies     runners.AgentDependencies
 	scriptConfig          runners.ScriptConfig

@@ -26,14 +26,20 @@ func TestAgentProviderRequestPreservesAttemptControlObserver(t *testing.T) {
 	}
 }
 
-func TestNewRejectsMissingDependencies(t *testing.T) {
+func TestExecuteWithoutOptionalProgressPublisher(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New(nil, noopPublisher, nil); err == nil {
-		t.Fatal("New(nil publisher) error = nil, want missing Providers service")
+	fake := &providersFake{}
+	runner, err := New(fake, nil, nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
 	}
-	if _, err := New(&providersFake{}, nil, nil); err == nil {
-		t.Fatal("New(nil publish) error = nil, want missing progress publisher")
+	result, err := runner.Execute(t.Context(), baseAgentRequest())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if fake.executeCalls != 1 || result.Content != "ok" {
+		t.Fatalf("Execute() calls = %d, content = %q, want one provider call and ok", fake.executeCalls, result.Content)
 	}
 }
 

@@ -43,7 +43,8 @@ type runner struct {
 
 var _ workers.Runner = (*runner)(nil)
 
-// New validates and snapshots an Inference Runner and its exact Models edge.
+// New validates domain configuration and snapshots an Inference Runner with
+// the Models edge supplied by process composition.
 func New(
 	config Config,
 	modelsService ModelInvoker,
@@ -51,9 +52,6 @@ func New(
 	contentMaterializer work.ContentMaterializer,
 	mediaFiles platformfilesystem.ReadOpener,
 ) (workers.Runner, error) {
-	if modelsService == nil {
-		return nil, misconfigured("inference Models service is required", nil)
-	}
 	worker := snapshotWorker(config.Worker)
 	if err := validateWorker(worker); err != nil {
 		return nil, err

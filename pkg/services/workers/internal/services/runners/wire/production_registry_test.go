@@ -202,7 +202,6 @@ func TestNewProductionRegistryPreservesStrategyConstructionErrors(t *testing.T) 
 		name     string
 		identity string
 	}{
-		{name: "agent", identity: runners.AgentIdentity},
 		{name: "script", identity: runners.ScriptIdentity},
 		{name: "inference", identity: runners.InferenceIdentity},
 	}
@@ -211,8 +210,6 @@ func TestNewProductionRegistryPreservesStrategyConstructionErrors(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			agentDependencies, scriptConfig, scriptDeps, inferenceConfig, inferenceDeps := validProductionRegistryInputs()
 			switch test.identity {
-			case runners.AgentIdentity:
-				agentDependencies.Providers = nil
 			case runners.ScriptIdentity:
 				scriptConfig.Command = ""
 				scriptConfig.RequestSelected = false

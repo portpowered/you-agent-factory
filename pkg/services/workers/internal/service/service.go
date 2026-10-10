@@ -41,7 +41,8 @@ type Service struct {
 // NewWithProviderOverride constructs an inert Execute capability with the
 // optional process edge provider used by root composition. The override is
 // immutable process configuration; request identity and cancellation remain
-// owned by each Execute call.
+// owned by each Execute call. Process composition supplies the required runner
+// registry and clock; this constructor only captures the completed capabilities.
 func NewWithProviderOverride(
 	runnerService runners.Service,
 	providersService providers.Service,
@@ -56,12 +57,6 @@ func NewWithProviderOverride(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	factoryDocs workers.FactoryDocsLoader,
 ) (*Service, error) {
-	if runnerService == nil {
-		return nil, errMisconfigured("runners service is required")
-	}
-	if clock == nil {
-		return nil, errMisconfigured("clock is required")
-	}
 	return &Service{
 		runners:           runnerService,
 		providers:         providersService,

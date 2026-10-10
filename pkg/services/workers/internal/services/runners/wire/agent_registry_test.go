@@ -161,24 +161,6 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 	}
 }
 
-func TestNewAgentRegistryRejectsMissingProvidersRoot(t *testing.T) {
-	_, err := newTestAgentRegistry(runners.AgentDependencies{
-		Publish: agentNoopPublisher,
-	})
-	if err == nil {
-		t.Fatal("newTestAgentRegistry() error = nil, want missing Providers root")
-	}
-}
-
-func TestNewAgentRegistryRejectsMissingProgressPublisher(t *testing.T) {
-	_, err := newTestAgentRegistry(runners.AgentDependencies{
-		Providers: newAgentProvidersFake(),
-	})
-	if err == nil {
-		t.Fatal("newTestAgentRegistry() error = nil, want missing progress publisher")
-	}
-}
-
 type agentProvidersFake struct {
 	providers.Service
 	mu      sync.Mutex

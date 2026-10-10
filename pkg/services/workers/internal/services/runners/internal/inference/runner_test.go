@@ -189,10 +189,7 @@ func TestRunnerPreservesPreCanceledContextWithoutCallingModels(t *testing.T) {
 	}
 }
 
-func TestNewRejectsMissingModelsAndManagedModel(t *testing.T) {
-	if _, err := New(validConfig(), nil, nil, nil, nil); err == nil {
-		t.Fatal("New() with nil Models returned nil error")
-	}
+func TestNewRejectsMissingManagedModel(t *testing.T) {
 	if _, err := New(Config{Worker: models.LocalWorker{
 		Name: "worker", Type: interfaces.WorkerTypeInference,
 		ModelLocality: models.RuntimeModelLocalityLocal,

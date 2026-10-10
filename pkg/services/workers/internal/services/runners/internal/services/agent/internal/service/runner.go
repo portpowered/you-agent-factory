@@ -98,20 +98,14 @@ func progressIdentityForRequest(request workers.RunnerExecutionRequest) progress
 
 var _ agent.Service = (*service)(nil)
 
-// New validates and captures the singular Providers root, the Workers-owned
-// observation edge, and the injected decision-envelope owner without starting
-// an attempt or constructing another graph.
+// New captures the Providers root supplied by process composition, the optional
+// Workers observation edge, and the injected decision-envelope owner without
+// starting an attempt or constructing another graph.
 func New(
 	providersService providers.Service,
 	publish workers.ProgressPublisher,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) (agent.Service, error) {
-	if providersService == nil {
-		return nil, misconfigured("agent Providers service is required", nil)
-	}
-	if publish == nil {
-		return nil, misconfigured("agent progress publisher is required", nil)
-	}
 	return &service{
 		providers:         providersService,
 		publish:           publish,
