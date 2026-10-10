@@ -101,7 +101,7 @@ func assertSelectedExportRead(t *testing.T, owner recordings.Service, id, sessio
 		t.Fatal(err)
 	}
 	if !bytes.Contains(data, []byte("selected export result COMPLETE")) {
-		 t.Fatal("export lost accepted Work result")
+		t.Fatal("export lost accepted Work result")
 	}
 	if excludedSession != "" && bytes.Contains(data, []byte(excludedSession)) {
 		t.Fatal("B07-R replacement retained old session records")
