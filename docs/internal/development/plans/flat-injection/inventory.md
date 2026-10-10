@@ -6,6 +6,29 @@ This is the impact inventory for [the plan](./plan.md), not a substitute for its
 
 The inventory combines the construction-path audit with the clock/logger and required-dependency follow-up. File links were checked against the working tree on 2026-10-02. Named symbols are the stable anchors; recorded line numbers are audit locators and may move during implementation. “Active” means a production composition or operational surface; it does not mean every optional feature is exercised by every process. “Compatibility/test” means an alternate construction seam with no production caller found in this audit. “Caller-check” means caller reachability must be settled before deletion. Runtime state allocation and lifecycle resource acquisition are separate from reusable service construction.
 
+## Current T29 reconciliation
+
+The rows below supersede only their named historical requiredness findings.
+They do not give terminal dispositions to the other historical, amendment or
+validation-review rows. Complete every-row reconciliation remains unsatisfied.
+The repository capability set currently enables Provider Sessions only, alongside
+the retained Chat/Events sets; its name is not a repository-coverage claim.
+
+| Original owner | Exact current source and symbol | Disposition | Delivered change or remaining delta |
+| --- | --- | --- | --- |
+| T06/T18 | `provider_sessions/internal/service/service.go:New`, `inspectionService.captured`; `captured_codex.go:capturedProvider.reader` | Directly injected | [PR #3132](https://github.com/portpowered/you-agent-factory/pull/3132), merge `b5cd3187cf8f83f258cdd5ee8dde93a183cb6fec`: New consumes the selected Recordings captured reader without a requiredness guard; captured-only inspection and identity validation remain. |
+| T06/T18 | `provider_sessions/transports/http/adapter.go:NewAdapter`, `(Adapter).Details`; `handler.go:NewHandler` | Directly injected | Same PR #3132/merge: the required root, adapter and logger guards are removed. Context cancellation and decoded identity errors remain domain/request handling. Canonical `pkg/wire/wire.go` retains direct NewAdapter/NewHandler provider references. |
+| T07 | `operator_settings/internal/service/service.go:(Service).LoadDocument`, `ApplyDocumentUpdate`, `ResolveEffective`; `identity.go:EnsureLocalBackendScope`; `defaults.go:ResolveDefaults` | Directly injected | [PR #3133](https://github.com/portpowered/you-agent-factory/pull/3133), merge `e35483788534480dc6bf2324780b93922fef10e0`: constructed root guards removed; document/resolution/effects stored directly by New. This is a root disposition only. |
+| T07 | `operator_settings/internal/services/document/internal/service/service.go:(Service).LoadDocument`, `MergeDocumentProviderModel`, `ApplyDocumentUpdate`, `PersistDocument` | BLOCKED, not terminal | All four still test the constructed receiver against nil and return errDocumentOwnerUnavailable. Smallest original-owner delta: remove repeated receiver requiredness and retire the corresponding invalid-internal-instance expectations; preserve request validation and resource failures. |
+| T07 | Same document owner, `load.go:(Service).loadDocument`; `persist.go:(Service).persistDocument`, `marshalDocument`; `update.go:validateProviderModelUpdate` | BLOCKED, not terminal | Required files/decoder/createTemp/encoder/provider-catalog guards survive. Classify exact required provenance and remove only required-effect compatibility guards; preserve optional diagnosticDecoder/preserveUnknown policy, missing files and atomic-write failures. PR #3133 did not change these production files. |
+| T07 | `operator_settings/internal/services/resolution/internal/service/provider_query.go:newProvidersRootQuery` | BLOCKED, not terminal | Required Providers root is still nil-checked at line 25 after New receives it. Smallest owner delta: direct root storage, preserving provider lookup/domain errors. |
+| T07/T18 | `operator_settings/transports/http/root_binding.go:NewAdapterFromRoot`, `RootBinding` | BLOCKED, not terminal | Compatibility wrapper calls NewAdapter outside Wire and carries the root in a record. Audit actual callers and retire the obsolete wrapper/binding rather than allow a second construction path. Dormant adapter compatibility does not prove canonical route activation. |
+
+These source dispositions are static only. They prove no runtime success,
+retention, performance or independent validation outcome. The interface-result
+receiver/storage provenance limit is documented in construction.md and lint.md
+section 4; it does not turn the blocked private Settings rows into lawful state.
+
 ## Construction graphs and dependency containers
 
 | Task | Classification | File / secondary object container | Problem | Cleanup |

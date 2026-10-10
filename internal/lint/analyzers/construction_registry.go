@@ -72,10 +72,11 @@ func RepositoryConstructionRegistry() ConstructionRegistry {
 	const events = module + "/pkg/services/events"
 	const store = events + "/internal/service"
 	constructor := ConstructionSymbol{ImportPath: owner, Name: "New"}
-	return ConstructionRegistry{
+	registry := ConstructionRegistry{
 		CapabilitySets: []ConstructionCapabilitySet{
 			{Name: "chat-target-catalog", OwnerTask: "T21", Mode: ConstructionEnforce},
 			{Name: "events", OwnerTask: "T29", Mode: ConstructionEnforce},
+			{Name: "repository", OwnerTask: "T29", Mode: ConstructionEnforce},
 		},
 		Constructors: []ConstructionConstructor{{
 			Symbol: constructor, CapabilitySet: "chat-target-catalog",
@@ -101,4 +102,45 @@ func RepositoryConstructionRegistry() ConstructionRegistry {
 			{Symbol: ConstructionSymbol{ImportPath: store, Name: "topicState"}, CapabilitySet: "events", Kind: ConstructionState},
 		},
 	}
+	return registerProviderSessionsConstruction(registry)
+}
+
+// The captured-only owner and its HTTP roles were corrected in PR #3132.
+// Remaining repository classifications must not be enabled over known debt.
+func registerProviderSessionsConstruction(registry ConstructionRegistry) ConstructionRegistry {
+	const root = "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	const reader = "github.com/portpowered/infinite-you/pkg/services/recordings.WorkerCapturedActivityReader"
+	service := ConstructionSymbol{ImportPath: root, Name: "Service"}
+	adapter := ConstructionSymbol{ImportPath: root + "/transports/http", Name: "Adapter"}
+	handler := ConstructionSymbol{ImportPath: root + "/transports/http", Name: "Handler"}
+	for _, symbol := range []ConstructionSymbol{
+		service, adapter, handler,
+		{ImportPath: root + "/internal/service", Name: "inspectionService"},
+	} {
+		registry.Types = append(registry.Types, ConstructionType{
+			Symbol: symbol, CapabilitySet: "repository", Kind: ConstructionBehavior,
+		})
+	}
+	for _, symbol := range []ConstructionSymbol{
+		{ImportPath: root + "/internal/service", Name: "New"},
+		{ImportPath: root + "/wire", Name: "NewService"},
+	} {
+		registry.Constructors = append(registry.Constructors, ConstructionConstructor{
+			Symbol: symbol, CapabilitySet: "repository", Results: []ConstructionSymbol{service},
+			RequiredParameters: []ConstructionParameter{{Index: 0, TypeExpr: reader}},
+		})
+	}
+	registry.Constructors = append(registry.Constructors, ConstructionConstructor{
+		Symbol:        ConstructionSymbol{ImportPath: adapter.ImportPath, Name: "NewAdapter"},
+		CapabilitySet: "repository", Results: []ConstructionSymbol{adapter},
+		RequiredParameters: []ConstructionParameter{{Index: 0, TypeExpr: root + ".Service"}},
+	}, ConstructionConstructor{
+		Symbol:        ConstructionSymbol{ImportPath: handler.ImportPath, Name: "NewHandler"},
+		CapabilitySet: "repository", Results: []ConstructionSymbol{handler},
+		RequiredParameters: []ConstructionParameter{
+			{Index: 0, TypeExpr: "*" + adapter.ImportPath + ".Adapter"},
+			{Index: 1, TypeExpr: "*go.uber.org/zap.Logger"},
+		},
+	})
+	return registry
 }

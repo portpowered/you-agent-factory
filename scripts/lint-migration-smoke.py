@@ -809,13 +809,74 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
     ]
 
 
+def provider_sessions_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]]:
+    """Use exact delivered constructor signatures with the production registry."""
+    module = "github.com/portpowered/infinite-you"
+    owner = "pkg/services/provider_sessions"
+    private = owner + "/internal/service"
+    transport = owner + "/transports/http"
+    write(root, "pkg/services/recordings/reader.go",
+          "package recordings\ntype WorkerCapturedActivityReader interface { Read() }\n")
+    # The HTTP signature consumes a Zap pointer, not the platform Logger view.
+    write(root, "stubs/zap/go.mod", "module go.uber.org/zap\n\ngo 1.25.0\n")
+    write(root, "stubs/zap/logger.go", "package zap\ntype Logger struct{}\n")
+    write(root, owner + "/contract.go", "package provider_sessions\ntype Service interface { Observe() }\n")
+    write(root, private + "/service.go", "package service\n" +
+          f'import sessions "{module}/{owner}"\n' +
+          f'import recordings "{module}/pkg/services/recordings"\n' +
+          "type inspectionService struct{ reader recordings.WorkerCapturedActivityReader }\n"
+          "func New(reader recordings.WorkerCapturedActivityReader) (sessions.Service, error) {\n" +
+          (" if reader == nil { return nil, nil }\n" if seeded else "") +
+          " return &inspectionService{reader: reader}, nil\n}\n"
+          "func (s *inspectionService) Observe() { s.reader.Read() }\n" +
+          ("func Operation(reader recordings.WorkerCapturedActivityReader) { New(reader) }\n" if seeded else ""))
+    write(root, owner + "/wire/provider.go", "package wire\n" +
+          f'import sessions "{module}/{owner}"\n' +
+          f'import recordings "{module}/pkg/services/recordings"\n' +
+          f'import service "{module}/{private}"\n' +
+          "func NewService(reader recordings.WorkerCapturedActivityReader) (sessions.Service, error) { return service.New(reader) }\n")
+    write(root, transport + "/adapter.go", "package http\n" +
+          f'import sessions "{module}/{owner}"\n' +
+          'import zap "go.uber.org/zap"\n' +
+          "type Adapter struct{ sessions sessions.Service }\n"
+          "type Handler struct{ adapter *Adapter; logger *zap.Logger }\n"
+          "func NewAdapter(peer sessions.Service) *Adapter { return &Adapter{sessions: peer} }\n"
+          "func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {\n" +
+          (" if logger == nil { return nil }\n" if seeded else "") +
+          " return &Handler{adapter: adapter, logger: logger}\n}\n"
+          "func (a *Adapter) Peer() sessions.Service { return a.sessions }\n"
+          "func (a *Adapter) View(id string) sessions.Service { _ = id; return a.sessions }\n" +
+          ("func (a *Adapter) Use() { a.Peer().Observe() }\n"
+           "func (a *Adapter) Escape() any { return a.Peer }\n" if seeded else ""))
+    write(root, "pkg/services/new_caller/caller.go", "package new_caller\n" +
+          (f'import wire "{module}/{owner}/wire"\n' +
+           f'import recordings "{module}/pkg/services/recordings"\n' +
+           "func Run(reader recordings.WorkerCapturedActivityReader) { wire.NewService(reader) }\n" if seeded else ""))
+    write(root, "pkg/wire/provider_sessions.go", "package wire\n" +
+          f'import sessions "{module}/{owner}"\n' +
+          f'import transport "{module}/{transport}"\n' +
+          'import zap "go.uber.org/zap"\n' +
+          "func ProvideProviderSessions(peer sessions.Service, logger *zap.Logger) *transport.Handler {\n"
+          " return transport.NewHandler(transport.NewAdapter(peer), logger)\n}\n")
+    return [
+        ("repolint", f"registered-construction: {private} -> {module}/{private}.Operation->{module}/{private}.New"),
+        ("repolint", f"service-construction: pkg/services/new_caller -> {owner}/wire.NewService"),
+        ("repolint", f"registered-construction: pkg/services/new_caller -> {module}/pkg/services/new_caller.Run->{module}/{owner}/wire.NewService"),
+        ("repolint", f"required-dependency-guard: {private} -> {module}/{private}.New->{module}/{private}.New"),
+        ("repolint", f"required-dependency-guard: {transport} -> {module}/{transport}.NewHandler->{module}/{transport}.NewHandler"),
+        ("repolint", f"service-getter-locator: {transport} -> {module}/{transport}.(Adapter).Use->{module}/{transport}.(Adapter).Peer"),
+        ("repolint", f"unresolved-service-getter-reference: {transport} -> {module}/{transport}.(Adapter).Escape->{module}/{transport}.(Adapter).Peer"),
+    ]
+
+
 def ci_smoke(tool: list[str], artifacts: Path) -> None:
     """Clean/seeded/recovered real plugin checks share one warm module."""
     started = time.monotonic()
     config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
     fixtures = SizeFixtures(tool, artifacts, config)
     root = fixtures.module("ci-smoke")
-    write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+    write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n"
+          "require go.uber.org/zap v0.0.0\nreplace go.uber.org/zap => ./stubs/zap\n")
     manifest = "pkg/transports/cli/root_work.go"
     consumer = "internal/consumer/source.go"
     clean_manifest = "package cli\nfunc executeWork(inputID string) string { return inputID }\n"
@@ -828,6 +889,7 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
           "package recordings\ntype Recording struct{}\n"
           "type Service interface { QueryHistoricalRecording() Recording }\n")
     construction_smoke_sources(root, False)
+    provider_sessions_smoke_sources(root, False)
     complete_tags = "integration,functionallong,backendconformance,factoryartifact,managed_process_integration"
 
     try:
@@ -838,6 +900,7 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         write(root, consumer, 'package consumer\nimport _ "github.com/portpowered/infinite-you/packages/packaged-factories"\n')
         write(root, "pkg/wire/wire.go", 'package wire\nimport "github.com/portpowered/infinite-you/pkg/services/recordings"\nfunc forbidden(reader recordings.Service) { _ = reader.QueryHistoricalRecording() }\n')
         construction = construction_smoke_sources(root, True)
+        construction += provider_sessions_smoke_sources(root, True)
         expected_issues = [
             ("repolint", "recording-read:"),
             ("repolint", "cli-manifest-authority:"),
@@ -847,9 +910,9 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         issues = fixtures.lint(root, "seeded", expected_issues)
         complete_issues = fixtures.lint(root, "seeded-complete", expected_issues, tags=complete_tags)
         construction_issues = [issue for issue in issues if "registered-construction:" in issue["Text"]]
-        assert len(construction_issues) == 7, construction_issues
+        assert len(construction_issues) == 9, construction_issues
         complete_construction = [issue for issue in complete_issues if "registered-construction:" in issue["Text"]]
-        assert len(complete_construction) == 7, complete_construction
+        assert len(complete_construction) == 9, complete_construction
         expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
         for name, diagnostic in expected.items():
             assert any((issue["Pos"]["Filename"].replace("\\", "/") == name
@@ -860,6 +923,7 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         write(root, "pkg/wire/wire.go", "package wire\n")
         write(root, "cmd/vetfixture/source.go", "package fixture\n")
         construction_smoke_sources(root, False)
+        provider_sessions_smoke_sources(root, False)
         fixtures.lint(root, "recovered", [])
         fixtures.lint(root, "recovered-complete", [], tags=complete_tags)
     finally:
