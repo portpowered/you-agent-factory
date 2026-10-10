@@ -96,11 +96,16 @@ func writeCoverageVerdict(label string, result coverageResult, failures []string
 
 func writePackageCoverageVerdictLine(verdict packageCoverageVerdict, lane string, result coverageResult) {
 	if !verdict.hasFloor {
+		status := "report-only"
+		if packageCoverageFinding(result.packageMinimumFailures, verdict.importPath) {
+			status = "FAIL"
+		}
 		fmt.Fprintf(
 			stdoutWriter,
-			"  package=%s coverage=%.1f%% floor=n/a status=report-only lane=%s\n",
+			"  package=%s coverage=%.1f%% floor=n/a status=%s lane=%s\n",
 			verdict.importPath,
 			verdict.actual,
+			status,
 			lane,
 		)
 		return
@@ -126,6 +131,9 @@ func writePackageCoverageVerdictLine(verdict packageCoverageVerdict, lane string
 				status = "WARN"
 			}
 		}
+	}
+	if packageCoverageFinding(result.packageMinimumFailures, verdict.importPath) {
+		status = "FAIL"
 	}
 	fmt.Fprintf(
 		stdoutWriter,

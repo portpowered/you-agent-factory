@@ -226,7 +226,11 @@ func execute(cfg config) error {
 	if len(failures) > 0 {
 		return errors.New(strings.Join(coverageDiagnosticsForOutput(cfg.detailedDiagnostics, failures), "\n"))
 	}
-	fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
+	if cfg.packageFloorPolicyIsAdvisory() && cfg.suite == functionalCoverageSuite {
+		fmt.Fprintln(stdoutWriter, "Coverage measurement complete: advisory report only, not functional admission.")
+	} else {
+		fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
+	}
 	return nil
 }
 

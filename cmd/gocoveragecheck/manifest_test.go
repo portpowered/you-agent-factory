@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,329 @@ import (
 	"testing"
 	"time"
 )
+
+func retainedPolicyFixture() (coverageManifest, map[string]packageCoverageTotals) {
+	manifest := coverageManifest{Version: 1, Lane: functionalCoverageSuite}
+	totals := make(map[string]packageCoverageTotals)
+	for importPath, floor := range map[string]coverageFloor{
+		modulePath + "/pkg/wire":             8006,
+		modulePath + "/pkg/platform/metrics": 7466,
+		modulePath + "/pkg/services/factory_definitions/transports/mapping/validationentry":        6567,
+		modulePath + "/pkg/services/work/internal/services/state_access/wire":                      7647,
+		modulePath + "/pkg/services/automations/internal/services/reconciliation/internal/service": 3571,
+		modulePath + "/pkg/transports/http":                                                        6559,
+		modulePath + "/pkg/transports/cli/clihttp":                                                 6707,
+	} {
+		manifest.Packages = append(manifest.Packages, coverageManifestEntry{Package: importPath, Minimum: json.RawMessage(floor.String())})
+		totals[importPath] = packageCoverageTotals{coveredStatements: int(floor), totalStatements: 10000}
+	}
+	slices.SortFunc(manifest.Packages, func(a, b coverageManifestEntry) int { return strings.Compare(a.Package, b.Package) })
+	return manifest, totals
+}
+
+func TestRetainedFunctionalFloorsRejectLoweredManifest(t *testing.T) {
+	t.Parallel()
+	manifest, totals := retainedPolicyFixture()
+	for index := range manifest.Packages {
+		entry := &manifest.Packages[index]
+		switch entry.Package {
+		case modulePath + "/pkg/wire":
+			entry.Minimum = json.RawMessage("71.49")
+			totals[entry.Package] = packageCoverageTotals{coveredStatements: 7149, totalStatements: 10000}
+		case modulePath + "/pkg/platform/metrics":
+			entry.Minimum = json.RawMessage("63.15")
+			totals[entry.Package] = packageCoverageTotals{coveredStatements: 6315, totalStatements: 10000}
+		}
+	}
+	if failures, _ := checkCoverageManifestWithEpsilon(manifest, totals, "policy.json", 0); len(failures) != 0 {
+		t.Fatalf("raw lowered floors should pass, got %v", failures)
+	}
+	failures := checkRetainedFunctionalFloors(manifest, totals, nil, t.TempDir())
+	if len(failures) != 2 || !strings.Contains(strings.Join(failures, "\n"), "retained-minimum=80.06%") || !strings.Contains(strings.Join(failures, "\n"), "retained-minimum=74.66%") {
+		t.Fatalf("retained deficits = %v", failures)
+	}
+}
+
+func TestRetainedFunctionalFloorsAcceptRestoration(t *testing.T) {
+	t.Parallel()
+	manifest, totals := retainedPolicyFixture()
+	if failures := checkRetainedFunctionalFloors(manifest, totals, nil, t.TempDir()); len(failures) != 0 {
+		t.Fatalf("exact restoration rejected: %v", failures)
+	}
+	manifest.Packages[len(manifest.Packages)-1].Minimum = json.RawMessage("90.00")
+	if failures := checkRetainedFunctionalFloors(manifest, totals, nil, t.TempDir()); len(failures) != 1 || !strings.Contains(failures[0], "stronger existing floor") {
+		t.Fatalf("stronger floor bypassed: %v", failures)
+	}
+	for importPath, actual := range totals {
+		actual.coveredStatements--
+		totals[importPath] = actual
+	}
+	if failures := checkRetainedFunctionalFloors(manifest, totals, nil, t.TempDir()); len(failures) != 7 {
+		t.Fatalf("just-below exact thresholds admitted: %v", failures)
+	}
+}
+
+func TestRetainedFunctionalFloorsCommandPolicy(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"restored", "lowered", "epsilon", "hold", "total-only", "no-manifest", "advisory"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			cfg, result, root := retainedCommandPolicyFixture(t, variant)
+			got, err := applyCoverageManifestGate(cfg, result, root, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if variant == "restored" {
+				if len(got.packageMinimumFailures) != 0 {
+					t.Fatalf("restoration rejected: %v", got.packageMinimumFailures)
+				}
+			} else if variant == "advisory" {
+				if len(got.packageMinimumFailures) != 0 || !strings.Contains(strings.Join(got.packageMinimumWarnings, "\n"), "retained functional coverage regression:") {
+					t.Fatalf("advisory findings lost: %+v", got)
+				}
+			} else if !strings.Contains(strings.Join(got.packageMinimumFailures, "\n"), "retained functional coverage regression:") {
+				t.Fatalf("%s bypassed retained admission", variant)
+			}
+		})
+	}
+}
+
+func retainedCommandPolicyFixture(t *testing.T, variant string) (config, coverageResult, string) {
+	t.Helper()
+	manifest, totals := retainedPolicyFixture()
+	for _, service := range []string{"automations", "factory_definitions", "work"} {
+		importPath := coverageServiceRootPrefix + service
+		manifest.Packages = append(manifest.Packages, coverageManifestEntry{Package: importPath, Minimum: json.RawMessage("0.00")})
+		totals[importPath] = packageCoverageTotals{}
+	}
+	slices.SortFunc(manifest.Packages, func(a, b coverageManifestEntry) int { return strings.Compare(a.Package, b.Package) })
+	wire := &manifest.Packages[len(manifest.Packages)-1]
+	if variant != "restored" && variant != "no-manifest" {
+		totals[wire.Package] = packageCoverageTotals{coveredStatements: 7149, totalStatements: 10000}
+	}
+	if variant == "lowered" || variant == "total-only" || variant == "advisory" {
+		wire.Minimum = json.RawMessage("71.49")
+	}
+	if variant == "hold" {
+		manifest.FloorHolds = []coverageManifestFloorHold{{Package: wire.Package, Owner: "owner", Deadline: "2099-01-01", Justification: "temporary hold", RemovalGate: "restore coverage"}}
+	}
+	root := t.TempDir()
+	data, err := renderCoverageManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filename := filepath.Join(root, "policy.json")
+	if err := os.WriteFile(filename, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config{suite: functionalCoverageSuite, packageManifest: filename, totalOnly: variant == "total-only"}
+	if variant == "no-manifest" {
+		cfg.packageManifest = ""
+		cfg.totalOnly = true
+	}
+	if variant == "epsilon" {
+		cfg.packageFloorEpsilon = 100
+	}
+	if variant == "advisory" {
+		cfg.packageFloorPolicy = coverageFloorPolicyAdvisory
+	}
+	packages := make([]string, 0, len(totals))
+	for importPath := range totals {
+		packages = append(packages, importPath)
+	}
+	result := coverageResult{packageTotals: totals, packageSummaries: summarizePackageCoverageFromTotals(totals, packages)}
+	return cfg, result, root
+}
+
+func TestRetainedFunctionalFloorsRejectHoldsAndScopeExclusions(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"missing-row", "missing-profile", "zero-statements", "measurement-exception", "generic-hold", "lowered-row-with-restored-measurement"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			manifest, totals := retainedPolicyFixture()
+			entry := &manifest.Packages[len(manifest.Packages)-1]
+			importPath := entry.Package
+			switch variant {
+			case "missing-row":
+				manifest.Packages = manifest.Packages[:len(manifest.Packages)-1]
+			case "missing-profile":
+				delete(totals, importPath)
+			case "zero-statements":
+				totals[importPath] = packageCoverageTotals{}
+			case "measurement-exception":
+				entry.Minimum = nil
+				entry.Exception = &coverageManifestException{Kind: "measurement"}
+			case "generic-hold":
+				manifest.FloorHolds = []coverageManifestFloorHold{{Package: importPath}}
+				totals[importPath] = packageCoverageTotals{coveredStatements: 1, totalStatements: 100}
+			case "lowered-row-with-restored-measurement":
+				entry.Minimum = json.RawMessage("71.49")
+			}
+			failures := checkRetainedFunctionalFloors(manifest, totals, nil, t.TempDir())
+			if len(failures) != 1 || !strings.Contains(failures[0], "package="+importPath+" ") {
+				t.Fatalf("%s admitted or wrong diagnostics: %v", variant, failures)
+			}
+		})
+	}
+}
+
+func retainedDispositionFixture(t *testing.T) (coverageManifestEntry, map[string]coverageBlock, string) {
+	t.Helper()
+	root := t.TempDir()
+	file := "pkg/wire/fixture.go"
+	filename := filepath.Join(root, filepath.FromSlash(file))
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("package wire\nfunc fixture() {}\n")
+	if err := os.WriteFile(filename, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entry := coverageManifestEntry{Package: modulePath + "/pkg/wire", Minimum: json.RawMessage("71.49")}
+	blocks := make(map[string]coverageBlock)
+	// More than the diagnostic display limit must still be validated in full.
+	for index := 1; index <= maxUncoveredCoverageBlocks+1; index++ {
+		rangeSpec := fmt.Sprintf("%d.1,%d.2", index, index)
+		block := coverageBlock{canonicalPath: modulePath + "/" + file, importPath: entry.Package, rangeSpec: rangeSpec, statementCount: 1}
+		blocks[block.canonicalPath+":"+rangeSpec] = block
+		entry.DeadCodeDispositions = append(entry.DeadCodeDispositions, coverageManifestDeadCodeDisposition{
+			File: file, Range: rangeSpec, Statements: 1, SourceSHA256: fmt.Sprintf("%x", sha256.Sum256(data)),
+			Classification: "unreachable", Justification: "The canonical caller rejects an absent owner before this guard can execute.",
+			ReviewReference: "https://github.com/portpowered/you-agent-factory/pull/3143#discussion_r1",
+		})
+	}
+	return entry, blocks, root
+}
+
+func TestRetainedFunctionalFloorsRequireExactDispositions(t *testing.T) {
+	t.Parallel()
+	entry, blocks, root := retainedDispositionFixture(t)
+	actual := packageCoverageTotals{coveredStatements: 74, totalStatements: 100}
+	before := coverageTotals(blocks)
+	if err := checkRetainedFunctionalPackage(entry, 8006, actual, blocks, root); err != nil {
+		t.Fatalf("complete source-bound disposition rejected: %v", err)
+	}
+	if got := coverageTotals(blocks)[entry.Package]; got != before[entry.Package] {
+		t.Fatalf("raw statement totals rewritten: %v -> %v", before, got)
+	}
+	manifest := coverageManifest{Version: 1, Lane: functionalCoverageSuite, Packages: []coverageManifestEntry{entry}}
+	data, err := renderCoverageManifest(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := readCoverageManifest(data, functionalCoverageSuite, []string{entry.Package})
+	if err != nil {
+		t.Fatalf("disposition schema round trip: %v", err)
+	}
+	if len(decoded.Packages[0].DeadCodeDispositions) != len(entry.DeadCodeDispositions) {
+		t.Fatal("dispositions lost on round trip")
+	}
+	diagnostics := retainedDispositionEligibilityDiagnostics(decoded, nil)
+	if len(diagnostics) != 1 || !strings.Contains(diagnostics[0], "independent review") || !strings.Contains(diagnostics[0], "source-bound-blocks=26") {
+		t.Fatalf("eligibility findings = %v", diagnostics)
+	}
+}
+
+func TestRetainedFunctionalFloorsDispositionPreservesStrongerFloors(t *testing.T) {
+	t.Parallel()
+	entry, blocks, root := retainedDispositionFixture(t)
+	manifest, totals := retainedPolicyFixture()
+	manifest.Packages[len(manifest.Packages)-1] = entry
+	totals[entry.Package] = packageCoverageTotals{totalStatements: len(blocks)}
+	retainedFailures := checkRetainedFunctionalFloors(manifest, totals, blocks, root)
+	if len(retainedFailures) != 0 {
+		t.Fatalf("exact disposition rejected: %v", retainedFailures)
+	}
+	failures, _ := checkCoverageManifestWithEpsilonAndBlocks(manifest, totals, "policy.json", 0, blocks)
+	if len(failures) != 1 {
+		t.Fatalf("raw floor finding = %v", failures)
+	}
+	if got := filterDispositionFloorFindings(manifest, failures, retainedFailures); len(got) != 0 {
+		t.Fatalf("valid alternative still blocked: %v", got)
+	}
+	manifest.Packages[len(manifest.Packages)-1].Minimum = json.RawMessage("90.00")
+	failures, _ = checkCoverageManifestWithEpsilonAndBlocks(manifest, totals, "policy.json", 0, blocks)
+	if got := filterDispositionFloorFindings(manifest, failures, retainedFailures); len(got) != 1 {
+		t.Fatal("stronger numeric floor was bypassed")
+	}
+	if got := filterDispositionFloorFindings(manifest, failures, []string{"retained regression: package=" + entry.Package + " invalid"}); len(got) != 1 {
+		t.Fatal("invalid disposition bypassed admission")
+	}
+}
+
+func TestRetainedFunctionalFloorsRejectIncompleteOrStaleDispositions(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"missing-last", "duplicate", "foreign", "range", "statements", "digest", "source-change", "reachable", "unknown", "blank-justification", "generic-scope", "blank-review", "malformed-review", "traversal", "absolute", "backslash", "missing-source", "covered-block"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			entry, blocks, root := retainedDispositionFixture(t)
+			mutateDispositionFixture(t, variant, &entry, blocks, root)
+			if err := checkRetainedFunctionalPackage(entry, 8006, packageCoverageTotals{coveredStatements: 74, totalStatements: 100}, blocks, root); err == nil {
+				t.Fatalf("%s disposition admitted", variant)
+			}
+			if err := checkRetainedFunctionalPackage(entry, 8006, packageCoverageTotals{coveredStatements: 90, totalStatements: 100}, blocks, root); err == nil {
+				t.Fatalf("%s stale/invalid disposition admitted after restoration", variant)
+			}
+		})
+	}
+}
+
+func mutateDispositionFixture(t *testing.T, variant string, entry *coverageManifestEntry, blocks map[string]coverageBlock, root string) {
+	t.Helper()
+	record := &entry.DeadCodeDispositions[0]
+	switch variant {
+	case "missing-last":
+		entry.DeadCodeDispositions = entry.DeadCodeDispositions[:maxUncoveredCoverageBlocks]
+	case "duplicate":
+		entry.DeadCodeDispositions = append(entry.DeadCodeDispositions, *record)
+	case "source-change":
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(record.File)), []byte("package wire\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	case "missing-source":
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(record.File))); err != nil {
+			t.Fatal(err)
+		}
+	case "covered-block":
+		key := modulePath + "/" + record.File + ":" + record.Range
+		block := blocks[key]
+		block.executionCount = 1
+		blocks[key] = block
+	default:
+		mutateDispositionRecord(variant, record)
+	}
+}
+
+func mutateDispositionRecord(variant string, record *coverageManifestDeadCodeDisposition) {
+	switch variant {
+	case "foreign":
+		record.File = "pkg/platform/metrics/fixture.go"
+	case "range":
+		record.Range = "99.1,99.2"
+	case "statements":
+		record.Statements++
+	case "digest":
+		record.SourceSHA256 = strings.Repeat("0", 64)
+	case "reachable":
+		record.Classification = "reachable"
+	case "unknown":
+		record.Classification = "generated"
+	case "blank-justification":
+		record.Justification = " "
+	case "generic-scope":
+		record.Justification = "scope exclusion"
+	case "blank-review":
+		record.ReviewReference = " "
+	case "malformed-review":
+		record.ReviewReference = "not a review"
+	case "traversal":
+		record.File = "pkg/wire/../wire/fixture.go"
+	case "absolute":
+		record.File = "/pkg/wire/fixture.go"
+	case "backslash":
+		record.File = `pkg\wire\fixture.go`
+	}
+}
 
 func TestCoverageFloorFromTotalsTruncatesDownward(t *testing.T) {
 	t.Parallel()

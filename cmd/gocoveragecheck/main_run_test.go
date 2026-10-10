@@ -397,8 +397,11 @@ func TestExecuteFunctionalFailsForNonBaselinedPackageBelowTarget(t *testing.T) {
 	}
 	want := "go coverage found non-baselined backend packages below 80.0% statement coverage: " +
 		modulePath + "/pkg/config (0.0%)"
-	if err.Error() != want {
+	if !strings.HasPrefix(err.Error(), want) {
 		t.Fatalf("execute() error = %q, want %q", err.Error(), want)
+	}
+	if strings.Count(err.Error(), "retained functional coverage regression:") != len(retainedFunctionalFloors) {
+		t.Fatalf("missing retained-package failures in %v", err)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())

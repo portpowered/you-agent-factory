@@ -36,9 +36,20 @@ type coverageManifest struct {
 }
 
 type coverageManifestEntry struct {
-	Package   string                     `json:"package"`
-	Minimum   json.RawMessage            `json:"minimum,omitempty"`
-	Exception *coverageManifestException `json:"exception,omitempty"`
+	Package              string                                `json:"package"`
+	Minimum              json.RawMessage                       `json:"minimum,omitempty"`
+	Exception            *coverageManifestException            `json:"exception,omitempty"`
+	DeadCodeDispositions []coverageManifestDeadCodeDisposition `json:"deadCodeDispositions,omitempty"`
+}
+
+type coverageManifestDeadCodeDisposition struct {
+	File            string `json:"file"`
+	Range           string `json:"range"`
+	Statements      int    `json:"statements"`
+	SourceSHA256    string `json:"sourceSHA256"`
+	Classification  string `json:"classification"`
+	Justification   string `json:"justification"`
+	ReviewReference string `json:"reviewReference"`
 }
 
 // coverageManifestFloorHold is a staged-cutover record for a package whose
@@ -445,6 +456,11 @@ func validateCoverageLane(lane string) error {
 }
 
 func validateCoverageManifestEntry(entry coverageManifestEntry) error {
+	for _, disposition := range entry.DeadCodeDispositions {
+		if err := validateDeadCodeDisposition(disposition, entry.Package); err != nil {
+			return err
+		}
+	}
 	hasMinimum := len(entry.Minimum) > 0 && string(entry.Minimum) != "null"
 	hasException := entry.Exception != nil
 	if hasMinimum == hasException {

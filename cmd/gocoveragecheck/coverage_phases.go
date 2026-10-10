@@ -191,7 +191,7 @@ func legacyPackageGateEnabled(cfg config) bool {
 }
 
 func applyCoverageManifestGate(cfg config, result coverageResult, repoRoot string, baselinePackages map[string]struct{}) (coverageResult, error) {
-	if !cfg.totalOnly && strings.TrimSpace(cfg.packageManifest) != "" {
+	if (!cfg.totalOnly || cfg.suite == functionalCoverageSuite) && strings.TrimSpace(cfg.packageManifest) != "" {
 		manifestPath := cfg.packageManifest
 		if !filepath.IsAbs(manifestPath) {
 			manifestPath = filepath.Join(repoRoot, manifestPath)
@@ -212,6 +212,10 @@ func applyCoverageManifestGate(cfg config, result coverageResult, repoRoot strin
 			return coverageResult{}, err
 		}
 		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
+		retainedFailures := checkRetainedFunctionalFloors(manifest, result.packageTotals, result.coverageBlocks, repoRoot)
+		result.packageMinimumFailures = append(filterDispositionFloorFindings(manifest, result.packageMinimumFailures, retainedFailures), retainedFailures...)
+		result.packageMinimumWarnings = filterDispositionFloorFindings(manifest, result.packageMinimumWarnings, retainedFailures)
+		result.packageMinimumWarnings = append(result.packageMinimumWarnings, retainedDispositionEligibilityDiagnostics(manifest, result.packageMinimumFailures)...)
 		if cfg.packageFloorPolicyIsAdvisory() {
 			result.packageMinimumWarnings = append(result.packageMinimumWarnings, result.packageMinimumFailures...)
 			result.packageMinimumFailures = nil
@@ -226,6 +230,9 @@ func applyCoverageManifestGate(cfg config, result coverageResult, repoRoot strin
 		result.packageGates = coverageManifestGatedPackages(manifest, result.packageTotals)
 	} else if legacyPackageGateEnabled(cfg) {
 		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
+	}
+	if cfg.suite == functionalCoverageSuite && strings.TrimSpace(cfg.packageManifest) == "" && cfg.generateManifest == "" {
+		result.packageMinimumFailures = append(result.packageMinimumFailures, checkRetainedFunctionalFloors(coverageManifest{Lane: functionalCoverageSuite}, result.packageTotals, result.coverageBlocks, repoRoot)...)
 	}
 	return result, nil
 }

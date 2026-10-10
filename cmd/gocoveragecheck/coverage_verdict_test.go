@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -14,6 +15,15 @@ var functionalVerdictCoverPackages = []string{
 	modulePath + "/pkg/config",
 	modulePath + "/pkg/service",
 	modulePath + "/pkg/wire",
+	modulePath + "/pkg/platform/metrics",
+	modulePath + "/pkg/services/automations/internal/services/reconciliation/internal/service",
+	modulePath + "/pkg/services/factory_definitions/transports/mapping/validationentry",
+	modulePath + "/pkg/services/work/internal/services/state_access/wire",
+	modulePath + "/pkg/transports/http",
+	modulePath + "/pkg/transports/cli/clihttp",
+	modulePath + "/pkg/services/automations",
+	modulePath + "/pkg/services/factory_definitions",
+	modulePath + "/pkg/services/work",
 }
 
 // fakeFunctionalCoverageCommand writes a profile with one below-floor package,
@@ -27,7 +37,7 @@ func fakeFunctionalCoverageCommand(invocation commandInvocation) (string, string
 	if profilePath == "" {
 		return "", "", fmt.Errorf("missing -coverprofile")
 	}
-	if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
+	lines := []string{
 		"mode: count",
 		modulePath + "/pkg/config/config.go:1.1,2.1 1 1",
 		modulePath + "/pkg/config/config.go:11.1,12.1 2 0",
@@ -36,7 +46,15 @@ func fakeFunctionalCoverageCommand(invocation commandInvocation) (string, string
 		modulePath + "/pkg/service/factory.go:31.1,32.1 1 0",
 		modulePath + "/pkg/wire/wire.go:1.1,2.1 10 3",
 		"",
-	}, "\n")); err != nil {
+	}
+	for _, importPath := range functionalVerdictCoverPackages[3:] {
+		statements := 1
+		if isCoverageManifestServiceRoot(importPath) {
+			statements = 0
+		}
+		lines = append(lines, fmt.Sprintf("%s/fixture.go:1.1,2.1 %d 1", importPath, statements))
+	}
+	if err := writeFakeCoverageProfile(profilePath, strings.Join(lines, "\n")); err != nil {
 		return "", "", err
 	}
 	// go test reports the per-package coverage percentage on its own line. The
@@ -46,11 +64,22 @@ func fakeFunctionalCoverageCommand(invocation commandInvocation) (string, string
 
 func functionalVerdictManifest(t *testing.T, configMinimum string) string {
 	t.Helper()
-	return writePackageMinimumManifestWithEntries(t, "functional", []manifestPackageSpec{
+	return writeFunctionalVerdictManifest(t, []manifestPackageSpec{
 		{importPath: modulePath + "/pkg/config", minimum: configMinimum},
 		{importPath: modulePath + "/pkg/service", minimum: "89.00"},
-		{importPath: modulePath + "/pkg/wire", minimum: "50.00"},
+		{importPath: modulePath + "/pkg/wire", minimum: "80.06"},
 	})
+}
+
+// Report fixtures include every protected package so unrelated reporter assertions
+// exercise valid retained admission rather than omitted-package exemptions.
+func writeFunctionalVerdictManifest(t *testing.T, entries []manifestPackageSpec) string {
+	t.Helper()
+	for _, importPath := range functionalVerdictCoverPackages[3:] {
+		entries = append(entries, manifestPackageSpec{importPath: importPath, minimum: retainedFunctionalFloors[importPath].String()})
+	}
+	slices.SortFunc(entries, func(a, b manifestPackageSpec) int { return strings.Compare(a.importPath, b.importPath) })
+	return writePackageMinimumManifestWithEntries(t, functionalCoverageSuite, entries)
 }
 
 func functionalVerdictConfig(manifestPath string, jsonPath string) config {
@@ -100,7 +129,7 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 
 	configLine := strings.Index(stdout, "  package="+modulePath+"/pkg/config coverage=25.0% floor=80.0% delta=-55.0pp status=FAIL lane=functional\n")
 	serviceLine := strings.Index(stdout, "  package="+modulePath+"/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp status=PASS lane=functional\n")
-	wireLine := strings.Index(stdout, "  package="+modulePath+"/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp status=PASS lane=functional\n")
+	wireLine := strings.Index(stdout, "  package="+modulePath+"/pkg/wire coverage=100.0% floor=80.1% delta=+19.9pp status=PASS lane=functional\n")
 	tally := strings.Index(stdout, "  tally: ")
 	if configLine < 0 || serviceLine < 0 || wireLine < 0 || tally < 0 {
 		t.Fatalf("verdict block missing sections (config=%d service=%d wire=%d tally=%d):\n%s", configLine, serviceLine, wireLine, tally, stdout)
@@ -111,7 +140,7 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 	if strings.Contains(stdout, "uncovered blocks:") || strings.Contains(stdout, "file.go:") {
 		t.Fatalf("default verdict exposed uncovered source detail:\n%s", stdout)
 	}
-	if !strings.Contains(stdout, "  tally: measured-packages=3 gated-packages=3 below-floor=1 near-floor=1 gate-failures=1\n") {
+	if !strings.Contains(stdout, "  tally: measured-packages=12 gated-packages=12 below-floor=1 near-floor=1 gate-failures=1\n") {
 		t.Fatalf("verdict tally line missing or wrong:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "  near floor: package=") || strings.Contains(stdout, "not shown") {
@@ -122,7 +151,7 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 func TestFunctionalCoverageVerdictNamesHeldFloorWithoutCallingItAnActiveViolation(t *testing.T) {
 	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
 	configPackage := modulePath + "/pkg/config"
-	manifestPath := writePackageMinimumManifestWithEntries(t, "functional", []manifestPackageSpec{
+	manifestPath := writeFunctionalVerdictManifest(t, []manifestPackageSpec{
 		{
 			importPath: configPackage,
 			minimum:    "80.00",
@@ -134,7 +163,7 @@ func TestFunctionalCoverageVerdictNamesHeldFloorWithoutCallingItAnActiveViolatio
 			},
 		},
 		{importPath: modulePath + "/pkg/service", minimum: "89.00"},
-		{importPath: modulePath + "/pkg/wire", minimum: "50.00"},
+		{importPath: modulePath + "/pkg/wire", minimum: "80.06"},
 	})
 
 	stdout, stderr, err := captureFunctionalVerdictRun(t, functionalVerdictConfig(manifestPath, jsonPath))
@@ -218,13 +247,13 @@ func TestFunctionalCoverageVerdictPassesWhenEveryPackageMeetsItsFloor(t *testing
 	for _, want := range []string{
 		"  package=" + modulePath + "/pkg/config coverage=25.0% floor=20.0% delta=+5.0pp status=PASS lane=functional\n",
 		"  package=" + modulePath + "/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp status=PASS lane=functional\n",
-		"  package=" + modulePath + "/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp status=PASS lane=functional\n",
+		"  package=" + modulePath + "/pkg/wire coverage=100.0% floor=80.1% delta=+19.9pp status=PASS lane=functional\n",
 	} {
 		if strings.Count(stdout, want) != 1 {
 			t.Fatalf("verdict line count for %q = %d, want one:\n%s", want, strings.Count(stdout, want), stdout)
 		}
 	}
-	if !strings.Contains(stdout, "  tally: measured-packages=3 gated-packages=3 below-floor=0 near-floor=1 gate-failures=0\n") {
+	if !strings.Contains(stdout, "  tally: measured-packages=12 gated-packages=12 below-floor=0 near-floor=1 gate-failures=0\n") {
 		t.Fatalf("passing verdict tally line missing or wrong:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "  near floor: package=") || strings.Contains(stdout, "not shown") {
@@ -232,6 +261,30 @@ func TestFunctionalCoverageVerdictPassesWhenEveryPackageMeetsItsFloor(t *testing
 	}
 	if !strings.Contains(stdout, "Go coverage") || !strings.Contains(stdout, "meets minimum") {
 		t.Fatalf("passing run lost its success message:\n%s", stdout)
+	}
+}
+
+func TestRetainedFunctionalFloorsAdvisoryIsNotAdmission(t *testing.T) {
+	manifestPath := functionalVerdictManifest(t, "20.00")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = bytes.Replace(data, []byte("80.06"), []byte("71.49"), 1)
+	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := functionalVerdictConfig(manifestPath, "")
+	cfg.packageFloorPolicy = coverageFloorPolicyAdvisory
+	stdout, stderr, err := captureFunctionalVerdictRun(t, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "not functional admission") || strings.Contains(stdout, "meets minimum") {
+		t.Fatalf("advisory presented as admission: %s", stdout)
+	}
+	if !strings.Contains(stderr, "retained functional coverage regression: package="+modulePath+"/pkg/wire ") {
+		t.Fatalf("retained finding missing: %s", stderr)
 	}
 }
 
