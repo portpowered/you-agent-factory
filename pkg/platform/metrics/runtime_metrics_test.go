@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,75 @@ import (
 	"testing"
 	"time"
 )
+
+// The sink owns cancellation, encoding and lease cleanup. These component
+// witnesses use its existing closer fake; they do not measure functional floors.
+func TestRuntimeMetricsSinkRejectedRecordsPreserveWrittenHistory(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	sink := &RuntimeMetricsSink{encoder: json.NewEncoder(&output)}
+	record := map[string]any{"session_id": "selected-session", "value": 7}
+	if err := sink.WriteMetric(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	before := output.String()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sink.WriteMetric(canceled, record); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled WriteMetric() = %v, want context.Canceled", err)
+	}
+	var unsupported *json.UnsupportedTypeError
+	if err := sink.WriteMetric(context.Background(), make(chan string)); !errors.As(err, &unsupported) {
+		t.Fatalf("unsupported WriteMetric() = %v, want UnsupportedTypeError", err)
+	}
+	if output.String() != before {
+		t.Fatalf("rejected records changed history: %q", output.String())
+	}
+	if err := sink.WriteMetric(context.Background(), record); err != nil {
+		t.Fatalf("healthy write after rejection: %v", err)
+	}
+	if output.String() != before+before {
+		t.Fatalf("recovered history = %q, want two complete records", output.String())
+	}
+}
+
+func TestRuntimeMetricsSinkCloseReleasesEveryResourceDespiteFailures(t *testing.T) {
+	t.Parallel()
+	for failures := 0; failures < 8; failures++ {
+		t.Run(strconv.Itoa(failures), func(t *testing.T) {
+			t.Parallel()
+			causes := []error{errors.New("writer close failed"), errors.New("claim close failed"), errors.New("retention close failed")}
+			resources := make([]*metricsTestCloser, len(causes))
+			for index, cause := range causes {
+				resources[index] = &metricsTestCloser{}
+				if failures&(1<<index) != 0 {
+					resources[index].err = cause
+				}
+			}
+			sink := &RuntimeMetricsSink{writer: resources[0], claim: resources[1], retentionLease: resources[2]}
+			err := sink.Close()
+			if failures == 0 && err != nil {
+				t.Fatalf("successful Close() = %v", err)
+			}
+			for index, cause := range causes {
+				if errors.Is(err, cause) != (failures&(1<<index) != 0) {
+					t.Fatalf("Close() = %v, cause %v lost or invented", err, cause)
+				}
+			}
+			if err := sink.WriteMetric(context.Background(), "late record"); !errors.Is(err, errRuntimeMetricsSinkClosed) {
+				t.Fatalf("write after Close() = %v, want closed", err)
+			}
+			if err := sink.Close(); err != nil {
+				t.Fatalf("repeated Close() = %v, want nil", err)
+			}
+			for _, resource := range resources {
+				if resource.closed != 1 {
+					t.Fatalf("resource closed %d times, want once", resource.closed)
+				}
+			}
+		})
+	}
+}
 
 func TestNormalizeRuntimeMetricsConfig(t *testing.T) {
 	tests := []struct {
