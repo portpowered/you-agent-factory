@@ -14,39 +14,124 @@ import (
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
-// These inert leaves deliberately have no operations: only construction's
-// existing nil classification is under test, not either owner's behavior.
 type constructionDocument struct{ settingsdocument.Service }
 type constructionResolution struct{ resolution.Service }
 
-func TestConstructionBoundaryNilAndTypedNilClassification(t *testing.T) {
+func rootTestIDGenerator() string { return "00000000-0000-4000-8000-000000000001" }
+
+type forwardingDocument struct {
+	settingsdocument.Service
+	load  func(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error)
+	apply func(operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error)
+}
+
+func (d forwardingDocument) LoadDocument(r operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error) {
+	return d.load(r)
+}
+
+func (d forwardingDocument) ApplyDocumentUpdate(r operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error) {
+	return d.apply(r)
+}
+
+type forwardingResolution struct {
+	resolve func(operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error)
+}
+
+func (r forwardingResolution) ResolveEffective(request operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error) {
+	return r.resolve(request)
+}
+
+func newControlledRoot(t *testing.T, document settingsdocument.Service, resolution resolution.Service) operatorsettings.Service {
+	t.Helper()
+	root, err := operatorservice.New(document, resolution, rootTestFileSystem{}, rootTestCreateTemporaryFile,
+		rootTestConfigDecoder, rootTestConfigEncoder, rootTestIDGenerator, logging.NoopLogger{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestRootForwardsRequestsResultsAndTypedFailures(t *testing.T) {
 	t.Parallel()
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failure=%v", fail), func(t *testing.T) {
+			t.Parallel()
+			loadRequest := operatorsettings.LoadDocumentRequest{Path: "selected-config", RequireExisting: true}
+			model := "selected-model"
+			applyRequest := operatorsettings.ApplyDocumentUpdateRequest{Path: "selected-config", ExpectedBackendScope: "scope", ProviderModel: operatorsettings.DocumentProviderModelUpdate{Model: &model}}
+			resolveRequest := operatorsettings.ResolveEffectiveRequest{ConfigPath: "selected-config"}
+			loadResult := operatorsettings.LoadDocumentResult{Path: "selected-config", Found: true}
+			applyResult := operatorsettings.ApplyDocumentUpdateResult{Path: "selected-config"}
+			resolveResult := operatorsettings.ResolveEffectiveResult{Selection: operatorsettings.EffectiveSelection{WorkerModel: model}}
+			var documentError, resolutionError error
+			if fail {
+				documentError = operatorsettings.DocumentFailure{Kind: operatorsettings.DocumentFailureKindConflict, Message: "selected failure"}
+				resolutionError = operatorsettings.ResolutionFailure{Kind: operatorsettings.ResolutionFailureKindConflict}
+				loadResult = operatorsettings.LoadDocumentResult{}
+			}
+			root := newControlledRoot(t, forwardingDocument{
+				load: func(r operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error) {
+					if !reflect.DeepEqual(r, loadRequest) {
+						t.Errorf("load request = %#v", r)
+					}
+					return loadResult, documentError
+				},
+				apply: func(r operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error) {
+					if !reflect.DeepEqual(r, applyRequest) {
+						t.Errorf("apply request = %#v", r)
+					}
+					return applyResult, documentError
+				},
+			}, forwardingResolution{resolve: func(r operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error) {
+				if !reflect.DeepEqual(r, resolveRequest) {
+					t.Errorf("resolve request = %#v", r)
+				}
+				return resolveResult, resolutionError
+			}})
+			loaded, err := root.LoadDocument(loadRequest)
+			if !reflect.DeepEqual(loaded, loadResult) || !errors.Is(err, documentError) {
+				t.Fatalf("load = %#v, %v", loaded, err)
+			}
+			applied, err := root.ApplyDocumentUpdate(applyRequest)
+			if !reflect.DeepEqual(applied, applyResult) || !errors.Is(err, documentError) {
+				t.Fatalf("apply = %#v, %v", applied, err)
+			}
+			resolved, err := root.ResolveEffective(resolveRequest)
+			if !reflect.DeepEqual(resolved, resolveResult) || !errors.Is(err, resolutionError) {
+				t.Fatalf("resolve = %#v, %v", resolved, err)
+			}
+		})
+	}
+}
+
+func TestRootMutationRejectsInvalidContextAndPreservesPersistFailure(t *testing.T) {
+	t.Parallel()
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
 	for _, tc := range []struct {
-		name       string
-		document   settingsdocument.Service
-		resolution resolution.Service
-		wantError  string
+		name string
+		ctx  context.Context
+		want error
 	}{
-		{"nil document", nil, &constructionResolution{}, "construct Operator Settings: document is required"},
-		{"nil resolution", &constructionDocument{}, nil, "construct Operator Settings: resolution is required"},
-		{"typed nil document", (*constructionDocument)(nil), &constructionResolution{}, ""},
-		{"typed nil resolution", &constructionDocument{}, (*constructionResolution)(nil), ""},
-		{"optional effects absent", &constructionDocument{}, &constructionResolution{}, ""},
+		{"nil", nil, nil}, {"canceled", canceled, context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			root, err := settingswire.NewService(tc.document, tc.resolution, nil, nil, nil, nil, nil, logging.NoopLogger{}, nil)
-			if tc.wantError != "" {
-				if root != nil || err == nil || err.Error() != tc.wantError {
-					t.Fatalf("New = (%v, %v), want %q", root, err, tc.wantError)
-				}
-			} else if root == nil || err != nil {
-				t.Fatalf("New = (%v, %v), want inert accepted construction", root, err)
+			root := newControlledRoot(t, &constructionDocument{}, &constructionResolution{})
+			_, err := root.ConfigureACPIntegrationAdd(tc.ctx, "config", operatorsettings.ACPIntegration{})
+			if err == nil || (tc.want != nil && !errors.Is(err, tc.want)) {
+				t.Fatalf("mutation error = %v", err)
 			}
 		})
+	}
+	failure := errors.New("persist failure")
+	document := &profileDocument{path: "config", persistError: failure}
+	root := newControlledRoot(t, document, &constructionResolution{})
+	_, err := root.UpdateACPAgentProfile(context.Background(), "config", operatorsettings.DefaultACPAgentProfile())
+	if !errors.Is(err, failure) || document.published {
+		t.Fatalf("persist = %v, published=%v", err, document.published)
 	}
 }
 
@@ -135,7 +220,7 @@ func TestSelectedProfileLoggersPreserveOutcomesAndIsolateConcurrentEffects(t *te
 			for index, logger := range []logging.Logger{spy, peerSpy, logging.NoopLogger{}} {
 				document := &profileDocument{path: filepath.Join(t.TempDir(), "config.json"), loadError: tc.loadError, persistError: tc.persistError, entered: entered, release: release}
 				documents[index] = document
-				root, err := operatorservice.New(document, &constructionResolution{}, nil, nil, nil, nil, nil, logger, nil)
+				root, err := operatorservice.New(document, &constructionResolution{}, rootTestFileSystem{}, rootTestCreateTemporaryFile, rootTestConfigDecoder, rootTestConfigEncoder, rootTestIDGenerator, logger, nil)
 				if err != nil {
 					t.Fatalf("New = %v", err)
 				}

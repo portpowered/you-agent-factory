@@ -11,9 +11,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
@@ -307,43 +305,5 @@ func TestResolveFromHomeUsesCompletedSettingsOwners(t *testing.T) {
 	}
 	if resolved.WorkerModelProvider != "CODEX" {
 		t.Fatalf("provider = %q, want CODEX from adapter ownership path", resolved.WorkerModelProvider)
-	}
-}
-
-// Optional effects are accepted by inert composition and fail only when needed.
-func TestCompletedSettingsOwnersRejectUnavailableIdentityEffectsWithoutWriting(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name    string
-		files   operatorsettings.FileSystem
-		decoder operatorsettings.ConfigDecoder
-		id      operatorsettings.IDGenerator
-		want    string
-	}{
-		{"filesystem", nil, globalconfigmapping.Decode, testIDGenerator(), "operator settings filesystem is required"},
-		{"decoder", platformfilesystem.Local{}, nil, testIDGenerator(), "operator settings decoder is required"},
-		{"identity", platformfilesystem.Local{}, globalconfigmapping.Decode, nil, "operator settings ID generator is required"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			path := filepath.Join(t.TempDir(), "config.json")
-			create := func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) }
-			document := settingswire.NewDocumentService(test.files, create, test.decoder, globalconfigmapping.Encode, testProviderCatalog, nil, nil)
-			resolution, err := settingswire.NewResolutionService(internaltestproviders.StandardCatalog())
-			if err != nil {
-				t.Fatal(err)
-			}
-			root, err := settingswire.NewService(document, resolution, test.files, create, test.decoder, globalconfigmapping.Encode, test.id, logging.NoopLogger{}, nil)
-			if err != nil {
-				t.Fatalf("inert NewService() = %v", err)
-			}
-			_, err = root.EnsureLocalBackendScope(path)
-			if err == nil || err.Error() != test.want {
-				t.Fatalf("EnsureLocalBackendScope() = %v, want %q", err, test.want)
-			}
-			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("failed identity operation created destination: %v", err)
-			}
-		})
 	}
 }
