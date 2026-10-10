@@ -170,7 +170,9 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 func (s *recordedWorkerSessionObservation) withSelectedCapturedTerminal(ctx context.Context, observation workersessions.Observation, item recordings.WorkerCapturedCatalogItem) (workersessions.Observation, error) {
 	observation.EndedAt, observation.Duration = nil, nil
 	observation.DurationBasis = workersessions.DurationBasisUnavailable
-	if item.Terminal == nil || item.Terminal.Position < 1 || uint64(item.Terminal.Position) > item.Catalog.CommittedPosition {
+	committedTerminal := item.Terminal != nil && item.Terminal.Position > 0 && uint64(item.Terminal.Position) <= item.Catalog.CommittedPosition
+	ownerLost := s.restoredWorkerScopes[observation.WorkerSessionID] != "" && item.Health == recordings.WorkerRecordingStatusIncomplete
+	if !committedTerminal && !ownerLost {
 		return observation, nil
 	}
 	captured, found, err := archivedFactoryWorker(ctx, s.Service, item.Catalog.FactorySessionID, observation.WorkerSessionID)
@@ -181,6 +183,8 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedTerminal(ctx cont
 		return observation, nil
 	}
 	observation.FactorySessionID, observation.State = captured.FactorySessionID, captured.State
+	observation.Provider = captured.Provider
+	observation.ContinuationHeadWorkerSessionID = captured.ContinuationHeadWorkerSessionID
 	observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
 	observation.DurationBasis = captured.DurationBasis
 	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable

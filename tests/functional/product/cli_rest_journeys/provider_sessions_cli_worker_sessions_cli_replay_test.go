@@ -3,15 +3,24 @@ package cli_rest_journeys_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -20,43 +29,43 @@ import (
 // HTTP parity observes the same customer summaries as Process.Execute.
 func testWorkerSessionsScopedPhysicalFacts(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"success", "business"} {
+	f := workerSessionsCLIProcess(t)
+	// Reconstruction has a distinct HTTP effect shape: four independently
+	// owned hosts share one reusable root and the immutable provider edge.
+	servers := map[int]*support.ProcessAPIServer{}
+	for port := 60200; port < 60204; port++ {
+		servers[port] = support.NewProcessAPIServer()
+	}
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{ProviderCommandRunner: f.runner, APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		return servers[request.Port].Start(ctx, request)
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, name := range []string{"success", "business"} {
 		t.Run("F-"+name, func(t *testing.T) {
 			t.Parallel()
 			c := newWorkerSessionsCLICase(t)
-			if name == "business" {
-				path := filepath.Join(c.factoryDir, "factory.json")
-				data, err := os.ReadFile(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				var doc map[string]any
-				if err := json.Unmarshal(data, &doc); err != nil {
-					t.Fatal(err)
-				}
-				doc["workstations"].([]any)[0].(map[string]any)["outcomeFormat"] = "decision-envelope"
-				data, err = json.Marshal(doc)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, data, 0o600); err != nil {
-					t.Fatal(err)
-				}
-			}
+			configurePhysicalOutcome(t, c, name)
 			route := "worker-session-physical-" + name
 			c.registerRoutes(t, route)
-			f, ctx := c.fixture, t.Context()
-			sessionID := c.openSession(t)
-			workID := submitWork(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, sessionID, route)
-			row := waitForWorkerSessionState(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, sessionID, workID, "COMPLETED")
-			waitForScopedUsageCommit(t, ctx, f.baseURL+"/factory-sessions/"+sessionID+"/worker-sessions?workId="+workID)
+			ctx := t.Context()
+			port := 60200 + index*2
+			sessionID := uuid.NewString()
+
+			first := startPhysicalFactsHost(t, process, c, f.homeDir, port, sessionID, "--record")
+			c.fixture = &workerSessionsCLISharedFixture{process: process, homeDir: f.homeDir, runner: f.runner, baseURL: servers[port].WaitForURL(t)}
+			local := c.fixture
+			workID := submitWork(t, ctx, local.process, functionalEnvironment(f.homeDir), c.factoryDir, local.baseURL, sessionID, route)
+			row := waitForWorkerSessionState(t, ctx, local.process, functionalEnvironment(f.homeDir), c.factoryDir, local.baseURL, sessionID, workID, "COMPLETED")
+			waitForScopedUsageCommit(t, ctx, local.baseURL+"/factory-sessions/"+sessionID+"/worker-sessions?workId="+workID)
 			shown := assertPhysicalWorkerParity(t, c, sessionID, row.WorkerSessionID, true)
 			if shown.FactorySessionId == nil || *shown.FactorySessionId != sessionID || shown.WorkId == nil || *shown.WorkId != workID {
 				t.Fatalf("physical attribution: %+v", shown)
 			}
 			// Work processing completes independently; observe its public outcome.
-			support.WaitForSessionTerminalStatus(t, f.baseURL, sessionID, 20*time.Second)
-			work := support.GetJSON[factoryapi.Work](t, f.baseURL+"/factory-sessions/"+sessionID+"/work/"+workID)
+			support.WaitForSessionTerminalStatus(t, local.baseURL, sessionID, 20*time.Second)
+			work := support.GetJSON[factoryapi.Work](t, local.baseURL+"/factory-sessions/"+sessionID+"/work/"+workID)
 			want := factoryapi.WorkStateTypeTERMINAL
 			if name == "business" {
 				want = factoryapi.WorkStateTypeFAILED
@@ -65,11 +74,68 @@ func testWorkerSessionsScopedPhysicalFacts(t *testing.T) {
 				t.Fatalf("independent Work outcome for %s: %+v", name, work)
 			}
 			assertPhysicalWorkerParity(t, c, sessionID, row.WorkerSessionID, true)
+			// A joined close and reopen of this owned board restores the same
+			// captured attempt without restoring execution authority.
+			if err := first(); err != nil {
+				t.Fatal(err)
+			}
+			reopened := uuid.NewString()
+			startPhysicalFactsHost(t, process, c, f.homeDir, port+1, reopened, "--resume")
+			local.baseURL = servers[port+1].WaitForURL(t)
+			after := assertPhysicalWorkerParity(t, c, reopened, row.WorkerSessionID, true)
+			after.ConfirmationState = shown.ConfirmationState
+			if !reflect.DeepEqual(shown, after) {
+				t.Fatalf("reopened physical facts changed: %+v %+v", shown, after)
+			}
+			restored := support.GetJSON[factoryapi.Work](t, local.baseURL+"/factory-sessions/"+reopened+"/work/"+workID)
+			if restored.State == nil || restored.State.Type != want {
+				t.Fatalf("reopened Work outcome changed: %+v", restored)
+			}
 		})
 	}
 	t.Run("F-live-and-fence", testScopedPhysicalLiveAndFence)
 	t.Run("F-error", testWorkerSessionsListWorkScopedSelectedReadFailure)
 	t.Run("F-empty", testWorkerSessionsListWorkScopedEmpty)
+}
+
+func startPhysicalFactsHost(t *testing.T, process support.ApplicationProcess, c *workerSessionsCLICase, home string, port int, scope, mode string) func() error {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", c.factoryDir, "--session", scope, mode, filepath.Join(c.factoryDir, "board.json"), "--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", port), "--quiet"})
+	inputs.Env, inputs.WorkingDirectory = functionalEnvironment(home), c.factoryDir
+	command := startWorkerSessionsCLIHostedCommand(process, inputs.Input)
+	var once sync.Once
+	var stopErr error
+	stop := func() error { once.Do(func() { stopErr = command.stop() }); return stopErr }
+	t.Cleanup(func() {
+		if err := stop(); err != nil {
+			t.Error(err)
+		}
+	})
+	return stop
+}
+
+func configurePhysicalOutcome(t *testing.T, c *workerSessionsCLICase, name string) {
+	t.Helper()
+	if name != "business" {
+		return
+	}
+	path := filepath.Join(c.factoryDir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	doc["workstations"].([]any)[0].(map[string]any)["outcomeFormat"] = "decision-envelope"
+	data, err = json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assertPhysicalWorkerParity(t *testing.T, c *workerSessionsCLICase, scope, id string, terminal bool) factoryapi.WorkerSessionObservation {
@@ -101,49 +167,155 @@ func assertPhysicalWorkerParity(t *testing.T, c *workerSessionsCLICase, scope, i
 		if session == "" {
 			shown = row
 		} else {
+			// Continuation admission is a current scoped capability, not a
+			// physical execution fact. A restored board cannot revive this row.
+			if shown.FactorySessionId != nil && scope != *shown.FactorySessionId && row.Revivable != nil && *row.Revivable {
+				t.Fatal("reopen restored execution authority")
+			}
+			row.Revivable = shown.Revivable
 			row.ConfirmationState = shown.ConfirmationState
 			if !terminal {
 				row.DurationMillis = shown.DurationMillis
 			}
 			if !reflect.DeepEqual(shown, row) {
-				t.Fatalf("scoped/top-level physical summary mismatch: %+v %+v", shown, row)
+				a, _ := json.Marshal(shown)
+				b, _ := json.Marshal(row)
+				t.Fatalf("scoped/top-level physical summary mismatch: %s %s", a, b)
 			}
 		}
 	}
 	if terminal {
-		if shown.State != "COMPLETED" || shown.EndedAt == nil || shown.DurationMillis == nil || shown.TerminalCause == nil || *shown.TerminalCause != "COMPLETED" || shown.Transcript != "AVAILABLE" || shown.RecordingHealth == nil || *shown.RecordingHealth != "COMPLETE" {
-			t.Fatalf("physical completion facts: %+v", shown)
-		}
-		var original factoryapi.WorkerSessionTranscriptResponse
-		for _, session := range []string{"", scope} {
-			args := []string{"--server", f.baseURL, "worker-sessions", "read", "--worker-session-id", id, "--output", "json"}
-			if session != "" {
-				args = append(args, "--session", session)
-			}
-			inputs := executeCLI(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir, args...)
-			var transcript factoryapi.WorkerSessionTranscriptResponse
-			decodeCLIJSON(t, inputs, &transcript)
-			if transcript.State != "COMPLETED" || len(transcript.Entries) == 0 {
-				t.Fatalf("physical transcript: %+v", transcript)
-			}
-			if session == "" {
-				original = transcript
-			} else {
-				// The published transcript field records the explicit read selector,
-				// while the summary owns physical Factory Session attribution.
-				if transcript.FactorySessionId == nil || *transcript.FactorySessionId != scope {
-					t.Fatalf("transcript selector lost: %+v", transcript)
-				}
-				transcript.FactorySessionId = original.FactorySessionId
-				if !reflect.DeepEqual(original, transcript) {
-					t.Fatalf("scoped transcript differs: %+v %+v", original, transcript)
-				}
-			}
-		}
-	} else if shown.State != "RUNNING" || shown.EndedAt != nil || shown.TerminalCause != nil || shown.RecordingHealth == nil || *shown.RecordingHealth != "INCOMPLETE" || shown.RecordingHealthReason != nil {
+		assertPhysicalCompletion(t, shown)
+		assertPhysicalTranscriptParity(t, c, scope, shown)
+	} else {
+		assertPhysicalLive(t, shown)
+	}
+	assertPhysicalMCPParity(t, c, shown, terminal)
+	return shown
+}
+
+func assertPhysicalCompletion(t *testing.T, shown factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if shown.State != "COMPLETED" || shown.EndedAt == nil || shown.DurationMillis == nil || shown.TerminalCause == nil || *shown.TerminalCause != "COMPLETED" || shown.Transcript != "AVAILABLE" || shown.RecordingHealth == nil || *shown.RecordingHealth != "COMPLETE" {
+		t.Fatalf("physical completion facts: %+v", shown)
+	}
+}
+func assertPhysicalLive(t *testing.T, shown factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if shown.State != "RUNNING" || shown.EndedAt != nil || shown.TerminalCause != nil || shown.RecordingHealth == nil || *shown.RecordingHealth != "INCOMPLETE" || shown.RecordingHealthReason != nil {
 		t.Fatalf("live owned capture falsely interrupted: %+v", shown)
 	}
-	return shown
+}
+
+func assertPhysicalTranscriptParity(t *testing.T, c *workerSessionsCLICase, scope string, shown factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	f := c.fixture
+	var original factoryapi.WorkerSessionTranscriptResponse
+	for _, session := range []string{"", scope} {
+		args := []string{"--server", f.baseURL, "worker-sessions", "read", "--worker-session-id", shown.WorkerSessionId, "--output", "json"}
+		if session != "" {
+			args = append(args, "--session", session)
+		}
+		inputs := executeCLI(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir, args...)
+		var transcript factoryapi.WorkerSessionTranscriptResponse
+		decodeCLIJSON(t, inputs, &transcript)
+		if transcript.State != "COMPLETED" || len(transcript.Entries) == 0 {
+			t.Fatalf("physical transcript: %+v", transcript)
+		}
+		if session == "" {
+			original = transcript
+		} else {
+			// Scoped transcript attribution retains the original execution owner.
+			if transcript.FactorySessionId == nil || !reflect.DeepEqual(transcript.FactorySessionId, shown.FactorySessionId) {
+				t.Fatalf("transcript physical owner lost: %+v", transcript)
+			}
+			transcript.FactorySessionId = original.FactorySessionId
+			if !reflect.DeepEqual(original, transcript) {
+				t.Fatalf("scoped transcript differs: %+v %+v", original, transcript)
+			}
+		}
+	}
+}
+
+// MCP READ selects a canonical Worker ID on the same host; its current contract
+// has no Factory selector. Compare its physical facts with the scoped observer.
+func assertPhysicalMCPParity(t *testing.T, c *workerSessionsCLICase, expected factoryapi.WorkerSessionObservation, terminal bool) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	input, writer := io.Pipe()
+	reader, output := io.Pipe()
+	done := make(chan error, 1)
+	f := c.fixture
+	go func() {
+		err := f.process.Execute(root.Input{Args: []string{"you", "--server", f.baseURL, "server", "mcp"}, Context: ctx, Env: functionalEnvironment(f.homeDir), WorkingDirectory: c.factoryDir, Stdin: input, Stdout: output, Stderr: io.Discard})
+		_ = input.CloseWithError(err)
+		_ = output.CloseWithError(err)
+		done <- err
+	}()
+	t.Cleanup(func() {
+		cancel()
+		_ = writer.Close()
+		_ = input.Close()
+		_ = output.Close()
+		_ = reader.Close()
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+				t.Errorf("MCP join: %v", err)
+			}
+		case <-time.After(20 * time.Second):
+			t.Error("MCP did not join")
+		}
+	})
+	client := mcp.NewClient(&mcp.Implementation{Name: "physical-facts", Version: "test"}, nil)
+	session, err := client.Connect(ctx, &mcp.IOTransport{Reader: reader, Writer: writer}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	assertPhysicalMCPViews(t, ctx, session, c, expected, terminal)
+}
+
+func assertPhysicalMCPViews(t *testing.T, ctx context.Context, session *mcp.ClientSession, c *workerSessionsCLICase, expected factoryapi.WorkerSessionObservation, terminal bool) {
+	t.Helper()
+	f := c.fixture
+	views := []string{"summary", "logs"}
+	if terminal {
+		views = append(views, "transcript")
+	}
+	for _, view := range views {
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": view, "workerSessionId": expected.WorkerSessionId}})
+		if err != nil || result.IsError || len(result.Content) != 1 {
+			t.Fatalf("MCP %s: %+v %v", view, result, err)
+		}
+		var envelope struct {
+			Result struct {
+				Session    factoryapi.WorkerSessionObservation        `json:"session"`
+				Transcript factoryapi.WorkerSessionTranscriptResponse `json:"transcript"`
+				Logs       factoryapi.WorkerSessionLogPage            `json:"logs"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
+			t.Fatal(err)
+		}
+		actual := envelope.Result.Session
+		actual.ConfirmationState = expected.ConfirmationState
+		if !terminal {
+			actual.DurationMillis = expected.DurationMillis
+		}
+		if !reflect.DeepEqual(actual, expected) {
+			t.Fatalf("MCP %s physical facts differ: %+v %+v", view, actual, expected)
+		}
+		if view == "logs" && (len(envelope.Result.Logs.Events) == 0 || string(envelope.Result.Logs.Health) != string(*expected.RecordingHealth)) {
+			t.Fatalf("MCP capture health/prefix differs: %+v", envelope.Result.Logs)
+		}
+		if view == "transcript" {
+			transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, f.baseURL+"/worker-sessions/"+expected.WorkerSessionId+"/transcript")
+			if !reflect.DeepEqual(envelope.Result.Transcript, transcript) {
+				t.Fatalf("MCP transcript differs from HTTP: %+v %+v", envelope.Result.Transcript, transcript)
+			}
+		}
+	}
 }
 
 func testScopedPhysicalLiveAndFence(t *testing.T) {
@@ -165,6 +337,7 @@ func testScopedPhysicalLiveAndFence(t *testing.T) {
 		row := waitForWorkerSessionState(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, scopes[index], "physical-shared-work", "RUNNING")
 		ids[index] = row.WorkerSessionID
 		assertPhysicalWorkerParity(t, c, scopes[index], ids[index], false)
+		assertPhysicalActiveTranscript(t, c, scopes[index], ids[index])
 	}
 	for _, command := range []string{"show", "read"} {
 		inputs, err := executeCLIExpectError(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir, "--server", f.baseURL, "worker-sessions", command, "--session", scopes[1], "--worker-session-id", ids[0], "--output", "json")
@@ -179,6 +352,27 @@ func testScopedPhysicalLiveAndFence(t *testing.T) {
 	waitForWorkerSessionState(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir, f.baseURL, scopes[0], "physical-shared-work", "COMPLETED")
 	assertPhysicalWorkerParity(t, c, scopes[0], ids[0], true)
 	assertPhysicalWorkerParity(t, c, scopes[1], ids[1], false)
+}
+
+func assertPhysicalActiveTranscript(t *testing.T, c *workerSessionsCLICase, scope, id string) {
+	t.Helper()
+	f := c.fixture
+	inputs, err := executeCLIExpectError(t, t.Context(), f.process, functionalEnvironment(f.homeDir), c.factoryDir, "--server", f.baseURL, "worker-sessions", "read", "--session", scope, "--worker-session-id", id, "--output", "json")
+	if err == nil || strings.TrimSpace(inputs.Stdout()) != "" {
+		t.Fatalf("active transcript emitted content: %v %s", err, inputs.Stdout())
+	}
+	response, err := http.Get(f.baseURL + "/factory-sessions/" + scope + "/worker-sessions/" + id + "/transcript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var failure factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode == http.StatusOK || failure.Code != factoryapi.ErrorResponseCodeWORKERSESSIONTRANSCRIPTACTIVE {
+		t.Fatalf("active transcript refusal: %d %+v", response.StatusCode, failure)
+	}
 }
 
 // TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON proves that the

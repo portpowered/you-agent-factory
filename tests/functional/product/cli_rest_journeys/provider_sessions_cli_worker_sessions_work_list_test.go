@@ -503,6 +503,12 @@ func testWorkerSessionsListWorkScopedEmpty(t *testing.T) {
 	if strings.TrimSpace(human.Stdout()) != "No worker sessions found." {
 		t.Fatalf("empty human list=%q", human.Stdout())
 	}
+	for _, command := range []string{"show", "read"} {
+		inputs, err := executeCLIExpectError(t, ctx, f.process, functionalEnvironment(f.homeDir), c.factoryDir, "--server", f.baseURL, "worker-sessions", command, "--session", sessionID, "--worker-session-id", "unknown-worker", "--output", "json")
+		if err == nil || strings.TrimSpace(inputs.Stdout()) != "" {
+			t.Fatalf("unknown Worker %s returned content: %v %s", command, err, inputs.Stdout())
+		}
+	}
 }
 
 func testWorkerSessionsListWorkScopedOptionalCapture(t *testing.T) {
