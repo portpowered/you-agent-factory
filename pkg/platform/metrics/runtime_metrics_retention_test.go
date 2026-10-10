@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -239,6 +241,175 @@ func TestRuntimeMetricsCoordinationCancelsWaitingLocksAndClassifiesBusyClaims(t 
 
 // These component witnesses use real host locks and scenario-owned paths. They
 // prove safe rejection and handoff without launching another OS process.
+func TestRuntimeMetricsCoordinationMissingMarkerDoesNotCreateAndRecovers(t *testing.T) {
+	t.Parallel()
+	coordination := runtimeMetricsCoordination{}
+	marker := filepath.Join(t.TempDir(), "selected.active")
+	if lock, err := coordination.TryClaimMarker(" "); lock != nil || err == nil || !strings.Contains(err.Error(), "path is required") {
+		t.Fatalf("blank marker claim = %v, %v, want path validation", lock, err)
+	}
+	lock, err := coordination.TryClaimMarker(marker)
+	if lock != nil || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing marker claim = %v, %v, want not-exist without a lock", lock, err)
+	}
+	assertRetentionPathAbsent(t, marker, "missing marker must not be created")
+	const content = "preserve marker bytes"
+	if err := os.WriteFile(marker, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lock, err = coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lock.Close() })
+	if peer, err := coordination.TryClaimMarker(marker); peer != nil || !errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
+		t.Fatalf("owned marker claim = %v, %v, want active", peer, err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertRetentionPreservedContent(t, marker, content)
+	recovered, err := coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recovered.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRuntimeMetricsCoordinationRejectsSymlinkMarkerAndRecovers(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "customer-file")
+	const content = "customer content outside the claim"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(root, "selected.active")
+	if err := os.Symlink(target, marker); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	coordination := runtimeMetricsCoordination{}
+	lock, err := coordination.TryClaimMarker(marker)
+	if lock != nil || err == nil || !strings.Contains(err.Error(), "is a symlink") || !strings.Contains(err.Error(), strconv.Quote(marker)) {
+		t.Fatalf("symlink marker claim = %v, %v, want safe path rejection", lock, err)
+	}
+	assertRetentionPreservedContent(t, target, content)
+	if got, err := os.Readlink(marker); err != nil || got != target {
+		t.Fatalf("rejected marker changed: %q, %v", got, err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, []byte("regular marker"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lock, err = coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertRetentionPreservedContent(t, target, content)
+	assertRetentionPreservedContent(t, marker, "regular marker")
+}
+
+func TestRuntimeMetricsCoordinationRejectsClosedHandleAndRecovers(t *testing.T) {
+	t.Parallel()
+	marker := filepath.Join(t.TempDir(), "selected.active")
+	file, err := os.OpenFile(marker, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := acquireRuntimeMetricsFile(t.Context(), file, marker, false, true)
+	if lock != nil || err == nil || errors.Is(err, ErrRuntimeMetricsArtifactBusy) || !strings.Contains(err.Error(), strconv.Quote(marker)) {
+		t.Fatalf("invalid handle claim = %v, %v, want OS error with selected path", lock, err)
+	}
+	var nativeError syscall.Errno
+	if !errors.As(err, &nativeError) || nativeError == 0 {
+		t.Fatalf("native lock cause lost: %v", err)
+	}
+	if _, err := file.Stat(); err == nil {
+		t.Fatalf("rejected handle remained usable: %v", err)
+	}
+	coordination := runtimeMetricsCoordination{}
+	lock, err = coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertRetentionPreservedContent(t, marker, "")
+}
+
+// Done is consulted only after the real host lock reports contention. The
+// existing context boundary supplies a deterministic cancellation barrier.
+type metricsWaitingContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (ctx *metricsWaitingContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.waiting) })
+	return ctx.Context.Done()
+}
+
+func TestRuntimeMetricsCoordinationCancelsContendedWaitAndRecovers(t *testing.T) {
+	t.Parallel()
+	coordination := runtimeMetricsCoordination{}
+	root := t.TempDir()
+	owner, err := coordination.LockRoot(nil, root) //nolint:staticcheck // Prove the supported nil-context normalization.
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = owner.Close() })
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	waiter := &metricsWaitingContext{Context: ctx, waiting: make(chan struct{})}
+	result := make(chan error, 1)
+	go func() {
+		lock, err := coordination.LockRoot(waiter, root)
+		if lock != nil {
+			_ = lock.Close()
+		}
+		result <- err
+	}()
+	select {
+	case <-waiter.waiting:
+	case <-time.After(30 * time.Second):
+		t.Fatal("contended lock did not enter its cancellation wait")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("contended wait = %v, want context.Canceled", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("contended lock did not acknowledge cancellation")
+	}
+	if lock, err := coordination.TryLockRoot(root); lock != nil || !errors.Is(err, ErrRuntimeMetricsRootBusy) {
+		t.Fatalf("canceled waiter changed owner lock: %v, %v", lock, err)
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := coordination.LockRoot(t.Context(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recovered.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRuntimeMetricsCoordinationRejectsFileRootAndRecovers(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(t.TempDir(), "selected-root")
