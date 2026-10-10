@@ -1737,7 +1737,6 @@ pkg/services/workers/internal/prompting/template_fields.go: unreachable func: Ap
 pkg/services/workers/internal/registry_runner.go: unreachable func: registryCapabilityRunner.Execute
 pkg/services/workers/internal/registry_runner.go: unreachable func: runnerMetadataFromProvider
 pkg/services/workers/internal/registry_runner.go: unreachable func: validateRequestedRunnerCapabilities
-pkg/services/workers/internal/service/service.go: unreachable func: New
 pkg/services/workers/internal/services/runners/internal/inference/runner.go: unreachable func: ResourcesFromFactory
 pkg/services/workers/internal/services/runners/internal/inference/runner.go: unreachable func: WorkerFromFactory
 pkg/services/workers/internal/services/runners/internal/testkit/conformance.go: unreachable func: InMemoryRunner.CapturedRequest

@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
 const Identity = "inference"
@@ -31,31 +32,27 @@ type ModelInvoker interface {
 	InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
-// Dependencies are the exact effects used by one Inference Runner.
-type Dependencies struct {
-	Models              ModelInvoker
-	Delegate            workers.Runner
-	ContentMaterializer work.ContentMaterializer
-	MediaFiles          platformfilesystem.ReadOpener
-}
-
 type runner struct {
 	worker              models.LocalWorker
 	resources           []models.LocalResource
 	scope               models.RuntimeScopeRef
 	models              ModelInvoker
-	delegate            workers.Runner
+	delegate            runners.Strategy
 	contentMaterializer work.ContentMaterializer
 	mediaFiles          platformfilesystem.ReadOpener
 }
 
-var _ workers.Runner = (*runner)(nil)
+var _ runners.Strategy = (*runner)(nil)
 
-// New validates and snapshots an Inference Runner and its exact Models edge.
-func New(config Config, dependencies Dependencies) (workers.Runner, error) {
-	if dependencies.Models == nil {
-		return nil, misconfigured("inference Models service is required", nil)
-	}
+// New validates domain configuration and snapshots an Inference Runner with
+// the Models edge supplied by process composition.
+func New(
+	config Config,
+	modelsService ModelInvoker,
+	delegate runners.Strategy,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
+) (runners.Strategy, error) {
 	worker := snapshotWorker(config.Worker)
 	if err := validateWorker(worker); err != nil {
 		return nil, err
@@ -64,10 +61,10 @@ func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 		worker:              worker,
 		resources:           snapshotResources(config.Resources),
 		scope:               config.Scope,
-		models:              dependencies.Models,
-		delegate:            dependencies.Delegate,
-		contentMaterializer: dependencies.ContentMaterializer,
-		mediaFiles:          dependencies.MediaFiles,
+		models:              modelsService,
+		delegate:            delegate,
+		contentMaterializer: contentMaterializer,
+		mediaFiles:          mediaFiles,
 	}, nil
 }
 

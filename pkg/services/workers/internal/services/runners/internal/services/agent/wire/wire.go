@@ -15,7 +15,7 @@ import (
 func NewService(
 	providersService providers.Service,
 	publish workers.ProgressPublisher,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) (agent.Service, error) {
-	return internalservice.New(providersService, publish, decisionEnvelopes...)
+	return internalservice.New(providersService, publish, decisionEnvelopes)
 }

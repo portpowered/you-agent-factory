@@ -33,9 +33,6 @@ var _ workers.PromptTemplates = (*Root)(nil)
 // NewRoot constructs the inert Workers root from the one directly injected
 // request-scoped execution owner.
 func NewRoot(execute ExecuteCapability) (workers.Service, error) {
-	if execute == nil {
-		return nil, fmt.Errorf("construct Workers: execution owner is required")
-	}
 	return &Root{execute: execute}, nil
 }
 

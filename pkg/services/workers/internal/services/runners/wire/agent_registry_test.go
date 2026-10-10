@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -20,7 +21,7 @@ const agentFixtureExecutionFailure = "fixture execution failure"
 
 func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
@@ -86,7 +87,7 @@ func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing
 
 func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
@@ -125,7 +126,7 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 		entered:            make(chan struct{}),
 		release:            make(chan struct{}),
 	}
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
@@ -158,24 +159,6 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 	assertAgentProviderRequest(t, fake.Request())
 	if fake.calls.Load() != 1 {
 		t.Fatalf("Providers.Execute calls = %d, want 1", fake.calls.Load())
-	}
-}
-
-func TestNewAgentRegistryRejectsMissingProvidersRoot(t *testing.T) {
-	_, err := newTestAgentRegistry(runners.AgentDependencies{
-		Publish: agentNoopPublisher,
-	})
-	if err == nil {
-		t.Fatal("newTestAgentRegistry() error = nil, want missing Providers root")
-	}
-}
-
-func TestNewAgentRegistryRejectsMissingProgressPublisher(t *testing.T) {
-	_, err := newTestAgentRegistry(runners.AgentDependencies{
-		Providers: newAgentProvidersFake(),
-	})
-	if err == nil {
-		t.Fatal("newTestAgentRegistry() error = nil, want missing progress publisher")
 	}
 }
 
@@ -405,13 +388,25 @@ func assertAgentResult(t *testing.T, result workers.RunnerExecutionResult) {
 // newTestAgentRegistry constructs one inert Agent Runner over the singular
 // Providers root and publishes it through the immutable private registry.
 func newTestAgentRegistry(
-	dependencies runners.AgentDependencies,
+	dependencies agentTestInputs,
 ) (runners.Service, error) {
-	implementation, err := agentImplementation(dependencies)
+	implementation, err := NewAgentRunner(dependencies.Providers, dependencies.Publish, dependencies.DecisionEnvelopes)
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.AgentIdentity,
-		Metadata: agentMetadata(),
-		Runner:   implementation,
+		Metadata: workers.RunnerMetadata{ID: runners.AgentIdentity, DisplayName: "Agent", Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityStructuredOutput, Status: workers.RunnerOptionalCapabilityStatusSupported},
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilitySessionResume, Status: workers.RunnerOptionalCapabilityStatusSupported},
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityWorkingDirectory, Status: workers.RunnerOptionalCapabilityStatusSupported},
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityWorktree, Status: workers.RunnerOptionalCapabilityStatusSupported},
+		)},
+		Runner: implementation,
 	}})
 	return service, errors.Join(err, registryErr)
+}
+
+// agentTestInputs retains the existing legacy registry fixtures.
+type agentTestInputs struct {
+	Providers         providers.Service
+	Publish           workers.ProgressPublisher
+	DecisionEnvelopes factorydefinitions.DecisionEnvelopeService
 }

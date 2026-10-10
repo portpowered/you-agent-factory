@@ -42,7 +42,7 @@ func TestManagedInferenceLoadsOrderedFileMediaBytes(t *testing.T) {
 		return path, func() { cleaned++ }, nil
 	})
 	model := &captureModelsService{result: models.InvokeModelResult{Status: models.ModelInvocationStatusCompleted, Outputs: []models.InferenceOutput{{Name: "text", Modality: models.ModalityText, Content: "ok"}}}}
-	runner, err := New(validConfig(), Dependencies{Models: model, ContentMaterializer: materializer, MediaFiles: platformfilesystem.Local{}})
+	runner, err := New(validConfig(), model, nil, materializer, platformfilesystem.Local{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,9 +74,9 @@ func TestManagedInferenceRejectsOversizeAndCleansUp(t *testing.T) {
 		return "fixture", func() { cleaned++ }, nil
 	})
 	model := &captureModelsService{}
-	runner, err := New(validConfig(), Dependencies{Models: model, ContentMaterializer: materializer, MediaFiles: mediaReadOpener{open: func(string) (io.ReadCloser, error) {
+	runner, err := New(validConfig(), model, nil, materializer, mediaReadOpener{open: func(string) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(strings.Repeat("x", int(maxInferenceMediaBytes+1)))), nil
-	}}})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,13 +102,13 @@ func TestManagedInferenceCleansUpOnReadFailureAndCancellation(t *testing.T) {
 				return "fixture", func() { cleaned++ }, nil
 			})
 			model := &captureModelsService{}
-			runner, err := New(validConfig(), Dependencies{Models: model, ContentMaterializer: materializer, MediaFiles: mediaReadOpener{open: func(string) (io.ReadCloser, error) {
+			runner, err := New(validConfig(), model, nil, materializer, mediaReadOpener{open: func(string) (io.ReadCloser, error) {
 				if cancel {
 					cancelContext()
 					return io.NopCloser(strings.NewReader("bytes")), nil
 				}
 				return nil, errors.New("open failed")
-			}}})
+			}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -169,7 +169,7 @@ func TestManagedInferenceMediaFailurePreservesCauseAndRecovers(t *testing.T) {
 				Status:  models.ModelInvocationStatusCompleted,
 				Outputs: []models.InferenceOutput{{Name: "text", Modality: models.ModalityText, Content: "ok"}},
 			}}
-			runner, err := New(validConfig(), Dependencies{Models: model, ContentMaterializer: work.ContentMaterializeFunc(fixture.materialize), MediaFiles: mediaReadOpener{open: fixture.open}})
+			runner, err := New(validConfig(), model, nil, work.ContentMaterializeFunc(fixture.materialize), mediaReadOpener{open: fixture.open})
 			if err != nil {
 				t.Fatal(err)
 			}

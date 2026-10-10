@@ -27,7 +27,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 
 	input := newStatelessConstructionInputs()
 	override := &statelessProviderOverride{}
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -43,7 +43,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 		override,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 	var events []workers.InferenceEvent
 	request := workers.ExecuteRequest{
@@ -109,7 +109,7 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 	override := &statelessProviderOverride{
 		content: `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
 	}
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -125,7 +125,7 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 		override,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
@@ -178,7 +178,7 @@ func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuation
 	input.agentDependencies.Providers = provider
 	var observationsMu sync.Mutex
 	observations := make(map[string][]workers.ExecutionObservation, attemptCount)
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -200,7 +200,7 @@ func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuation
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 
 	results := make(chan concurrentAgentExecutionResult, attemptCount)

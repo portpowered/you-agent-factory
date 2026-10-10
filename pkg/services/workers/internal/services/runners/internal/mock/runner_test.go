@@ -46,13 +46,22 @@ func TestMockRunnerScriptUsesInjectedEffect(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
-			r := &runner{config: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: "fixture", Args: []string{"input"}, WorkingDirectory: "workspace"}}}}, next: mockCommandEffect(func(_ context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+			config := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: "fixture", Args: []string{"input"}, WorkingDirectory: "workspace"}}}}
+			r, err := New(Config{WorkersConfig: config}, mockCommandEffect(func(_ context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 				calls++
 				if request.Command != "fixture" || len(request.Args) != 1 || request.Args[0] != "input" || request.WorkDir != "workspace" {
 					t.Fatalf("command request = %#v", request)
 				}
 				return workerprocess.CommandResult{Stdout: []byte(" result \n"), ExitCode: tc.exit}, tc.err
-			})}
+			}), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 0 {
+				t.Fatal("construction executed the command effect")
+			}
+			config.MockWorkers[0].ScriptConfig.Command = "caller-mutated"
+			config.MockWorkers[0].ScriptConfig.Args[0] = "caller-mutated"
 			result, err := r.Execute(t.Context(), workers.RunnerExecutionRequest{RunnerID: Identity})
 			if calls != 1 || (err != nil) != (tc.exit != 0 || tc.err != nil) {
 				t.Fatalf("calls=%d result=%#v error=%v", calls, result, err)
@@ -109,7 +118,7 @@ func TestMockRunnerDeclaredBodyIsDetachedAndUnchanged(t *testing.T) {
 	t.Parallel()
 	body := json.RawMessage(`{ "decision":"ACCEPTED", "output":{"invalid":"business"} }`)
 	cfg := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeAccept, ResultBody: body}}}
-	r, err := New(Config{WorkersConfig: cfg}, Dependencies{})
+	r, err := New(Config{WorkersConfig: cfg}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -5,8 +5,6 @@ package wire
 import (
 	"context"
 
-	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
-
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -25,9 +23,11 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -451,7 +451,16 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 )
 
 var workerServiceSet = wire.NewSet(
-	provideStatelessWorkersService,
+	workerswire.NewService,
+	provideWorkersFactoryDocs,
+	provideWorkersAgentRunner,
+	provideWorkersScriptRunner,
+	provideWorkersInferenceRunner,
+	provideWorkersRegistry,
+	provideWorkersExecute,
+	provideWorkersHarness,
+	provideWorkersContextualScriptCommandRunner,
+	provideWorkersLoggedScriptCommandRunner,
 	provideWorkersAgentToolFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,

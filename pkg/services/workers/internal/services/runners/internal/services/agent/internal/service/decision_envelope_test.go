@@ -383,7 +383,7 @@ func (fake *diagnosticProvidersFake) Execute(
 func TestExecuteRejectsDecisionEnvelopeWithoutInjectedOwner(t *testing.T) {
 	t.Parallel()
 
-	runner, err := New(&providersFake{content: `{"decision":"ACCEPTED"}`}, noopPublisher)
+	runner, err := New(&providersFake{content: `{"decision":"ACCEPTED"}`}, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

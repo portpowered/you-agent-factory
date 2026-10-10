@@ -28,12 +28,6 @@ func (s *Service) authorizeProviderTarget(
 	if providerOverrideApplies(request, configuredProviderOverride(s)) {
 		return nil
 	}
-	if s == nil || s.providers == nil {
-		return fmt.Errorf(
-			"%w: Providers service is required for agent execution",
-			workers.ErrExecuteUnavailable,
-		)
-	}
 	raw := providerTargetIdentity(request)
 	if strings.TrimSpace(raw) == "" {
 		return fmt.Errorf(
