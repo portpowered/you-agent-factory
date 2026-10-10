@@ -661,12 +661,13 @@ func fixedClock(at time.Time) func() time.Time {
 	return func() time.Time { return at }
 }
 
-func newChatSessionsStore(prefix string) (chatsessions.Service, error) {
+func newChatSessionsStore(prefix string) chatsessions.Service {
 	return chatsessionswire.NewService(
 		sequentialIDGenerator(prefix),
 		fixedClock(time.Unix(0, 1)),
 		stubEventsAppender{},
 		stubEventsReader{},
+		logging.NoopLogger{},
 	)
 }
 
@@ -782,10 +783,7 @@ func wantAdvanceTurnSequence(t *testing.T, chatSessions *fakeChatSessionsService
 }
 func newActiveBoundControlSession(t *testing.T, factorySessionID string) (chatsessions.Service, chatsessions.Session, chatsessions.Turn) {
 	t.Helper()
-	store, err := newChatSessionsStore("control")
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
+	store := newChatSessionsStore("control")
 	created, err := store.CreateSession(context.Background(), chatsessions.CreateSessionRequest{
 		RequestID:     chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCNumber, ConnectionID: "control-setup", JSONRPCNumberID: "1"},
 		WorkingRoot:   "/work/project",
