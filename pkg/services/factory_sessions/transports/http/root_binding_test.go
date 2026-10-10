@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,7 +32,7 @@ func TestHandlerFromRoot_GetFactorySessionInvokesSessionsRoot(t *testing.T) {
 			},
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil), "session-alpha")
@@ -62,7 +63,7 @@ func TestHandlerFromRoot_ListFactorySessionsInvokesSessionsRoot(t *testing.T) {
 			}}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.ListFactorySessions(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions", nil), factoryapi.ListFactorySessionsParams{})
@@ -94,7 +95,7 @@ func TestHandlerFromRoot_HumanApprovalReadUsesSessionProjection(t *testing.T) {
 			"session-empty": {},
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 
 	listRecorder := httptest.NewRecorder()
 	handler.ListHumanApprovalsBySessionId(listRecorder,
@@ -429,4 +430,48 @@ func (fake *httpSessionsRootFake) GetArtifact(context.Context, string, string) (
 
 func (fake *httpSessionsRootFake) ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
 	return factorysessions.EventReadResult{}, factorysessions.ErrDurableSessionNotFound
+}
+
+type testRequestPreparation struct{}
+
+func (testRequestPreparation) PrepareStart(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+	return request, nil
+}
+func (testRequestPreparation) PrepareControl(request factorysessions.ControlRequest) (factorysessions.ControlRequest, error) {
+	return request, nil
+}
+func (testRequestPreparation) PrepareApprove(request factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error) {
+	return request, nil
+}
+func (testRequestPreparation) PrepareRetryDispatch(request factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error) {
+	return request, nil
+}
+func (testRequestPreparation) PrepareInterruptDispatch(request factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error) {
+	return request, nil
+}
+func (testRequestPreparation) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+	return normalizeListSessionsScope(request)
+}
+func (testRequestPreparation) PrepareResult(request factorysessions.ResultRequest) (factorysessions.ResultRequest, error) {
+	return request, nil
+}
+func (testRequestPreparation) PrepareEventReconnect(request factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error) {
+	return request, nil
+}
+func normalizeListSessionsScope(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+	if request.Scope == "" {
+		request.Scope = factorysessions.DefaultSessionListScope
+	}
+	switch request.Scope {
+	case factorysessions.SessionListScopeLive,
+		factorysessions.SessionListScopePersisted,
+		factorysessions.SessionListScopeHistory,
+		factorysessions.SessionListScopeAll:
+		return request, nil
+	default:
+		return factorysessions.ListSessionsRequest{}, &factorysessions.ExecutionValidationError{
+			Field:   "scope",
+			Message: fmt.Sprintf("scope must be live, persisted, or all; history is also supported (got %q)", request.Scope),
+		}
+	}
 }

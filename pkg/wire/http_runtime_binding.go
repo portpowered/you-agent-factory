@@ -142,7 +142,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 	invocationAPI := factorysessionmapping.NewInvocationAPI(root)
 	sessionsHandler := newHTTPSessionsHandler(
 		root, logger, definitionMapping, definitionsAPI, statusAPI, liveAPI, invocationAPI,
-		validation, invocationWorkType, sessionRequests, workflowPreview, workerPrompts,
+		validation, sessionRequests, workflowPreview, workerPrompts,
 	)
 	factoryDefinitionsHandler := factorydefinitionshttp.NewHandler(
 		definitions, factorydefinitionshttp.NewTopologyValidation(definitions), logger,
@@ -199,22 +199,17 @@ func newHTTPSessionsHandler(
 	liveAPI *factorysessionmapping.LiveAPI,
 	invocationAPI *factorysessionmapping.InvocationAPI,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	workerPrompts workers.PromptTemplates,
 ) *factorysessionshttp.Handler {
-	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot: root, LiveControl: root,
-		SessionDeletion: root,
-		CurrentFactory:  currentFactory, FactoryStatus: statusAPI,
-		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
-		FactoryValidation: validation, WorkflowPreview: workflowPreview,
-		DurableLister:     root,
-		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: root},
-		WorkerPrompts:     workerPrompts, InvocationWorkType: invocationWorkType,
-		SessionRequests: sessionRequests,
-	}, logger)
+	handler := factorysessionshttp.NewHandler(
+		factorysessionshttp.NewLifecycleHandler(root, root, root, sessionRequests, logger),
+		factorysessionshttp.NewReadHandler(root, liveAPI, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, sessionRequests, logger),
+		factorysessionshttp.NewAuthoringHandler(currentFactory, definitionsAPI, validation, workflowPreview, workerPrompts, logger),
+		factorysessionshttp.NewInvocationHandler(invocationAPI, logger),
+		factorysessionshttp.NewObservationHandler(root, liveAPI, statusAPI, sessionRequests, logger),
+	)
 	return handler
 }
 

@@ -43,15 +43,15 @@ const (
 )
 
 // GetStatus handles GET /status as the supported runtime status read model.
-func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
+func (s *ObservationHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	s.getStatus(w, r, "")
 }
 
-func (s *Server) GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *ObservationHandler) GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.getStatus(w, r, string(sessionID))
 }
 
-func (s *Server) getStatus(
+func (s *ObservationHandler) getStatus(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID string,
@@ -76,7 +76,7 @@ func (s *Server) getStatus(
 
 // GetFactoryResponseEventsBySessionId streams the retained-then-live ephemeral
 // response-event cursor owned by exactly one Factory Session.
-func (s *Server) GetFactoryResponseEventsBySessionId(
+func (s *ObservationHandler) GetFactoryResponseEventsBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -198,7 +198,7 @@ func streamFactoryResponseEvents(
 	}
 }
 
-func (s *Server) responseEventStreamRequest(
+func (s *ObservationHandler) responseEventStreamRequest(
 	w http.ResponseWriter,
 	sessionID string,
 	params factoryapi.GetFactoryResponseEventsBySessionIdParams,
@@ -261,7 +261,7 @@ func writeFactoryResponseEventSSE(w http.ResponseWriter, event apisurface.Factor
 	return err
 }
 
-func (s *Server) GetFactorySessionSyncPreflightBySessionId(
+func (s *ObservationHandler) GetFactorySessionSyncPreflightBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -307,4 +307,12 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 // canonical Factory Event cursor.
 func ReconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
 	return reconnectCursorFromParams(afterEventID, afterSequence)
+}
+
+func (s *ObservationHandler) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSessionAPI, bool) {
+	if s.sessions == nil {
+		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return s.sessions, true
 }

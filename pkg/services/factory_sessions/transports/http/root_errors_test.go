@@ -25,7 +25,7 @@ func TestHandlerFromRoot_CloseFactorySessionNotFoundReturnsTypedErrorResponse(t 
 			return factorysessions.ErrSessionNotFound
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.CloseFactorySession(recorder, httptest.NewRequest(http.MethodDelete, "/factory-sessions/missing-session", nil), "missing-session")
@@ -48,7 +48,7 @@ func TestHandlerFromRoot_DeleteFactorySessionConflictReturnsTypedErrorResponse(t
 			}
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.CloseFactorySession(recorder, httptest.NewRequest(http.MethodDelete, "/factory-sessions/~default", nil), "~default")
@@ -70,7 +70,7 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncValidationErrorReturnsTy
 			}
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"requestId":"req-alpha","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`)
 
@@ -95,7 +95,7 @@ func TestHandlerFromRoot_PauseDurableFactorySessionControlConflictReturnsTypedLi
 			}
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.PauseFactorySession(
@@ -125,7 +125,7 @@ func TestHandlerFromRoot_GetFactorySessionUnmappedRootErrorDoesNotLeakInternalDe
 			return factorysessions.SessionProjection{}, internalErr
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil), "session-alpha")
@@ -148,7 +148,7 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncRequestIDConflictReturns
 			return factorysessions.SessionStartResult{}, factorysessions.ErrExecutionRequestIDConflict
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"requestId":"req-conflict","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`)
 

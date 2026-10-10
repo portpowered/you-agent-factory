@@ -29,7 +29,7 @@ func sessionsRequestContextErrorResponse(err error) (status int, response any, h
 	}
 }
 
-func (s *Server) writeSessionsRequestContextOutcome(w http.ResponseWriter, err error) bool {
+func (s *responseWriter) writeSessionsRequestContextOutcome(w http.ResponseWriter, err error) bool {
 	status, response, ok := sessionsRequestContextErrorResponse(err)
 	if !ok {
 		return false
@@ -41,6 +41,6 @@ func (s *Server) writeSessionsRequestContextOutcome(w http.ResponseWriter, err e
 	return true
 }
 
-func (s *Server) guardSessionsRequestContext(w http.ResponseWriter, r *http.Request) bool {
+func (s *responseWriter) guardSessionsRequestContext(w http.ResponseWriter, r *http.Request) bool {
 	return s.writeSessionsRequestContextOutcome(w, r.Context().Err())
 }

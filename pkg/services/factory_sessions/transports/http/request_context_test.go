@@ -26,7 +26,7 @@ func TestHandlerFromRoot_GetFactorySessionCanceledDuringRootCallCompletesWithout
 	root := &httpSessionsRootFake{
 		getSession: waitForRootGetSession,
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil).WithContext(ctx)
@@ -55,7 +55,7 @@ func TestHandlerFromRoot_GetFactorySessionCanceledBeforeRootCallCompletesWithout
 	t.Parallel()
 
 	root := &httpSessionsRootFake{}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -77,7 +77,7 @@ func TestHandlerFromRoot_ListFactorySessionsDeadlineExceededReturnsGatewayTimeou
 			return factorysessions.ListSessionsResult{}, ctx.Err()
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
@@ -109,7 +109,7 @@ func TestHandlerFromRoot_CloseFactorySessionDeadlineExceededReturnsGatewayTimeou
 			return ctx.Err()
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()

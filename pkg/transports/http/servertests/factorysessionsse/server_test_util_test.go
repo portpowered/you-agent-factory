@@ -109,9 +109,13 @@ func (*programmedFactorySessionEvents) MoveWorkForSession(context.Context, strin
 
 func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
-	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionRequests: sseRequestPreparation{},
-	}, logger)
+	handler := factorysessionshttp.NewHandler(
+		factorysessionshttp.NewLifecycleHandler(nil, nil, nil, sseRequestPreparation{}, logger),
+		factorysessionshttp.NewReadHandler(nil, nil, nil, sseRequestPreparation{}, logger),
+		factorysessionshttp.NewAuthoringHandler(nil, nil, nil, nil, nil, logger),
+		factorysessionshttp.NewInvocationHandler(nil, logger),
+		factorysessionshttp.NewObservationHandler(nil, nil, nil, sseRequestPreparation{}, logger),
+	)
 	return api.NewServerWithRecordings(
 		recordingshttp.NewAdapterWithSessions(nil, factorySessionEventsRoot{source: workAPI}, nil),
 		handler, nil, nil, nil, nil, logger,

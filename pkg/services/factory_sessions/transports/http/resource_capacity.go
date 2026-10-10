@@ -13,7 +13,7 @@ import (
 // SetFactorySessionResourceCapacity handles one live resource-capacity change.
 // Resource identity comes from the stable resource_id path parameter; the
 // mutable display name is never accepted as an alternate target.
-func (s *Server) SetFactorySessionResourceCapacity(
+func (s *LifecycleHandler) SetFactorySessionResourceCapacity(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -60,7 +60,7 @@ func (s *Server) SetFactorySessionResourceCapacity(
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) writeLiveChangeError(w http.ResponseWriter, sessionID string, err error) {
+func (s *LifecycleHandler) writeLiveChangeError(w http.ResponseWriter, sessionID string, err error) {
 	var liveChangeErr *factorysessions.LiveChangeError
 	if !errors.As(err, &liveChangeErr) {
 		if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrLiveChangeSessionNotFound) {

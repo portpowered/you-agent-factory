@@ -47,15 +47,17 @@ func newServerFromRoles(
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
 ) *Server {
-	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		CurrentFactory: currentFactoryTestReader{runtime}, FactoryStatus: factoryStatus,
-		Sessions: sessions, Invocation: invocation,
-		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
-		WorkflowPreview: workflowPreview,
-		DurableLister:   durableLister, LiveSessionLister: liveSessionLister,
-		WorkerPrompts:   workerPrompts,
-		SessionRequests: sessionRequests,
-	}, logger)
+	var listRoot factorysessions.Service
+	if durableLister != nil {
+		listRoot = testDurableListRoot{lister: durableLister}
+	}
+	handler := factorysessionshttp.NewHandler(
+		factorysessionshttp.NewLifecycleHandler(nil, nil, nil, sessionRequests, logger),
+		factorysessionshttp.NewReadHandler(listRoot, sessions, liveSessionLister, sessionRequests, logger),
+		factorysessionshttp.NewAuthoringHandler(currentFactoryTestReader{runtime}, factoryDefinitions, factoryValidation, workflowPreview, workerPrompts, logger),
+		factorysessionshttp.NewInvocationHandler(invocation, logger),
+		factorysessionshttp.NewObservationHandler(nil, sessions, factoryStatus, sessionRequests, logger),
+	)
 	workRoot := &completeWorkTestRoot{
 		submission: workAPI, read: workRead, staging: contentStaging, preparation: requestPreparation,
 		invocationInput: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
@@ -212,4 +214,13 @@ type currentFactoryTestReader struct{ source currentFactoryTestAPI }
 
 func (reader currentFactoryTestReader) GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error) {
 	return reader.source.GetCurrentFactory(ctx)
+}
+
+type testDurableListRoot struct {
+	factorysessions.Service
+	lister factorysessionshttp.DurableExecutionSessionLister
+}
+
+func (root testDurableListRoot) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return root.lister.ListSessions(ctx, request)
 }

@@ -511,20 +511,22 @@ func provideDirectJavaScriptHostAdapter(
 	sessions factorysessions.Service,
 	inspection factorysessions.SessionInspectionService,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	start platformhttpserver.Starter,
 	newRunner lifecycle.RunnerFactory,
 	logger *zap.Logger,
 	recoverOwners recordings.WorkerOwnerRecoveryOperation,
 ) (runcli.DirectJavaScriptHost, error) {
-	if sessions == nil || inspection == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
+	if sessions == nil || inspection == nil || validation == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
 	}
-	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot: sessions, DurableLister: sessions, FactoryValidation: validation,
-		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
-	}, logger)
+	sessionsHandler := factorysessionshttp.NewHandler(
+		factorysessionshttp.NewDurableLifecycleHandler(sessions, sessionRequests, logger),
+		factorysessionshttp.NewDurableReadHandler(sessions, sessionRequests, logger),
+		factorysessionshttp.NewDurableAuthoringHandler(validation, logger),
+		factorysessionshttp.NewUnavailableInvocationHandler(logger),
+		factorysessionshttp.NewDurableObservationHandler(sessions, sessionRequests, logger),
+	)
 	recordingsAdapter := recordingshttp.NewAdapterWithSessions(nil, sessions, inspection)
 	return func(
 		host factorysessions.RuntimeHostRequest,

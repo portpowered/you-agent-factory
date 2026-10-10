@@ -15,52 +15,26 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
-// Handler owns the generated HTTP operation implementations for Factory
-// Sessions and their session-scoped Factory and Work resources.
+// Adapter composes completed Factory Sessions HTTP operation roles.
 type Adapter struct {
-	sessionsRoot       factorysessions.Service
-	liveControl        factorysessions.LiveControlService
-	sessionDeletion    factorysessions.LiveDeletionService
-	currentFactory     apisurface.CurrentFactoryReader
-	factoryStatus      apisurface.FactoryStatusAPI
-	sessions           apisurface.LiveSessionAPI
-	invocation         apisurface.InvocationAPI
-	factoryDefinitions apisurface.FactorySaveAPI
-	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
-	workflowPreview    factoryruntime.WorkflowPreviewOperation
-	durableLister      DurableExecutionSessionLister
-	liveSessionLister  LiveSessionListReader
-	workerPrompts      workers.PromptTemplates
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
-	sessionRequests    RequestPreparation
-	logger             *zap.Logger
+	*LifecycleHandler
+	*ReadHandler
+	*AuthoringHandler
+	*InvocationHandler
+	*ObservationHandler
 }
 
-// Dependencies are the exact injected roles used by the Factory Sessions HTTP
-// adapter. They are supplied by canonical Wire before session activation.
-type Dependencies struct {
-	SessionsRoot       factorysessions.Service
-	LiveControl        factorysessions.LiveControlService
-	SessionDeletion    factorysessions.LiveDeletionService
-	CurrentFactory     apisurface.CurrentFactoryReader
-	FactoryStatus      apisurface.FactoryStatusAPI
-	Sessions           apisurface.LiveSessionAPI
-	Invocation         apisurface.InvocationAPI
-	FactoryDefinitions apisurface.FactorySaveAPI
-	FactoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
-	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
-	DurableLister      DurableExecutionSessionLister
-	LiveSessionLister  LiveSessionListReader
-	WorkerPrompts      workers.PromptTemplates
-	InvocationWorkType factorydefinitions.InvocationWorkTypeService
-	SessionRequests    RequestPreparation
+type Handler = Adapter
+
+// NewHandler composes inert roles built by canonical Wire.
+func NewHandler(lifecycle *LifecycleHandler, reads *ReadHandler, authoring *AuthoringHandler, invocation *InvocationHandler, observation *ObservationHandler) *Adapter {
+	return &Adapter{lifecycle, reads, authoring, invocation, observation}
 }
 
 type RequestPreparation interface {
@@ -72,23 +46,6 @@ type RequestPreparation interface {
 	PrepareListSessions(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error)
 	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
 	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
-}
-
-// NewHandler constructs an inert Factory Sessions HTTP adapter.
-func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
-	return &Adapter{
-		sessionsRoot: deps.SessionsRoot, liveControl: deps.LiveControl,
-		sessionDeletion: deps.SessionDeletion,
-		currentFactory:  deps.CurrentFactory, factoryStatus: deps.FactoryStatus,
-		sessions:           deps.Sessions,
-		invocation:         deps.Invocation,
-		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
-		workflowPreview: deps.WorkflowPreview,
-		durableLister:   deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
-		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
-		sessionRequests: deps.SessionRequests,
-		logger:          logger,
-	}
 }
 
 // FactoryStatusSessionReader is the narrow session-scoped observation role
@@ -141,14 +98,9 @@ func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID
 	}, nil
 }
 
-// Server is retained as a private receiver alias while the moved handler files
-// are kept mechanically identical to the established public behavior.
-type Handler = Adapter
-type Server = Adapter
-
 // ListHumanApprovalsBySessionId returns the pending approvals projected from
 // the selected live Factory Session's current session facts.
-func (s *Adapter) ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListHumanApprovalsBySessionIdParams) {
+func (s *LifecycleHandler) ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListHumanApprovalsBySessionIdParams) {
 	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
@@ -170,7 +122,7 @@ func (s *Adapter) ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.R
 
 // GetHumanApprovalBySessionId returns one pending approval by its stable
 // identity. Resolution is read-only; decision handling belongs to a later lane.
-func (s *Adapter) GetHumanApprovalBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, approvalID factoryapi.HumanApprovalID) {
+func (s *LifecycleHandler) GetHumanApprovalBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, approvalID factoryapi.HumanApprovalID) {
 	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
@@ -192,7 +144,7 @@ func (s *Adapter) GetHumanApprovalBySessionId(w http.ResponseWriter, r *http.Req
 	s.writeError(w, http.StatusNotFound, "human approval not found", "NOT_FOUND")
 }
 
-func (s *Adapter) pendingHumanApprovals(r *http.Request, sessionID string) ([]factorydefinitions.FactoryWorldHumanApproval, error) {
+func (s *LifecycleHandler) pendingHumanApprovals(r *http.Request, sessionID string) ([]factorydefinitions.FactoryWorldHumanApproval, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, errors.New("factory session id is required")
 	}

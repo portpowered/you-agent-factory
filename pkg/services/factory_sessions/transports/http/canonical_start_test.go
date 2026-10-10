@@ -39,7 +39,7 @@ func TestHandlerFromRoot_CanonicalStartMapsArgsSourceWait(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	body := `{"requestId":"req-map-1","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"},"args":{"branch":"main"},"requestedPolicy":{"priority":"high"},"wait":{"timeoutMillis":5000,"cancelOnTimeout":true}}`
 
 	asyncRec := httptest.NewRecorder()
@@ -121,7 +121,7 @@ func TestDurableStartUsesSoleExplicitHostedSessionProjectRoot(t *testing.T) {
 		}},
 		live: []factorysessions.SessionView{{SessionID: "explicit-1", FactoryDir: "/selected-factory"}},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.StartDurableFactorySessionAsync(recorder, httptest.NewRequest(http.MethodPost, "/factory-sessions/async", bytes.NewBufferString(`{"requestId":"durable-1","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`)))
 	if recorder.Code != http.StatusOK {
@@ -138,7 +138,7 @@ func TestDurableStartRejectsAmbiguousExplicitHostedSessions(t *testing.T) {
 		}},
 		live: []factorysessions.SessionView{{SessionID: "explicit-1", FactoryDir: "/first"}, {SessionID: "explicit-2", FactoryDir: "/second"}},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.StartDurableFactorySessionAsync(recorder, httptest.NewRequest(http.MethodPost, "/factory-sessions/async", bytes.NewBufferString(`{"requestId":"durable-1","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`)))
 	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "current Factory Session is ambiguous") {

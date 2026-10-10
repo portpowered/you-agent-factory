@@ -42,7 +42,7 @@ func TestHandlerFromRoot_OpenFactorySessionEncodesRootResult(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"folderPath":"/workspace/alpha"}`)
 
@@ -76,7 +76,7 @@ func TestHandlerFromRoot_OpenFactorySessionAcceptsUnknownFieldsWithWarning(t *te
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.New(core))
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.New(core))
 	recorder := httptest.NewRecorder()
 	handler.OpenFactorySession(
 		recorder,
@@ -116,7 +116,7 @@ func TestHandlerFromRoot_OpenFactorySessionMissingFolderPathReturnsBadRequestWit
 			return factorysessions.SessionStartResult{}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"folderPath":""}`)
 
@@ -148,7 +148,7 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvokesRootWithDecodedRe
 			}}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"requestId":"req-async-alpha","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`)
 
@@ -178,7 +178,7 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvalidSourceReturnsBadR
 			return factorysessions.SessionStartResult{}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"requestId":"req-bad-inline","source":{"kind":"INLINE_WORKFLOW"}}`)
 
@@ -212,7 +212,7 @@ func TestHandlerFromRoot_CloseFactorySessionInvokesRoot(t *testing.T) {
 			return nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.CloseFactorySession(recorder, httptest.NewRequest(http.MethodDelete, "/factory-sessions/session-close-alpha", nil), "session-close-alpha")
@@ -244,7 +244,7 @@ func TestHandlerFromRoot_PauseDurableFactorySessionEncodesRootLifecycleControl(t
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := bytes.NewBufferString(`{"reason":"operator pause"}`)
 
@@ -281,7 +281,7 @@ func TestHandlerFromRoot_PauseLiveFactorySessionEncodesRootLifecycleControl(t *t
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.PauseFactorySession(recorder, httptest.NewRequest(http.MethodPost, "/factory-sessions/session-live-pause/pause", io.NopCloser(bytes.NewBuffer(nil))), "session-live-pause")
@@ -326,7 +326,7 @@ func TestHandlerFromRoot_LiveCancelAndTerminateUseSupportedLifecycleControls(t *
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 
 	cancelRecorder := httptest.NewRecorder()
 	handler.CancelFactorySession(
@@ -377,7 +377,7 @@ func TestHandlerFromRoot_LiveLifecycleControlConflictIsTyped(t *testing.T) {
 			}
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.TerminateFactorySession(
 		recorder,

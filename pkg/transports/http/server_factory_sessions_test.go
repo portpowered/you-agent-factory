@@ -47,7 +47,11 @@ func (fake canonicalOpenSessionsRootFake) Start(ctx context.Context, request fac
 func newCanonicalOpenTestServer(start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)) *Server {
 	srv := newLiveSessionTestServer(nil)
 	srv.factorySessionsAdapter.Adapter = factorysessionshttp.NewHandler(
-		factorysessionshttp.Dependencies{SessionsRoot: canonicalOpenSessionsRootFake{start: start}}, zap.NewNop(),
+		factorysessionshttp.NewLifecycleHandler(canonicalOpenSessionsRootFake{start: start}, nil, nil, nil, zap.NewNop()),
+		factorysessionshttp.NewReadHandler(canonicalOpenSessionsRootFake{start: start}, nil, nil, nil, zap.NewNop()),
+		factorysessionshttp.NewAuthoringHandler(nil, nil, nil, nil, nil, zap.NewNop()),
+		factorysessionshttp.NewInvocationHandler(nil, zap.NewNop()),
+		factorysessionshttp.NewObservationHandler(canonicalOpenSessionsRootFake{start: start}, nil, nil, nil, zap.NewNop()),
 	)
 	return srv
 }
@@ -1085,10 +1089,10 @@ func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testi
 
 func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 	var closed []string
-	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{close: func(_ context.Context, sessionID string) error {
+	srv := newDeletionTestServer(func(_ context.Context, sessionID string) error {
 		closed = append(closed, sessionID)
 		return nil
-	}})
+	})
 
 	req := httptest.NewRequest(http.MethodDelete, "/factory-sessions/session-beta", nil)
 	rec := httptest.NewRecorder()
@@ -1124,9 +1128,9 @@ func (e apiTestSessionValidationError) ErrorCode() string {
 }
 
 func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
-	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{close: func(context.Context, string) error {
+	srv := newDeletionTestServer(func(context.Context, string) error {
 		return apisurface.ErrFactorySessionNotFound
-	}})
+	})
 
 	req := httptest.NewRequest(http.MethodDelete, "/factory-sessions/missing-session", nil)
 	rec := httptest.NewRecorder()
@@ -1744,4 +1748,19 @@ func assertProviderSessionParseDiagnostics(t *testing.T, parse factoryapi.Provid
 	if len(parse.ParseErrors) != 1 || parse.ParseErrors[0].LineNumber != 4 || len(parse.UnknownEvents) != 1 || parse.UnknownEvents[0].LineNumber != 3 {
 		t.Fatalf("parse diagnostics = %#v, want malformed line 4 and unknown line 3", parse)
 	}
+}
+
+type deletionTestRoot struct {
+	factorysessions.LiveControlService
+	close func(context.Context, string) error
+}
+
+func (root deletionTestRoot) DeleteFactorySession(ctx context.Context, id string) error {
+	return root.close(ctx, id)
+}
+func newDeletionTestServer(close func(context.Context, string) error) *Server {
+	srv := newLiveSessionTestServer(nil)
+	root := deletionTestRoot{close: close}
+	srv.factorySessionsAdapter.LifecycleHandler = factorysessionshttp.NewLifecycleHandler(nil, root, root, nil, zap.NewNop())
+	return srv
 }

@@ -72,7 +72,13 @@ func TestDurableHTTPUsesInjectedInspectionForSelectedSession(t *testing.T) {
 			sessions := canonicalStdioSessionsStub{}
 			handler := bindDurableExecutionHTTPHandler(
 				recordingshttp.NewAdapterWithSessions(nil, sessions, inspection),
-				factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{SessionsRoot: sessions}, zap.NewNop()),
+				factorysessionshttp.NewHandler(
+					factorysessionshttp.NewLifecycleHandler(sessions, nil, nil, nil, zap.NewNop()),
+					factorysessionshttp.NewReadHandler(sessions, nil, nil, nil, zap.NewNop()),
+					factorysessionshttp.NewAuthoringHandler(nil, nil, nil, nil, nil, zap.NewNop()),
+					factorysessionshttp.NewInvocationHandler(nil, zap.NewNop()),
+					factorysessionshttp.NewObservationHandler(sessions, nil, nil, nil, zap.NewNop()),
+				),
 				zap.NewNop(), nil,
 			)
 			const sessionID = "dur-sess-selected-inspection"

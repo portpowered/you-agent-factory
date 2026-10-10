@@ -389,7 +389,13 @@ func (modelHTTPContentPreparation) PrepareWorkContent(_ context.Context, content
 
 func newEventStreamTestServer() *Server {
 	logger := zap.NewNop()
-	return &Server{factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger)}, logger: logger}
+	return &Server{factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorysessionshttp.NewHandler(
+		factorysessionshttp.NewLifecycleHandler(nil, nil, nil, nil, logger),
+		factorysessionshttp.NewReadHandler(nil, nil, nil, nil, logger),
+		factorysessionshttp.NewAuthoringHandler(nil, nil, nil, nil, nil, logger),
+		factorysessionshttp.NewInvocationHandler(nil, logger),
+		factorysessionshttp.NewObservationHandler(nil, nil, nil, nil, logger),
+	)}, logger: logger}
 }
 
 func canonicalFactoryEventForHTTPTest(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {

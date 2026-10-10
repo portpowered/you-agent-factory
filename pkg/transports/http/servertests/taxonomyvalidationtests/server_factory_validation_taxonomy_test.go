@@ -51,7 +51,13 @@ func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 
 func newAPITestServer(validator factorydefinitions.SubmittedDefinitionValidationOperation) *api.Server {
 	logger := zap.NewNop()
-	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{FactoryValidation: validator}, logger)
+	handler := factorysessionshttp.NewHandler(
+		factorysessionshttp.NewLifecycleHandler(nil, nil, nil, nil, logger),
+		factorysessionshttp.NewReadHandler(nil, nil, nil, nil, logger),
+		factorysessionshttp.NewAuthoringHandler(nil, nil, validator, nil, nil, logger),
+		factorysessionshttp.NewInvocationHandler(nil, logger),
+		factorysessionshttp.NewObservationHandler(nil, nil, nil, nil, logger),
+	)
 	return api.NewServer(handler, nil, nil, nil, nil, logger)
 }
 

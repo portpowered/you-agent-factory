@@ -33,9 +33,6 @@ func decodeStartFactorySessionRequestWithDiagnostics(
 	if err != nil {
 		return factorysessions.StartRequest{}, decoded.Diagnostics, err
 	}
-	if prepare == nil {
-		prepare = noopRequestPreparation{}
-	}
 	prepared, err := prepare.PrepareStart(raw)
 	return prepared, decoded.Diagnostics, err
 }
@@ -51,9 +48,6 @@ func decodeLifecycleControlRequestWithDiagnostics(
 	control, err := factorysession.ControlRequestFromAPI(decoded.Value)
 	if err != nil {
 		return factorysessions.ControlRequest{}, decoded.Diagnostics, err
-	}
-	if prepare == nil {
-		prepare = noopRequestPreparation{}
 	}
 	prepared, err := prepare.PrepareControl(control)
 	return prepared, decoded.Diagnostics, err
@@ -71,9 +65,6 @@ func decodeApproveFactorySessionRequestWithDiagnostics(
 	if err != nil {
 		return factorysessions.ApproveRequest{}, decoded.Diagnostics, err
 	}
-	if prepare == nil {
-		prepare = noopRequestPreparation{}
-	}
 	prepared, err := prepare.PrepareApprove(approve)
 	return prepared, decoded.Diagnostics, err
 }
@@ -89,9 +80,6 @@ func decodeRetryDispatchRequestWithDiagnostics(
 	retry, err := factorysession.RetryDispatchRequestFromAPI(decoded.Value)
 	if err != nil {
 		return factorysessions.RetryDispatchRequest{}, decoded.Diagnostics, err
-	}
-	if prepare == nil {
-		prepare = noopRequestPreparation{}
 	}
 	prepared, err := prepare.PrepareRetryDispatch(retry)
 	return prepared, decoded.Diagnostics, err
@@ -109,14 +97,11 @@ func decodeInterruptDispatchRequestWithDiagnostics(
 	if err != nil {
 		return factorysessions.InterruptDispatchRequest{}, decoded.Diagnostics, err
 	}
-	if prepare == nil {
-		prepare = noopRequestPreparation{}
-	}
 	prepared, err := prepare.PrepareInterruptDispatch(interrupt)
 	return prepared, decoded.Diagnostics, err
 }
 
-func (s *Server) finishRootLifecycleControl(
+func (s *LifecycleHandler) finishRootLifecycleControl(
 	w http.ResponseWriter,
 	sessionID string,
 	operation string,
@@ -139,7 +124,7 @@ func (s *Server) finishRootLifecycleControl(
 	s.writeLifecycleControlSuccessWithDiagnostics(w, factorysession.LifecycleControlResponseToAPI(result), paths)
 }
 
-func (s *Server) invokeRootLiveLifecycleControl(
+func (s *LifecycleHandler) invokeRootLiveLifecycleControl(
 	w http.ResponseWriter,
 	ctx context.Context,
 	sessionID factoryapi.SessionID,
