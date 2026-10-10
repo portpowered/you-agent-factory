@@ -12,6 +12,7 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	resetprovidersessionscli3State()
 	resetprovidersessionscli5State()
 	initializeProvidersessionscliFixture(t)
+	t.Run("TestWorkerSessionsScopedPhysicalFacts", testWorkerSessionsScopedPhysicalFacts)
 	t.Run("TestWorkerSessionsListWorkScopedEmpty", testWorkerSessionsListWorkScopedEmpty)
 	t.Run("TestFactoryTargetReadinessCustomerBehavior", testProvidersessionscliFactoryTargetReadinessCustomerBehavior)
 	t.Run("TestTerminalProviderSessionReadsPreserveTranscriptOutcomes", testProvidersessionscliTerminalProviderSessionReadsPreserveTranscriptOutcomes)
