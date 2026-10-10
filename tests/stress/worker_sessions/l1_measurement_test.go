@@ -19,6 +19,7 @@ type l1CaptureSamples struct {
 	backlogHigh      int64
 	observed         int
 	oldestPendingAge time.Duration
+	interval         l1CommitInterval
 }
 
 func measureL1Capture(t *testing.T, ctx context.Context, baseURL string, streams []*l1Stream) {
@@ -28,9 +29,9 @@ func measureL1Capture(t *testing.T, ctx context.Context, baseURL string, streams
 	defer stop()
 	results := make(chan l1CaptureSamples, len(streams))
 	var monitors sync.WaitGroup
-	for index, stream := range streams {
+	for _, stream := range streams {
 		monitors.Go(func() {
-			results <- monitorL1Capture(t, ctx, measurementCtx, baseURL, fmt.Sprintf("l1-active-%03d", index), stream)
+			results <- monitorL1Capture(t, ctx, measurementCtx, baseURL, stream.id, stream, started)
 		})
 	}
 	var active, firstPage l1Samples
@@ -45,7 +46,7 @@ func measureL1Capture(t *testing.T, ctx context.Context, baseURL string, streams
 			close(results)
 			active.report(t, "active-list", 250*time.Millisecond)
 			firstPage.report(t, "first-logs-page", 500*time.Millisecond)
-			reportL1Capture(t, results, streams, time.Since(started))
+			reportL1Capture(t, results, streams, started, time.Since(started))
 			return
 		case <-ticker.C:
 			queryStart := time.Now()
@@ -56,15 +57,15 @@ func measureL1Capture(t *testing.T, ctx context.Context, baseURL string, streams
 				t.Fatalf("active membership=%d err=%v", len(fleet.Sessions), err)
 			}
 			queryStart = time.Now()
-			fleetProfileHTTP(t, ctx, http.MethodGet, baseURL+"/worker-sessions/l1-active-000/logs?limit=1", nil)
+			fleetProfileHTTP(t, ctx, http.MethodGet, baseURL+"/worker-sessions/"+streams[0].id+"/logs?limit=1", nil)
 			firstPage = append(firstPage, time.Since(queryStart))
 		}
 	}
 }
 
-func monitorL1Capture(t *testing.T, ctx, measurementCtx context.Context, baseURL, id string, stream *l1Stream) l1CaptureSamples {
+func monitorL1Capture(t *testing.T, ctx, measurementCtx context.Context, baseURL, id string, stream *l1Stream, started time.Time) l1CaptureSamples {
 	t.Helper()
-	var result l1CaptureSamples
+	result := l1CaptureSamples{interval: l1CommitInterval{start: started, end: started.Add(l1Window)}}
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -103,6 +104,7 @@ func (samples *l1CaptureSamples) observe(stream *l1Stream, page factoryapi.Worke
 			return fmt.Errorf("committed position %d absent from page", sequence)
 		}
 		lag := observedAt.Sub(stream.emitted[sequence-1])
+		samples.interval.observe(sequence, stream.emitted[sequence-1], observedAt)
 		samples.visible = append(samples.visible, lag)
 		samples.durable = append(samples.durable, lag)
 	}
@@ -132,12 +134,14 @@ func (samples *l1CaptureSamples) observe(stream *l1Stream, page factoryapi.Worke
 	return nil
 }
 
-func reportL1Capture(t *testing.T, results <-chan l1CaptureSamples, streams []*l1Stream, elapsed time.Duration) {
+func reportL1Capture(t *testing.T, results <-chan l1CaptureSamples, streams []*l1Stream, started time.Time, elapsed time.Duration) {
 	t.Helper()
 	var visible, durable l1Samples
 	var backlog int64
+	committed := 0
 	var oldestPendingAge time.Duration
 	for result := range results {
+		committed += result.interval.count
 		if len(result.visible) == 0 {
 			t.Error("capture monitor returned no samples")
 		}
@@ -161,18 +165,67 @@ func reportL1Capture(t *testing.T, results <-chan l1CaptureSamples, streams []*l
 	if len(durable) > 0 && durable[len(durable)-1] > time.Second {
 		t.Errorf("maximum durable upper bound=%s exceeds 1s", durable[len(durable)-1])
 	}
-	count := 0
-	for _, stream := range streams {
-		stream.mu.Lock()
-		count += len(stream.emitted)
-		stream.mu.Unlock()
-	}
-	rate := float64(count) / elapsed.Seconds()
-	t.Logf("emissions=%d elapsed=%s achievedRate=%.2f/s backlogUpperBoundBytes=%d (fixed workload only)", count, elapsed, rate, backlog)
+	count, emittedInWindow := countL1Emissions(streams, started, started.Add(l1Window))
+	rate := float64(committed) / l1Window.Seconds()
+	t.Logf("emissionsIncludingDrain=%d intervalEmissions=%d intervalCommits=%d window=%s observerElapsed=%s achievedCommittedRate=%.2f/s backlogUpperBoundBytes=%d (fixed workload only)", count, emittedInWindow, committed, l1Window, elapsed, rate, backlog)
 	if rate < 1000 {
 		t.Errorf("achieved rate=%.2f/s want >=1000/s", rate)
 	}
 	if backlog > 8<<20 {
 		t.Errorf("backlog bound=%d exceeds 8MiB", backlog)
+	}
+}
+
+func countL1Emissions(streams []*l1Stream, start, end time.Time) (total, inWindow int) {
+	for _, stream := range streams {
+		stream.mu.Lock()
+		total += len(stream.emitted)
+		for _, emitted := range stream.emitted {
+			if !emitted.Before(start) && emitted.Before(end) {
+				inWindow++
+			}
+		}
+		stream.mu.Unlock()
+	}
+	return total, inWindow
+}
+
+// Positions are session-local and monotonic. Only newly acknowledged workload
+// records emitted and publicly committed inside the interval count; lifecycle,
+// duplicate polling and post-window drain cannot inflate throughput.
+type l1CommitInterval struct {
+	start, end  time.Time
+	last, count int
+}
+
+func (interval *l1CommitInterval) observe(sequence int, emitted, acknowledged time.Time) {
+	if sequence <= interval.last {
+		return
+	}
+	interval.last = sequence
+	if !emitted.Before(interval.start) && emitted.Before(interval.end) && !acknowledged.Before(interval.start) && acknowledged.Before(interval.end) {
+		interval.count++
+	}
+}
+func TestL1MeasurementAccounting(t *testing.T) {
+	start := time.Unix(100, 0)
+	interval := l1CommitInterval{start: start, end: start.Add(10 * time.Second)}
+	interval.observe(0, start, start) // opening/initial prefix
+	interval.observe(1, start.Add(-time.Second), start.Add(time.Second))
+	interval.observe(2, start.Add(time.Second), start.Add(2*time.Second))
+	interval.observe(2, start.Add(time.Second), start.Add(3*time.Second))
+	interval.observe(3, start.Add(9*time.Second), start.Add(10*time.Second))
+	interval.observe(4, start.Add(11*time.Second), start.Add(12*time.Second))
+	if interval.count != 1 {
+		t.Fatalf("interval commits=%d want 1", interval.count)
+	}
+	streams := []*l1Stream{
+		{emitted: []time.Time{start.Add(-time.Second), start, start.Add(time.Second)}},
+		{emitted: []time.Time{interval.end.Add(-time.Nanosecond), interval.end, interval.end.Add(time.Second)}},
+		{},
+	}
+	total, inWindow := countL1Emissions(streams, interval.start, interval.end)
+	if total != 6 || inWindow != 3 {
+		t.Fatalf("emissions including drain=%d interval emissions=%d want 6 and 3", total, inWindow)
 	}
 }

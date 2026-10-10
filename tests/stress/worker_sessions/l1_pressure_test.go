@@ -20,7 +20,7 @@ import (
 // This dedicated pressure cell holds one actual capture write in flight while
 // a controlled command emits 12MiB. The real Events subscription, journal,
 // reducers and public HTTP logs/control boundaries remain wired by root.
-// Each parallel cell owns its profile/host/Direct attempt; no executable build
+// Each parallel cell owns its profile/host/Factory attempt; no executable build
 // or provider files. Count capacity (128) cannot explain the 24-record loss.
 func TestL1CaptureBytePressure(t *testing.T) {
 	t.Parallel()
@@ -28,7 +28,8 @@ func TestL1CaptureBytePressure(t *testing.T) {
 	defer cancel()
 	runner := newPressureScript(24, 512<<10)
 	writer := &pressureWriter{entered: make(chan struct{}), release: make(chan struct{})}
-	endpoint, store := startL1Host(t, ctx, prepareEvictionFactory(t), runner, writer)
+	dir := prepareEvictionFactory(t)
+	endpoint, _ := startL1Host(t, ctx, dir, runner, writer)
 	t.Cleanup(func() {
 		select {
 		case <-writer.release:
@@ -36,8 +37,7 @@ func TestL1CaptureBytePressure(t *testing.T) {
 			close(writer.release)
 		}
 	})
-	writer.WorkerRecordingStore = store
-	id := admitPressureScript(t, ctx, endpoint, runner)
+	id := admitPressureScript(t, ctx, endpoint, dir, runner)
 	prefix := readPressurePage(t, ctx, endpoint, id)
 	close(runner.release)
 	waitEvictionSignal(t, ctx, writer.entered)
@@ -83,8 +83,9 @@ func TestL1CapturedOversizedOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	runner := newPressureScript(1, 3<<20)
-	endpoint, _ := startL1Host(t, ctx, prepareEvictionFactory(t), runner)
-	id := admitPressureScript(t, ctx, endpoint, runner)
+	dir := prepareEvictionFactory(t)
+	endpoint, _ := startL1Host(t, ctx, dir, runner)
+	id := admitPressureScript(t, ctx, endpoint, dir, runner)
 	close(runner.release)
 	waitEvictionSignal(t, ctx, runner.emitted)
 	waitEvictionCapture(t, ctx, endpoint, id, 3)
@@ -166,13 +167,9 @@ func (runner *pressureScript) RunStreaming(ctx context.Context, _ platformproces
 	return platformprocess.CommandResult{}, ctx.Err()
 }
 
-func admitPressureScript(t *testing.T, ctx context.Context, endpoint string, runner *pressureScript) string {
+func admitPressureScript(t *testing.T, ctx context.Context, endpoint, dir string, runner *pressureScript) string {
 	t.Helper()
-	id := "l1-pressure"
-	worker := "worker"
-	fleetProfileHTTP(t, ctx, http.MethodPost, endpoint+"/worker-sessions", factoryapi.WorkerSessionStartRequest{
-		RequestId: id, WorkerSessionId: id, Execution: factoryapi.WorkerSessionResolvedExecution{WorkstationName: "process", WorkerType: &worker,
-			Dispatch: factoryapi.WorkerSessionResolvedDispatch{DispatchId: id, WorkstationName: "process", WorkerType: &worker}}})
+	id := admitL1FactoryScript(t, ctx, endpoint, dir, 1)[0]
 	waitEvictionSignal(t, ctx, runner.started)
 	waitEvictionCapture(t, ctx, endpoint, id, 2)
 	return id
@@ -216,6 +213,13 @@ func waitPressureHealth(t *testing.T, ctx context.Context, endpoint, id string, 
 
 func assertPressureCancel(t *testing.T, ctx context.Context, endpoint, id string, runner *pressureScript) {
 	t.Helper()
+	var observation factoryapi.WorkerSessionObservation
+	data := fleetProfileHTTP(t, ctx, http.MethodGet, endpoint+"/worker-sessions/"+id, nil)
+	if err := json.Unmarshal(data, &observation); err != nil || observation.FactorySessionId == nil {
+		t.Fatalf("Factory cancellation scope: %v", err)
+	}
+	// Pause dispatch before canceling this Worker, so Runtime cannot replace it.
+	fleetProfileHTTP(t, ctx, http.MethodPost, endpoint+"/factory-sessions/"+*observation.FactorySessionId+"/pause", map[string]any{})
 	fleetProfileHTTP(t, ctx, http.MethodPost, endpoint+"/worker-sessions/"+id+"/cancel", map[string]any{})
 	waitEvictionSignal(t, ctx, runner.canceled)
 }

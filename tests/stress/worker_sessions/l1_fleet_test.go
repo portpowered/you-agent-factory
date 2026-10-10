@@ -33,7 +33,7 @@ const (
 
 // L1 is a dedicated real-storage workload, including under -short. The normal
 // stress target excludes it; test-worker-sessions-l1 owns explicit execution.
-// One isolated canonical host owns 100 Direct scripts and 10,000 compatible
+// One isolated canonical host owns 100 Factory scripts and 10,000 compatible
 // archived captures. Sixty-four seed writers bound preparation concurrency; no
 // filesystem substitute, provider files, executable builds or paid calls.
 func TestL1FleetDiscoveryAndCapture(t *testing.T) {
@@ -60,10 +60,15 @@ func runL1Fleet(t *testing.T, archiveCount, payloadBytes int) {
 	baseURL, store := startL1Host(t, ctx, dir, runner)
 	t.Logf("environment OS=%s arch=%s Go=%s CPUs=%d profile=%s archives=%d archivePayloadBytes=%d diskBudget=%d", runtime.GOOS, runtime.GOARCH, runtime.Version(), runtime.NumCPU(), dir, archiveCount, payloadBytes, l1DiskBudget)
 	seedL1Archives(t, ctx, store, archiveCount, payloadBytes)
+	corpusBytes := l1RetainedBytes(t, dir)
+	t.Logf("actual archived corpus bytes=%d", corpusBytes)
+	if archiveCount == l1Archives && corpusBytes < int64(l1Archives)*l1ArchivePayloadBytes {
+		t.Fatalf("INCONCLUSIVE: actual corpus bytes=%d below declared full sizing", corpusBytes)
+	}
 	assertL1ArchiveMembership(t, ctx, baseURL, archiveCount)
-	streams := admitL1Streams(t, ctx, baseURL, runner)
+	streams := admitL1Streams(t, ctx, baseURL, dir, runner)
 	for index := range streams {
-		waitEvictionCapture(t, ctx, baseURL, fmt.Sprintf("l1-active-%03d", index), 2)
+		waitEvictionCapture(t, ctx, baseURL, streams[index].id, 2)
 	}
 	close(runner.release)
 	measureL1Capture(t, ctx, baseURL, streams)
@@ -72,11 +77,20 @@ func runL1Fleet(t *testing.T, archiveCount, payloadBytes int) {
 		stream.mu.Lock()
 		position := int64(len(stream.emitted) + 3)
 		stream.mu.Unlock()
-		page := waitEvictionCapture(t, ctx, baseURL, fmt.Sprintf("l1-active-%03d", index), position)
+		page := waitEvictionCapture(t, ctx, baseURL, streams[index].id, position)
 		if page.Health != "COMPLETE" {
 			t.Errorf("terminal capture health=%s", page.Health)
 		}
 	}
+	diskBytes := l1RetainedBytes(t, dir)
+	t.Logf("achieved active=%d archived=%d retainedBytes=%d measuredRun=%s", len(streams), archiveCount, diskBytes, time.Since(started))
+	if diskBytes > l1DiskBudget {
+		t.Errorf("retained bytes %d exceeds %d", diskBytes, l1DiskBudget)
+	}
+}
+
+func l1RetainedBytes(t *testing.T, dir string) int64 {
+	t.Helper()
 	var diskBytes int64
 	err := filepath.WalkDir(filepath.Join(dir, ".you-agent-factory", "worker-recordings"), func(_ string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
@@ -91,10 +105,7 @@ func runL1Fleet(t *testing.T, archiveCount, payloadBytes int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("achieved active=%d archived=%d retainedBytes=%d measuredRun=%s", len(streams), archiveCount, diskBytes, time.Since(started))
-	if diskBytes > l1DiskBudget {
-		t.Errorf("retained bytes %d exceeds %d", diskBytes, l1DiskBudget)
-	}
+	return diskBytes
 }
 
 func seedL1Archives(t *testing.T, ctx context.Context, store recordings.WorkerRecordingStore, archiveCount, payloadBytes int) {
@@ -204,19 +215,35 @@ func assertL1ArchiveMembership(t *testing.T, ctx context.Context, baseURL string
 	}
 }
 
-func admitL1Streams(t *testing.T, ctx context.Context, baseURL string, runner *l1Script) []*l1Stream {
+func admitL1Streams(t *testing.T, ctx context.Context, baseURL, dir string, runner *l1Script) []*l1Stream {
 	t.Helper()
 	streams := make([]*l1Stream, l1Active)
-	worker := "worker"
+	// Two explicit Factory Sessions preserve the 100-worker fleet while keeping
+	// each session below the current runtime observation page size.
+	ids := admitL1FactoryScript(t, ctx, baseURL, dir, l1Active/2)
+	ids = append(ids, admitL1FactoryScript(t, ctx, baseURL, prepareEvictionFactory(t), l1Active/2)...)
 	for index := range streams {
-		id := fmt.Sprintf("l1-active-%03d", index)
-		fleetProfileHTTP(t, ctx, http.MethodPost, baseURL+"/worker-sessions", factoryapi.WorkerSessionStartRequest{
-			RequestId: id, WorkerSessionId: id, Execution: factoryapi.WorkerSessionResolvedExecution{WorkstationName: "process", WorkerType: &worker,
-				Dispatch: factoryapi.WorkerSessionResolvedDispatch{DispatchId: id, WorkstationName: "process", WorkerType: &worker}}})
 		select {
 		case streams[index] = <-runner.entered:
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
+		}
+	}
+	// All streams emit the same sequence workload; match them to public IDs via
+	// a captured initial marker before measuring.
+	for _, id := range ids {
+		waitEvictionCapture(t, ctx, baseURL, id, 2)
+		body := fleetProfileHTTP(t, ctx, http.MethodGet, baseURL+"/worker-sessions/"+id+"/logs?limit=2", nil)
+		matched := false
+		for _, stream := range streams {
+			if bytes.Contains(body, []byte(fmt.Sprintf("initial stream=%p", stream))) {
+				stream.id = id
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Fatalf("unmatched Factory capture %s", id)
 		}
 	}
 	return streams
