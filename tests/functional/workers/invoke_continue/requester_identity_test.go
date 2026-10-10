@@ -776,9 +776,42 @@ func TestRequesterPackagedLiveOpen(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &result); err != nil || result.Status != api.InvocationTerminalStatusCompleted {
 		t.Fatalf("packaged invocation did not complete: %s", body)
 	}
+	if result.FailureReason != nil || strings.Contains(body, "failureReason") {
+		t.Fatal("successful packaged invocation published a failure category")
+	}
 	requests := scenario.providerRunner.Requests()
 	if len(requests) != 1 || requests[0].WorkDir != scenario.workingDirectory || !strings.Contains(string(requests[0].Stdin), "packaged live request") {
 		t.Fatal("packaged invocation lost working root/input or duplicated provider launch")
+	}
+	functionalevidence.Covers(t, "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/closeFactorySession")
+}
+
+// The host's invocation owner selects a provider category through production
+// runtime wiring; HTTP and its shared decoder preserve that category.
+func TestRequesterPackagedInvocationFailureReason(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "requester-packaged-auth-failure")
+	defer scenario.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	opened := requesterPackagedOpen(t, fixture, ctx, map[string]any{
+		"folderPath": scenario.workingDirectory, "factoryId": "@you/subagent", "requestId": scenarioScopedID(scenario, "failure-open"),
+	})
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	status, body := t7HTTP(t, ctx, http.MethodPost, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/invocations", map[string]any{
+		"requestId": scenarioScopedID(scenario, "failure-invoke"),
+		"args":      map[string]any{"input": "controlled provider failure", "workingRoot": scenario.workingDirectory, "workerProvider": "codex", "workerModel": "gpt-5-codex"},
+	})
+	var result api.InvocationResponse
+	if status != http.StatusOK || json.Unmarshal([]byte(body), &result) != nil || result.Status != api.InvocationTerminalStatusFailed {
+		t.Fatalf("packaged failed invocation = %d %s", status, body)
+	}
+	if result.FailureReason == nil || *result.FailureReason != api.WorkFailureTypeAuthFailure {
+		t.Fatal("public invocation lost the owner's authentication classification")
+	}
+	if result.RequestId == "" || result.TraceId == "" || scenario.providerRunner.CallCount() != 1 {
+		t.Fatal("failed invocation lost correlation or retried a terminal authentication failure")
 	}
 	functionalevidence.Covers(t, "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/closeFactorySession")
 }

@@ -1228,6 +1228,10 @@
       "executionClass": "deterministic",
       "evidence": [
         {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
+          "boundary": "rest"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
           "boundary": "rest"
         }
@@ -1568,6 +1572,10 @@
           "boundary": "rest"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
+          "boundary": "rest"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
           "boundary": "rest"
         }
@@ -1737,6 +1745,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
           "boundary": "rest"
         },
         {

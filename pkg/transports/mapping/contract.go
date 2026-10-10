@@ -150,6 +150,9 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 	if message := strings.TrimSpace(result.Message); message != "" {
 		response.Message = &message
 	}
+	if result.Status != interfaces.InvocationTerminalStatusCompleted {
+		response.FailureReason = invocationFailureReason(result.FailureReason)
+	}
 	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
 		response.SessionId = &sessionID
 	}
@@ -199,6 +202,11 @@ func FactoryInvocationResultFromResponse(response factoryapi.InvocationResponse)
 	if response.Message != nil {
 		result.Message = *response.Message
 	}
+	if response.FailureReason != nil && result.Status != interfaces.InvocationTerminalStatusCompleted {
+		if reason := invocationFailureReason(string(*response.FailureReason)); reason != nil {
+			result.FailureReason = string(*reason)
+		}
+	}
 	if response.SessionId != nil {
 		result.SessionID = *response.SessionId
 	}
@@ -230,6 +238,23 @@ func FactoryInvocationResultFromResponse(response factoryapi.InvocationResponse)
 		}
 	}
 	return result
+}
+
+// invocationFailureReason preserves only existing owner-selected categories at
+// the HTTP boundary, including when a peer sends an unrecognized enum value.
+func invocationFailureReason(reason string) *factoryapi.WorkFailureType {
+	value := factoryapi.WorkFailureType(reason)
+	switch value {
+	case factoryapi.WorkFailureTypeAuthFailure, factoryapi.WorkFailureTypePermanentBadRequest,
+		factoryapi.WorkFailureTypeThrottled, factoryapi.WorkFailureTypeInternalServerError,
+		factoryapi.WorkFailureTypeTimeout, factoryapi.WorkFailureTypeUnknown,
+		factoryapi.WorkFailureTypeMisconfigured, factoryapi.WorkFailureTypeMissingExecutable,
+		factoryapi.WorkFailureTypeCommandLineTooLong, factoryapi.WorkFailureTypeStructuredOutputSchemaViolation,
+		factoryapi.WorkFailureTypeExpectedArtifactsUnsatisfied, factoryapi.WorkFailureTypeWorkerDeclaredFailure:
+		return &value
+	default:
+		return nil
+	}
 }
 
 // RequestValidationError reports a stable client-side validation failure that

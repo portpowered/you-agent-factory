@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -27,6 +29,7 @@ type liveSessionAPIFake struct {
 type invocationAPIFake struct {
 	onInvoke func(*workersessions.CallerIdentity)
 	err      error
+	result   apisurface.FactoryInvocationResult
 }
 
 func (fake invocationAPIFake) InvokeFactorySession(
@@ -38,7 +41,47 @@ func (fake invocationAPIFake) InvokeFactorySession(
 	if fake.onInvoke != nil {
 		fake.onInvoke(caller)
 	}
-	return apisurface.FactoryInvocationResult{}, fake.err
+	return fake.result, fake.err
+}
+
+func TestHandlerInvocationPublishesOnlyRecognizedFailureReason(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, reason, message, want string
+		status                      factoryapi.InvocationTerminalStatus
+	}{
+		{name: "success", status: factoryapi.InvocationTerminalStatusCompleted, reason: "throttled"},
+		{name: "recognized", status: factoryapi.InvocationTerminalStatusFailed, reason: "throttled", message: "failed", want: "throttled"},
+		{name: "empty message", status: factoryapi.InvocationTerminalStatusFailed, reason: "auth_failure", want: "auth_failure"},
+		{name: "unrecognized", status: factoryapi.InvocationTerminalStatusFailed, reason: "planted-private-reason"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			result := apisurface.FactoryInvocationResult{RequestID: "request", TraceID: "trace",
+				Status: factorydefinitions.InvocationTerminalStatus(tc.status), FailureReason: tc.reason, Message: tc.message}
+			handler := NewHandler(Dependencies{Invocation: invocationAPIFake{
+				result: result, onInvoke: func(*workersessions.CallerIdentity) { calls++ },
+			}}, zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.InvokeFactorySessionBySessionId(recorder,
+				httptest.NewRequest(http.MethodPost, "/factory-sessions/session/invocations", strings.NewReader(`{}`)), "session")
+			var response factoryapi.InvocationResponse
+			if recorder.Code != http.StatusOK || json.Unmarshal(recorder.Body.Bytes(), &response) != nil || calls != 1 {
+				t.Fatalf("invocation response = %d %s, calls = %d", recorder.Code, recorder.Body.String(), calls)
+			}
+			got := apisurface.FactoryInvocationResultFromResponse(response)
+			if got.FailureReason != tc.want || got.RequestID != "request" || got.TraceID != "trace" || got.Message != tc.message {
+				t.Fatalf("terminal representation lost owner facts: %#v", got)
+			}
+			if tc.want == "" && strings.Contains(recorder.Body.String(), "failureReason") {
+				t.Fatal("successful or unrecognized category was exposed")
+			}
+			if strings.Contains(recorder.Body.String(), "planted-private-reason") {
+				t.Fatal("private unrecognized diagnostic was exposed")
+			}
+		})
+	}
 }
 
 func (fake liveSessionAPIFake) GetFactorySession(ctx context.Context, id string) (factoryapi.FactorySession, error) {

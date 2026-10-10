@@ -207,6 +207,11 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-packaged-live", packagedRunner, packagedRunner, nil, nil, nil, packagedRunner.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
+	authFailure := platformprocess.CommandResult{Stderr: []byte("401 Unauthorized: controlled authentication failure"), ExitCode: 1}
+	authRunner := newInvokeContinueResettableProviderCommandRunner(authFailure)
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-packaged-auth-failure", authRunner, authRunner, nil, nil, nil, authRunner.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	streamingRunner := newWSRFT015StreamingProviderRunner()
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "recorded-provider-session", streamingRunner, nil, streamingRunner, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err

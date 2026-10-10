@@ -5955,6 +5955,9 @@ type InvocationResponse struct {
 	// ErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
 	ErrorCode *InvocationResponseErrorCode `json:"errorCode,omitempty"`
 
+	// FailureReason Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	FailureReason *WorkFailureType `json:"failureReason,omitempty"`
+
 	// Message Human-readable failure summary when status is not `COMPLETED`.
 	Message *string `json:"message,omitempty"`
 

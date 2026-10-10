@@ -1417,6 +1417,8 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Recognized failure category selected by the invocation owner. Absent for successful invocations and failures without a recognized category. */
+      failureReason?: components["schemas"]["WorkFailureType"];
       /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
       sessionId?: string;
       /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
