@@ -183,26 +183,27 @@ func TestProvideAPIServerStarterHonorsRootEdgeOverride(t *testing.T) {
 func TestProvideBrowserOpenerHonorsRootEdgeOverride(t *testing.T) {
 	t.Parallel()
 
-	called := false
-	override := platformbrowser.Opener(func(context.Context, string) error {
-		called = true
-		return nil
-	})
-	selected := provideBrowserOpener(serviceedges.Edges{BrowserOpener: override})
-	if err := selected(t.Context(), "https://factory.example"); err != nil || !called {
-		t.Fatalf("browser override = (called %t, error %v)", called, err)
-	}
-	if provideBrowserOpener(serviceedges.Edges{}) == nil {
-		t.Fatal("provideBrowserOpener default = nil, want host adapter")
-	}
-
 	for _, tc := range browserOpenerEnvironmentCases() {
-		assertBrowserOpenerEnvironmentCase(t, tc)
+		t.Run("application/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertBrowserOpenerEnvironmentCase(t, tc)
+		})
 	}
-
-	for _, value := range []string{"", "1"} {
-		assertInjectedBrowserOpener(t, value)
+	for _, inTestBinary := range []bool{false, true} {
+		for _, tc := range browserOpenerEnvironmentCases() {
+			if (!tc.present && tc.wantErr) || (tc.present && tc.value != "0" && tc.value != "1") {
+				continue
+			}
+			t.Run(fmt.Sprintf("injection/test=%t/%s", inTestBinary, tc.name), func(t *testing.T) {
+				t.Parallel()
+				assertInjectedBrowserOpener(t, tc, inTestBinary, nil)
+			})
+		}
 	}
+	t.Run("injected error precedes test refusal and opt-out", func(t *testing.T) {
+		t.Parallel()
+		assertInjectedBrowserOpener(t, browserOpenerEnvironmentCase{present: true, value: "1"}, true, errors.New("injected browser failure"))
+	})
 }
 
 type browserOpenerEnvironmentCase struct {
@@ -210,15 +211,17 @@ type browserOpenerEnvironmentCase struct {
 	present  bool
 	value    string
 	wantNoOp bool
+	wantErr  bool
 }
 
 func browserOpenerEnvironmentCases() []browserOpenerEnvironmentCase {
 	return []browserOpenerEnvironmentCase{
-		{name: "missing"},
-		{name: "empty", present: true},
-		{name: "zero", present: true, value: "0"},
-		{name: "true", present: true, value: "true"},
-		{name: "whitespace", present: true, value: " 1"},
+		{name: "missing success"},
+		{name: "missing error", wantErr: true},
+		{name: "empty", present: true, wantErr: true},
+		{name: "zero", present: true, value: "0", wantErr: true},
+		{name: "true", present: true, value: "true", wantErr: true},
+		{name: "whitespace", present: true, value: " 1", wantErr: true},
 		{name: "exact one", present: true, value: "1", wantNoOp: true},
 	}
 }
@@ -226,61 +229,56 @@ func browserOpenerEnvironmentCases() []browserOpenerEnvironmentCase {
 func assertBrowserOpenerEnvironmentCase(t *testing.T, tc browserOpenerEnvironmentCase) {
 	t.Helper()
 
-	var hostFactoryCalls int
-	fallbackCalled := false
-	fallbackErr := errors.New("controlled browser fallback")
-	fallback := platformbrowser.Opener(func(context.Context, string) error {
-		fallbackCalled = true
-		return fallbackErr
-	})
+	var hostFactoryCalls, openerCalls int
+	var wantErr error
+	if tc.wantErr {
+		wantErr = errors.New("controlled browser fallback")
+	}
+	ctx, url := t.Context(), "https://factory.example/application"
 	selected := provideBrowserOpenerWith(
 		serviceedges.Edges{},
 		func(string) (string, bool) { return tc.value, tc.present },
+		false,
 		func() platformbrowser.Opener {
 			hostFactoryCalls++
-			return fallback
+			return func(gotCtx context.Context, gotURL string) error {
+				openerCalls++
+				if gotCtx != ctx || gotURL != url {
+					t.Fatalf("host received (%v, %q), want exact context and %q", gotCtx, gotURL, url)
+				}
+				return wantErr
+			}
 		},
 	)
-	if selected == nil {
-		t.Fatal("selected browser opener = nil")
+	if openerCalls != 0 {
+		t.Fatal("construction invoked host opener")
 	}
-
-	err := selected(context.Background(), "https://factory.example")
+	err := selected(ctx, url)
+	wantCalls := 1
 	if tc.wantNoOp {
-		if err != nil {
-			t.Fatalf("opt-out opener error = %v, want nil", err)
-		}
-		if hostFactoryCalls != 0 {
-			t.Fatalf("host factory calls = %d, want 0 under exact opt-out", hostFactoryCalls)
-		}
-		if fallbackCalled {
-			t.Fatal("real fallback was called under exact opt-out")
-		}
-		return
+		wantCalls = 0
 	}
-	if !errors.Is(err, fallbackErr) {
-		t.Fatalf("fallback error = %v, want %v", err, fallbackErr)
-	}
-	if hostFactoryCalls != 1 {
-		t.Fatalf("host factory calls = %d, want exactly 1", hostFactoryCalls)
-	}
-	if !fallbackCalled {
-		t.Fatal("controlled real fallback was not called")
+	if err != wantErr || hostFactoryCalls != wantCalls || openerCalls != wantCalls {
+		t.Fatalf("application opener = (error %v, factories %d, opens %d), want (%v, %d, %d)", err, hostFactoryCalls, openerCalls, wantErr, wantCalls, wantCalls)
 	}
 }
 
-func assertInjectedBrowserOpener(t *testing.T, value string) {
+func assertInjectedBrowserOpener(t *testing.T, tc browserOpenerEnvironmentCase, inTestBinary bool, wantErr error) {
 	t.Helper()
 
-	injectedCalled := false
-	injected := platformbrowser.Opener(func(context.Context, string) error {
-		injectedCalled = true
-		return nil
+	var injectedCalls, hostFactoryCalls int
+	ctx, url := t.Context(), "https://factory.example/injected"
+	injected := platformbrowser.Opener(func(gotCtx context.Context, gotURL string) error {
+		injectedCalls++
+		if gotCtx != ctx || gotURL != url {
+			t.Fatalf("injected opener received (%v, %q), want exact context and %q", gotCtx, gotURL, url)
+		}
+		return wantErr
 	})
-	hostFactoryCalls := 0
 	selected := provideBrowserOpenerWith(
 		serviceedges.Edges{BrowserOpener: injected},
-		func(string) (string, bool) { return value, true },
+		func(string) (string, bool) { return tc.value, tc.present },
+		inTestBinary,
 		func() platformbrowser.Opener {
 			hostFactoryCalls++
 			return func(context.Context, string) error {
@@ -288,14 +286,11 @@ func assertInjectedBrowserOpener(t *testing.T, value string) {
 			}
 		},
 	)
-	if err := selected(context.Background(), "https://factory.example"); err != nil {
-		t.Fatalf("injected opener error = %v", err)
+	if injectedCalls != 0 {
+		t.Fatal("construction invoked injected opener")
 	}
-	if !injectedCalled {
-		t.Fatal("injected opener was not called")
-	}
-	if hostFactoryCalls != 0 {
-		t.Fatalf("host factory calls = %d, want 0 for explicit injection", hostFactoryCalls)
+	if err := selected(ctx, url); err != wantErr || injectedCalls != 1 || hostFactoryCalls != 0 {
+		t.Fatalf("injected opener = (error %v, opens %d, factories %d), want (%v, 1, 0)", err, injectedCalls, hostFactoryCalls, wantErr)
 	}
 }
 
@@ -700,14 +695,30 @@ func TestDefaultBrowserOpenerNeverLaunchesRealBrowserInTestBinary(t *testing.T) 
 	if !testing.Testing() {
 		t.Fatal("testing.Testing() = false inside a test binary")
 	}
-	// Harness path: process wiring with no BrowserOpener edge and no opt-out.
-	selected := provideBrowserOpenerWith(
-		serviceedges.Edges{},
-		func(string) (string, bool) { return "", false },
-		hostBrowserOpener,
-	)
-	if err := selected(context.Background(), "http://localhost:7437/dashboard/ui"); !errors.Is(err, errBrowserLaunchInTestBinary) {
-		t.Fatalf("default opener error = %v, want %v", err, errBrowserLaunchInTestBinary)
+	for _, tc := range []browserOpenerEnvironmentCase{
+		{name: "missing"},
+		{name: "zero", present: true, value: "0"},
+		{name: "one", present: true, value: "1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			hostFactoryCalls := 0
+			selected := provideBrowserOpenerWith(
+				serviceedges.Edges{},
+				func(string) (string, bool) { return tc.value, tc.present },
+				true,
+				func() platformbrowser.Opener {
+					hostFactoryCalls++
+					return func(context.Context, string) error { return nil }
+				},
+			)
+			if err := selected(t.Context(), "http://localhost:7437/dashboard/ui"); !errors.Is(err, errBrowserLaunchInTestBinary) || hostFactoryCalls != 0 {
+				t.Fatalf("test opener = (error %v, factories %d), want refusal and zero factories", err, hostFactoryCalls)
+			}
+		})
+	}
+	if err := hostBrowserOpener()(t.Context(), "http://guard"); !errors.Is(err, errBrowserLaunchInTestBinary) {
+		t.Fatalf("host guard error = %v, want refusal", err)
 	}
 	if err := provideBrowserOpener(serviceedges.Edges{})(context.Background(), "http://x"); !errors.Is(err, errBrowserLaunchInTestBinary) {
 		t.Fatalf("provideBrowserOpener default error = %v, want refusal", err)
@@ -719,7 +730,7 @@ func TestDefaultBrowserOpenerNeverLaunchesRealBrowserInTestBinary(t *testing.T) 
 	// An injected fake still records the open.
 	var opened []string
 	fake := platformbrowser.Opener(func(_ context.Context, u string) error { opened = append(opened, u); return nil })
-	if err := provideBrowserOpener(serviceedges.Edges{BrowserOpener: fake})(context.Background(), "http://dash"); err != nil || len(opened) != 1 {
+	if err := provideBrowserOpener(serviceedges.Edges{BrowserOpener: fake})(context.Background(), "http://dash"); err != nil || len(opened) != 1 || opened[0] != "http://dash" {
 		t.Fatalf("fake opener = (%v, %v)", opened, err)
 	}
 }

@@ -112,6 +112,7 @@ func provideBrowserOpener(edges serviceedges.Edges) platformbrowser.Opener {
 	return provideBrowserOpenerWith(
 		edges,
 		os.LookupEnv,
+		testing.Testing(),
 		hostBrowserOpener,
 	)
 }
@@ -139,10 +140,14 @@ const browserOpenOptOutEnvironment = "YOU_NO_BROWSER_OPEN"
 func provideBrowserOpenerWith(
 	edges serviceedges.Edges,
 	lookupEnv func(string) (string, bool),
+	inTestBinary bool,
 	hostFactory func() platformbrowser.Opener,
 ) platformbrowser.Opener {
 	if edges.BrowserOpener != nil {
 		return edges.BrowserOpener
+	}
+	if inTestBinary {
+		return func(context.Context, string) error { return errBrowserLaunchInTestBinary }
 	}
 	if value, ok := lookupEnv(browserOpenOptOutEnvironment); ok && value == "1" {
 		return func(context.Context, string) error { return nil }
