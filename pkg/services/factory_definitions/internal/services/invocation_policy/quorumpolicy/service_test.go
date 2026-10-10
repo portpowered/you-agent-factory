@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -37,5 +38,40 @@ func TestQuorumRelationsKeepOnlyRelevantLineage(t *testing.T) {
 	want = []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "a", RequiredState: "complete"}, {Type: work.RelationDependsOn, TargetWorkID: "b", RequiredState: "complete"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("merge lineage = %#v", got)
+	}
+}
+
+func TestPolicy_QuorumPolicy(t *testing.T) {
+	t.Parallel()
+
+	quorum := NewService()
+	if !quorum.IsPackagedQuorumFactory(&factorydefinitions.FactoryConfig{
+		Name: factorydefinitions.PackagedQuorumFactoryName,
+	}) {
+		t.Fatal("IsPackagedQuorumFactory() = false, want true for packaged quorum factory")
+	}
+
+	relations := quorum.WorkRelations(
+		factorydefinitions.PackagedQuorumSplitWorkstationName,
+		"task-1",
+		"quorum-branch-a",
+		nil,
+	)
+	if len(relations) != 1 || relations[0].Type != work.RelationParentChild || relations[0].TargetWorkID != "task-1" {
+		t.Fatalf("split WorkRelations = %#v, want parent-child to task-1", relations)
+	}
+
+	branches := []factorydefinitions.QuorumLineageInput{
+		{WorkID: "branch-a", WorkTypeID: "quorum-branch-a"},
+		{WorkID: "branch-b", WorkTypeID: "quorum-branch-b"},
+	}
+	mergeRelations := quorum.WorkRelations(
+		factorydefinitions.PackagedQuorumMergeWorkstationName,
+		"",
+		"quorum-merge",
+		branches,
+	)
+	if len(mergeRelations) != 2 {
+		t.Fatalf("merge WorkRelations = %#v, want two branch dependencies", mergeRelations)
 	}
 }

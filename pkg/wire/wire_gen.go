@@ -312,11 +312,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
 	v73 := provideFactoryRuntimeProviderOverride(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
-	if err != nil {
-		return nil, err
-	}
-	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
+	decisionEnvelopeService := wire7.NewDecisionEnvelopeService()
 	workersService, err := provideStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v71, readFileTree, source, logger, factoryWorktreePreparer, v72, temporaryFileSystem, v73, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
@@ -338,12 +334,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	recordedSessionInventory := provideRecordedSessionInventory(edges2, replayInputLoader, loggingLogger)
 	v80 := wire3.NewRecordedHistory(homeDirectoryResolver, recordedSessionInventory)
 	v81 := wire3.NewInvocationAuthority(v14, timerSource, worldStateProjector)
-	ttsObservabilityService := provideTTSObservabilityService(invocationPolicyPorts)
+	ttsObservabilityService := wire7.NewTTSObservabilityService()
 	v82 := provideFactorySessionInvocationMetricsRecorder(edges2)
 	v83 := wire3.NewInvocationTelemetry(v14, ttsObservabilityService, v82, logger)
 	v84 := wire3.NewInvocationSpecialCase(ttsObservabilityService)
-	invocationInterpolationService := provideInvocationInterpolationService(invocationPolicyPorts)
-	invocationWorkTypeService := provideInvocationWorkTypeService(invocationPolicyPorts)
+	invocationInterpolationService := wire7.NewInvocationInterpolationService()
+	invocationWorkTypeService := wire7.NewInvocationWorkTypeService()
 	invocationInputReader := provideFactorySessionInvocationInputReader(edges2)
 	invocationWorkPolicy := provideInvocationWorkPolicy()
 	v85, err := wire3.NewInvocationOwner(v81, v17, v83, v84, invocationInterpolationService, invocationWorkTypeService, invocationInputReader, invocationWorkPolicy)
@@ -503,9 +499,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	quorumPolicyService := provideQuorumPolicyService(invocationPolicyPorts)
-	invocationOutputShapingService := provideInvocationOutputShapingService(invocationPolicyPorts)
-	workPropagationPolicyService := provideWorkPropagationPolicyService(invocationPolicyPorts)
+	quorumPolicyService := wire7.NewQuorumPolicyService()
+	invocationOutputShapingService := wire7.NewInvocationOutputShapingService()
+	workPropagationPolicyService := wire7.NewWorkPropagationPolicyService()
 	contentStagingService, err := provideWorkContentStagingService(edges2, source)
 	if err != nil {
 		return nil, err
@@ -561,7 +557,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	workstationExecutionPolicyService := provideWorkstationExecutionPolicyService(invocationPolicyPorts)
+	workstationExecutionPolicyService := wire7.NewWorkstationExecutionPolicyService()
 	v148 := provideAutomationsCursorFileSystem(edges2)
 	v149 := wire8.NewCursorScopes(v148)
 	v150 := provideAutomationsScriptPollers(logger, v147, commandRunner, workstationExecutionPolicyService, v149)
@@ -1063,17 +1059,7 @@ var servicesSet = wire11.NewSet(
 	provideWorkSubmittedFilePathInspector,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
-	provideFactoryInvocationPolicyPorts,
-	provideWorkersInferenceMediaFileReader,
-	provideDecisionEnvelopeService,
-	provideInvocationInterpolationService,
-	provideInvocationOutputShapingService,
-	provideInvocationWorkTypeService,
-	provideQuorumPolicyService,
-	provideWorkPropagationPolicyService,
-	provideWorkstationExecutionPolicyService,
-	provideTTSObservabilityService,
-	provideAutomationHostedClock,
+	provideWorkersInferenceMediaFileReader, wire7.NewDecisionEnvelopeService, wire7.NewInvocationInterpolationService, wire7.NewInvocationOutputShapingService, wire7.NewInvocationWorkTypeService, wire7.NewQuorumPolicyService, wire7.NewWorkPropagationPolicyService, wire7.NewWorkstationExecutionPolicyService, wire7.NewTTSObservabilityService, provideAutomationHostedClock,
 	provideAutomationHostedHTTPClient,
 	provideAutomationHostedSecretResolver,
 	provideAutomationHostedCheckpointStore,

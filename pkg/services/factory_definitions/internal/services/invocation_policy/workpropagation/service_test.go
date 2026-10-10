@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestModeDefaultsAndTrimsExplicitPolicy(t *testing.T) {
@@ -14,5 +15,23 @@ func TestModeDefaultsAndTrimsExplicitPolicy(t *testing.T) {
 	}
 	if got := (Service{}).Mode(&definitions.FactoryWorkstationConfig{WorkPropagation: &definitions.WorkPropagationConfig{Mode: " explicit "}}); got != "explicit" {
 		t.Fatalf("explicit mode = %q", got)
+	}
+}
+
+func TestPolicy_WorkPropagation(t *testing.T) {
+	t.Parallel()
+
+	propagation := NewService()
+	if got := propagation.Mode(nil); got != factorydefinitions.WorkPropagationModeOutputAsPayload {
+		t.Fatalf("Mode(nil) = %q, want output_as_payload default", got)
+	}
+
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
+		WorkPropagation: &factorydefinitions.WorkPropagationConfig{
+			Mode: factorydefinitions.WorkPropagationModePreserveInput,
+		},
+	}
+	if got := propagation.Mode(workstation); got != factorydefinitions.WorkPropagationModePreserveInput {
+		t.Fatalf("Mode() = %q, want preserve_input", got)
 	}
 }

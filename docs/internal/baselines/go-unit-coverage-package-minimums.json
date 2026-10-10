@@ -549,10 +549,6 @@
       "minimum": 44.82
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
       "minimum": 12.83
     },

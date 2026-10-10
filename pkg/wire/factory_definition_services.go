@@ -105,58 +105,6 @@ func provideContentMaterializer(
 	)
 }
 
-func provideFactoryInvocationPolicyPorts() (factorydefinitionswire.InvocationPolicyPorts, error) {
-	return factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
-}
-
-func provideDecisionEnvelopeService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.DecisionEnvelopeService {
-	return ports.DecisionEnvelope
-}
-
-func provideInvocationInterpolationService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.InvocationInterpolationService {
-	return ports.InvocationInterpolation
-}
-
-func provideInvocationOutputShapingService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.InvocationOutputShapingService {
-	return ports.InvocationOutput
-}
-
-func provideInvocationWorkTypeService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.InvocationWorkTypeService {
-	return ports.InvocationWorkType
-}
-
-func provideQuorumPolicyService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.QuorumPolicyService {
-	return ports.QuorumPolicy
-}
-
-func provideWorkPropagationPolicyService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.WorkPropagationPolicyService {
-	return ports.WorkPropagation
-}
-
-func provideWorkstationExecutionPolicyService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.WorkstationExecutionPolicyService {
-	return ports.WorkstationExecution
-}
-
-func provideTTSObservabilityService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.TTSObservabilityService {
-	return ports.TTSObservability
-}
-
 func provideFactoryDefinitionPortableFileSystem(
 	edges serviceedges.Edges,
 ) portablefiles.FileSystem {

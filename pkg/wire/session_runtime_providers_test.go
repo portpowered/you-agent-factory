@@ -25,6 +25,7 @@ import (
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -830,11 +831,7 @@ func (wireTestWorkersService) Execute(
 func statelessDecisionEnvelopeService(t *testing.T) factorydefinitions.DecisionEnvelopeService {
 	t.Helper()
 
-	ports, err := provideFactoryInvocationPolicyPorts()
-	if err != nil {
-		t.Fatalf("provideFactoryInvocationPolicyPorts() error = %v", err)
-	}
-	return provideDecisionEnvelopeService(ports)
+	return factorydefinitionswire.NewDecisionEnvelopeService()
 }
 
 // unavailableWorkerControlStore is a controlled persistence outage for tests

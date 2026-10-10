@@ -50,3 +50,37 @@ func TestInterpolatePromptWithProvenanceDoesNotClassifyEmptySensitiveValue(t *te
 		t.Fatalf("sensitive spans = %#v, want none for an empty value", spans)
 	}
 }
+
+func TestPolicy_InvocationInterpolation(t *testing.T) {
+	t.Parallel()
+
+	interpolation := NewService()
+	workstation, err := interpolation.InterpolateWorkstationConfig(
+		factorydefinitions.FactoryWorkstationConfig{
+			PromptTemplate: "Use ${input} now",
+		},
+		&work.InvocationArguments{
+			Arguments: map[string]work.InvocationArgument{
+				"input": {Values: []string{"draft"}},
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig: %v", err)
+	}
+	if workstation.PromptTemplate != "Use draft now" {
+		t.Fatalf("PromptTemplate = %q, want interpolated draft", workstation.PromptTemplate)
+	}
+
+	_, err = interpolation.InterpolateWorkstationConfig(
+		factorydefinitions.FactoryWorkstationConfig{
+			PromptTemplate: "Use ${missing} now",
+		},
+		&work.InvocationArguments{},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("InterpolateWorkstationConfig error = nil, want invalid interpolation")
+	}
+}
