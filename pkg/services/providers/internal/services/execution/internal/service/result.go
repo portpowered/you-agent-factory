@@ -17,6 +17,11 @@ func safeProgressRequest(request providers.ExecuteRequest, extraSecrets ...strin
 	if observer == nil {
 		return request
 	}
+	// Freeze classified values before the adapter receives mutable environment
+	// slices/maps. An adapter clearing its execution environment must not undo
+	// the publication boundary's secret classification.
+	redactionRequest := request.Clone()
+	extraSecrets = append([]string(nil), extraSecrets...)
 	var mu sync.Mutex
 	count := 0
 	request.ProgressObserver = func(progress providers.ExecuteProgress) {
@@ -26,7 +31,7 @@ func safeProgressRequest(request providers.ExecuteRequest, extraSecrets ...strin
 			return
 		}
 		count++
-		diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{progress}}, request, extraSecrets...)
+		diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{progress}}, redactionRequest, extraSecrets...)
 		observer(diagnostics.Progress[0])
 	}
 	return request
@@ -81,6 +86,11 @@ func normalizeSuccess(
 	normalized := result.Clone()
 	if err := validateSessionRef(normalized.SessionRef, provider); err != nil {
 		return providers.ExecuteResult{}, err
+	}
+	// Ordinary content is preserved, but execution credentials must never be
+	// returned to Workers for output shaping or capture.
+	for _, token := range workerSessionTokenSecrets(request) {
+		normalized.Content = strings.ReplaceAll(normalized.Content, token, redactedValue)
 	}
 	if normalized.Diagnostics != nil {
 		diagnostics := normalizeDiagnostics(*normalized.Diagnostics, request, extraSecrets...)
@@ -209,10 +219,25 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest, extraSecrets ...
 			secrets = append(secrets, value)
 		}
 	}
+	secrets = append(secrets, workerSessionTokenSecrets(request)...)
 	secrets = append(secrets, extraSecrets...)
 	// Redact a containing value before its substring; map iteration order must
 	// not leave part of a longer classified value in diagnostics.
 	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	return secrets
+}
+
+// Worker Session credentials are execution-only process entries, never
+// persisted EnvVars. Classify every supplied occurrence before handoff, even
+// if another entry or override will win the final environment merge.
+func workerSessionTokenSecrets(request providers.ExecuteRequest) []string {
+	var secrets []string
+	for _, entry := range request.ProcessEnvironment {
+		name, value, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(name, "YOU_WORKER_SESSION_TOKEN") && value != "" {
+			secrets = append(secrets, value)
+		}
+	}
 	return secrets
 }
 
