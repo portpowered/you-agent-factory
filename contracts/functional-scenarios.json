@@ -297,6 +297,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+          "boundary": "cli"
         }
       ]
     },
@@ -2018,6 +2022,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+          "boundary": "rest"
         }
       ]
     },
@@ -2032,6 +2040,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
           "boundary": "rest"
         }
       ]

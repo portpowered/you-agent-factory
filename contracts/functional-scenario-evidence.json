@@ -417,6 +417,14 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+      "stableIds": [
+        "cli/you.run",
+        "rest/startDurableFactorySessionAsync",
+        "rest/startDurableFactorySessionSync"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
       "stableIds": [
         "cli/you.server.mcp",
