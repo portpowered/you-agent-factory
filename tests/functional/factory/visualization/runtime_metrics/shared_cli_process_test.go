@@ -2,6 +2,7 @@ package runtime_metrics_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -17,6 +18,30 @@ var runtimeMetricsProcessState struct {
 	once    sync.Once
 	process support.ApplicationProcess
 	err     error
+}
+
+var activeMetricsProcessState struct {
+	once    sync.Once
+	process support.ApplicationProcess
+	routes  *activeMetricsProviderRoutes
+	err     error
+}
+
+func activeMetricsProcess(t testing.TB) (support.ApplicationProcess, *activeMetricsProviderRoutes) {
+	t.Helper()
+	activeMetricsProcessState.once.Do(func() {
+		activeMetricsProcessState.routes = &activeMetricsProviderRoutes{}
+		activeMetricsProcessState.process, activeMetricsProcessState.err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+			ProviderCommandRunner: activeMetricsProcessState.routes,
+			APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+				return ctx.Value(retainedMetricsServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
+			},
+		})
+	})
+	if activeMetricsProcessState.err != nil {
+		t.Fatal(activeMetricsProcessState.err)
+	}
+	return activeMetricsProcessState.process, activeMetricsProcessState.routes
 }
 
 type retainedMetricsServerKey struct{}
@@ -58,10 +83,13 @@ func FunctionalMonolithCleanup(t *testing.T) {
 }
 
 func closeRuntimeMetricsProcess() error {
-	if runtimeMetricsProcessState.process == nil {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:testsleep // bounded process teardown; public tests own completion signals
 	defer cancel()
-	return runtimeMetricsProcessState.process.Close(ctx)
+	var result error
+	for _, process := range []support.ApplicationProcess{runtimeMetricsProcessState.process, activeMetricsProcessState.process} {
+		if process != nil {
+			result = errors.Join(result, process.Close(ctx))
+		}
+	}
+	return result
 }

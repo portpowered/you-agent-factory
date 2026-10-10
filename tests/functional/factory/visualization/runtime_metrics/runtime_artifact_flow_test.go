@@ -17,7 +17,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -31,14 +30,7 @@ import (
 // use their API-owned contract; metrics reads use the customer CLI.
 func TestActiveMetricsSessionsPreservePeerOnCompletionOrCancellation(t *testing.T) {
 	t.Parallel()
-	routes := &activeMetricsProviderRoutes{}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: routes,
-		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			return ctx.Value(retainedMetricsServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
-		},
-	})
-	support.CleanupProcess(t, process)
+	process, routes := activeMetricsProcess(t)
 	for _, cancelFirst := range []bool{false, true} {
 		t.Run(fmt.Sprintf("cancel first=%t", cancelFirst), func(t *testing.T) {
 			t.Parallel()
@@ -86,6 +78,109 @@ func TestActiveMetricsSessionsPreservePeerOnCompletionOrCancellation(t *testing.
 }
 
 type activeMetricsProviderRoutes struct{ runners sync.Map }
+
+func TestMetricsCoverageAgeRetentionKeepsFreshFactsAndUnsafeContent(t *testing.T) {
+	t.Parallel()
+	process, routes := activeMetricsProcess(t)
+	root := filepath.Join(t.TempDir(), "metrics")
+	expired := writeFunctionalMetricsFixture(t, root, "2020/01/01", "000000.000000000-runtime-metrics-expired.log", "expired")
+	unsafe := writeFunctionalMetricsFixture(t, root, "2020/02/30", "000000.000000000-runtime-metrics-unsafe.log", "unsafe")
+	fresh := filepath.Join(root, filepath.FromSlash(time.Now().UTC().Format("2006/01/02")), "235959.000000000-runtime-metrics-fresh.log")
+	historyID := uuid.NewString()
+	writeRuntimeMetricsArtifact(t, fresh, false, []map[string]any{
+		{"metric_name": runtimeProviderInputTokens, "value": 7, "session_id": historyID, "dispatch_id": "retained", "provider": "codex"},
+		{"metric_name": runtimeProviderOutputTokens, "value": 3, "session_id": historyID, "dispatch_id": "retained", "provider": "codex"},
+		{"metric_name": "dispatch.completed", "value": 1, "session_id": historyID},
+	})
+	first := startActiveMetricsSession(t, process, routes, root)
+	if _, err := os.Stat(expired); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("expired startup artifact stat = %v, want removed", err)
+	}
+	assertFunctionalFileContents(t, unsafe, "{\"metric_name\":\"unsafe\",\"value\":1}\n")
+	assertMetricsCoverageTotals(t, t.TempDir(), first.url, "", 7, 3, 1)
+	assertMetricsCoverageTotals(t, t.TempDir(), first.url, first.id, 0, 0, 0)
+	close(first.runner.release)
+	support.WaitForSessionTerminalStatus(t, first.url, first.id, 30*time.Second)
+	assertSelectedTimeWork(t, selectedTimeFixture{url: first.url, session: first.id})
+	assertMetricsCoverageTotals(t, t.TempDir(), first.url, first.id, 1, 1, 1)
+	assertMetricsCoverageTotals(t, t.TempDir(), first.url, "", 8, 4, 2)
+	first.command.Stop(t)
+}
+
+// A storage failure occurs before provider dispatch. Repair and peer commands
+// enter the same reusable process, with separate session and profile ownership.
+func TestMetricsCoverageStorageFailureRepairAndPeer(t *testing.T) {
+	t.Parallel()
+	process, routes := activeMetricsProcess(t)
+	for _, obstruction := range []string{"parent", "claim directory"} {
+		t.Run(obstruction, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			root := filepath.Join(home, "metrics")
+			blocked := home + string(os.PathSeparator) + "blocked"
+			if obstruction == "parent" {
+				root = filepath.Join(blocked, "metrics")
+			} else {
+				blocked = filepath.Join(root, ".runtime-metrics-retention-claims")
+			}
+			writeFunctionalFile(t, blocked, "customer obstruction")
+			inputs, _ := runtimeMetricsRunInputs(t, home, root)
+			runner := &activeMetricsProvider{started: make(chan struct{}), release: make(chan struct{}), cancelled: make(chan struct{})}
+			dir := filepath.Clean(inputs.Args[3])
+			routes.runners.Store(dir, runner)
+			t.Cleanup(func() { routes.runners.Delete(dir) })
+			err := process.Execute(inputs.Input)
+			var pathErr *fs.PathError
+			if !errors.As(err, &pathErr) || !strings.Contains(err.Error(), "runtime metrics") {
+				t.Fatalf("storage startup error = %v, want metrics filesystem failure", err)
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("failed startup stdout = %q", inputs.Stdout())
+			}
+			select {
+			case <-runner.started:
+				t.Fatal("blocked metrics storage dispatched a provider")
+			default:
+			}
+			assertFunctionalFileContents(t, blocked, "customer obstruction")
+			peer := startActiveMetricsSession(t, process, routes, filepath.Join(t.TempDir(), "metrics"))
+			finishPeriodicRetentionSessions(t, peer)
+			if err := os.Remove(blocked); err != nil {
+				t.Fatal(err)
+			}
+			first := startActiveMetricsSession(t, process, routes, root)
+			close(first.runner.release)
+			support.WaitForSessionTerminalStatus(t, first.url, first.id, 30*time.Second)
+			assertCompletedSessionMetrics(t, first.url, first.id)
+			assertMetricsCoverageTotals(t, home, first.url, first.id, 1, 1, 1)
+			first.command.Stop(t)
+			paths := functionalMetricArtifactPaths(t, root)
+			var firstPath string
+			for _, path := range paths {
+				if strings.Contains(filepath.Base(path), first.id) {
+					firstPath = path
+				}
+			}
+			retained, err := os.ReadFile(firstPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second := startActiveMetricsSession(t, process, routes, root)
+			// Session selection is host-scoped: a stopped host's ID is not a
+			// live ID on its successor. Its customer artifact remains intact.
+			assertRetainedMetricsTokens(t, home, second.url, second.id, 0)
+			assertFunctionalFileContents(t, firstPath, string(retained))
+			close(second.runner.release)
+			support.WaitForSessionTerminalStatus(t, second.url, second.id, 30*time.Second)
+			assertCompletedSessionMetrics(t, second.url, second.id)
+			assertRetainedMetricsTokens(t, home, second.url, second.id, 1)
+			assertMetricsCoverageTotals(t, home, second.url, second.id, 1, 1, 1)
+			assertMetricsCoverageTotals(t, home, second.url, "", 2, 2, 2)
+			assertFunctionalFileContents(t, firstPath, string(retained))
+			second.command.Stop(t)
+		})
+	}
+}
 
 func (routes *activeMetricsProviderRoutes) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner, ok := routes.runners.Load(filepath.Clean(request.WorkDir))
@@ -386,7 +481,7 @@ func TestRuntimeMetricsStartupRejectsFileRootThroughSharedProcess(t *testing.T) 
 
 // M2-S/F: size retention prunes the oldest eligible file and protects a
 // recognized name that is already a directory when startup inventories it.
-func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
+func TestMetricsCoverageStartupSizeRetentionThroughSharedProcess(t *testing.T) {
 	t.Parallel()
 	for _, protectDirectory := range []bool{false, true} {
 		t.Run(fmt.Sprintf("protected directory=%t", protectDirectory), func(t *testing.T) {
@@ -394,14 +489,16 @@ func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
 			home := t.TempDir()
 			root := platformmetrics.RuntimeMetricsRoot(home)
 			oldest := filepath.Join(root, "2026", "08", "20", "000000.000000000-runtime-metrics-oldest.log")
-			newer := writeFunctionalMetricsFixture(t, root, "2026/08/20", "010000.000000000-runtime-metrics-newer.log", "newer")
+			newer := filepath.Join(root, "2026", "08", "20", "010000.000000000-runtime-metrics-newer.log")
+			newerContents := strings.Repeat(" ", 600*1024) + "{\"metric_name\":\"newer\",\"value\":1}\n"
+			writeFunctionalFile(t, newer, newerContents)
 			unknown := filepath.Join(root, "2026", "08", "20", "keep.txt")
 			writeFunctionalFile(t, unknown, "unknown file")
 			if protectDirectory {
 				writeFunctionalFile(t, filepath.Join(oldest, "child.txt"), "protected contents")
 				oldest = filepath.Join(root, "2026", "08", "20", "003000.000000000-runtime-metrics-eligible.log")
 			}
-			writeFunctionalFile(t, oldest, strings.Repeat("x", 1024*1024+1))
+			writeFunctionalFile(t, oldest, strings.Repeat(" ", 600*1024)+"{\"metric_name\":\"oldest\",\"value\":1}\n")
 			inputs, _ := runtimeMetricsRunInputs(t, home, root,
 				"--runtime-metrics-max-size-mb", "1", "--runtime-metrics-max-age-days", "0")
 			if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
@@ -411,7 +508,7 @@ func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
 				t.Fatalf("oldest eligible artifact stat = %v, want pruned", err)
 			}
 			assertFunctionalFileContents(t, unknown, "unknown file")
-			assertFunctionalFileContents(t, newer, "{\"metric_name\":\"newer\",\"value\":1}\n")
+			assertFunctionalFileContents(t, newer, newerContents)
 			paths := functionalMetricArtifactPaths(t, root)
 			if len(paths) != 2 {
 				t.Fatalf("retained artifacts = %v, want newer and completed active artifact", paths)
@@ -425,6 +522,8 @@ func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
 				assertFunctionalFileContents(t, filepath.Join(root, "2026", "08", "20",
 					"000000.000000000-runtime-metrics-oldest.log", "child.txt"), "protected contents")
 			}
+			server := startRetainedMetricsHost(t, home, uuid.NewString(), "--runtime-metrics-max-age-days", "0")
+			assertMetricsCoverageTotals(t, home, server, "", 1, 1, 1)
 		})
 	}
 }
@@ -432,7 +531,7 @@ func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
 // Retention cannot order an artifact whose calendar path or clock is invalid.
 // Even above the size budget it must preserve those bytes, prune a valid peer,
 // and remain able to prune the artifact after the customer repairs its path.
-func TestRuntimeMetricsStartupProtectsUnorderableHistoryAndRecovers(t *testing.T) {
+func TestMetricsCoverageStartupProtectsUnorderableHistoryAndRecovers(t *testing.T) {
 	t.Parallel()
 	for _, scenario := range []struct {
 		name, date, clock string
@@ -524,7 +623,10 @@ func runtimeMetricsRunInputs(t *testing.T, home, root string, flags ...string) (
 	args := append([]string{"you", "run", "--dir", factory, "--session", session,
 		"--quiet", "--no-record", "--runtime-metrics-dir", root}, flags...)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home,
+		"APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"),
+		"XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"),
+		"XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
 	inputs.Input.WorkingDirectory = home
 	return inputs, session
 }

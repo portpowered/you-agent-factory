@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,6 +87,132 @@ func TestPeriodicMetricsRetentionPreservesWorkAndReleasesClaims(t *testing.T) {
 	finishPeriodicRetentionSessions(t, reopened)
 }
 
+func TestMetricsCoveragePeriodicSharedRootSurvivesOwnerCancellation(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
+	scheduler := &periodicRetentionClock{
+		Deterministic: platformclock.NewDeterministic(base, time.Hour),
+		registered:    make(chan struct{}, 8),
+	}
+	core, logs := observer.New(zap.DebugLevel)
+	reports := make(chan struct{}, 8)
+	routes := &activeMetricsProviderRoutes{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		Clock:            &selectedTimeNowOnlySource{clock: platformclock.NewDeterministic(base, time.Hour)},
+		ProcessScheduler: scheduler, ProcessLogger: zap.New(periodicRetentionLogObserver{Core: core, reports: reports}),
+		ProviderCommandRunner: routes,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			return ctx.Value(retainedMetricsServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
+		},
+	})
+	support.CleanupProcess(t, process)
+	root := filepath.Join(t.TempDir(), "metrics")
+	first := startActiveMetricsSession(t, process, routes, root)
+	awaitSelectedTimeSignal(t, reports)
+	awaitSelectedTimeSignal(t, scheduler.registered)
+	peer := startActiveMetricsSession(t, process, routes, root)
+	live := functionalMetricArtifactPaths(t, root)
+	control := selectedCancellationControl(t, first.url, first.id)
+	if string(control.Outcome) != "ACCEPTED" {
+		t.Fatalf("cancel outcome = %s", control.Outcome)
+	}
+	awaitSelectedTimeSignal(t, first.runner.cancelled)
+	support.WaitForSessionStopped(t, first.url, first.id, 30*time.Second)
+	assertSelectedCancellationState(t, first.url, first.id)
+	first.command.Stop(t)
+	expired := writeFunctionalMetricsFixture(t, root, "2020/01/01", "000000.000000000-runtime-metrics-expired.log", "expired")
+	unsafe := writeFunctionalMetricsFixture(t, root, "2020/02/30", "000000.000000000-runtime-metrics-unsafe.log", "unsafe")
+	blocked := writeFunctionalMetricsFixture(t, root, "2020/01/02", "000000.000000000-runtime-metrics-blocked.log", "blocked")
+	restore := protectPeriodicMetricsCandidate(t, blocked)
+	scheduler.SetTick(1)
+	awaitSelectedTimeSignal(t, reports)
+	awaitSelectedTimeSignal(t, scheduler.registered)
+	assertPeriodicCandidateFailure(t, logs, root)
+	if _, err := os.Stat(expired); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("safe periodic peer stat = %v, want removed", err)
+	}
+	assertFunctionalFileContents(t, unsafe, "{\"metric_name\":\"unsafe\",\"value\":1}\n")
+	assertFunctionalFileContents(t, blocked, "{\"metric_name\":\"blocked\",\"value\":1}\n")
+	for _, path := range live {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("periodic cleanup removed a current session artifact: %v", err)
+		}
+	}
+	assertRetainedMetricsTokens(t, t.TempDir(), peer.url, peer.id, 0)
+	repaired := filepath.Join(root, "2020", "01", "01", filepath.Base(unsafe))
+	if err := os.MkdirAll(filepath.Dir(repaired), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(unsafe, repaired); err != nil {
+		t.Fatal(err)
+	}
+	restore()
+	scheduler.SetTick(2)
+	awaitSelectedTimeSignal(t, reports)
+	if _, err := os.Stat(repaired); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("corrected periodic candidate stat = %v, want removed", err)
+	}
+	if _, err := os.Stat(blocked); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("repaired permission candidate stat = %v, want removed", err)
+	}
+	close(peer.runner.release)
+	support.WaitForSessionTerminalStatus(t, peer.url, peer.id, 30*time.Second)
+	assertCompletedSessionMetrics(t, peer.url, peer.id)
+	assertSelectedTimeWork(t, selectedTimeFixture{url: peer.url, session: peer.id})
+	peer.command.Stop(t)
+	reopened := startActiveMetricsSession(t, process, routes, root)
+	close(reopened.runner.release)
+	support.WaitForSessionTerminalStatus(t, reopened.url, reopened.id, 30*time.Second)
+	assertCompletedSessionMetrics(t, reopened.url, reopened.id)
+	reopened.command.Stop(t)
+}
+
+// Customers can make a historical candidate undeletable using ordinary
+// filesystem ownership. Windows protects an open file from deletion; Unix
+// deletion permission belongs to its parent directory. Restore before teardown.
+func protectPeriodicMetricsCandidate(t *testing.T, path string) func() {
+	t.Helper()
+	selected, mode := filepath.Dir(path), os.FileMode(0o500)
+	if runtime.GOOS == "windows" {
+		file, err := os.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var once sync.Once
+		restore := func() {
+			once.Do(func() {
+				if err := file.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+		}
+		t.Cleanup(restore)
+		return restore
+	}
+	if err := os.Chmod(selected, mode); err != nil {
+		t.Fatal(err)
+	}
+	restore := func() {
+		if err := os.Chmod(selected, 0o700); err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(restore)
+	return restore
+}
+
+func assertPeriodicCandidateFailure(t *testing.T, logs *observer.ObservedLogs, root string) {
+	t.Helper()
+	for _, entry := range logs.All() {
+		fields := entry.ContextMap()
+		if entry.Message == "runtime metrics retention sweep completed with failures" &&
+			fields["root"] == root && fields["failed_files"] == int64(1) && fields["removed_files"] == int64(1) {
+			return
+		}
+	}
+	t.Fatalf("candidate failure and safe peer cleanup diagnostic missing: %#v", logs.FilterMessageSnippet("runtime metrics retention sweep").All())
+}
+
 // The existing ProcessLogger edge observes completed retention diagnostics.
 // Signal only after the observer has recorded the fields used by readback.
 type periodicRetentionLogObserver struct {
@@ -120,6 +247,7 @@ func finishPeriodicRetentionSessions(t *testing.T, sessions ...activeMetricsSess
 		close(session.runner.release)
 		support.WaitForSessionTerminalStatus(t, session.url, session.id, 30*time.Second)
 		assertSelectedTimeWork(t, selectedTimeFixture{url: session.url, session: session.id})
+		assertCompletedSessionMetrics(t, session.url, session.id)
 		session.command.Stop(t)
 	}
 }
