@@ -15,10 +15,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 )
 
-// DirectJavaScriptHost binds the process Factory Sessions root to a CLI HTTP
-// transport. It owns no Factory Session state.
+// DirectJavaScriptHost binds invocation host facts to prebuilt HTTP roles.
+// It owns no Factory Session state.
 type DirectJavaScriptHost func(
-	factorysessions.Service,
 	factorysessions.RuntimeHostRequest,
 	initializer.InvocationCancellation,
 	factorysessions.RuntimeHostObserver,
@@ -115,7 +114,7 @@ func (operation *directJavaScriptRun) Run(
 			}
 			return runAfterReady(runCtx)
 		}
-		transport, err = operation.host(operation.sessions, *request.Host, cancellation, observer)
+		transport, err = operation.host(*request.Host, cancellation, observer)
 		if err != nil {
 			return err
 		}

@@ -508,6 +508,7 @@ func (reader recordingsWorkDurabilityReader) CompletedFlushSequence(
 }
 
 func provideDirectJavaScriptHostAdapter(
+	sessions factorysessions.Service,
 	inspection factorysessions.SessionInspectionService,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
@@ -517,21 +518,20 @@ func provideDirectJavaScriptHostAdapter(
 	logger *zap.Logger,
 	recoverOwners recordings.WorkerOwnerRecoveryOperation,
 ) (runcli.DirectJavaScriptHost, error) {
-	if inspection == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
+	if sessions == nil || inspection == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
 	}
+	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		SessionsRoot: sessions, DurableLister: sessions, FactoryValidation: validation,
+		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
+	}, logger)
+	recordingsAdapter := recordingshttp.NewAdapterWithSessions(nil, sessions, inspection)
 	return func(
-		sessions factorysessions.Service,
 		host factorysessions.RuntimeHostRequest,
 		cancellation initializer.InvocationCancellation,
 		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
-		handler, err := newDurableExecutionHTTPHandler(
-			sessions, inspection, validation, invocationWorkType, sessionRequests, logger, cancellation,
-		)
-		if err != nil {
-			return nil, err
-		}
+		handler := bindDurableExecutionHTTPHandler(recordingsAdapter, sessionsHandler, logger, cancellation)
 		return newRunner(func(ctx context.Context) error {
 			if recoverOwners != nil {
 				if err := recoverOwners(ctx); err != nil {
@@ -553,31 +553,21 @@ func provideDirectJavaScriptHostAdapter(
 	}, nil
 }
 
-func newDurableExecutionHTTPHandler(
-	sessions factorysessions.Service,
-	inspection factorysessions.SessionInspectionService,
-	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-	sessionRequests factorysessionshttp.RequestPreparation,
+// bindDurableExecutionHTTPHandler binds only invocation cancellation to the
+// route shell. Its service-owned adapters were completed by canonical Wire.
+func bindDurableExecutionHTTPHandler(
+	recordingsAdapter *recordingshttp.Adapter,
+	sessionsHandler *factorysessionshttp.Adapter,
 	logger *zap.Logger,
 	cancellation initializer.InvocationCancellation,
-) (http.Handler, error) {
-	if sessions == nil || inspection == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
-		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
-	}
-	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot:  sessions,
-		DurableLister: sessions, FactoryValidation: validation,
-		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
-	}, logger)
+) http.Handler {
 	var shutdown transporthttp.ShutdownOperation
 	if cancellation != nil {
 		shutdown = cancellation.Cancel
 	}
 	return transporthttp.NewServerWithRecordingsAndShutdown(
-		recordingshttp.NewAdapterWithSessions(nil, sessions, inspection),
-		sessionsHandler, nil, nil, nil, nil, logger, shutdown,
-	).Handler(), nil
+		recordingsAdapter, sessionsHandler, nil, nil, nil, nil, logger, shutdown,
+	).Handler()
 }
 
 type workerSessionsFactorySessionScopeResolver struct {

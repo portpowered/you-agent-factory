@@ -27,7 +27,6 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
@@ -36,6 +35,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
@@ -55,16 +55,6 @@ func (stub *durableHTTPInspectionStub) QueryArtifacts(_ context.Context, request
 	return factorysessions.ListArtifactsResult{SessionID: request.SessionID}, stub.err
 }
 
-type durableHTTPValidationStub struct {
-	factorydefinitions.SubmittedDefinitionValidationOperation
-}
-type durableHTTPWorkTypeStub struct {
-	factorydefinitions.InvocationWorkTypeService
-}
-type durableHTTPRequestsStub struct {
-	factorysessionshttp.RequestPreparation
-}
-
 func TestDurableHTTPUsesInjectedInspectionForSelectedSession(t *testing.T) {
 	for _, missing := range []bool{false, true} {
 		name := "selected artifacts"
@@ -79,11 +69,12 @@ func TestDurableHTTPUsesInjectedInspectionForSelectedSession(t *testing.T) {
 			}
 			// This Sessions fake has no inspection accessor. Only the separately
 			// injected owner can answer the selected artifact request.
-			handler, err := newDurableExecutionHTTPHandler(canonicalStdioSessionsStub{}, inspection,
-				durableHTTPValidationStub{}, durableHTTPWorkTypeStub{}, durableHTTPRequestsStub{}, zap.NewNop(), nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			sessions := canonicalStdioSessionsStub{}
+			handler := bindDurableExecutionHTTPHandler(
+				recordingshttp.NewAdapterWithSessions(nil, sessions, inspection),
+				factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{SessionsRoot: sessions}, zap.NewNop()),
+				zap.NewNop(), nil,
+			)
 			const sessionID = "dur-sess-selected-inspection"
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/artifacts", nil))
