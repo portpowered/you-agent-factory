@@ -8,14 +8,18 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -36,9 +40,17 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	t.Cleanup(release)
 	var starts atomic.Int32
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
+	overlap := make([]initialOpeningScenario, 4)
+	providerGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{})}
+	for i := range overlap {
+		overlap[i] = newInitialOpeningProviderScenario(t)
+		providerGate.paths[overlap[i].candidateDir] = overlap[i].candidateID
+	}
+	t.Cleanup(providerGate.unblock)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		RecordingReadFile:   os.ReadFile,
-		ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		RecordingReadFile:     os.ReadFile,
+		ScriptCommandRunner:   initialOpeningScriptRunner{effects: effects},
+		ProviderCommandRunner: completedHTTPProviderRunner{initialOpeningProviderRunner{effects: effects, selected: providerGate}},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			starts.Add(1)
 			if request.Port == 18013 {
@@ -78,6 +90,11 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	t.Run("H05 invalid HTTP admission", func(t *testing.T) {
 		t.Parallel()
 		testCompletedHTTPValidation(t, baseURL)
+	})
+	t.Run("H10 H11 overlapping HTTP Work and retained then live responses", func(t *testing.T) {
+		t.Parallel()
+		sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+		testCompletedHTTPOverlap(t, sessions, baseURL, overlap, providerGate)
 	})
 	t.Run("H02 H13 durable readiness result and unavailable roles", func(t *testing.T) {
 		t.Parallel()
@@ -150,6 +167,19 @@ func testCompletedHTTPAuthoringAndControl(t *testing.T, baseURL, selected, proje
 	after := completedHTTPRequest(t, http.MethodGet, selected+"/factory", "", http.StatusOK)
 	if string(after) != string(definition) {
 		t.Fatalf("H03: rejected save changed Current Factory: %s", after)
+	}
+	if factory.Version == nil {
+		t.Fatal("H03: Current Factory has no editable version")
+	}
+	stale["version"] = map[string]string{
+		"logical":  strconv.FormatInt(factory.Version.Logical.Int64()+1, 10),
+		"physical": factory.Version.Physical.UTC().Add(time.Nanosecond).Format(time.RFC3339Nano),
+	}
+	body, _ = json.Marshal(map[string]any{"factory": stale})
+	completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusOK)
+	reloaded := support.GetJSON[factoryapi.Factory](t, selected+"/factory")
+	if reloaded.Version == nil || reloaded.Version.Logical <= factory.Version.Logical || reloaded.WorkTypes == nil || (*reloaded.WorkTypes)[0].Name != "task" {
+		t.Fatalf("H03: accepted save did not preserve definition and advance version: %#v", reloaded)
 	}
 	previewBody, _ := json.Marshal(map[string]string{"sourceKind": "INLINE_WORKFLOW", "inlineSource": "return 7;", "projectRoot": projectRoot})
 	preview := completedHTTPRequest(t, http.MethodPost, baseURL+"/factories/preview", string(previewBody), http.StatusOK)
@@ -245,6 +275,209 @@ func completedHTTPHostURL(t *testing.T, server *support.ProcessAPIServer, bound 
 		t.Fatalf("H02: host did not become ready: %v", ctx.Err())
 	}
 	return ""
+}
+
+// The provider gate makes coexistence deterministic. Only the selected Session
+// is closed; peer invocations and cursor ownership remain live until release.
+func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, baseURL string, scenarios []initialOpeningScenario, gate *selectedProviderGate) {
+	t.Helper()
+	defer gate.unblock()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	ids := make([]string, len(scenarios))
+	closes := make([]func(), len(scenarios))
+	done := make([]<-chan completedHTTPInvocation, len(scenarios))
+	t.Cleanup(func() {
+		cancel()
+		gate.unblock()
+		for _, joined := range done {
+			if joined == nil {
+				continue
+			}
+			select {
+			case <-joined:
+			case <-time.After(time.Minute):
+				t.Error("HTTP invocation did not join during cleanup")
+			}
+		}
+	})
+	streams := make([]*support.FactoryResponseEventStream, len(scenarios))
+	last := make([]int64, len(scenarios))
+	for i, scenario := range scenarios {
+		ids[i], closes[i] = completedHTTPOpen(t, sessions, baseURL, scenario.candidateDir)
+		selected := baseURL + "/factory-sessions/" + ids[i]
+		empty := support.GetJSON[factoryapi.ListWorkResponse](t, selected+"/work")
+		if len(empty.Results) != 0 {
+			t.Fatalf("H04: empty Session %s has Work: %#v", ids[i], empty)
+		}
+		done[i] = startCompletedHTTPInvocation(ctx, selected+"/invocations", scenario.candidateID)
+	}
+	awaitSelectedProviders(t, ctx, gate)
+	for i, id := range ids {
+		assertSelectedRunningWorker(t, baseURL, id)
+		completedHTTPRequest(t, http.MethodGet, baseURL+"/factory-sessions/"+id+"/status", "", http.StatusOK)
+		streams[i] = support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(baseURL, id))
+		if !streams[i].HasRetainedFrameCount || streams[i].RetainedFrameCount == 0 {
+			t.Fatal("H11: admitted Work did not retain a response prefix")
+		}
+		for range streams[i].RetainedFrameCount {
+			frame := streams[i].NextFrame(time.Minute)
+			last[i] = assertCompletedHTTPFrame(t, frame, id, last[i])
+		}
+	}
+	// Detach one cursor before closing that Session; peer cursors continue to
+	// observe the same generation and ordered native provider output.
+	streams[0].Close()
+	closes[0]()
+	canceled := awaitCompletedHTTPInvocation(t, ctx, done[0])
+	var closedError factoryapi.ErrorResponse
+	if err := json.Unmarshal(canceled.body, &closedError); err != nil || canceled.status != http.StatusNotFound || closedError.Code != "NOT_FOUND" {
+		t.Fatalf("H10: closed invocation = %d %s, %v, want typed 404", canceled.status, canceled.body, err)
+	}
+	completedHTTPError(t, baseURL+"/factory-sessions/"+ids[0], http.StatusNotFound, "NOT_FOUND")
+	for i := 1; i < len(ids); i++ {
+		assertSelectedRunningWorker(t, baseURL, ids[i])
+		select {
+		case result := <-done[i]:
+			t.Fatalf("H10: closing one Session stopped peer %s: %s, %v", ids[i], result.body, result.err)
+		default:
+		}
+	}
+	gate.unblock()
+	finishCompletedHTTPPeers(t, ctx, baseURL, ids, scenarios, done, streams, last)
+}
+
+func finishCompletedHTTPPeers(t *testing.T, ctx context.Context, baseURL string, ids []string, scenarios []initialOpeningScenario, done []<-chan completedHTTPInvocation, streams []*support.FactoryResponseEventStream, last []int64) {
+	t.Helper()
+	for i := 1; i < len(ids); i++ {
+		result := awaitCompletedHTTPInvocation(t, ctx, done[i])
+		if result.status != http.StatusOK || result.response.Status != "COMPLETED" || !strings.Contains(string(result.body), scenarios[i].candidateID+" COMPLETE") {
+			t.Fatalf("H10: peer %s lost selected output: %s", ids[i], result.body)
+		}
+		for {
+			frame := streams[i].NextFrame(time.Minute)
+			last[i] = assertCompletedHTTPFrame(t, frame, ids[i], last[i])
+			if frame.Event.Kind == "MESSAGE" && frame.Event.Phase == "COMPLETED" {
+				message, err := json.Marshal(frame.Event.Payload)
+				if err != nil || !strings.Contains(string(message), scenarios[i].candidateID+" COMPLETE") {
+					t.Fatalf("H11: peer response output = %s, %v", message, err)
+				}
+				break
+			}
+		}
+		streams[i].Close()
+		testCompletedHTTPReconnect(t, baseURL, ids[i], last[i])
+	}
+}
+
+func completedHTTPOpen(t *testing.T, sessions factorysessions.Service, baseURL, dir string) (string, func()) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"folderPath": dir})
+	opened := completedHTTPRequest(t, http.MethodPost, baseURL+"/factory-sessions", string(body), http.StatusOK)
+	var result factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(opened, &result); err != nil || result.Session == nil {
+		t.Fatalf("HTTP open = %s, %v", opened, err)
+	}
+	id := result.Session.Id
+	var once sync.Once
+	closeSession := func() {
+		once.Do(func() {
+			closeInitialOpeningSession(t, sessions, id)
+		})
+	}
+	t.Cleanup(closeSession)
+	return id, closeSession
+}
+
+type completedHTTPInvocation struct {
+	response factoryapi.InvocationResponse
+	status   int
+	body     []byte
+	err      error
+}
+
+type completedHTTPProviderRunner struct{ initialOpeningProviderRunner }
+
+func (runner completedHTTPProviderRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	progress := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"completed-http-progress\",\"type\":\"command_execution\",\"command\":\"controlled inspection\",\"aggregated_output\":\"HTTP progress before release\",\"exit_code\":0}}\n")
+	if observe != nil {
+		observe(platformprocess.OutputStreamStdout, progress)
+	}
+	result, err := runner.Run(ctx, request)
+	if err == nil && observe != nil {
+		observe(platformprocess.OutputStreamStdout, result.Stdout)
+	}
+	result.Stdout = append(progress, result.Stdout...)
+	return result, err
+}
+
+func startCompletedHTTPInvocation(ctx context.Context, endpoint, payload string) <-chan completedHTTPInvocation {
+	done := make(chan completedHTTPInvocation, 1)
+	go func() {
+		defer close(done)
+		result := completedHTTPInvocation{}
+		body, _ := json.Marshal(map[string]any{"sourceKind": "text", "content": []map[string]string{{"type": "text", "text": payload}}})
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+		if err == nil {
+			request.Header.Set("Content-Type", "application/json")
+			var response *http.Response
+			response, err = http.DefaultClient.Do(request)
+			if err == nil {
+				defer response.Body.Close()
+				result.status = response.StatusCode
+				result.body, err = io.ReadAll(response.Body)
+				if err == nil && response.StatusCode == http.StatusOK {
+					err = json.Unmarshal(result.body, &result.response)
+				}
+			}
+		}
+		result.err = err
+		done <- result
+	}()
+	return done
+}
+
+func awaitCompletedHTTPInvocation(t *testing.T, ctx context.Context, done <-chan completedHTTPInvocation) completedHTTPInvocation {
+	t.Helper()
+	select {
+	case result := <-done:
+		if result.err != nil {
+			t.Fatalf("HTTP invocation = %s, %v", result.body, result.err)
+		}
+		return result
+	case <-ctx.Done():
+		t.Fatalf("HTTP invocation did not join: %v", ctx.Err())
+		return completedHTTPInvocation{}
+	}
+}
+
+func assertCompletedHTTPFrame(t *testing.T, frame support.FactoryResponseEventFrame, id string, previous int64) int64 {
+	t.Helper()
+	if frame.Event.FactorySessionId != id || frame.Event.Sequence <= previous || frame.SSEID != strconv.FormatInt(frame.Event.Sequence, 10) {
+		t.Fatalf("H11: attributed ordered SSE frame = %#v, previous=%d, Session=%s", frame, previous, id)
+	}
+	return frame.Event.Sequence
+}
+
+func testCompletedHTTPReconnect(t *testing.T, baseURL, id string, sequence int64) {
+	t.Helper()
+	retained := support.GetFactoryResponseEventsAt(t, baseURL, id)
+	reconnected := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURLWithAfterSequence(baseURL, id, sequence))
+	defer reconnected.Close()
+	count := 0
+	for _, event := range retained {
+		if event.Sequence <= sequence {
+			continue
+		}
+		frame := reconnected.NextFrame(time.Minute)
+		if frame.Event.EventId != event.EventId || frame.Event.Sequence != event.Sequence {
+			t.Fatalf("H11: reconnect replayed or replaced an acknowledged event: %#v, want %#v", frame.Event, event)
+		}
+		count++
+	}
+	if !reconnected.HasRetainedFrameCount || reconnected.RetainedFrameCount != count {
+		t.Fatalf("H11: reconnect retained count = %d, want %d", reconnected.RetainedFrameCount, count)
+	}
 }
 
 func completedHTTPError(t *testing.T, endpoint string, status int, code string) {
