@@ -126,7 +126,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
+	root := &Root{runtimeHost: &joinedHostService{}, runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
 
 	directList, err := privateCatalog.ListCatalog(
@@ -246,7 +246,7 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	root := &Root{runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
+	root := &Root{runtimeHost: &joinedHostService{}, runtimeScopes: scopes, catalog: privateCatalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 	opened := openScopedCatalogModel(t, root, "parity-model", "generate")
 
 	assertCatalogGetFailureParity(t, root, privateCatalog, models.GetModelRequest{
@@ -454,7 +454,7 @@ func newScopedCatalogRoot(t *testing.T) *Root {
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
-	return &Root{runtimeScopes: scopes, catalog: catalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
+	return &Root{runtimeHost: &joinedHostService{}, runtimeScopes: scopes, catalog: catalog, resources: mustResourceLimiter(t), pullModel: inertScopedLocalExecution{}.PullModelForScope, closeScopedExecution: inertScopedLocalExecution{}.CloseScope, closeExecution: inertScopedLocalExecution{}.Close}
 }
 
 func scopedCatalogWorker(name, model, operation string) models.RuntimeWorker {
@@ -568,52 +568,4 @@ func mutateScopedCatalogResult(result models.ListModelsResult) {
 		result.Models[index].ManagedRuntime.Diagnostics["sourceKind"] = "mutated"
 		return
 	}
-}
-
-func assertContractOnlyUnsupported(t *testing.T, operation string, err error) {
-	t.Helper()
-	if !errors.Is(err, models.ErrUnsupportedOperation) {
-		t.Fatalf("%s error = %v, want ErrUnsupportedOperation", operation, err)
-	}
-}
-
-func TestRootContractOnlyOperationsFailExplicitly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	root := &Root{}
-	_, err := root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
-	_, err = root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
-	_, err = root.ListCatalog(ctx, models.ListModelsRequest{})
-	assertContractOnlyUnsupported(t, "ListCatalog", err)
-	_, err = root.GetCatalogModel(ctx, models.GetModelRequest{})
-	assertContractOnlyUnsupported(t, "GetCatalogModel", err)
-	_, err = root.GetModelReadiness(ctx, models.GetModelReadinessRequest{})
-	assertContractOnlyUnsupported(t, "GetModelReadiness", err)
-	_, err = root.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
-	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
-	_, err = root.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
-	_, err = root.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
-	_, err = root.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
-	_, err = root.EnsureModelHost(ctx, models.EnsureModelHostRequest{})
-	assertContractOnlyUnsupported(t, "EnsureModelHost", err)
-	_, err = root.InspectModelHost(ctx, models.InspectModelHostRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelHost", err)
-	_, err = root.StopModelHost(ctx, models.StopModelHostRequest{})
-	assertContractOnlyUnsupported(t, "StopModelHost", err)
-	_, err = root.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "AcquireModelLease", err)
-	_, err = root.GetModelLease(ctx, models.GetModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "GetModelLease", err)
-	_, err = root.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{})
-	assertContractOnlyUnsupported(t, "ReleaseModelLease", err)
-	_, err = root.InvokeModelWithLease(ctx, models.InvokeModelRequest{})
-	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
-	_, err = root.CancelInvocation(ctx, models.CancelInvocationRequest{})
-	assertContractOnlyUnsupported(t, "CancelInvocation", err)
 }

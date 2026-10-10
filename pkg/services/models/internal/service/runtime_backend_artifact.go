@@ -19,10 +19,6 @@ func (o *Root) resolveJoinedBackendArtifact(
 	if !isJoinedManagedBackend(configuration.Backend) {
 		return modelseffects.BackendArtifactSelection{}, nil
 	}
-	if o == nil || o.resolveBackendArtifact == nil {
-		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
-			"%w: managed backend selector is unavailable", models.ErrHostMissingAssets)
-	}
 	selection, err := o.resolveBackendArtifact(ctx, configuration.Clone(), offline)
 	if err != nil {
 		if errors.Is(err, models.ErrAssetOffline) {

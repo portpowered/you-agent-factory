@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"testing"
 	"time"
 
@@ -970,3 +971,11 @@ func (assets *recordingInferenceAssets) InspectRuntimeCache(
 	}
 	return assets.inspection, nil
 }
+
+func (h *recordingInferenceHost) EnsureModelHostWithConfiguration(ctx context.Context, c modelseffects.ResolvedHostConfiguration) (models.EnsureModelHostResult, error) {
+	return h.EnsureModelHost(ctx, models.EnsureModelHostRequest{Scope: c.Scope, Name: c.ModelName})
+}
+func (*recordingInferenceHost) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
+}
+func (*recordingInferenceHost) Shutdown(context.Context) error { return nil }

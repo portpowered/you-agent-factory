@@ -337,3 +337,10 @@ func assertIndividualExecutionCleanup(t *testing.T, root *modelsservice.Root, ct
 		t.Fatal("process close did not retire execution")
 	}
 }
+
+func (h *scopedLocalRootHost) EnsureModelHostWithConfiguration(ctx context.Context, c modelseffects.ResolvedHostConfiguration) (models.EnsureModelHostResult, error) {
+	return h.EnsureModelHost(ctx, models.EnsureModelHostRequest{Scope: c.Scope, Name: c.ModelName})
+}
+func (*scopedLocalRootHost) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
+}
