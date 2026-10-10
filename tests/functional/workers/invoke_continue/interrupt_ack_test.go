@@ -21,6 +21,7 @@ import (
 type interruptPhaseAckStore struct {
 	recordings.WorkerRecordingStore
 	inputAcknowledgements sync.Map
+	requesterPreparations sync.Map
 }
 
 func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
@@ -222,7 +223,20 @@ func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context
 		target.WorkerSessionID == "continuation-unadmitted-recipe-successor" || strings.HasPrefix(target.WorkerSessionID, "requester-recipe-failed-") {
 		return errors.New("private-recipe-sync-detail")
 	}
-	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request, metadata...)
+	err := store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request, metadata...)
+	if err != nil {
+		return err
+	}
+	if value, exists := store.requesterPreparations.Load(filepath.Base(request.Execution.WorkingDirectory)); exists {
+		gate := value.(*requesterPreparationGate)
+		gate.once.Do(func() { close(gate.prepared) })
+		select {
+		case <-gate.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {

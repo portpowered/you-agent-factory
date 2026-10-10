@@ -1,14 +1,18 @@
 package acceptance
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +25,17 @@ import (
 )
 
 func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSetup) error {
+	for _, mode := range []string{"cli", "http"} {
+		parent := &t7GatedProviderRunner{}
+		parent.reset()
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-fence-parent-"+mode, parent, parent, nil, nil, nil, parent.reset); err != nil {
+			return err
+		}
+		child := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("fence-child", "unexpected child launch")})
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-fence-child-"+mode, child, child, nil, nil, nil, child.Reset); err != nil {
+			return err
+		}
+	}
 	durableRoutes := make(map[string]platformprocess.CommandRunner)
 	for _, mode := range []string{"live", "local", "async", "sync"} {
 		parent := &t7GatedProviderRunner{}
@@ -62,6 +77,131 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 	timeout := &t7GatedProviderRunner{}
 	timeout.reset()
 	return appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-failure-timeout", timeout, timeout, nil, nil, nil, timeout.reset)
+}
+
+// The existing recording-store edge pauses sync-confirmed preparation. Public
+// cancellation ends the caller while admission is held; no private owner state
+// is changed and provider execution remains observable at the command edge.
+type requesterPreparationGate struct {
+	once     sync.Once
+	prepared chan struct{}
+	release  chan struct{}
+}
+
+func TestRequesterPreparationOwnerLoss(t *testing.T) {
+	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.show", "rest/startWorkerSession")
+	fixture := ensureInvokeContinuePackageFixture(t)
+	for _, mode := range []string{"cli", "http"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			runRequesterPreparationOwnerLoss(t, fixture, mode)
+		})
+	}
+}
+
+func runRequesterPreparationOwnerLoss(t *testing.T, fixture *invokeContinuePackageFixture, mode string) {
+	t.Helper()
+	parent := fixture.scenario(t, "requester-fence-parent-"+mode)
+	child := fixture.scenario(t, "requester-fence-child-"+mode)
+	defer parent.close(t)
+	defer child.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := parent.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	parentID := scenarioScopedID(parent, "fence-caller")
+	start := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.started, "preparation caller running")
+	token := requesterSourceToken(t, runner, parentID)
+	gate := &requesterPreparationGate{prepared: make(chan struct{}), release: make(chan struct{})}
+	fixture.ackStore.requesterPreparations.Store(filepath.Base(child.workingDirectory), gate)
+	defer fixture.ackStore.requesterPreparations.Delete(filepath.Base(child.workingDirectory))
+	var release sync.Once
+	defer release.Do(func() { close(gate.release) })
+	childID := scenarioScopedID(child, "fence-child")
+	path := requesterExecutionPath(t, child, childID)
+	outcome := make(chan string, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		outcome <- requesterPreparationInvoke(fixture, child, ctx, mode, path, parentID, token)
+	}()
+	defer func() {
+		release.Do(func() { close(gate.release) })
+		joinCtx, joinCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer joinCancel()
+		t19AwaitSignal(t, joinCtx, finished, "preparation request joined")
+	}()
+	t19AwaitSignal(t, ctx, gate.prepared, "child restart preparation persisted")
+	if child.providerRunner.CallCount() != 0 {
+		t.Fatal("provider launched before preparation release")
+	}
+	stop := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "cancel", parentID)
+	if err := fixture.process.Execute(stop.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.stopped, "caller command stopped before child admission")
+	if observation := requesterObservation(t, fixture, parent, ctx, parentID); observation.State != api.WorkerSessionObservationStateCanceled {
+		t.Fatal("caller did not become terminal")
+	}
+	release.Do(func() { close(gate.release) })
+	select {
+	case result := <-outcome:
+		assertRequesterPreparationRefusal(t, mode, result, token)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if child.providerRunner.CallCount() != 0 || runner.CallCount() != 1 {
+		t.Fatal("preparation owner loss launched a child or changed the source attempt")
+	}
+	observation := requesterObservation(t, fixture, child, ctx, childID)
+	if observation.State != api.WorkerSessionObservationStateFailed || observation.Requester == nil || observation.Requester.WorkerSessionId != parentID {
+		t.Fatal("refused child lost terminal outcome or its detached prepared requester")
+	}
+}
+
+func assertRequesterPreparationRefusal(t *testing.T, mode, result, token string) {
+	t.Helper()
+	if strings.Contains(result, token) {
+		t.Fatal("preparation refusal disclosed a caller credential")
+	}
+	if !strings.Contains(result, "WORKER_SESSION_CALLER_INVALID") {
+		t.Fatalf("preparation loss did not retain safe typed refusal: %s", result)
+	}
+	if mode == "http" && !strings.HasPrefix(result, "403") {
+		t.Fatal("HTTP preparation loss did not return forbidden")
+	}
+}
+
+func requesterPreparationInvoke(fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, mode, path, parentID, token string) string {
+	if mode == "cli" {
+		input := t7RemoteCLIInputs(child, ctx, fixture.baseURL, "invoke", "--execution", path, "--async")
+		input.Input.Env = append(input.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
+		err := fixture.process.Execute(input.Input)
+		return fmt.Sprint(err) + input.Stdout() + input.Stderr()
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err.Error()
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, fixture.baseURL+"/worker-sessions", bytes.NewReader(data))
+	if err != nil {
+		return err.Error()
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-You-Worker-Session-Id", parentID)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return err.Error()
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	return fmt.Sprint(response.StatusCode, err) + string(body)
 }
 
 // HTTP durable starts use the host's working root. Their unique public prompts

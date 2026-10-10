@@ -35,6 +35,7 @@ type invokeContinueStartedProcess struct {
 	apiStopped    <-chan struct{}
 	apiStarts     *atomic.Int32
 	processBuilds *atomic.Int32
+	ackStore      *interruptPhaseAckStore
 }
 
 type invokeContinueRecordingDirectory string
@@ -470,5 +471,5 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		cancel()
 		return invokeContinueStartedProcess{}, fmt.Errorf("wait for package fixture API: %w; command result: %v", err, commandErr)
 	}
-	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds}, nil
+	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds, ackStore: ackStore}, nil
 }
