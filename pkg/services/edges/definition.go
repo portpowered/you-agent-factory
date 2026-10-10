@@ -263,6 +263,8 @@ type Edges struct {
 	WorkersAgentToolFileSystem         workers.AgentToolFileSystem
 	WorkersMockWorkersConfigFileSystem workers.MockWorkersConfigFileSystem
 	WorkersRetryRandomSource           platformrandom.Source
+	// WorkerSessionTokenEntropy replaces only credential entropy, never admission policy.
+	WorkerSessionTokenEntropy          io.Reader
 	WorkersWorkstationFileSystem       platformfilesystem.ReadFileInspector
 	WorkersProviderTemporaryFileSystem platformfilesystem.TemporaryFileSystem
 	ProvidersCodexPromptFiles          providercontract.CodexPromptFileSystem
@@ -729,6 +731,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.WorkersMockWorkersConfigFileSystem != nil {
 		defaults.WorkersMockWorkersConfigFileSystem = replacements.WorkersMockWorkersConfigFileSystem
+	}
+	if replacements.WorkerSessionTokenEntropy != nil {
+		defaults.WorkerSessionTokenEntropy = replacements.WorkerSessionTokenEntropy
 	}
 	if replacements.WorkersRetryRandomSource != nil {
 		defaults.WorkersRetryRandomSource = replacements.WorkersRetryRandomSource

@@ -1071,6 +1071,11 @@ func (r *registry) directAttemptProgress(
 	supervision *supervision,
 ) func(workers.ExecutionCorrelation, workers.ProgressFragment) {
 	return func(correlation workers.ExecutionCorrelation, fragment workers.ProgressFragment) {
+		safe, err := r.redactExecutionFragment(sessionID, fragment)
+		if err != nil {
+			return
+		}
+		fragment = safe
 		attemptID := correlation.AttemptID
 		if (fragment.DispatchID != "" && fragment.DispatchID != attemptID) ||
 			(fragment.Correlation.DispatchID != "" && fragment.Correlation.DispatchID != attemptID) ||

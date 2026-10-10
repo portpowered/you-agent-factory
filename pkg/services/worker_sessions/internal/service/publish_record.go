@@ -133,6 +133,7 @@ func (r *registry) Stop(ctx context.Context) error {
 func (r *registry) stopOwned(ctx context.Context) error {
 	r.mu.Lock()
 	r.stopping = true
+	clear(r.executionTokens)
 	startDone := r.startsDone
 	ids := make([]string, 0, len(r.supervisions))
 	for id, supervision := range r.supervisions {
@@ -564,6 +565,15 @@ func (r *registry) publicationFor(id string) *publication {
 // identity, or a rejected Events append is returned unchanged, and no record
 // is committed.
 func (r *registry) PublishRecord(ctx context.Context, req workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
+	address := r.workerAddress(req.SessionID, req.FactorySessionID)
+	var safe workers.Draft
+	changed, redactionErr := r.redactExecutionValue(address, req.Draft, &safe)
+	if redactionErr != nil {
+		return workersessions.PublishRecordResult{}, redactionErr
+	}
+	if changed {
+		req.Draft = safe
+	}
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session publish record rejected", "sessionID", publicWorkerID(req.SessionID), "outcome", "invalid")
 		return workersessions.PublishRecordResult{}, err

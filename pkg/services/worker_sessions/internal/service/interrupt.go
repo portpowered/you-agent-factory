@@ -915,6 +915,7 @@ func (r *registry) transitionToPaused(id string) bool {
 		return false
 	}
 	session.State = workersessions.StatePaused
+	delete(r.executionTokens, id)
 	r.sessions[id] = session
 	return true
 }

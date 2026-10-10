@@ -3,6 +3,8 @@ package service_test
 import (
 	"context"
 	"errors"
+	"io"
+	"math/rand"
 	"reflect"
 	"sync"
 	"testing"
@@ -53,7 +55,7 @@ func newServiceWithClock(
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
+	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 }
 
 // fakeExecution is a controlled legacy-shaped test double. The
@@ -1039,4 +1041,8 @@ func (cancellationResultExecution) ValidateExecution(ctx context.Context, _ work
 }
 func (*cancellationObserverExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
 	return ctx.Err()
+}
+
+func newTestTokenEntropy() io.Reader {
+	return rand.New(rand.NewSource(17))
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
+	"io"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -54,6 +55,7 @@ func NewService(
 	snapshots *HistorySnapshotBudget,
 	continuationSupport providers.Service,
 	inspection providersessions.Service,
+	tokenEntropy io.Reader,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
 		execution,
@@ -68,5 +70,6 @@ func NewService(
 		snapshots,
 		continuationSupport,
 		inspection,
+		tokenEntropy,
 	)
 }

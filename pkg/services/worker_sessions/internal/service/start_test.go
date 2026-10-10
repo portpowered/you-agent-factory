@@ -2790,7 +2790,7 @@ func TestInvokeSessionWaitsForDurableOpeningBeforeProviderHandoff(t *testing.T) 
 		platformclock.Real{},
 		recording,
 		unavailableWorkerControlStore{},
-		unavailableWorkerControlStore{}, continuationInspectionFake{})
+		unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2839,7 +2839,7 @@ func TestInvokeSessionOpeningBarrierFailureMakesZeroProviderCalls(t *testing.T) 
 		platformclock.Real{},
 		recording,
 		unavailableWorkerControlStore{},
-		unavailableWorkerControlStore{}, continuationInspectionFake{})
+		unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2898,7 +2898,7 @@ func TestInvokeSession_PostHandoffRecordingFinalizationFailurePreservesExecution
 				platformclock.Real{},
 				terminalAwareRecordingService{recording: recording},
 				unavailableWorkerControlStore{},
-				unavailableWorkerControlStore{}, continuationInspectionFake{})
+				unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2933,7 +2933,7 @@ func TestInvokeSession_TerminalPublicationFailureStillSuppliesExecutionTruthToRe
 		platformclock.Real{},
 		terminalAwareRecordingService{recording: recording},
 		unavailableWorkerControlStore{},
-		unavailableWorkerControlStore{}, continuationInspectionFake{})
+		unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3000,7 +3000,7 @@ func TestInvokeSessionOpeningAppendFailureAbortsCaptureAndPersistsClassification
 		platformclock.Real{},
 		observedRecorder,
 		unavailableWorkerControlStore{},
-		unavailableWorkerControlStore{}, continuationInspectionFake{})
+		unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4186,7 +4186,7 @@ func newUsagePublicationService(t *testing.T, captured bool) workersessions.Serv
 		recording = recorder
 	}
 	var err error
-	registry, err = service.New(execution, newEventsAppender(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
+	registry, err = service.New(execution, newEventsAppender(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 	if err != nil {
 		t.Fatal(err)
 	}

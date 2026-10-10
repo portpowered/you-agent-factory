@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"slices"
 	"sort"
@@ -60,6 +61,10 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
+	tokenEntropy     io.Reader
+	tokenEntropyMu   sync.Mutex
+	executionTokens  map[string]string
+	executionSecrets map[string][]string
 	historySnapshots observationSnapshots
 	logs             *LogReader
 	mu               sync.RWMutex
@@ -181,6 +186,7 @@ func New(
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	inspection providersessions.Service,
+	tokenEntropy io.Reader,
 ) (workersessions.Service, error) {
 	if missingControlOperationStore(operations) {
 		return nil, recordings.ErrMissingWorkerControlOperationStore
@@ -188,10 +194,16 @@ func New(
 	if restart == nil || (reflect.ValueOf(restart).Kind() == reflect.Pointer && reflect.ValueOf(restart).IsNil()) {
 		return nil, recordings.ErrMissingWorkerRestartInputStore
 	}
+	if tokenEntropy == nil {
+		return nil, errors.New("worker sessions: token entropy is required")
+	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
 	close(startsDone)
 	registry := &registry{
+		tokenEntropy:                tokenEntropy,
+		executionTokens:             make(map[string]string),
+		executionSecrets:            make(map[string][]string),
 		historySnapshots:            newObservationSnapshots(new(HistorySnapshotBudget)),
 		sessions:                    make(map[string]workersessions.Session),
 		publications:                make(map[string]*publication),
@@ -526,6 +538,7 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 
 	session := existing
 	session.State = state
+	delete(r.executionTokens, id)
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
 	r.finishObservationLocked(id, r.observationClockLocked(id).Now())
@@ -558,6 +571,7 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 		return cloneSession(existing), false
 	}
 	existing.State = state
+	delete(r.executionTokens, id)
 	existing.Result = nil
 	r.sessions[id] = existing
 	r.finishObservationLocked(id, r.observationClockLocked(id).Now())

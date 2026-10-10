@@ -112,6 +112,7 @@ func provideWorkerHistorySnapshotBudget() *workersessionswire.HistorySnapshotBud
 }
 
 func provideWorkerSessionsService(
+	edges serviceedges.Edges,
 	execution workers.Service,
 	eventsService events.Service,
 	logger logging.Logger,
@@ -127,7 +128,11 @@ func provideWorkerSessionsService(
 ) (workersessions.Service, error) {
 	// Legacy injected writers still support execution without captured reads.
 	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, reader, operations, restart, snapshots, providerService, inspection)
+	tokenEntropy := edges.WorkerSessionTokenEntropy
+	if tokenEntropy == nil {
+		tokenEntropy = rand.Reader
+	}
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, reader, operations, restart, snapshots, providerService, inspection, tokenEntropy)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {

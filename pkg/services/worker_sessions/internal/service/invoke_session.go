@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -137,6 +138,10 @@ func (r *registry) publishRuntimeProgress(
 	}
 	if !runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
 		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	fragment, err = r.redactExecutionFragment(ownerID, fragment)
+	if err != nil {
+		return err
 	}
 	attemptID := correlation.AttemptID
 	physicalID := strings.TrimSpace(fragment.Correlation.AttemptID)
@@ -1091,4 +1096,34 @@ func observationWorkerSessionIDFromTopic(topic events.Topic) string {
 	value = strings.TrimPrefix(value, "worker-session/")
 	value = strings.TrimSuffix(value, "/events")
 	return value
+}
+
+// bindExecutionIdentityEnvironment runs only after the safe restart recipe has
+// been prepared. Tokens are process-local, never Session or recipe fields.
+func (r *registry) bindExecutionIdentityEnvironment(id string) ([]string, error) {
+	entropy := make([]byte, 32)
+	r.tokenEntropyMu.Lock()
+	_, err := io.ReadFull(r.tokenEntropy, entropy)
+	r.tokenEntropyMu.Unlock()
+	if err != nil {
+		return nil, errors.New("worker sessions: token entropy unavailable")
+	}
+	token := base64.RawURLEncoding.EncodeToString(entropy)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, exists := r.sessions[id]
+	if !exists || (session.State != workersessions.StateStarting && session.State != workersessions.StateRunning) || r.stopping {
+		return nil, workersessions.ErrSessionNotStartable
+	}
+	if r.executionTokens == nil {
+		r.executionTokens = make(map[string]string)
+	}
+	if r.executionSecrets == nil {
+		r.executionSecrets = make(map[string][]string)
+	}
+	r.executionTokens[id] = token
+	r.executionSecrets[id] = append(r.executionSecrets[id], token)
+	session = cloneSession(session)
+	session.ID = publicWorkerID(id)
+	return append(session.IdentityEnvironment(), "YOU_WORKER_SESSION_TOKEN="+token), nil
 }

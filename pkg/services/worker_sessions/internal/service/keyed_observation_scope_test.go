@@ -1,13 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -27,7 +32,11 @@ func TestDirectIdentityHandoffUsesReservedMetadataWithoutChangingRestartInput(t 
 	r.execution = coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		got = request.Clone()
 		request.Target.Environment.SupervisedEnvironment[0] = "mutated"
-		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+		token := strings.TrimPrefix(got.Target.Environment.SupervisedEnvironment[len(want)], "YOU_WORKER_SESSION_TOKEN=")
+		output := coverageExecutionResult(request, workers.ExecutionOutcomeAccepted)
+		output.Output.Primary = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "ordinary " + token}}
+		output.ProposedOutputPresent = true
+		return output, nil
 	}}
 	request := validStartRequest("child", "child-dispatch")
 	request.Metadata = &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "replacement"}}
@@ -36,8 +45,10 @@ func TestDirectIdentityHandoffUsesReservedMetadataWithoutChangingRestartInput(t 
 	if err != nil || result.Session.State != workersessions.StateCompleted {
 		t.Fatalf("invocation = %#v, %v", result.Session, err)
 	}
-	if !reflect.DeepEqual(got.Target.Environment.SupervisedEnvironment, want) {
-		t.Fatalf("supervised environment = %#v, want reserved facts %#v", got.Target.Environment.SupervisedEnvironment, want)
+	token := assertIdentityTokenEnvironment(t, got.Target.Environment.SupervisedEnvironment, want)
+	assertTokenPublicationAbsent(t, r, result.Session, token)
+	if !reflect.DeepEqual(got.Target.Environment.SupervisedEnvironment[:len(want)], want) {
+		t.Fatal("supervised environment changed reserved identity facts")
 	}
 	if !reflect.DeepEqual(got.Target.Environment.ProcessEnvironment, []string{"PATH=explicit"}) || !got.Target.Environment.SkipProcessInheritance {
 		t.Fatal("identity binding changed ordinary explicit environment policy")
@@ -72,8 +83,9 @@ func TestRuntimeIdentityHandoffIsDetachedScopedAndAbsentOnRejectedAdmission(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("runtime identity = %#v, want public scoped facts %#v", got, want)
+	assertIdentityTokenEnvironment(t, got, want)
+	if !reflect.DeepEqual(got[:len(want)], want) {
+		t.Fatal("runtime identity changed public scoped facts")
 	}
 	key := scopedWorkerAddress(request.ID, request.Execution.Execution.FactorySessionID)
 	if !reflect.DeepEqual(r.executionIdentityEnvironment(key), want) {
@@ -400,4 +412,140 @@ func assertForeignProviderReadsHaveNoEffects(t *testing.T, registry *registry, r
 	if reader.readCalls != 1 {
 		t.Fatal("foreign lookup reached enrichment/history")
 	}
+}
+
+func assertIdentityTokenEnvironment(t *testing.T, environment, facts []string) string {
+	t.Helper()
+	if len(environment) != len(facts)+1 {
+		t.Fatal("identity handoff did not supply exactly one execution token")
+	}
+	if !reflect.DeepEqual(environment[:len(facts)], facts) {
+		t.Fatal("identity handoff changed admitted facts")
+	}
+	token := strings.TrimPrefix(environment[len(facts)], "YOU_WORKER_SESSION_TOKEN=")
+	entropy, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(entropy) != 32 {
+		t.Fatal("execution token must encode 32 bytes without padding")
+	}
+	return token
+}
+
+func TestTokenEntropyFailureDoesNotLaunchExecution(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	r.tokenEntropy = bytes.NewReader(nil)
+	calls := 0
+	r.execution = coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	result, err := r.InvokeSession(t.Context(), validStartRequest("entropy-failure", "dispatch"))
+	if err != nil || calls != 0 || result.Session.State != workersessions.StateFailed {
+		t.Fatalf("entropy failure: state %s, calls %d, error %v", result.Session.State, calls, err)
+	}
+	if len(r.executionTokens) != 0 || len(r.executionSecrets) != 0 {
+		t.Fatal("failed entropy acquired authority or secret state")
+	}
+}
+
+func TestTokenBindingFreshnessRevocationAndRedaction(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	token := bindTestSessionToken(t, r, "source")
+	next := bindTestSessionToken(t, r, "successor")
+	if token == next {
+		t.Fatal("successor reused source token")
+	}
+	assertTokenFragmentRedaction(t, r, token)
+	assertTokenResultRedaction(t, r, token)
+	if _, committed := r.commitControlTerminal("source", workersessions.StateCanceled); !committed {
+		t.Fatal("terminal transition rejected")
+	}
+	if r.executionTokens["source"] != "" || r.executionTokens["successor"] != next {
+		t.Fatal("terminal transition did not revoke only its owner")
+	}
+	if _, err := r.bindExecutionIdentityEnvironment("source"); err == nil {
+		t.Fatal("terminal session acquired another token")
+	}
+	safe, err := r.redactExecutionFragment("source", workers.ProgressFragment{Payload: token})
+	if err != nil || strings.Contains(safe.Payload, token) {
+		t.Fatal("late fragment lost secret classification")
+	}
+	session, err := r.Get(t.Context(), workersessions.GetRequest{ID: "source"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(session)
+	if err != nil || bytes.Contains(encoded, []byte(token)) {
+		t.Fatal("session representation published a token")
+	}
+}
+
+func assertTokenResultRedaction(t *testing.T, r *registry, token string) {
+	t.Helper()
+	failure := errors.New("provider failed " + token)
+	content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: token}}
+	result := workers.WorkstationDispatchResult{Result: workers.WorkResult{Output: "ordinary " + token, Error: token, OutputContent: content}, ProposedOutput: &workers.ProposedOutput{Primary: content}}
+	redacted, safeErr := r.redactExecutionResult("source", result, failure)
+	if redacted.Result.OutputContent[0].Text != "[REDACTED]" || redacted.ProposedOutput.Primary[0].Text != "[REDACTED]" || content[0].Text != token {
+		t.Fatal("transient content redaction lost detached output")
+	}
+	if redacted.Result.Output != "ordinary [REDACTED]" || strings.Contains(safeErr.Error(), token) || !errors.Is(safeErr, failure) {
+		t.Fatal("result or diagnostic redaction lost safety or typed cause")
+	}
+}
+
+func assertTokenPublicationAbsent(t *testing.T, r *registry, session workersessions.Session, token string) {
+	t.Helper()
+	payload, err := json.Marshal(session)
+	if err != nil || bytes.Contains(payload, []byte(token)) {
+		t.Fatal("terminal session did not publish sanitized ordinary output")
+	}
+	sink := r.events.(*internalTestEventsService)
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	records := sink.records[r.observationTopic(session.ID)]
+	if len(records) < 2 {
+		t.Fatal("missing opening and terminal records")
+	}
+	var observed []byte
+	for _, record := range records {
+		observed = append(observed, record.Payload...)
+		if bytes.Contains(record.Payload, []byte(token)) {
+			t.Fatal("execution token escaped into Events")
+		}
+	}
+	if !bytes.Contains(observed, []byte("ordinary [REDACTED]")) {
+		t.Fatal("Events lost ordinary sanitized output")
+	}
+	if r.executionTokens[session.ID] != "" {
+		t.Fatal("completed execution retained token authority")
+	}
+}
+
+func assertTokenFragmentRedaction(t *testing.T, r *registry, token string) {
+	t.Helper()
+	payload := workers.ProgressFragment{Payload: "echo " + token, Metadata: map[string]string{"failure": token}}
+	safe, err := r.redactExecutionFragment("source", payload)
+	if err != nil || safe.Payload != "echo [REDACTED]" || safe.Metadata["failure"] != "[REDACTED]" {
+		t.Fatal("execution fragment was not sanitized")
+	}
+	if payload.Metadata["failure"] != token {
+		t.Fatal("sanitizer mutated producer metadata")
+	}
+}
+
+func bindTestSessionToken(t *testing.T, r *registry, id string) string {
+	t.Helper()
+	if _, err := r.Reserve(t.Context(), workersessions.ReserveRequest{ID: id}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.transitionToStarting(id); err != nil {
+		t.Fatal(err)
+	}
+	environment, err := r.bindExecutionIdentityEnvironment(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return assertIdentityTokenEnvironment(t, environment, []string{"YOU_WORKER_SESSION_ID=" + id})
 }

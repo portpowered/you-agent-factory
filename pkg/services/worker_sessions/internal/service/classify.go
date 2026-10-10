@@ -83,6 +83,7 @@ func (a *runtimeAttempt) Complete(
 		}
 		a.mu.Unlock()
 		r := a.registry
+		result, dispatchErr = r.redactExecutionResult(a.workerID, result, dispatchErr)
 		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)
 		state, terminal := dispatchedTerminal(action, result, dispatchErr)
 		final, committed := r.commitTerminal(a.workerID, state, terminal)

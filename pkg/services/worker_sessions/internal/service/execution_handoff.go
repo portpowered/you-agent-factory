@@ -92,7 +92,15 @@ func (r *registry) publishExecution(
 	finished := make(chan struct{})
 	dispatchDone := make(chan error, 1)
 	execution := supervision.executor
-	identity := r.executionIdentityEnvironment(sessionID)
+	if execution == nil {
+		cancel()
+		return workers.ErrExecuteUnavailable
+	}
+	identity, identityErr := r.bindExecutionIdentityEnvironment(sessionID)
+	if identityErr != nil {
+		cancel()
+		return identityErr
+	}
 	supervision.mu.Lock()
 	supervision.identityEnvironment = identity
 	supervision.mu.Unlock()
@@ -552,6 +560,7 @@ func cloneSessionContinuation(value *workers.ProviderContinuationRef) *workers.P
 }
 
 func (r *registry) completeSupervision(ctx context.Context, id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
+	result, dispatchErr = r.redactExecutionResult(id, result, dispatchErr)
 	snapshot := supervision.completionSnapshot()
 	if snapshot.forceConfirmed {
 		// Only a confirmed owned tree kill overrides the adapter's signal-exit
@@ -877,9 +886,14 @@ func (r *registry) BeginRuntimeAttempt(
 		}
 		return nil, err
 	}
+	identity, identityErr := r.bindExecutionIdentityEnvironment(req.ID)
+	if identityErr != nil {
+		_ = handle.Complete(ctx, workers.WorkstationDispatchResult{DispatchID: attemptID, TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed}, identityErr)
+		return nil, identityErr
+	}
 	opened = true
 	if req.BindEnvironment != nil {
-		req.BindEnvironment(r.executionIdentityEnvironment(req.ID))
+		req.BindEnvironment(identity)
 	}
 	handle.bindProviderAttemptControl(ctx, req.BindAttemptControl, req.Execution.Execution.AttemptControlObserver)
 	return workersessions.RuntimeAttempt(handle.Resolve), nil
