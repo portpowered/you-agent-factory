@@ -180,6 +180,32 @@ func TestProvideAPIServerStarterHonorsRootEdgeOverride(t *testing.T) {
 	}
 }
 
+func TestWorkerExecutionEndpointMapsActualBinding(t *testing.T) {
+	t.Parallel()
+	for _, host := range []string{"127.0.0.1", "::1"} {
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+			want := "http://127.0.0.1:8124"
+			if host == "::1" {
+				want = "http://[::1]:8124"
+			}
+			released := false
+			bind := func(endpoint string) func() {
+				if endpoint != want {
+					t.Fatalf("mapped endpoint = %q, want %q", endpoint, want)
+				}
+				return func() { released = true }
+			}
+			handler := workerExecutionEndpointHandler{Handler: http.NotFoundHandler(), bind: bind}
+			release := handler.ObserveHostBinding(platformhttpserver.Binding{Host: host, Port: 8124})
+			release()
+			if !released {
+				t.Fatal("binding did not return owner release")
+			}
+		})
+	}
+}
+
 func TestProvideBrowserOpenerHonorsRootEdgeOverride(t *testing.T) {
 	t.Parallel()
 

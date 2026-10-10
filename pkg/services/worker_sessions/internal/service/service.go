@@ -61,17 +61,19 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
-	tokenEntropy     io.Reader
-	tokenEntropyMu   sync.Mutex
-	executionTokens  map[string]string
-	executionSecrets map[string][]string
-	historySnapshots observationSnapshots
-	logs             *LogReader
-	mu               sync.RWMutex
-	sessions         map[string]workersessions.Session
-	publications     map[string]*publication
-	supervisions     map[string]*supervision
-	observations     map[string]*observation
+	tokenEntropy          io.Reader
+	tokenEntropyMu        sync.Mutex
+	executionTokens       map[string]string
+	executionSecrets      map[string][]string
+	executionEndpoints    map[uint64]string
+	nextExecutionEndpoint uint64
+	historySnapshots      observationSnapshots
+	logs                  *LogReader
+	mu                    sync.RWMutex
+	sessions              map[string]workersessions.Session
+	publications          map[string]*publication
+	supervisions          map[string]*supervision
+	observations          map[string]*observation
 	// observationIDsBySessionWork lets a runtime list only the Worker Session
 	// attempts associated with its exact Factory Session and Work.
 	observationIDsBySessionWork map[observationWorkKey]map[string]struct{}
@@ -137,6 +139,37 @@ type registry struct {
 // (Reserve + Get + List + Start) without exposing the mutable map or a
 // broader API.
 var _ workersessions.Service = (*registry)(nil)
+
+// ExecutionEndpointBinding exposes only the live-host binding operation.
+func (r *registry) ExecutionEndpointBinding() workersessions.ExecutionEndpointBinding {
+	return r.bindExecutionEndpoint
+}
+
+func (r *registry) bindExecutionEndpoint(endpoint string) func() {
+	r.mu.Lock()
+	r.nextExecutionEndpoint++
+	binding := r.nextExecutionEndpoint
+	if r.executionEndpoints == nil {
+		r.executionEndpoints = make(map[uint64]string)
+	}
+	r.executionEndpoints[binding] = endpoint
+	r.mu.Unlock()
+	return func() {
+		r.mu.Lock()
+		delete(r.executionEndpoints, binding)
+		r.mu.Unlock()
+	}
+}
+
+func (r *registry) executionEndpointLocked() string {
+	var latest uint64
+	for binding := range r.executionEndpoints {
+		if binding > latest {
+			latest = binding
+		}
+	}
+	return r.executionEndpoints[latest]
+}
 
 func runtimeProgressMetadataAgrees(actual, expected workers.ExecutionCorrelation) bool {
 	// Legacy fragments may omit metadata, but supplied values must belong to

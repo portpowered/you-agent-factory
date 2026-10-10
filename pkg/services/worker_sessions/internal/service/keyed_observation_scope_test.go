@@ -549,3 +549,52 @@ func bindTestSessionToken(t *testing.T, r *registry, id string) string {
 	}
 	return assertIdentityTokenEnvironment(t, environment, []string{"YOU_WORKER_SESSION_ID=" + id})
 }
+
+func TestExecutionEndpointBindingsRemainExecutionOnlyAndReleaseIndependently(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	first := r.bindExecutionEndpoint("http://127.0.0.1:7438")
+	second := r.bindExecutionEndpoint("http://[::1]:7439")
+	t.Cleanup(first)
+	t.Cleanup(second)
+	assertEndpoint := func(id, want string) {
+		t.Helper()
+		if _, err := r.Reserve(t.Context(), workersessions.ReserveRequest{ID: id}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.transitionToStarting(id); err != nil {
+			t.Fatal(err)
+		}
+		environment, err := r.bindExecutionIdentityEnvironment(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var endpoint string
+		for _, entry := range environment {
+			if value, found := strings.CutPrefix(entry, "YOU_SERVER="); found {
+				endpoint = value
+			}
+		}
+		if endpoint != want {
+			t.Fatalf("execution endpoint = %q, want %q", endpoint, want)
+		}
+		session, err := r.Get(t.Context(), workersessions.GetRequest{ID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload, err := json.Marshal(session)
+		if err != nil || strings.Contains(string(payload), "http://") || strings.Contains(string(payload), "YOU_SERVER") {
+			t.Fatal("execution endpoint entered retained session")
+		}
+	}
+	assertEndpoint("newest", "http://[::1]:7439")
+	second()
+	second()
+	assertEndpoint("remaining", "http://127.0.0.1:7438")
+	first()
+	assertEndpoint("unhosted", "")
+	third := r.bindExecutionEndpoint("http://127.0.0.1:7440")
+	t.Cleanup(third)
+	first()
+	assertEndpoint("rebound", "http://127.0.0.1:7440")
+}

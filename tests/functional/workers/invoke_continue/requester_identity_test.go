@@ -149,6 +149,7 @@ func assertRequesterRestoredChain(t *testing.T, fixture *invokeContinuePackageFi
 	}
 	requests := child.providerRunner.Requests()
 	environment := requesterEnvironment(requests[3].Env)
+	assertRequesterEndpoint(t, environment, fixture.baseURL)
 	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, child.homeDirectory, child.workingDirectory, successorID, "t7-thread-requester-child")
 	assertRequesterDurableTokenPrivacy(t, fixture, t.Context(), successorID, environment["YOU_WORKER_SESSION_TOKEN"])
 	for _, request := range requests[:3] {
@@ -177,6 +178,7 @@ func requesterSourceToken(t *testing.T, runner *t7GatedProviderRunner, parentID 
 func assertRequesterChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, childID, parentID, token string) {
 	t.Helper()
 	childEnv := requesterEnvironment(child.providerRunner.Requests()[0].Env)
+	assertRequesterEndpoint(t, childEnv, fixture.baseURL)
 	decoded, err := base64.RawURLEncoding.Strict().DecodeString(childEnv["YOU_WORKER_SESSION_TOKEN"])
 	if err != nil || len(decoded) != 32 {
 		t.Fatal("child did not receive a fresh 32-byte caller credential")
@@ -250,6 +252,7 @@ func assertRequesterContinuations(t *testing.T, fixture *invokeContinuePackageFi
 		}
 		command := child.providerRunner.Requests()[index+1]
 		environment := requesterEnvironment(command.Env)
+		assertRequesterEndpoint(t, environment, fixture.baseURL)
 		assertRequesterSuccessorEnvironment(t, environment, successorID, parentID, previousToken)
 		assertRequesterDurableTokenPrivacy(t, fixture, ctx, successorID, environment["YOU_WORKER_SESSION_TOKEN"])
 		if !strings.Contains(strings.Join(command.Args, " "), "resume "+source.ProviderSession.Id) {
@@ -332,6 +335,13 @@ func requesterEnvironment(environment []string) map[string]string {
 		}
 	}
 	return facts
+}
+
+func assertRequesterEndpoint(t *testing.T, environment map[string]string, endpoint string) {
+	t.Helper()
+	if environment["YOU_SERVER"] != endpoint {
+		t.Fatalf("execution endpoint = %q, want bound host %q", environment["YOU_SERVER"], endpoint)
+	}
 }
 
 // M10: both supported interruption modes preserve the admitted requester and

@@ -15,6 +15,80 @@ import (
 	"go.uber.org/zap"
 )
 
+type bindingObserverHandler struct {
+	http.Handler
+	observe func(Binding) func()
+}
+
+func (handler bindingObserverHandler) ObserveHostBinding(binding Binding) func() {
+	return handler.observe(binding)
+}
+
+func TestObservedStarterPublishesBeforeReadinessAndReleasesOnExit(t *testing.T) {
+	t.Parallel()
+	want := Binding{Host: "127.0.0.1", Port: 8124}
+	active, ready := false, false
+	releases := 0
+	handler := bindingObserverHandler{Handler: http.NotFoundHandler(), observe: func(binding Binding) func() {
+		if binding != want {
+			t.Fatalf("binding = %+v, want %+v", binding, want)
+		}
+		active = true
+		return func() { active = false; releases++ }
+	}}
+	wantErr := errors.New("controlled serving failure")
+	starter := NewObservedStarter(func(_ context.Context, request StartRequest) error {
+		if active {
+			t.Fatal("binding published before host bound")
+		}
+		request.OnBound(want)
+		if !active || !ready {
+			t.Fatal("host served before binding and readiness")
+		}
+		return wantErr
+	})
+	err := starter(t.Context(), StartRequest{Handler: handler, Host: want.Host, Port: 8123, AutoPort: true, OnBound: func(binding Binding) {
+		if !active || binding != want {
+			t.Fatal("readiness observed a missing or incorrect binding")
+		}
+		ready = true
+	}})
+	if !errors.Is(err, wantErr) || active || releases != 1 {
+		t.Fatalf("exit = %v, active %t, releases %d", err, active, releases)
+	}
+}
+
+func TestObservedStarterDoesNotPublishFailedBinding(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("controlled bind failure")
+	starter := NewObservedStarter(func(context.Context, StartRequest) error { return wantErr })
+	handler := bindingObserverHandler{Handler: http.NotFoundHandler(), observe: func(Binding) func() {
+		t.Fatal("failed binding published an endpoint")
+		return nil
+	}}
+	if err := starter(t.Context(), StartRequest{Handler: handler}); !errors.Is(err, wantErr) {
+		t.Fatal(err)
+	}
+}
+
+func TestObservedStarterPreservesUnobservedHostCallback(t *testing.T) {
+	t.Parallel()
+	want := Binding{Host: "::1", Port: 8124}
+	ready := false
+	starter := NewObservedStarter(func(_ context.Context, request StartRequest) error {
+		request.OnBound(want)
+		return nil
+	})
+	if err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler(), OnBound: func(binding Binding) {
+		if binding != want {
+			t.Fatal("unobserved host binding changed")
+		}
+		ready = true
+	}}); err != nil || !ready {
+		t.Fatalf("unobserved host = %v, ready %t", err, ready)
+	}
+}
+
 func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 	bound := make(chan net.Listener, 1)
 	starter, err := NewStarter(func(network, _ string) (net.Listener, error) {

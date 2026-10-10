@@ -43,6 +43,11 @@ type RuntimeAttemptKey struct {
 	DispatchID string
 }
 
+// ExecutionEndpointBinding publishes a live host exposing this Worker Sessions
+// owner. The returned release removes only that host's binding. Endpoints are
+// execution-only facts and are never retained in session metadata or recipes.
+type ExecutionEndpointBinding func(string) func()
+
 // RuntimeAttemptRequest asks Worker Sessions to open the durable observation
 // window for an attempt whose admission and execution remain owned by
 // Factory Runtime. ID is the Worker Session identity; AttemptID is the

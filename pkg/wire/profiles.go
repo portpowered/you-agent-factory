@@ -501,10 +501,15 @@ func provideAPIServerStarter(
 	edges serviceedges.Edges,
 	commandLineReader platformhttpserver.CommandLineReader,
 ) (platformhttpserver.Starter, error) {
-	if edges.APIServerStarter != nil {
-		return edges.APIServerStarter, nil
+	starter := edges.APIServerStarter
+	if starter == nil {
+		var err error
+		starter, err = platformhttpserver.NewStarter(net.Listen, platformprocessmemory.CurrentCommit, commandLineReader)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return platformhttpserver.NewStarter(net.Listen, platformprocessmemory.CurrentCommit, commandLineReader)
+	return platformhttpserver.NewObservedStarter(starter), nil
 }
 
 func provideRuntimeHostOperation(

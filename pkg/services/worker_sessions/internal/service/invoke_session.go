@@ -1130,5 +1130,9 @@ func (r *registry) bindExecutionIdentityEnvironment(id string) ([]string, error)
 	r.executionSecrets[id] = append(r.executionSecrets[id], token)
 	session = cloneSession(session)
 	session.ID = publicWorkerID(id)
-	return append(session.IdentityEnvironment(), "YOU_WORKER_SESSION_TOKEN="+token), nil
+	environment := append(session.IdentityEnvironment(), "YOU_WORKER_SESSION_TOKEN="+token)
+	if endpoint := r.executionEndpointLocked(); endpoint != "" {
+		environment = append(environment, "YOU_SERVER="+endpoint)
+	}
+	return environment, nil
 }
