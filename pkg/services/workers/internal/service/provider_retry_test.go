@@ -783,31 +783,8 @@ func TestSelectedRetryWaitCarriesContinuationAndStopsTimer(t *testing.T) {
 			scheduler := &selectedRetryScheduler{registered: make(chan *selectedRetryTimer, 1)}
 			service := &Service{clock: scheduler.Now, scheduler: scheduler}
 			var attempts atomic.Int32
-			done := make(chan error, 1)
-			failed := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary", nil)
-			failed.Continuation = (&providers.SessionMetadata{Provider: "codex", ID: "selected-continuation"}).ContinuationRef()
-			go func() {
-				result, err := service.executeProviderWithRetry(ctx, workers.RunnerExecutionRequest{}, func(request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
-					if attempts.Add(1) == 1 {
-						return workers.RunnerExecutionResult{}, failed
-					}
-					if request.SessionID != "selected-continuation" {
-						return workers.RunnerExecutionResult{}, errors.New("continuation lost")
-					}
-					return workers.RunnerExecutionResult{Content: "accepted"}, nil
-				})
-				if err == nil && result.Content != "accepted" {
-					err = errors.New("result lost")
-				}
-				done <- err
-			}()
-			var timer *selectedRetryTimer
-			select {
-			case timer = <-scheduler.registered:
-			//nolint:testsleep // Registration is the synchronization signal; host time only bounds a broken fixture.
-			case <-time.After(5 * time.Second):
-				t.Fatal("retry timer not registered")
-			}
+			done := startSelectedContinuationRetry(ctx, service, &attempts)
+			timer := awaitSelectedRetryRegistration(t, scheduler)
 			if timer.delay != detachedProviderInitialBackoff || attempts.Load() != 1 {
 				t.Fatal("retry advanced before selected backoff")
 			}
@@ -821,21 +798,60 @@ func TestSelectedRetryWaitCarriesContinuationAndStopsTimer(t *testing.T) {
 			} else {
 				timer.ticks <- scheduler.Now().Add(timer.delay)
 			}
-			select {
-			case err := <-done:
-				if canceled && (!errors.Is(err, context.Canceled) || attempts.Load() != 1) {
-					t.Fatalf("cancel = %v, attempts = %d", err, attempts.Load())
-				}
-				if !canceled && (err != nil || attempts.Load() != 2) {
-					t.Fatalf("advance = %v, attempts = %d", err, attempts.Load())
-				}
-			//nolint:testsleep // Completion is the synchronization signal; host time only bounds a broken fixture.
-			case <-time.After(5 * time.Second):
-				t.Fatal("retry did not join")
-			}
+			assertSelectedRetryCompletion(t, done, canceled, &attempts)
 			if !timer.stopped.Load() {
 				t.Fatal("owned retry timer not stopped")
 			}
 		})
+	}
+}
+
+func startSelectedContinuationRetry(ctx context.Context, service *Service, attempts *atomic.Int32) <-chan error {
+	done := make(chan error, 1)
+	failed := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary", nil)
+	failed.Continuation = (&providers.SessionMetadata{Provider: "codex", ID: "selected-continuation"}).ContinuationRef()
+	go func() {
+		result, err := service.executeProviderWithRetry(ctx, workers.RunnerExecutionRequest{}, func(request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			if attempts.Add(1) == 1 {
+				return workers.RunnerExecutionResult{}, failed
+			}
+			if request.SessionID != "selected-continuation" {
+				return workers.RunnerExecutionResult{}, errors.New("continuation lost")
+			}
+			return workers.RunnerExecutionResult{Content: "accepted"}, nil
+		})
+		if err == nil && result.Content != "accepted" {
+			err = errors.New("result lost")
+		}
+		done <- err
+	}()
+	return done
+}
+
+func awaitSelectedRetryRegistration(t *testing.T, scheduler *selectedRetryScheduler) *selectedRetryTimer {
+	t.Helper()
+	select {
+	case timer := <-scheduler.registered:
+		return timer
+	//nolint:testsleep // Registration is the synchronization signal; host time only bounds a broken fixture.
+	case <-time.After(5 * time.Second):
+		t.Fatal("retry timer not registered")
+		return nil
+	}
+}
+
+func assertSelectedRetryCompletion(t *testing.T, done <-chan error, canceled bool, attempts *atomic.Int32) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if canceled && (!errors.Is(err, context.Canceled) || attempts.Load() != 1) {
+			t.Fatalf("cancel = %v, attempts = %d", err, attempts.Load())
+		}
+		if !canceled && (err != nil || attempts.Load() != 2) {
+			t.Fatalf("advance = %v, attempts = %d", err, attempts.Load())
+		}
+	//nolint:testsleep // Completion is the synchronization signal; host time only bounds a broken fixture.
+	case <-time.After(5 * time.Second):
+		t.Fatal("retry did not join")
 	}
 }

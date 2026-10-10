@@ -15,7 +15,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -51,55 +50,15 @@ func TestSelectedSessionDiagnosticsAndConcurrentOutput(t *testing.T) {
 	for range runs {
 		calls = append(calls, selectedAwait(t, runner.calls))
 	}
-	for _, call := range calls {
-		for _, run := range runs {
-			if call.request.ExecutionScopeID == run.sessionID {
-				call.reply <- platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(run.sessionID + " COMPLETE")}
-				break
-			}
-		}
-	}
+	releaseSelectedOutputCalls(calls, runs)
 	for index, run := range runs {
 		if err := selectedAwait(t, run.done); err != nil {
 			t.Fatal(err)
 		}
-		stdout, stderr := run.stdout(), run.inputs.Stderr()
 		if index == len(flags) {
-			content, err := os.ReadFile(path)
-			if err != nil || string(content) != run.sessionID+" COMPLETE" || stdout != "" || stderr != "" {
-				t.Fatalf("selected file = %q, %v; stdout=%q stderr=%q", content, err, stdout, stderr)
-			}
-			assertSelectedSessionLog(t, logs, run)
-			continue
-		}
-		if stderr != "" || !strings.Contains(stdout, run.sessionID) {
-			t.Fatalf("mode %d stdout=%q stderr=%q", index, stdout, stderr)
-		}
-		for _, peer := range runs {
-			if peer.sessionID != run.sessionID && strings.Contains(stdout+stderr, peer.sessionID) {
-				t.Fatal("peer output crossed invocation boundary")
-			}
-		}
-		switch index {
-		case 0:
-			if stdout != run.sessionID+" COMPLETE" {
-				t.Fatalf("quiet raw result = %q", stdout)
-			}
-		case 1, 2:
-			if !strings.Contains(stdout, "--- primary result ---\n"+run.sessionID) {
-				t.Fatalf("human framing = %q", stdout)
-			}
-		case 3:
-			decoder := json.NewDecoder(strings.NewReader(stdout))
-			var response factoryapi.InvocationResponse
-			if err := decoder.Decode(&response); err != nil || response.Status != factoryapi.InvocationTerminalStatusCompleted {
-				t.Fatalf("JSON response = %#v, %v", response, err)
-			}
-			if err := decoder.Decode(&struct{}{}); err != io.EOF {
-				t.Fatalf("diagnostics contaminated JSON: %v", err)
-			}
-		case 4:
-			assertSelectedDiagnosticNDJSON(t, stdout)
+			assertSelectedFileOutput(t, run, path)
+		} else {
+			assertSelectedOutputMode(t, index, run, runs)
 		}
 		assertSelectedSessionLog(t, logs, run)
 	}
@@ -109,6 +68,65 @@ func TestSelectedSessionDiagnosticsAndConcurrentOutput(t *testing.T) {
 		t.Fatalf("base metadata changed: %#v", fields)
 	}
 	t.Log("L01/L03 and L04 JSON/NDJSON: concurrent selected-backend operations retain correlation and invocation framing")
+}
+
+func releaseSelectedOutputCalls(calls []selectedCommandCall, runs []selectedInvocation) {
+	for _, call := range calls {
+		for _, run := range runs {
+			if call.request.ExecutionScopeID == run.sessionID {
+				call.reply <- platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(run.sessionID + " COMPLETE")}
+				break
+			}
+		}
+	}
+}
+
+func assertSelectedFileOutput(t *testing.T, run selectedInvocation, path string) {
+	t.Helper()
+	stdout, stderr := run.stdout(), run.inputs.Stderr()
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != run.sessionID+" COMPLETE" || stdout != "" || stderr != "" {
+		t.Fatalf("selected file = %q, %v; stdout=%q stderr=%q", content, err, stdout, stderr)
+	}
+}
+
+func assertSelectedOutputMode(t *testing.T, index int, run selectedInvocation, runs []selectedInvocation) {
+	t.Helper()
+	stdout, stderr := run.stdout(), run.inputs.Stderr()
+	if stderr != "" || !strings.Contains(stdout, run.sessionID) {
+		t.Fatalf("mode %d stdout=%q stderr=%q", index, stdout, stderr)
+	}
+	for _, peer := range runs {
+		if peer.sessionID != run.sessionID && strings.Contains(stdout+stderr, peer.sessionID) {
+			t.Fatal("peer output crossed invocation boundary")
+		}
+	}
+	switch index {
+	case 0:
+		if stdout != run.sessionID+" COMPLETE" {
+			t.Fatalf("quiet raw result = %q", stdout)
+		}
+	case 1, 2:
+		if !strings.Contains(stdout, "--- primary result ---\n"+run.sessionID) {
+			t.Fatalf("human framing = %q", stdout)
+		}
+	case 3:
+		assertSelectedDiagnosticJSON(t, stdout)
+	case 4:
+		assertSelectedDiagnosticNDJSON(t, stdout)
+	}
+}
+
+func assertSelectedDiagnosticJSON(t *testing.T, stdout string) {
+	t.Helper()
+	decoder := json.NewDecoder(strings.NewReader(stdout))
+	var response factoryapi.InvocationResponse
+	if err := decoder.Decode(&response); err != nil || response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("JSON response = %#v, %v", response, err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		t.Fatalf("diagnostics contaminated JSON: %v", err)
+	}
 }
 
 func assertSelectedSessionLog(t *testing.T, logs *observer.ObservedLogs, run selectedInvocation) {
@@ -234,7 +252,7 @@ func TestSelectedFailedPrimaryOutputPreservesExistingFile(t *testing.T) {
 	t.Cleanup(func() { _ = file.Close() })
 	run := startSelectedWriterInvocation(t, process, t.Context(), support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"), []string{"--output", "primary"}, "private-prompt-canary", file)
 	selectedAwait(t, runner.calls).reply <- platformprocess.CommandResult{ExitCode: 1, Stdout: []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"authentication failed: sk-fi-private-provider-canary\"}}\n"), Stderr: []byte("private-stderr-canary")}
-	var failure factoryruntimecli.InvocationCLIError
+	var failure interface{ InvocationErrorCode() string }
 	if err := selectedAwait(t, run.done); !errors.As(err, &failure) || failure.InvocationErrorCode() != "INVOCATION_RUNTIME_FAILURE" {
 		t.Fatalf("file-output failure = %v", err)
 	}
