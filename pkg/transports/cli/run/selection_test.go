@@ -43,10 +43,10 @@ func TestPrepareCanonicalSessionIDPreservesExplicitSessionUUID(t *testing.T) {
 func TestMapCurrentFactoryFailurePreservesSessionIdentityDiagnostic(t *testing.T) {
 	t.Parallel()
 	err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: "validation-factory"})
-	if got := MapCurrentFactoryFailure(err); got != err {
+	if got := MapCurrentFactoryFailure(err); !errors.Is(got, err) {
 		t.Fatalf("mapped identity diagnostic = %v, want original %v", got, err)
 	}
-	if got := MapInvocationFailure(err); got != err {
+	if got := MapInvocationFailure(err); !errors.Is(got, err) {
 		t.Fatalf("mapped invocation diagnostic = %v, want original %v", got, err)
 	}
 }

@@ -208,45 +208,66 @@ func testIdentityJourneyParity(t *testing.T, process support.Process, s *identit
 	t.Helper()
 	command, base, id := startIdentityJourney(t, process, s, false)
 	defer command.Stop(t)
+	testIdentityJourneyRejectedSelectors(t, process, s, base, id)
+	testIdentityJourneyGeneratedSession(t, s, base)
+}
+
+func testIdentityJourneyRejectedSelectors(t *testing.T, process support.Process, s *identityJourney, base, id string) {
+	t.Helper()
 	for _, selector := range []string{"validation-factory", "../escape", uuid.NewString()} {
 		status := http.StatusBadRequest
 		if factorysessions.SessionIdentity(selector).Valid() {
 			status = http.StatusNotFound
 		}
-		endpoint := base + "/factory-sessions/" + url.PathEscape(selector) + "/invocations"
-		response, err := http.Post(endpoint, "application/json", strings.NewReader(`{"sourceKind":"text","content":[{"type":"text","text":"identity invocation"}]}`))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var diagnostic factoryapi.ErrorResponse
-		err = json.NewDecoder(response.Body).Decode(&diagnostic)
-		response.Body.Close()
-		if err != nil || response.StatusCode != status {
-			t.Fatalf("API selector=%q status=%d diagnostic=%#v err=%v", selector, response.StatusCode, diagnostic, err)
-		}
-		if status == http.StatusBadRequest && (diagnostic.Code != "BAD_REQUEST" || !strings.Contains(diagnostic.Message, "sessionId") || !strings.Contains(diagnostic.Message, factorysessions.SessionIdentityForm)) {
-			t.Fatalf("API diagnostic = %#v", diagnostic)
-		}
-		inputs := identityJourneyInputs(t, s, []string{"you", "--remote", "--server", base, "run", "--factory", filepath.Join(s.dir, "factory.json"), "--session", selector, "identity invocation"})
-		if err := process.Execute(inputs.Input); err == nil {
-			t.Fatalf("remote selector %q admitted", selector)
-		}
-		if status == http.StatusBadRequest {
-			if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "BAD_REQUEST" || diagnostic.Message != "--session must be "+factorysessions.SessionIdentityForm {
-				t.Fatalf("remote diagnostic = %q err=%v", inputs.Stderr(), err)
-			}
-		} else {
-			// The existing remote CLI envelope reports the HTTP 404 inside its
-			// remote-operation error; HTTP itself retains typed NOT_FOUND.
-			if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "REMOTE_DURABLE_START_FAILED" || !strings.Contains(diagnostic.Message, "(404): factory session not found") {
-				t.Fatalf("missing selector diagnostic = %s err=%v", inputs.Stderr(), err)
-			}
-		}
+		assertIdentityJourneyAPIRejection(t, base, selector, status)
+		assertIdentityJourneyRemoteRejection(t, process, s, base, selector, status)
 	}
 	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(base, id, "/work"))
 	if len(works.Results) != 0 || s.calls.Load() != 0 {
 		t.Fatalf("invalid/missing selectors caused Work/provider effects: %#v calls=%d", works, s.calls.Load())
 	}
+}
+
+func assertIdentityJourneyAPIRejection(t *testing.T, base, selector string, status int) {
+	t.Helper()
+	endpoint := base + "/factory-sessions/" + url.PathEscape(selector) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", strings.NewReader(`{"sourceKind":"text","content":[{"type":"text","text":"identity invocation"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diagnostic factoryapi.ErrorResponse
+	err = json.NewDecoder(response.Body).Decode(&diagnostic)
+	response.Body.Close()
+	if err != nil || response.StatusCode != status {
+		t.Fatalf("API selector=%q status=%d diagnostic=%#v err=%v", selector, response.StatusCode, diagnostic, err)
+	}
+	if status == http.StatusBadRequest && (diagnostic.Code != "BAD_REQUEST" || !strings.Contains(diagnostic.Message, "sessionId") || !strings.Contains(diagnostic.Message, factorysessions.SessionIdentityForm)) {
+		t.Fatalf("API diagnostic = %#v", diagnostic)
+	}
+}
+
+func assertIdentityJourneyRemoteRejection(t *testing.T, process support.Process, s *identityJourney, base, selector string, status int) {
+	t.Helper()
+	var diagnostic factoryapi.ErrorResponse
+	inputs := identityJourneyInputs(t, s, []string{"you", "--remote", "--server", base, "run", "--factory", filepath.Join(s.dir, "factory.json"), "--session", selector, "identity invocation"})
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatalf("remote selector %q admitted", selector)
+	}
+	if status == http.StatusBadRequest {
+		if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "BAD_REQUEST" || diagnostic.Message != "--session must be "+factorysessions.SessionIdentityForm {
+			t.Fatalf("remote diagnostic = %q err=%v", inputs.Stderr(), err)
+		}
+	} else {
+		// The existing remote CLI envelope reports the HTTP 404 inside its
+		// remote-operation error; HTTP itself retains typed NOT_FOUND.
+		if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "REMOTE_DURABLE_START_FAILED" || !strings.Contains(diagnostic.Message, "(404): factory session not found") {
+			t.Fatalf("missing selector diagnostic = %s err=%v", inputs.Stderr(), err)
+		}
+	}
+}
+
+func testIdentityJourneyGeneratedSession(t *testing.T, s *identityJourney, base string) {
+	t.Helper()
 	opened := postSessionsJSON[factoryapi.OpenFactorySessionResponse](t, base+"/factory-sessions", factoryapi.OpenFactorySessionRequest{FolderPath: s.dir}, "open generated session")
 	if opened.Session == nil || !factorysessions.SessionIdentity(opened.Session.Id).Valid() {
 		t.Fatalf("API opened identity = %#v", opened)
