@@ -116,7 +116,9 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 					assertArchivedFailureUnknowns(t, row)
 				}
 				if !reflect.DeepEqual(recordedSummaryFailure(row), recordedSummaryFailure(http)) {
-					t.Fatalf("%s row differs: %+v %+v", history, row, http)
+					rowJSON, _ := json.Marshal(row)
+					showJSON, _ := json.Marshal(http)
+					t.Fatalf("%s row differs for %s: list=%s show=%s", history, id, rowJSON, showJSON)
 				}
 			}
 		}
