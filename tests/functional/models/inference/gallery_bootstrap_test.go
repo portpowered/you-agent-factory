@@ -33,7 +33,7 @@ func TestModelsGalleryBootstrapRelease(t *testing.T) {
 func TestModelsGalleryBootstrapIntegrityRetry(t *testing.T) {
 	requireGalleryPlatform(t)
 	t.Parallel()
-	for _, fault := range []string{"checksum", "interrupted", "publication", "cached-corrupt"} {
+	for _, fault := range []string{"checksum", "download", "interrupted", "publication", "cached-corrupt"} {
 		t.Run(fault, func(t *testing.T) { t.Parallel(); galleryPullRecovery(t, fault, "", "") })
 	}
 }
@@ -68,13 +68,15 @@ const galleryBinaryName = "local-ai-v1-linux-amd64"
 var galleryBinary = []byte("synthetic verified executable; controlled runner never launches it")
 
 type galleryPullFixture struct {
-	model         *pullToReadyAssetClient
-	cache         string
-	fault         string
-	failed        atomic.Bool
-	downloads     atomic.Int32
-	commands      atomic.Int32
-	wantedCommand string
+	model           *pullToReadyAssetClient
+	cache           string
+	fault           string
+	failed          atomic.Bool
+	downloads       atomic.Int32
+	requests        atomic.Int32
+	commands        atomic.Int32
+	wantedCommand   string
+	downloadStarted chan struct{}
 }
 
 func galleryPullRecovery(t *testing.T, fault, override, located string) {
@@ -189,6 +191,7 @@ func (fixture *galleryPullFixture) Run(ctx context.Context, request platformproc
 	return platformprocess.CommandResult{}, err
 }
 func (fixture *galleryPullFixture) Do(request *http.Request) (*http.Response, error) {
+	fixture.requests.Add(1)
 	var body []byte
 	status := http.StatusOK
 	switch request.URL.Path {
@@ -205,21 +208,45 @@ func (fixture *galleryPullFixture) Do(request *http.Request) (*http.Response, er
 		digest := sha256.Sum256(galleryBinary)
 		body = []byte(fmt.Sprintf("%x  %s\n", digest, galleryBinaryName))
 	case "/binary":
-		fixture.downloads.Add(1)
-		body = galleryBinary
-		if fixture.failed.Load() && fixture.fault == "checksum" {
-			body = bytes.Repeat([]byte("x"), len(body))
-		}
-		if fixture.failed.Load() && fixture.fault == "interrupted" {
-			return &http.Response{StatusCode: status, Body: io.NopCloser(io.MultiReader(bytes.NewReader(body[:2]), galleryInterruptedReader{})), Request: request}, nil
-		}
+		return fixture.binaryResponse(request), nil
 	default:
 		return fixture.model.Do(request)
 	}
 	return &http.Response{StatusCode: status, Body: io.NopCloser(bytes.NewReader(body)), Request: request}, nil
 }
 
+func (fixture *galleryPullFixture) binaryResponse(request *http.Request) *http.Response {
+	fixture.downloads.Add(1)
+	body := galleryBinary
+	status := http.StatusOK
+	var reader io.Reader = bytes.NewReader(body)
+	if fixture.failed.Load() {
+		switch fixture.fault {
+		case "download":
+			status = http.StatusServiceUnavailable
+		case "cancellation":
+			reader = io.MultiReader(bytes.NewReader(body[:2]), galleryCanceledReader{request.Context(), fixture.downloadStarted})
+		case "checksum":
+			reader = bytes.NewReader(bytes.Repeat([]byte("x"), len(body)))
+		case "interrupted":
+			reader = io.MultiReader(bytes.NewReader(body[:2]), galleryInterruptedReader{})
+		}
+	}
+	return &http.Response{StatusCode: status, Body: io.NopCloser(reader), Request: request}
+}
+
 type galleryInterruptedReader struct{}
+
+type galleryCanceledReader struct {
+	context context.Context
+	started chan struct{}
+}
+
+func (reader galleryCanceledReader) Read([]byte) (int, error) {
+	close(reader.started)
+	<-reader.context.Done()
+	return 0, reader.context.Err()
+}
 
 func (galleryInterruptedReader) Read([]byte) (int, error) {
 	return 0, errors.New("controlled interrupted transfer")
@@ -255,7 +282,7 @@ func galleryAssertNoUnverifiedInstallation(t *testing.T, fixture *galleryPullFix
 	if fault != "command" && fault != "exit" && fault != "missing-script" && fixture.commands.Load() != 0 {
 		t.Fatal("unverified binary reached installation command")
 	}
-	if fault == "checksum" || fault == "interrupted" || fault == "publication" {
+	if fault == "checksum" || fault == "download" || fault == "interrupted" || fault == "publication" || fault == "cancellation" {
 		if _, err := os.Stat(fixture.wantedCommand); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("failed transfer published binary: %v", err)
 		}
