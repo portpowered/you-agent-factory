@@ -1,15 +1,128 @@
 package customer_journeys_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// W1-S/F exercise the API-owned explicit-session Work and event read contract
+// on the existing host with peer routing journeys. Each parallel leaf owns its
+// Factory, provider route and public Work trace.
+func runSelectedProviderRouteJourneys(t *testing.T, host *factorySessionHost) {
+	t.Parallel()
+	for _, failed := range []bool{false, true} {
+		name := "success"
+		if failed {
+			name = "provider_failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runSelectedProviderRoute(t, host, name, failed)
+		})
+	}
+}
+
+func runSelectedProviderRoute(t *testing.T, host *factorySessionHost, name string, failed bool) {
+	t.Helper()
+	marker := "selected-provider-route-" + name
+	dir := support.ScaffoldSingleStepFactory(t, marker)
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nWork: {{ (index .Inputs 0).WorkID }}\nPayload: {{ (index .Inputs 0).Payload }}\n")
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task", TraceID: marker, Payload: []byte(`{"title":"` + marker + `"}`),
+	})
+	result := platformprocess.CommandResult{Stdout: []byte(marker + " COMPLETE")}
+	state, outcome := "complete", factoryapi.WorkOutcomeAccepted
+	complete, failures := 1, 0
+	if failed {
+		result = platformprocess.CommandResult{ExitCode: 77, Stderr: []byte("deterministic selected provider refusal")}
+		state, outcome = "failed", factoryapi.WorkOutcomeFailed
+		complete, failures = 0, 1
+	}
+	runner := support.NewShapedProviderCommandRunner(result)
+	session, listed, events := host.Run(t, dir, runner, 15*time.Second)
+	assertWorkflowWorkStates(t, listed, map[string]int{
+		"task:init": 0, "task:complete": complete, "task:failed": failures,
+	})
+	workID, found := workIDAtCustomerState(t, listed, "task:"+state, marker)
+	if !found {
+		t.Fatalf("selected Work trace %q missing at %s", marker, state)
+	}
+	requests := runner.Requests()
+	if len(requests) != 1 {
+		t.Fatalf("selected runner requests = %d, want one", len(requests))
+	}
+	prompt := string(requests[0].Stdin)
+	if requests[0].Command != "codex" || !strings.Contains(prompt, marker) || !strings.Contains(prompt, workID) || strings.Contains(prompt, "{{") {
+		t.Fatalf("selected command = %q, prompt = %q; want Codex with expanded Work %q and payload %q", requests[0].Command, prompt, workID, marker)
+	}
+	assertSelectedProviderEvents(t, events, session.Id, workID, marker, outcome)
+}
+
+func assertSelectedProviderEvents(t *testing.T, events []factoryapi.FactoryEvent, sessionID, workID, marker string, outcome factoryapi.WorkOutcome) {
+	t.Helper()
+	responses := 0
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("dispatch session = %v, want %q", event.Context.SessionId, sessionID)
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSelectedProviderResponse(t, payload, marker, outcome)
+		responses++
+	}
+	observations := support.ObserveDispatchEvents(t, events)
+	if responses != 1 || len(observations) != 1 || !support.DispatchObservationIncludesWork(observations[0], workID) {
+		t.Fatalf("dispatches = %+v, response count = %d; want one correlated to Work %s", observations, responses, workID)
+	}
+}
+
+func assertSelectedProviderResponse(t *testing.T, payload factoryapi.DispatchResponseEventPayload, marker string, outcome factoryapi.WorkOutcome) {
+	t.Helper()
+	if payload.Outcome != outcome {
+		t.Fatalf("selected dispatch outcome = %s, want %s", payload.Outcome, outcome)
+	}
+	peerMarker := "selected-provider-route-success"
+	if outcome == factoryapi.WorkOutcomeAccepted {
+		peerMarker = "selected-provider-route-provider_failure"
+		if payload.Output == nil || !strings.Contains(*payload.Output, marker) {
+			t.Fatalf("selected dispatch output = %v, want %q", payload.Output, marker)
+		}
+	} else {
+		// The public contract intentionally normalizes an unrecognized native
+		// process error; raw provider stderr and exit details stay private.
+		if payload.Error == nil {
+			t.Fatal("selected failure lacks public diagnostic")
+		}
+		if *payload.Error != "provider execution failed" {
+			t.Fatalf("selected failure diagnostic = %q, want safe provider execution failure", *payload.Error)
+		}
+		if payload.Output != nil && strings.TrimSpace(*payload.Output) != "" {
+			t.Fatalf("failed selected dispatch published output %q", *payload.Output)
+		}
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), peerMarker) {
+		t.Fatalf("selected dispatch contains peer facts: %s", encoded)
+	}
+}
 
 func runProviderRetryRecoveryJourneys(t *testing.T, host *factorySessionHost) {
 	t.Parallel()
