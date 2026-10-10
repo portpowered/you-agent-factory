@@ -122,8 +122,10 @@ func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
 	execution.Execution.Model = "captured-model"
 	execution.Execution.ReasoningEffort = "high"
 	execution.Execution.WorkingDirectory = "captured-workspace"
-	execution.Execution.ProcessEnvironment = []string{"API_KEY=private-environment-value"}
-	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+	const token = "planted-worker-session-token-32-bytes"
+	execution.Execution.ProcessEnvironment = []string{"API_KEY=private-environment-value", "YOU_WORKER_SESSION_TOKEN=" + token}
+	metadata := json.RawMessage(`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead","workId":"project"},"correlation":{"workId":"lane","factorySessionId":"factory"},"labels":["parent:lead"]}`)
+	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := newTestFileWriter(local, writer.root)
@@ -145,16 +147,40 @@ func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
 	if recipe.Version != 1 || recipe.Target != target || recipe.Execution.Execution.Model != "captured-model" || recipe.Execution.Execution.WorkingDirectory != "captured-workspace" || recipe.Execution.Execution.ReasoningEffort != "high" {
 		t.Fatalf("recipe lost captured settings: %+v", recipe)
 	}
-	if bytes.Contains(stored, []byte("private-environment-value")) || recipe.Execution.Execution.ProcessEnvironment != nil {
+	if bytes.Contains(stored, []byte("private-environment-value")) || bytes.Contains(stored, []byte(token)) || recipe.Execution.Execution.ProcessEnvironment != nil {
 		t.Fatal("recipe retained inherited credentials")
 	}
+	if !bytes.Equal(recipe.SessionMetadata, metadata) {
+		t.Fatal("recipe lost nonsecret requester metadata")
+	}
+	assertRestartRecipeEnvelopePrivacy(t, fresh, identity, token)
 	assertRestartRecipeRead(t, fresh, target, recipe.Execution)
-	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); err != nil {
 		t.Fatal(err)
 	}
 	execution.Execution.Model = "changed-model"
-	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); !errors.Is(err, recordings.ErrWorkerControlConflict) {
+	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); !errors.Is(err, recordings.ErrWorkerControlConflict) {
 		t.Fatalf("changed recipe = %v, want conflict", err)
+	}
+}
+
+// The control-input serializer owns the base64 envelope; check its decoded
+// payload as well as disk bytes so encoding cannot conceal a credential.
+func assertRestartRecipeEnvelopePrivacy(t *testing.T, writer *FileWriter, identity controlInputArtifact, token string) {
+	t.Helper()
+	data, err := os.ReadFile(writer.controlInputPath(controlInputRef(identity)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifact controlInputArtifact
+	if err := json.Unmarshal(data, &artifact); err != nil {
+		t.Fatal(err)
+	}
+	if artifact.Key != identity.Key || artifact.Generation != identity.Generation || len(artifact.Input) == 0 {
+		t.Fatal("persisted envelope lost exact recipe identity or payload")
+	}
+	if bytes.Contains(data, []byte(token)) || bytes.Contains(artifact.Input, []byte(token)) {
+		t.Fatal("persisted envelope retained an execution credential")
 	}
 }
 
@@ -765,17 +791,22 @@ func TestContinuationAdmissionRefusesChangedImmutableArtifact(t *testing.T) {
 
 func TestRestartRecipeMetadataRejectsInheritedSecrets(t *testing.T) {
 	t.Parallel()
-	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
-	target := controlIntent(t, writer, "recording", "worker", "request").Target
-	execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
-	execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
-	execution.Execution.Dispatch.WorkstationName = "direct"
-	execution.Execution.ProcessEnvironment = []string{"API_KEY=planted-secret"}
-	metadata := json.RawMessage(`{"requester":null,"labels":["planted-secret"]}`)
-	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
-		t.Fatalf("secret-bearing metadata accepted: %v", err)
-	}
-	if _, err := writer.ReadWorkerRestartRecipe(t.Context(), target); err == nil {
-		t.Fatal("rejected metadata persisted a recipe")
+	for _, name := range []string{"API_KEY", "YOU_WORKER_SESSION_TOKEN"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = "direct"
+			execution.Execution.ProcessEnvironment = []string{name + "=planted-secret"}
+			metadata := json.RawMessage(`{"requester":null,"labels":["planted-secret"]}`)
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
+				t.Fatalf("secret-bearing metadata accepted: %v", err)
+			}
+			if _, err := writer.ReadWorkerRestartRecipe(t.Context(), target); err == nil {
+				t.Fatal("rejected metadata persisted a recipe")
+			}
+		})
 	}
 }

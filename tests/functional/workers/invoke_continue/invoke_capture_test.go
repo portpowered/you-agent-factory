@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -239,61 +237,42 @@ func assertRequesterTokenAbsent(t *testing.T, token, body string) {
 	}
 }
 
-// Inspect the persisted control-input contract as well as its decoded payload:
-// input is base64 encoded on disk, so checking only raw bytes misses leaks.
-// The exact session key excludes concurrent scenarios on the shared profile.
+// Public archived reads prove capture completeness and credential exclusion.
+// Private continuation-recipe envelopes are verified by their owning serializer
+// in TestRestartRecipePersistsImmutableDetachedInputAcrossReopen.
 func assertRequesterDurableTokenPrivacy(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, id, token string) {
 	t.Helper()
-	paths, err := filepath.Glob(filepath.Join(fixture.hostDir, ".you-agent-factory", "worker-recordings", "worker-payloads", "*.control.json"))
-	if err != nil {
-		t.Fatal("durable control inputs unavailable")
+	status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+	if status != http.StatusOK {
+		t.Fatal("archived Worker logs unavailable")
 	}
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			t.Fatal("durable control input unreadable")
-		}
-		var artifact struct {
-			Key   recordings.WorkerControlOperationKey `json:"key"`
-			Input []byte                               `json:"input"`
-		}
-		if json.Unmarshal(data, &artifact) != nil {
-			// Other parallel scenarios deliberately corrupt their inputs. The
-			// exact recipe below must still be found and decoded for this session.
-			continue
-		}
-		if artifact.Key.WorkerSessionID != id || !strings.HasPrefix(artifact.Key.RequestID, "restart-recipe/") {
-			continue
-		}
-		assertRequesterTokenAbsent(t, token, string(data))
-		assertRequesterTokenAbsent(t, token, string(artifact.Input))
-		assertRequesterRecordedTokenPrivacy(t, fixture, ctx, artifact.Key.RecordingID, id, token)
-		return
+	assertRequesterTokenAbsent(t, token, body)
+	var logs api.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(body), &logs); err != nil || logs.WorkerSessionId != id || string(logs.Health) != "COMPLETE" || len(logs.Events) < 2 {
+		t.Fatal("archived Worker logs omitted complete execution evidence")
 	}
-	t.Fatal("execution has no persisted continuation recipe")
-}
-
-func assertRequesterRecordedTokenPrivacy(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, recordingID, id, token string) {
-	t.Helper()
-	snapshot, err := fixture.process.WorkerRecordingReader().LoadWorkerRecording(ctx, recordingID)
-	if err != nil {
-		t.Fatal("persisted Worker recording unavailable")
-	}
-	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID != id {
-			continue
+	terminal := false
+	for _, event := range logs.Events {
+		if event.WorkerSessionId != id {
+			t.Fatal("archived Worker logs included another execution")
 		}
-		data, err := json.Marshal(session)
-		if err != nil || session.Status != recordings.WorkerRecordingStatusComplete || len(session.Records) < 2 || session.ExecutionTerminal == nil {
-			t.Fatal("persisted Worker recording omitted complete execution evidence")
+		if event.Event.Payload["kind"] == "SESSION" {
+			switch event.Event.Payload["phase"] {
+			case "COMPLETED", "FAILED", "CANCELED":
+				terminal = true
+			}
 		}
-		assertRequesterTokenAbsent(t, token, string(data))
-		return
 	}
-	t.Fatal("persisted Worker recording omitted the exact execution")
+	if !terminal {
+		t.Fatal("archived Worker logs omitted the terminal execution event")
+	}
+	for _, suffix := range []string{"", "/transcript"} {
+		status, body = t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+suffix, nil)
+		if status != http.StatusOK {
+			t.Fatal("archived Worker observation or transcript unavailable")
+		}
+		assertRequesterTokenAbsent(t, token, body)
+	}
 }
 
 const (
