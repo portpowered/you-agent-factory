@@ -28,6 +28,33 @@ type delegatedOwner struct {
 	capture       definitions.CaptureFactorySnapshotResult
 	prepareImport definitions.PrepareFactorySnapshotImportResult
 	materialize   definitions.MaterializeFactorySnapshotResult
+	compiled      definitions.CompileEffectiveFactorySourceResult
+	effective     definitions.ValidateEffectiveFactoryDefinitionResult
+	resolved      definitions.ResolveBuiltInPackagedFactoryResult
+	installed     definitions.InstallPackagedFactoryResult
+	scaffolded    definitions.CreateFactoryScaffoldResult
+}
+
+func (o *delegatedOwner) ValidateEffectiveFactoryDefinition(ctx context.Context, request definitions.ValidateEffectiveFactoryDefinitionRequest) (definitions.ValidateEffectiveFactoryDefinitionResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.effective, o.err
+}
+func (o *delegatedOwner) ResolveBuiltInPackagedFactory(ctx context.Context, request definitions.ResolveBuiltInPackagedFactoryRequest) (definitions.ResolveBuiltInPackagedFactoryResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.resolved, o.err
+}
+func (o *delegatedOwner) InstallPackagedFactory(ctx context.Context, request definitions.InstallPackagedFactoryRequest) (definitions.InstallPackagedFactoryResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.installed, o.err
+}
+func (o *delegatedOwner) CreateFactoryScaffold(ctx context.Context, request definitions.CreateFactoryScaffoldRequest) (definitions.CreateFactoryScaffoldResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.scaffolded, o.err
+}
+
+func (o *delegatedOwner) CompileEffectiveFactorySource(ctx context.Context, request definitions.CompileEffectiveFactorySourceRequest) (definitions.CompileEffectiveFactorySourceResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.compiled, o.err
 }
 
 func (o *delegatedOwner) ValidateStructuralFactoryDefinition(ctx context.Context, request definitions.ValidateStructuralFactoryDefinitionRequest) (definitions.ValidateStructuralFactoryDefinitionResult, error) {
@@ -57,7 +84,7 @@ func TestInjectedDelegationPreservesResultsRequestsAndErrorIdentity(t *testing.T
 	} {
 		t.Run(failure.name, func(t *testing.T) {
 			t.Parallel()
-			for _, operation := range []string{"validation", "authoring", "flatten", "expand", "create", "replace", "distribution", "snapshot", "capture", "prepare-import", "materialize"} {
+			for _, operation := range []string{"compile", "validation", "effective-validation", "authoring", "flatten", "expand", "create", "replace", "distribution", "resolve-packaged", "install", "scaffold", "snapshot", "capture", "prepare-import", "materialize"} {
 				t.Run(operation, func(t *testing.T) {
 					t.Parallel()
 					ctx, cancel := context.WithCancel(t.Context())
@@ -77,10 +104,15 @@ func TestInjectedDelegationPreservesResultsRequestsAndErrorIdentity(t *testing.T
 						capture:       definitions.CaptureFactorySnapshotResult{Snapshot: snapshotPayload()},
 						prepareImport: definitions.PrepareFactorySnapshotImportResult{Name: "alpha"},
 						materialize:   definitions.MaterializeFactorySnapshotResult{TargetDir: "alpha"},
+						compiled:      definitions.CompileEffectiveFactorySourceResult{Effective: definitions.EffectiveFactorySource{ContentIdentity: "alpha"}},
+						effective:     definitions.ValidateEffectiveFactoryDefinitionResult{Validation: definitions.ValidationResult{Targets: []definitions.ValidationTarget{{}}}},
+						resolved:      definitions.ResolveBuiltInPackagedFactoryResult{Definition: definitions.PackagedDefinition{Name: "@you/alpha", Project: "alpha"}},
+						installed:     definitions.InstallPackagedFactoryResult{Definition: definitions.DistributedFactoryDefinitionFacts{Name: "@you/alpha", FactoryDir: "alpha"}},
+						scaffolded:    definitions.CreateFactoryScaffoldResult{Definition: definitions.DistributedFactoryDefinitionFacts{Name: "alpha", FactoryDir: "alpha"}},
 					}
 					disabled := definitions.UnimplementedService{}
 					service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-						nil, lifecycle.StubActivationGateway(), disabled, owner, owner, owner, owner, disabled, nil, disabled.ListEffectiveFactories,
+						nil, lifecycle.StubActivationGateway(), disabled, owner, owner, owner, owner, owner, nil, disabled.ListEffectiveFactories,
 						owner,
 					)
 					if owner.ctx != nil {
@@ -98,6 +130,26 @@ func assertDelegation(t *testing.T, ctx context.Context, service *lifecycle.Serv
 	var request, result, expected any
 	var err error
 	switch operation {
+	case "effective-validation":
+		r := definitions.ValidateEffectiveFactoryDefinitionRequest{Canonical: []byte(`{"name":"alpha"}`), Effective: definitions.EffectiveFactorySource{ContentIdentity: "alpha"}}
+		request, expected = r, owner.effective
+		result, err = service.ValidateEffectiveFactoryDefinition(ctx, r)
+	case "resolve-packaged":
+		r := definitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/alpha"}
+		request, expected = r, owner.resolved
+		result, err = service.ResolveBuiltInPackagedFactory(ctx, r)
+	case "install":
+		r := definitions.InstallPackagedFactoryRequest{RootDir: "/factories", Name: "@you/alpha"}
+		request, expected = r, owner.installed
+		result, err = service.InstallPackagedFactory(ctx, r)
+	case "scaffold":
+		r := definitions.CreateFactoryScaffoldRequest{TargetDir: "/factories/alpha"}
+		request, expected = r, owner.scaffolded
+		result, err = service.CreateFactoryScaffold(ctx, r)
+	case "compile":
+		r := definitions.CompileEffectiveFactorySourceRequest{FactoryDir: "alpha", Canonical: []byte(`{"name":"alpha"}`)}
+		request, expected = r, owner.compiled
+		result, err = service.CompileEffectiveFactorySource(ctx, r)
 	case "capture":
 		r := definitions.CaptureFactorySnapshotRequest{FactoryDir: "alpha", Canonical: []byte(`{"name":"alpha"}`), Name: "alpha"}
 		request, expected = r, owner.capture

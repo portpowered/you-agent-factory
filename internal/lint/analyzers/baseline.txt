@@ -38,10 +38,6 @@ domain-transport-test|pkg/services/factory_definitions/internal/services/snapsho
 domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/systeminitializationtests|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/systeminitializationtests|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/http/generated
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/mapping
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime_test|pkg/transports/mapping/workcontent
 domain-transport-test|pkg/services/factory_runtime/internal/services/orchestration/runtime|pkg/transports/http/generated

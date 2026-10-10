@@ -9,7 +9,106 @@ import (
 	"time"
 
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 )
+
+type activationGateway struct {
+	definitions.DefinitionActivationGateway
+	t           *testing.T
+	session     *definitions.DefinitionSession
+	idleError   error
+	swapError   error
+	locked      bool
+	swappedName string
+	swapCalls   int
+}
+
+func (g *activationGateway) RunSessionID() string { return g.session.ID }
+func (g *activationGateway) SessionForActivation(id string) *definitions.DefinitionSession {
+	if id != g.session.ID || !g.locked {
+		g.t.Fatal("activation did not retain session identity and lock")
+	}
+	return g.session
+}
+func (g *activationGateway) WithActivationLock(fn func() error) error {
+	g.locked = true
+	defer func() { g.locked = false }()
+	return fn()
+}
+func (g *activationGateway) NamedFactoryActivationPaths(session *definitions.DefinitionSession) (string, string) {
+	if session != g.session {
+		g.t.Fatal("activation selected a different session")
+	}
+	return "root", "folder"
+}
+func (g *activationGateway) RequireIdleBeforeNamedFactoryActivation(_ context.Context, id string, session *definitions.DefinitionSession) error {
+	if id != g.session.ID || session != g.session || !g.locked {
+		g.t.Fatal("idle gate lost selected session or lock")
+	}
+	return g.idleError
+}
+func (g *activationGateway) SwapPersistedNamedFactoryRuntime(_ context.Context, id string, session *definitions.DefinitionSession, root, folder, dir, name string) error {
+	if !g.locked || id != g.session.ID || session != g.session || root != "root" || folder != "folder" || dir != filepath.Join("root", "alpha") {
+		g.t.Fatalf("swap lost activation context: %q, %v, %q, %q, %q", id, session, root, folder, dir)
+	}
+	g.swapCalls++
+	g.swappedName = name
+	return g.swapError
+}
+
+type activationHost struct {
+	lifecycle.Host
+	t           *testing.T
+	lookupError error
+	lookupCalls int
+}
+
+func (h *activationHost) ResolveExistingFactoryDir(root, name string) (string, error) {
+	h.lookupCalls++
+	if root != "root" || name != "alpha" {
+		h.t.Fatalf("lookup arguments = %q, %q", root, name)
+	}
+	return filepath.Join(root, name), h.lookupError
+}
+
+func TestNamedActivationGatesLookupAndSwapAndRetainsSelectedSession(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"success", "busy", "lookup", "swap"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("activation dependency rejected")
+			host := &activationHost{t: t}
+			gateway := &activationGateway{t: t, session: &definitions.DefinitionSession{ID: "session-alpha"}}
+			wantError, wantLookup, wantSwap := error(nil), 1, 1
+			switch stage {
+			case "busy":
+				gateway.idleError, wantError, wantLookup, wantSwap = cause, cause, 0, 0
+			case "lookup":
+				host.lookupError, wantError, wantSwap = cause, cause, 0
+			case "swap":
+				gateway.swapError, wantError = cause, cause
+			}
+			disabled := definitions.UnimplementedService{}
+			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(host, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories, disabled)
+			if host.lookupCalls != 0 || gateway.swapCalls != 0 {
+				t.Fatal("construction performed activation effects")
+			}
+			err := service.ActivateNamedFactory(t.Context(), "alpha")
+			if err != wantError || host.lookupCalls != wantLookup || gateway.swapCalls != wantSwap || gateway.locked {
+				t.Fatalf("activation = %v, lookup %d, swap %d, lock %t; want %v, %d, %d, false", err, host.lookupCalls, gateway.swapCalls, gateway.locked, wantError, wantLookup, wantSwap)
+			}
+			if wantSwap != 0 && gateway.swappedName != "alpha" {
+				t.Fatalf("swapped name = %q", gateway.swappedName)
+			}
+			if stage == "busy" {
+				gateway.idleError = nil
+				if err := service.ActivateNamedFactory(t.Context(), "alpha"); err != nil || gateway.swapCalls != 1 || gateway.swappedName != "alpha" {
+					t.Fatalf("activation after idle = %v, swap %d, name %q", err, gateway.swapCalls, gateway.swappedName)
+				}
+			}
+		})
+	}
+}
 
 type readHost struct {
 	*versionHost

@@ -1,15 +1,69 @@
 package definitions
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Read-only definition commands use the shared process and scenario-owned paths
+// and streams; no Current Factory or live Factory Session is needed.
+func TestFactoryConfigReadbackMergesAuthoredWorkerAndWorkstation(t *testing.T) {
+	t.Parallel()
+	config := compilationFactoryConfig()
+	config["workstations"].([]map[string]any)[0]["stopWords"] = []string{"CANONICAL"}
+	dir := support.ScaffoldFactory(t, config)
+	for _, file := range []struct{ path, contents string }{
+		{filepath.Join("workers", compilationWorkerName, "AGENTS.md"), "---\ntype: SCRIPT_WORKER\ncommand: go\nargs: [\"test\", \"./...\"]\n---\nRun tests.\n"},
+		{filepath.Join("workstations", compilationWorkstationName, "AGENTS.md"), "---\ntype: MODEL_WORKSTATION\nworker: executor\nstopWords: [\"RUNTIME\"]\n---\nImplement the story.\n"},
+	} {
+		path := filepath.Join(dir, file.path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(file.contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	process, environment := buildDefinitionsProcess(t), isolatedHomeEnvironment(t)
+	fromDirectory, err := support.FlattenFactoryConfigWithProcessAndEnv(t, process, environment, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromFile, err := support.FlattenFactoryConfigWithProcessAndEnv(t, process, environment, filepath.Join(dir, factorydefinitions.FactoryConfigFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var directoryValue, fileValue any
+	if err := json.Unmarshal(fromDirectory, &directoryValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(fromFile, &fileValue); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(directoryValue, fileValue) {
+		t.Fatalf("directory and file readback differ: %s versus %s", fromDirectory, fromFile)
+	}
+	loaded, err := support.DecodeFactoryDefinition(fromDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker, ok := support.FindFactoryWorker(loaded, compilationWorkerName)
+	if !ok || worker.Command == nil || *worker.Command != "go" || stringValue(worker.Body) != "Run tests." {
+		t.Fatalf("loaded worker = %#v; want authored command and body", worker)
+	}
+	workstation, ok := support.FindFactoryWorkstation(loaded, compilationWorkstationName)
+	if !ok || stringValue(workstation.Worker) != compilationWorkerName || stringValue(workstation.Body) != "Implement the story." || workstation.StopWords == nil || !reflect.DeepEqual(*workstation.StopWords, []string{"CANONICAL", "RUNTIME"}) {
+		t.Fatalf("loaded workstation = %#v; want authored binding/body and ordered canonical/runtime stop words", workstation)
+	}
+}
 
 const (
 	compilationFactoryName     = "compilation-equivalence"

@@ -49,6 +49,9 @@ func (files *saveDeniedDefinitionFiles) WriteFile(path string, data []byte, mode
 	if strings.Contains(filepath.Base(filepath.Dir(path)), ".write-blocked.staging-") {
 		return os.ErrPermission
 	}
+	if filepath.Base(path) == "AGENTS.md" && strings.Contains(string(data), "definition-after") && (strings.Contains(path, ".corrupt-write.staging-") || strings.Contains(path, ".save-corrupt-replace.staging-")) {
+		data = []byte("---\ntype: [\n")
+	}
 	return files.Local.WriteFile(path, data, mode)
 }
 
@@ -90,7 +93,7 @@ func TestFactorySaveFailureRetainsActiveDefinition(t *testing.T) {
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	selected := []selectedDefinition{}
-	for _, name := range []string{"save-success", "save-denied", "save-write-denied", "save-missing"} {
+	for _, name := range []string{"save-success", "save-denied", "save-write-denied", "save-corrupt-create", "save-corrupt-replace", "save-missing"} {
 		selected = append(selected, prepareSaveDefinition(t, process, env, name))
 	}
 	inputs := support.FakeInputs(context.Background(), []string{"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--no-record", "--quiet"})
@@ -123,6 +126,12 @@ func assertDefinitionSaveOutcome(t *testing.T, endpoint string, before factoryap
 		updated.Name = "blocked"
 	} else if cell == "save-write-denied" {
 		updated.Name = "write-blocked"
+	} else if cell == "save-corrupt-create" {
+		updated.Name = "corrupt-write"
+	} else if cell == "save-corrupt-replace" {
+		updated.Name = before.Name
+		updated.Version.Logical++
+		updated.Version.Physical = updated.Version.Physical.Add(1)
 	}
 	body := "definition-after {{ (index .Inputs 0).Payload }}"
 	(*updated.Workstations)[0].Body = &body
@@ -136,7 +145,7 @@ func assertDefinitionSaveOutcome(t *testing.T, endpoint string, before factoryap
 		assertDefinitionsHTTPError(t, response, status, http.StatusInternalServerError, "INTERNAL_ERROR")
 		return
 	}
-	if cell == "save-write-denied" {
+	if cell == "save-write-denied" || strings.HasPrefix(cell, "save-corrupt-") {
 		assertDefinitionsHTTPError(t, response, status, http.StatusBadRequest, "INVALID_FACTORY")
 		return
 	}
@@ -271,6 +280,11 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 	peerBefore := support.GetJSON[factoryapi.Factory](t, peerEndpoint)
 	endpoint := baseURL + "/factory-sessions/" + id + "/factory"
 	before := support.GetJSON[factoryapi.Factory](t, endpoint)
+	durablePath := filepath.Join(cell.root, cell.name, "factory.json")
+	durableBefore, err := os.ReadFile(durablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assertDefinitionInvocation(t, baseURL, id, "definition-before")
 	if cell.name == "save-missing" {
 		assertMissingDefinitionKeepsOwner(t, baseURL, cell.root)
@@ -278,6 +292,17 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 		assertDefinitionSaveOutcome(t, endpoint, before, cell.name)
 	}
 	assertNoDefinitionStaging(t, cell.root)
+	if cell.name != "save-success" {
+		durableAfter, err := os.ReadFile(durablePath)
+		if err != nil || string(durableAfter) != string(durableBefore) {
+			t.Fatalf("rejected definition request changed durable content: %s, %v", durableAfter, err)
+		}
+		if cell.name == "save-corrupt-create" {
+			if _, err := os.Stat(filepath.Join(cell.root, "corrupt-write")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("rejected create left a partial named Factory: %v", err)
+			}
+		}
+	}
 	after := support.GetJSON[factoryapi.Factory](t, endpoint)
 	want := "definition-before"
 	if cell.name == "save-success" {

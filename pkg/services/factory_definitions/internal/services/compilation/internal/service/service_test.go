@@ -173,6 +173,43 @@ func TestCompileEffectiveFactorySource_EquivalentCanonicalInputsShareIdentity(t 
 	}
 }
 
+func TestCompilationDirectoryAndCanonicalInputsPreserveLoadedIdentity(t *testing.T) {
+	t.Parallel()
+	config := &factorydefinitions.FactoryConfig{Name: "alpha"}
+	source := stubLoadedSource{cfg: config, factoryDir: "/factories/alpha", runtimeBaseDir: "/runtime/alpha"}
+	canonicalCalls, directoryCalls := 0, 0
+	svc := compilationimpl.New(
+		func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			canonicalCalls++
+			if string(payload) != `{"name":"alpha"}` || loader != nil {
+				t.Fatalf("canonical arguments = %q, %v", payload, loader)
+			}
+			return source, nil
+		},
+		func(dir string, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			directoryCalls++
+			if dir != source.factoryDir || loader != nil {
+				t.Fatalf("directory arguments = %q, %v", dir, loader)
+			}
+			return source, nil
+		}, stubEncodeFactory,
+	)
+	fromDirectory, err := svc.CompileEffectiveFactorySource(t.Context(), factoryroot.CompileEffectiveFactorySourceRequest{FactoryDir: source.factoryDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromCanonical, err := svc.CompileEffectiveFactorySource(t.Context(), factoryroot.CompileEffectiveFactorySourceRequest{Canonical: []byte(`{"name":"alpha"}`), FactoryDir: source.factoryDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromDirectory != fromCanonical || fromDirectory.Effective.ContentIdentity == "" || fromDirectory.Effective.FactoryDir != source.factoryDir || fromDirectory.Effective.RuntimeBaseDir != source.runtimeBaseDir {
+		t.Fatalf("effective outcomes = %#v, %#v; want equal content and loaded directory identities", fromDirectory, fromCanonical)
+	}
+	if canonicalCalls != 1 || directoryCalls != 1 {
+		t.Fatalf("loader calls = canonical %d, directory %d; want one selected load each", canonicalCalls, directoryCalls)
+	}
+}
+
 func TestCompileEffectiveFactorySource_TypedInvalidSourceAndUnresolvedReference(t *testing.T) {
 	t.Parallel()
 
