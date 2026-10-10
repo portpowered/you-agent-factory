@@ -14,11 +14,6 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
-// WriteRecording refuses synthetic recording export from the fake durable owner.
-func (s *FakeService) WriteRecording(context.Context, string, string) error {
-	return fmt.Errorf("%w: fake durable execution does not support recording export", factorysessions.ErrExecutionServiceNotConfigured)
-}
-
 // NormalizeStartRequest validates and normalizes one durable execution start request.
 func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	requestID := strings.TrimSpace(req.RequestID)

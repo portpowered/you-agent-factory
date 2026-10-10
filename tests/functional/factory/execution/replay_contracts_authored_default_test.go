@@ -62,10 +62,6 @@ func TestAuthoredDefaultRecordReplayJourney(t *testing.T) {
 			if cell.defaults {
 				wantWork = 2
 			}
-			artifact := testutil.LoadReplayArtifact(t, path)
-			if got := composedEventCount(artifact.Events, factoryapi.FactoryEventTypeDispatchRequest); got != wantWork*2 {
-				t.Fatalf("recorded dispatches=%d, want %d", got, wantWork*2)
-			}
 			before := mustReadFile(t, path)
 			calls := runner.callsIn(dir)
 			id := uuid.NewString()

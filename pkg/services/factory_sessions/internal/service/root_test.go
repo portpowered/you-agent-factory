@@ -576,6 +576,30 @@ func TestCanonicalDirectJavaScriptRecordingSelectionAndFailure(t *testing.T) {
 	}
 }
 
+type openingWithoutRecording struct {
+	durableexecution.Service
+	openingCanonicalDurableOwner
+}
+
+func TestCanonicalDirectJavaScriptUnsupportedRecordingRefusesTruthfully(t *testing.T) {
+	t.Parallel()
+	owner := &openingDurableStartStub{}
+	// Select only the canonical execution capability, excluding the writer.
+	opening := &RuntimeOpening{assembly: &legacyservice.Assembly{}, durable: &openingWithoutRecording{openingCanonicalDurableOwner: owner}}
+	request := factorysessions.SessionStartRequest{
+		Mode: factorysessions.SessionOperationModeDurable, Synchronous: true, FolderPath: "/selected",
+		Correlation:      factorysessions.SessionOperationCorrelation{RequestID: "synthetic"},
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{},
+	}
+	if _, err := opening.Start(t.Context(), request); err != nil {
+		t.Fatalf("execution without recording: %v", err)
+	}
+	request.RuntimeSelection.Recording.RecordPath = "synthetic.json"
+	if _, err := opening.Start(t.Context(), request); !errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured) {
+		t.Fatalf("unsupported recording export: %v", err)
+	}
+}
+
 func (s *openingDurableStartStub) StartCanonical(ctx context.Context, request factorysessions.StartRequest, synchronous bool) (durableexecution.CanonicalStartResult, error) {
 	s.ctx, s.request, s.synchronous = ctx, request, synchronous
 	s.calls++

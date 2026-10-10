@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -632,12 +633,21 @@ func childArtifactFromDispatch(
 	if len(issues) > 0 || parsed.ArtifactID == "" {
 		return ArtifactSummary{}, false
 	}
+	// Hash the retained child output, not its artifact URI or dispatch identity.
+	// Invalid non-JSON output keeps an invalid digest so export refuses it truthfully.
+	content, err := json.Marshal(child.Output)
+	contentHash := ""
+	if err == nil {
+		contentHash = fmt.Sprintf("sha256:%x", sha256.Sum256(content))
+	}
 	return ArtifactSummary{
 		ID:           parsed.ArtifactID,
 		Kind:         "CHILD_RESULT",
 		Visibility:   "WORKFLOW_RUNTIME",
 		Label:        child.Label,
 		DispatchID:   child.DispatchID,
+		ContentHash:  contentHash,
+		SizeBytes:    int64(len(content)),
 		CreatedAt:    timePtr(observedAt.UTC()),
 		RetrievalRef: artifactRetrievalRefForSession(sessionID, parsed.ArtifactID),
 	}, true
