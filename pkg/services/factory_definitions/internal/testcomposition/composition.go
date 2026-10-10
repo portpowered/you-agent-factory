@@ -340,29 +340,6 @@ func PortableOperations(
 	return applySupportedFiles, applyStarterWork, pruneRemovedDocs
 }
 
-func (c Composition) ApplySupportedFiles(
-	factoryDir string,
-	factoryConfig *factorydefinitions.FactoryConfig,
-	includeInlineContent bool,
-	discoverUnlistedDocs bool,
-) error {
-	applySupportedFiles, _, _ := PortableOperations(c.fileSystem)
-	return applySupportedFiles(
-		factoryDir,
-		factoryConfig,
-		includeInlineContent,
-		discoverUnlistedDocs,
-	)
-}
-
-func (c Composition) ApplyStarterWork(
-	factoryDir string,
-	factoryConfig *factorydefinitions.FactoryConfig,
-) error {
-	_, applyStarterWork, _ := PortableOperations(c.fileSystem)
-	return applyStarterWork(factoryDir, factoryConfig)
-}
-
 func (c Composition) PruneRemovedDocs(
 	factoryDir string,
 	factoryConfig *factorydefinitions.FactoryConfig,

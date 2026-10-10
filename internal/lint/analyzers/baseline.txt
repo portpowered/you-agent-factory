@@ -23,8 +23,6 @@ domain-transport-test|pkg/services/factory_definitions/internal/services/compila
 domain-transport-test|pkg/services/factory_definitions/internal/services/compilation_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/distribution/promptassets_test|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/internal/services/distribution/promptassets_test|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/editable_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/editable_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests_test|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/systeminitializationtests|pkg/transports/mapping/factoryconfig

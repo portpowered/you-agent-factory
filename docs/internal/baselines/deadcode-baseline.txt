@@ -563,8 +563,6 @@ pkg/services/factory_definitions/internal/services/validation/impl/target_equiva
 pkg/services/factory_definitions/internal/services/validation/impl/target_equivalence.go: unreachable func: EquivalentCanonicalTargetSignatures
 pkg/services/factory_definitions/internal/services/validation/impl/target_equivalence.go: unreachable func: canonicalTargetSignature
 pkg/services/factory_definitions/internal/services/validation/impl/topology_rules.go: unreachable func: ruleWorkerReferences
-pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.ApplyStarterWork
-pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.ApplySupportedFiles
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.ExpandLayout
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.FactoryDefinitionPersistenceWithValidator
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: Composition.FactoryLayoutFlattener
