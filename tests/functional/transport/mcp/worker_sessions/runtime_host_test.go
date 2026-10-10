@@ -6,12 +6,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -553,6 +556,9 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	assertFactoryCLIParity(t, reopened, "lost-worker", selected)
 	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
 	assertIncompleteLogsPolling(t, recoveredCtx, recoveredSession, reopened)
+	// The incomplete fixture is seeded at the recording edge, not an OS-death
+	// witness. Its public transcript must still retain typed unavailable meaning.
+	assertUnavailableTranscriptParity(t, recoveredCtx, recoveredSession, reopened, "lost-worker")
 	// This epoch-only opening has no affirmative OS death witness. It cannot
 	// acquire stop authority or the witnessed OWNER_LOST refusal semantics.
 	for _, action := range []string{"cancel", "terminate"} {
@@ -573,6 +579,147 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	page := callWorker(t, recoveredCtx, recoveredSession, "list", map[string]any{"history": "archived", "limit": 1})["result"].(map[string]any)
 	token := page["paginationContext"].(map[string]any)["nextToken"].(string)
 	assertToolError(t, callAction(t, foreignCtx, foreignSession, "LIST", map[string]any{"history": "archived", "nextToken": token}), "worker_session.invalid_request", false)
+}
+
+// The controlled durable edge disappears only after public admission and a
+// committed opening. No journals are seeded, truncated or repaired. Suppressing
+// the failure marker models loss of the same storage connection, not OS death.
+type interruptedCaptureStore struct {
+	recordings.WorkerRecordingStore
+	lost       atomic.Bool
+	completed  chan struct{}
+	completion sync.Once
+}
+
+func (s *interruptedCaptureStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return s.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (s *interruptedCaptureStore) RecoverWorkerOwners(ctx context.Context) error {
+	return s.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}
+
+func (s *interruptedCaptureStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if s.lost.Load() && record.WorkerSessionID == "admitted-lost" {
+		return errors.New("controlled capture writer disconnected")
+	}
+	err := s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+	var payload struct {
+		Phase string `json:"phase"`
+		Kind  string `json:"kind"`
+	}
+	if err == nil && record.WorkerSessionID == "admitted-completed" {
+		_ = json.Unmarshal(record.Record.Payload, &payload)
+		if payload.Kind == "SESSION" && payload.Phase == "COMPLETED" {
+			s.completion.Do(func() { close(s.completed) })
+		}
+	}
+	return err
+}
+
+func (s *interruptedCaptureStore) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
+	if s.lost.Load() && failure.WorkerSessionID == "admitted-lost" {
+		return errors.New("controlled capture writer disconnected")
+	}
+	return s.WorkerRecordingStore.PersistWorkerRecordingFailure(ctx, failure)
+}
+
+type captureRecoveryRunner struct {
+	controlHostRunner
+	calls atomic.Int32
+}
+
+func (r *captureRecoveryRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	if r.calls.Add(1) == 1 {
+		done := make(chan struct{})
+		r.started <- done
+		defer close(done)
+		return (failedBusinessAttributionRunner{}).RunStreaming(ctx, request, observer)
+	}
+	return r.controlHostRunner.Run(ctx, request)
+}
+
+func runAdmittedCaptureRecovery(t *testing.T, process support.Process) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "admitted-capture-recovery")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	runner := &captureRecoveryRunner{controlHostRunner: controlHostRunner{started: make(chan (<-chan struct{}), 2)}}
+	store := &interruptedCaptureStore{completed: make(chan struct{})}
+	cfg := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{
+		ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: store,
+		WorkerRecordingStoreObserver: func(base recordings.WorkerRecordingStore) { store.WorkerRecordingStore = base },
+	}}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	session, ctx := startMCP(t, process, host.URL())
+	completed := admitControlWorker(t, ctx, host.URL(), "admitted-completed", runner.controlHostRunner)
+	waitControlSignal(t, completed)
+	waitControlSignal(t, store.completed)
+	// Public transcript waits for the recorder's terminal barrier, independently
+	// of the runner's completion signal.
+	endpoint := host.URL() + "/worker-sessions/admitted-completed/transcript"
+	transcript := getHost(t, endpoint)
+	assertCompletedAttributionTranscript(t, transcript, "admitted-completed")
+	assertCompletedAttributionCLITranscript(t, host, "admitted-completed", transcript)
+	lost := admitControlWorker(t, ctx, host.URL(), "admitted-lost", runner.controlHostRunner)
+	prefix := getHost(t, host.URL()+"/worker-sessions/admitted-lost/logs")
+	if len(prefix.(map[string]any)["events"].([]any)) == 0 {
+		t.Fatal("admitted execution has no committed opening")
+	}
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "missing-admitted"}), "worker_session.not_found", false)
+	store.lost.Store(true)
+	host.Close(t)
+	waitControlSignal(t, lost)
+	cfg.Edges.WorkerRecordingWriter = nil
+	cfg.Edges.WorkerRecordingStoreObserver = nil
+	reopened := support.StartFunctionalAPIServer(t, cfg)
+	recovered, recoveredCtx := startMCP(t, process, reopened.URL())
+	row := getHost(t, reopened.URL()+"/worker-sessions/admitted-lost").(map[string]any)
+	if row["recordingHealth"] != "INCOMPLETE" || row["state"] != "FAILED" {
+		t.Fatalf("lost capture invented completion or live ownership: %v", row)
+	}
+	assertFactoryCLIParity(t, reopened, "admitted-lost", row)
+	assertUnavailableTranscriptParity(t, recoveredCtx, recovered, reopened, "admitted-lost")
+	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/admitted-lost/logs"))
+	assertJSONEqual(t, transcript, getHost(t, reopened.URL()+"/worker-sessions/admitted-completed/transcript"))
+	assertCompletedAttributionCLITranscript(t, reopened, "admitted-completed", transcript)
+	read := callWorker(t, recoveredCtx, recovered, "read", map[string]any{"workerSessionId": "admitted-completed", "view": "transcript"})["result"].(map[string]any)
+	assertTranscriptEqual(t, read["transcript"], transcript)
+	if runner.calls.Load() != 2 {
+		t.Fatalf("recovery invoked provider: calls=%d", runner.calls.Load())
+	}
+}
+
+func assertUnavailableTranscriptParity(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host.URL()+"/worker-sessions/"+id+"/transcript", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || response.StatusCode != http.StatusInternalServerError || body["code"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("HTTP transcript=%d %v err=%v", response.StatusCode, body, err)
+	}
+	inputs := support.FakeInputs(ctx, []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "transcript", "--server", host.URL(), "--json"})
+	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(inputs.Stderr(), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") {
+		t.Fatalf("CLI transcript=%v stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	result := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id, "view": "transcript"})
+	assertToolError(t, result, "worker_session.unavailable", false)
+	encoded, _ := json.Marshal(result.StructuredContent)
+	var envelope struct {
+		Error struct {
+			WorkerSessionID string         `json:"workerSessionId"`
+			Details         map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(encoded, &envelope); err != nil || envelope.Error.WorkerSessionID != id || envelope.Error.Details["status"] != float64(500) || envelope.Error.Details["upstreamCode"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("MCP transcript=%s err=%v", encoded, err)
+	}
 }
 
 func assertArchivedProviderRecovery(t *testing.T, host *support.FunctionalAPIServer, ctx context.Context, session *mcp.ClientSession, page map[string]any) {

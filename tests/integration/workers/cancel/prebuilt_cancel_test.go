@@ -202,6 +202,9 @@ func startCancelDaemon(t *testing.T, ctx context.Context, binaryPath string, fix
 	} else {
 		args = append(args, "--replay", fixture.recordPath, "--session", replaySession[0], "--no-record")
 	}
+	if fixture.mockPath != "" {
+		args = append(args, "--with-mock-workers="+fixture.mockPath)
+	}
 	command := exec.CommandContext(ctx, binaryPath, args...)
 	command.Dir = fixture.factoryDir
 	command.Env = append([]string(nil), fixture.environment...)
