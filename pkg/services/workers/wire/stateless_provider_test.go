@@ -230,9 +230,9 @@ func newLegacyMockStatelessService(
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
-	mockRunner, err := NewMockRunner(
-		MockConfig{WorkersConfig: mockWorkers},
-		mockDependencies.Next, agentToolFiles,
+	mockRunner, err := runnerswire.NewMockRunner(
+		runnerswire.MockRunnerConfig{WorkersConfig: mockWorkers},
+		workerprocess.AdaptPlatformCommandRunner(mockDependencies.Next), agentToolFiles,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", invalidRunnerConstruction(runners.MockIdentity, err))

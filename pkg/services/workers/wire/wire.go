@@ -2,7 +2,6 @@
 package wire
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -24,7 +23,6 @@ type Registry = runners.Service
 type Harness = agentrun.HarnessAdapter
 type ScriptConfig = runnerswire.ScriptRunnerConfig
 type InferenceConfig = runnerswire.InferenceRunnerConfig
-type MockConfig = runnerswire.MockRunnerConfig
 
 // NewService captures completed execution behavior without constructing children.
 func NewService(execute ExecuteCapability) (workers.Service, error) {
@@ -58,16 +56,4 @@ func NewScriptRunner(config ScriptConfig, command platformprocess.CommandRunner,
 		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command runner must support streaming", nil)
 	}
 	return runnerswire.NewScriptRunner(config, streaming, docs, now, publish, record), nil
-}
-
-// NewMockRunner adapts only the optional external command effect; the leaf
-// snapshots the explicit configuration and retains request-local gate behavior.
-func NewMockRunner(config MockConfig, command platformprocess.CommandRunner,
-	files workers.AgentToolFileSystem,
-) (workers.Runner, error) {
-	runner, err := runnerswire.NewMockRunner(config, workerprocess.AdaptPlatformCommandRunner(command), files)
-	if err != nil {
-		return nil, fmt.Errorf("%w: mock runner construction failed: %w", workers.ErrInvalidRunnerRegistration, err)
-	}
-	return runner, nil
 }
