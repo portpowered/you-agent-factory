@@ -6,15 +6,6 @@
 # Unlisted findings and stale entries fail. Absent merge-base rule IDs seed once.
 # Established exact-debt rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/http/generated
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/mapping
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/contracts/failuremetadatatests|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/internal/contracts/failuremetadatatests|pkg/transports/mapping/workerdiagnostics
 domain-transport-test|pkg/services/factory_definitions/internal/contracts|pkg/transports/http/generated
@@ -2643,8 +2634,6 @@ service-root-interface-count|pkg/services/work/internal/services/state_access|pk
 service-root-interface-count|pkg/services/workers|pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service
 service-root-interface-count|pkg/services/work|pkg/services/work/admission_contract.go:ContentPreparation,pkg/services/work/admission_contract.go:FactoryRequestBatchPreparation,pkg/services/work/admission_contract.go:FileSource,pkg/services/work/admission_contract.go:RequestPreparationService,pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/invocation_return_policy_contract.go:InvocationInputPreparation,pkg/services/work/lineage_contract.go:VisualizationFileSystem,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service
 service-root-unexpected-directory|pkg/services/factory_definitions/clonetests|pkg/services/factory_definitions/clonetests
-service-root-unexpected-directory|pkg/services/factory_definitions/definition_test|pkg/services/factory_definitions/definition
-service-root-unexpected-directory|pkg/services/factory_definitions/definition|pkg/services/factory_definitions/definition
 service-root-unexpected-directory|pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout|pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout
 service-root-unexpected-directory|pkg/services/factory_definitions/internal/services/authoring_layout/expand|pkg/services/factory_definitions/internal/services/authoring_layout/expand
 service-root-unexpected-directory|pkg/services/factory_definitions/internal/services/authoring_layout/flatten|pkg/services/factory_definitions/internal/services/authoring_layout/flatten

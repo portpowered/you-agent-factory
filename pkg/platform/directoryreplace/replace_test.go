@@ -14,6 +14,7 @@ func TestCommitAndRestore(t *testing.T) {
 	targetDir := filepath.Join(parentDir, "alpha")
 	stagingDir := filepath.Join(parentDir, ".alpha.staging")
 	writeFixture(t, targetDir, "value.txt", "old")
+	writeFixture(t, filepath.Join(targetDir, "workers", "stale-worker"), "AGENTS.md", "STALE_MARKER")
 	writeFixture(t, stagingDir, "value.txt", "new")
 
 	store := NewLocal(runtime.GOOS)
@@ -29,6 +30,7 @@ func TestCommitAndRestore(t *testing.T) {
 
 	store.Restore(targetDir, backupDir)
 	assertFixture(t, targetDir, "value.txt", "old")
+	assertFixture(t, targetDir, filepath.Join("workers", "stale-worker", "AGENTS.md"), "STALE_MARKER")
 	if _, err := os.Stat(backupDir); !os.IsNotExist(err) {
 		t.Fatalf("backup after Restore: %v, want not found", err)
 	}

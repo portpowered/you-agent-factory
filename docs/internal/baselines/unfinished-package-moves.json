@@ -11,12 +11,6 @@
   },
   "moves": [
     {
-      "packagePath": "pkg/services/factory_definitions/definition",
-      "destination": "factory_definitions/internal",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/internal/services/runtime_snapshot",
       "destination": "factory_definitions/internal",
       "successor": "pkg/services/factory_definitions/internal",
