@@ -735,12 +735,77 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
     write(root, "pkg/services/unrelated/internal/consumer/consumer.go", "package consumer\n" +
           (f'import catalog "{module}/pkg/services/chat_sessions/wire"\n'
            "func Operation() { catalog.NewCatalog(nil, nil, nil) }\n" if seeded else ""))
+    events = "pkg/services/events"
+    store = events + "/internal/service"
+    write(root, events + "/service.go", "package events\ntype Service interface { Observe() }\n")
+    write(root, store + "/store.go", "package service\n" +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          f'import events "{module}/{events}"\n' +
+          "type topicState struct { Values map[string]string }\n"
+          "type Store struct { logger logging.Logger; topics map[string]*topicState; peer events.Service }\n"
+          "func NewWithRetention(retention int, logger logging.Logger) *Store {\n" +
+          (" if logger == nil { return nil }\n" if seeded else "") +
+          " if retention <= 0 { retention = 10000 }; _ = retention\n"
+          " return &Store{logger: logger, topics: make(map[string]*topicState)}\n}\n"
+          "func (s *Store) Observe() { s.logger.Observe() }\n"
+          "func (s *Store) Topic() { s.topics[\"topic\"] = &topicState{Values: make(map[string]string)} }\n" +
+          "func NewGeneric[T any](value T, logger logging.Logger) *Store { _ = value; return &Store{logger: logger} }\n" +
+          "func NewPeer(peer events.Service) *Store {\n" +
+          (" if peer == nil { return nil }\n" if seeded else "") +
+          " return &Store{peer: peer}\n}\n"
+          "func (s *Store) Peer() events.Service { return s.peer }\n"
+          "func (s *Store) PeerView(_ string) events.Service { return s.peer }\n"
+          "func (s *Store) View() { s.PeerView(\"scope\") }\n" +
+          ("func (s *Store) UsePeer() { if s.peer != nil { s.peer.Observe() }; s.Peer() }\n"
+           "func (s *Store) EscapePeer() any { return s.Peer }\n" if seeded else "") +
+          ("func Operation(logger logging.Logger) { NewWithRetention(0, logger); NewGeneric(\"scope\", logger) }\n" if seeded else ""))
+    write(root, events + "/wire/provider.go", "package wire\n" +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          f'import events "{module}/{events}"\n' +
+          f'import service "{module}/{store}"\n' +
+          "func NewService(logger logging.Logger) (events.Service, error) {\n" +
+          (" if logger == nil { return nil, nil }\n" if seeded else "") +
+          " return service.NewWithRetention(0, logger), nil\n}\n")
+    # The consumer sees compiler object facts, including promoted method
+    # identity; it must not need the owning package's source-body index.
+    write(root, events + "/internal/consumer/consumer.go", "package consumer\n" +
+          f'import service "{module}/{store}"\n' +
+          "type View struct { *service.Store }\n"
+          "func Scoped(view *View) { view.PeerView(\"scope\") }\n" +
+          ("func Use(view *View) { view.Peer() }\n"
+           "func Escape(view *View) any { return view.Peer }\n" if seeded else ""))
+    write(root, events + "/internal/consumer/dot.go", "package consumer\n" +
+          (f'import . "{module}/{store}"\n' if seeded else "") +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          "func Shadow(logger logging.Logger) {\n"
+          " NewWithRetention := func(_ int, _ logging.Logger) int { return 1 }\n"
+          " _ = NewWithRetention(0, logger)\n}\n" +
+          ("func Dot(logger logging.Logger) { NewWithRetention(0, logger) }\n" if seeded else ""))
+    # Keep the operational caller in the existing private consumer package;
+    # public service roots own contracts rather than floating operations.
+    write(root, "pkg/services/unrelated/internal/consumer/events.go", "package consumer\n" +
+          (f'import eventswire "{module}/{events}/wire"\n'
+           "func EventsOperation() { eventswire.NewService(nil) }\n" if seeded else ""))
     return [] if not seeded else [
         ("repolint", f"{module}/{owner}.Operation->{module}/{owner}.New"),
         ("repolint", f"{module}/pkg/services/chat_sessions/internal/consumer.Operation->{module}/{owner}.NewAlternate"),
         ("repolint", f"{module}/pkg/services/unrelated/internal/consumer.Operation->{module}/pkg/services/chat_sessions/wire.NewCatalog"),
         ("repolint", "service-construction: pkg/services/unrelated/internal/consumer -> pkg/services/chat_sessions/wire.NewCatalog"),
         ("repolint", "service-subpackage: pkg/services/unrelated/internal/consumer -> pkg/services/chat_sessions/wire"),
+        ("repolint", f"{module}/{store}.Operation->{module}/{store}.NewWithRetention"),
+        ("repolint", f"{module}/{store}.Operation->{module}/{store}.NewGeneric"),
+        ("repolint", f"{module}/{events}/internal/consumer.Dot->{module}/{store}.NewWithRetention"),
+        ("repolint", f"{module}/pkg/services/unrelated/internal/consumer.EventsOperation->{module}/{events}/wire.NewService"),
+        ("repolint", f"service-construction: pkg/services/unrelated/internal/consumer -> {events}/wire.NewService"),
+        ("repolint", f"service-subpackage: pkg/services/unrelated/internal/consumer -> {events}/wire"),
+        ("repolint", f"required-dependency-guard: {store} -> {module}/{store}.NewWithRetention->{module}/{store}.NewWithRetention"),
+        ("repolint", f"required-dependency-guard: {events}/wire -> {module}/{events}/wire.NewService->{module}/{events}/wire.NewService"),
+        ("repolint", f"required-dependency-guard: {store} -> {module}/{store}.NewPeer->{module}/{store}.NewPeer"),
+        ("repolint", f"{module}/{store}.(Store).UsePeer->{module}/{store}.NewPeer"),
+        ("repolint", f"service-getter-locator: {store} -> {module}/{store}.(Store).UsePeer->{module}/{store}.(Store).Peer"),
+        ("repolint", f"unresolved-service-getter-reference: {store} -> {module}/{store}.(Store).EscapePeer->{module}/{store}.(Store).Peer"),
+        ("repolint", f"service-getter-locator: {events}/internal/consumer -> {module}/{events}/internal/consumer.Use->{module}/{store}.(Store).Peer"),
+        ("repolint", f"unresolved-service-getter-reference: {events}/internal/consumer -> {module}/{events}/internal/consumer.Escape->{module}/{store}.(Store).Peer"),
     ]
 
 
@@ -763,21 +828,28 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
           "package recordings\ntype Recording struct{}\n"
           "type Service interface { QueryHistoricalRecording() Recording }\n")
     construction_smoke_sources(root, False)
+    complete_tags = "integration,functionallong,backendconformance,factoryartifact,managed_process_integration"
+
     try:
         fixtures.lint(root, "clean", [])
-        write(root, "cmd/vetfixture/source.go", '//go:build !integration\n\n// Code generated by fixture. DO NOT EDIT.\npackage fixture\nimport "fmt"\nfunc witness() { fmt.Printf("%d", "text") }\n')
+        fixtures.lint(root, "clean-complete", [], tags=complete_tags)
+        write(root, "cmd/vetfixture/source.go", '// Code generated by fixture. DO NOT EDIT.\npackage fixture\nimport "fmt"\nfunc witness() { fmt.Printf("%d", "text") }\n')
         write(root, manifest, "package cli\nfunc newRunCommand() {}\n")
         write(root, consumer, 'package consumer\nimport _ "github.com/portpowered/infinite-you/packages/packaged-factories"\n')
         write(root, "pkg/wire/wire.go", 'package wire\nimport "github.com/portpowered/infinite-you/pkg/services/recordings"\nfunc forbidden(reader recordings.Service) { _ = reader.QueryHistoricalRecording() }\n')
         construction = construction_smoke_sources(root, True)
-        issues = fixtures.lint(root, "seeded", [
+        expected_issues = [
             ("repolint", "recording-read:"),
             ("repolint", "cli-manifest-authority:"),
             ("repolint", "packaged-factory-direct-publication:"),
             ("govet", "wrong type"),
-        ] + construction)
+        ] + construction
+        issues = fixtures.lint(root, "seeded", expected_issues)
+        complete_issues = fixtures.lint(root, "seeded-complete", expected_issues, tags=complete_tags)
         construction_issues = [issue for issue in issues if "registered-construction:" in issue["Text"]]
-        assert len(construction_issues) == 3, construction_issues
+        assert len(construction_issues) == 7, construction_issues
+        complete_construction = [issue for issue in complete_issues if "registered-construction:" in issue["Text"]]
+        assert len(complete_construction) == 7, complete_construction
         expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
         for name, diagnostic in expected.items():
             assert any((issue["Pos"]["Filename"].replace("\\", "/") == name
@@ -789,6 +861,7 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         write(root, "cmd/vetfixture/source.go", "package fixture\n")
         construction_smoke_sources(root, False)
         fixtures.lint(root, "recovered", [])
+        fixtures.lint(root, "recovered-complete", [], tags=complete_tags)
     finally:
         write(artifacts, "results.json", json.dumps(fixtures.results, indent=2) + "\n")
         print(f"ci-smoke elapsed: {time.monotonic() - started:.3f}s; artifacts: {artifacts}", flush=True)

@@ -69,9 +69,14 @@ type ConstructionRegistry struct {
 func RepositoryConstructionRegistry() ConstructionRegistry {
 	const module = "github.com/portpowered/infinite-you"
 	const owner = module + "/pkg/services/chat_sessions/internal/service"
+	const events = module + "/pkg/services/events"
+	const store = events + "/internal/service"
 	constructor := ConstructionSymbol{ImportPath: owner, Name: "New"}
 	return ConstructionRegistry{
-		CapabilitySets: []ConstructionCapabilitySet{{Name: "chat-target-catalog", OwnerTask: "T21", Mode: ConstructionEnforce}},
+		CapabilitySets: []ConstructionCapabilitySet{
+			{Name: "chat-target-catalog", OwnerTask: "T21", Mode: ConstructionEnforce},
+			{Name: "events", OwnerTask: "T29", Mode: ConstructionEnforce},
+		},
 		Constructors: []ConstructionConstructor{{
 			Symbol: constructor, CapabilitySet: "chat-target-catalog",
 			RequiredParameters: []ConstructionParameter{
@@ -80,7 +85,20 @@ func RepositoryConstructionRegistry() ConstructionRegistry {
 				{Index: 2, TypeExpr: module + "/pkg/platform/logging.Logger"},
 			},
 			Results: []ConstructionSymbol{{ImportPath: owner, Name: "Service"}},
+		}, {
+			Symbol: ConstructionSymbol{ImportPath: store, Name: "NewWithRetention"}, CapabilitySet: "events",
+			RequiredParameters: []ConstructionParameter{{Index: 1, TypeExpr: module + "/pkg/platform/logging.Logger"}},
+			Results:            []ConstructionSymbol{{ImportPath: store, Name: "Store"}},
+		}, {
+			Symbol: ConstructionSymbol{ImportPath: events + "/wire", Name: "NewService"}, CapabilitySet: "events",
+			RequiredParameters: []ConstructionParameter{{Index: 0, TypeExpr: module + "/pkg/platform/logging.Logger"}},
+			Results:            []ConstructionSymbol{{ImportPath: events, Name: "Service"}},
 		}},
-		Types: []ConstructionType{{Symbol: ConstructionSymbol{ImportPath: owner, Name: "Service"}, CapabilitySet: "chat-target-catalog", Kind: ConstructionBehavior}},
+		Types: []ConstructionType{
+			{Symbol: ConstructionSymbol{ImportPath: owner, Name: "Service"}, CapabilitySet: "chat-target-catalog", Kind: ConstructionBehavior},
+			{Symbol: ConstructionSymbol{ImportPath: events, Name: "Service"}, CapabilitySet: "events", Kind: ConstructionBehavior},
+			{Symbol: ConstructionSymbol{ImportPath: store, Name: "Store"}, CapabilitySet: "events", Kind: ConstructionBehavior},
+			{Symbol: ConstructionSymbol{ImportPath: store, Name: "topicState"}, CapabilitySet: "events", Kind: ConstructionState},
+		},
 	}
 }

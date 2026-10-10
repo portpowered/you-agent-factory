@@ -243,3 +243,97 @@ func Shadowed() {
 	analysistest.Run(t, dir, registeredConstructionAnalyzer(registry), owner,
 		"m/pkg/services/catalog/wire", "m/pkg/services/other/wire", "m/pkg/wire")
 }
+
+// The production registry must reject regressions in the delivered Events
+// owner, while preserving retention policy and per-topic state allocation.
+func TestConstructionRepositoryEvents(t *testing.T) {
+	useFixtures(t)
+	const module = "github.com/portpowered/infinite-you"
+	modulePrefix = module + "/"
+	const owner = module + "/pkg/services/events/internal/service"
+	files := map[string]string{
+		module + "/pkg/platform/logging/logger.go": `package logging
+type Logger interface { Observe() }
+`,
+		module + "/pkg/services/events/service.go": `package events
+type Service interface { Observe() }
+`,
+		owner + "/store.go": `package service
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
+import "github.com/portpowered/infinite-you/pkg/services/events"
+type topicState struct { values map[string]string }
+type Store struct { logger logging.Logger; topics map[string]*topicState; peer events.Service }
+func NewWithRetention(retention int, logger logging.Logger) *Store {
+ if logger == nil { return nil } // want "required-dependency-guard:.*NewWithRetention"
+ if retention <= 0 { retention = 10000 }
+ return &Store{logger: logger, topics: make(map[string]*topicState)}
+}
+func (s *Store) Observe() {
+ if s.logger != nil { s.logger.Observe() } // want "required-dependency-guard:.*Observe.*NewWithRetention"
+}
+func (s *Store) Topic() { s.topics["topic"] = &topicState{values: make(map[string]string)} }
+func NewAlternate(logger logging.Logger) *Store { return &Store{logger: logger} }
+func NewGeneric[T any](value T, logger logging.Logger) *Store { _ = value; return &Store{logger: logger} }
+func NewPeer(peer events.Service) *Store {
+ if peer == nil { return nil } // want "required-dependency-guard:.*NewPeer"
+ return &Store{peer: peer}
+}
+func (s *Store) Peer() events.Service { return s.peer } // want Peer:"construction-getter=service-getter-locator"
+func (s *Store) UsePeer() {
+ if s.peer != nil { s.peer.Observe() } // want "required-dependency-guard:.*UsePeer.*NewPeer"
+ s.Peer() // want "service-getter-locator:.*UsePeer.*Peer"
+}
+func (s *Store) EscapePeer() any { return s.Peer } // want "unresolved-service-getter-reference:.*EscapePeer.*Peer"
+func (s *Store) PeerView(_ string) events.Service { return s.peer }
+func (s *Store) View() { s.PeerView("scope") }
+func Operation(logger logging.Logger) {
+ NewWithRetention(0, logger) // want "registered-construction:.*Operation.*NewWithRetention"
+ NewAlternate(logger) // want "registered-construction:.*Operation.*NewAlternate"
+ NewGeneric("scope", logger) // want "registered-construction:.*Operation.*NewGeneric"
+}
+`,
+		module + "/pkg/services/events/wire/provider.go": `package wire
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
+import "github.com/portpowered/infinite-you/pkg/services/events"
+import "github.com/portpowered/infinite-you/pkg/services/events/internal/service"
+func NewService(logger logging.Logger) (events.Service, error) {
+ if logger == nil { return nil, nil } // want "required-dependency-guard:.*NewService"
+ return service.NewWithRetention(0, logger), nil
+}
+`,
+		module + "/pkg/services/events/internal/consumer/consumer.go": `package consumer
+import "github.com/portpowered/infinite-you/pkg/services/events/internal/service"
+type View struct { *service.Store }
+func Use(view *View) {
+ view.Peer() // want "service-getter-locator:.*Use.*\\(Store\\).Peer"
+ view.PeerView("scope")
+}
+func Escape(view *View) any { return view.Peer } // want "unresolved-service-getter-reference:.*Escape.*\\(Store\\).Peer"
+`,
+		module + "/pkg/services/events/internal/consumer/dot.go": `package consumer
+import . "github.com/portpowered/infinite-you/pkg/services/events/internal/service"
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
+func Dot(logger logging.Logger) {
+ NewWithRetention(0, logger) // want "registered-construction:.*Dot.*events/internal/service.NewWithRetention"
+}
+func Shadow(logger logging.Logger) {
+ NewWithRetention := func(_ int, _ logging.Logger) int { return 1 }
+ _ = NewWithRetention(0, logger)
+}
+`,
+		module + "/pkg/services/other/consumer.go": `package other
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
+import eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
+func Operation(logger logging.Logger) {
+ eventswire.NewService(logger) // want "registered-construction:.*Operation.*events/wire.NewService"
+}
+`,
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(RepositoryConstructionRegistry()), owner,
+		module+"/pkg/services/events/wire", module+"/pkg/services/events/internal/consumer", module+"/pkg/services/other")
+}
