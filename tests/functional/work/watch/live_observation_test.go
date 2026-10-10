@@ -392,6 +392,61 @@ func observationOutput(structured bool) string {
 	return "controlled unstructured output"
 }
 
+// Default selection is host-owned; explicit peers share its public server and
+// command edge while each cohort is held until both Works have been admitted.
+func TestWorkWatchDefaultAndExplicitCohortsOverlap(t *testing.T) {
+	ensureWatchFixture(t)
+	dir := support.ScaffoldFactory(t, observationFactoryConfig(true, "review"))
+	command := &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(true))}
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	t.Cleanup(func() { observationCommands.routes.Delete(filepath.Clean(dir)) })
+	host, _ := startWatchHost(t, observationWatchProcess, dir, "--no-record")
+	selected := attachLiveObservation(t, host, "~default", command, false)
+	peer := newLiveObservation(t, host, true, false)
+	defaultWorks := []string{selected.submit(t, "default-first"), selected.submit(t, "default-second")}
+	peerWorks := []string{peer.submit(t, "peer-first"), peer.submit(t, "peer-second")}
+	selected.awaitCommand(t)
+	peer.awaitCommand(t)
+	close(command.release)
+	close(peer.command.release)
+	selected.awaitDispatches(t, 2)
+	peer.awaitDispatches(t, 2)
+	waitForLedgerLines(t, selected.out, 2, "default automatic relocations")
+	waitForLedgerLines(t, peer.out, 2, "peer automatic relocations")
+	for index, work := range defaultWorks {
+		selected.move(t, work, "processing")
+		peer.move(t, peerWorks[index], "processing")
+	}
+	selected.move(t, defaultWorks[0], "complete")
+	peer.move(t, peerWorks[0], "complete")
+	waitForLedgerLines(t, selected.out, 3, "default first terminal")
+	waitForLedgerLines(t, peer.out, 3, "peer first terminal")
+	for _, s := range []*liveObservation{selected, peer} {
+		select {
+		case <-s.watch.Done():
+			t.Fatalf("%s completed with an unfinished cohort member", s.session)
+		default:
+		}
+	}
+	selected.move(t, defaultWorks[1], "complete")
+	selected.finish(t)
+	defaultLines := decodeWatchLines(t, selected.out.String())
+	assertLiveObservationLines(t, defaultLines, selected.session, defaultWorks)
+	selected.assertCanonicalParity(t, defaultLines)
+	// Closing the default watch must preserve the explicit peer's remaining
+	// member and its cursor on the same host.
+	cursor := decodeWatchLines(t, peer.out.String())
+	peer.move(t, peerWorks[1], "complete")
+	peer.finish(t)
+	peerLines := decodeWatchLines(t, peer.out.String())
+	assertLiveObservationLines(t, peerLines, peer.session, peerWorks)
+	peer.assertCanonicalParity(t, peerLines)
+	events := support.GetFactoryEventsAfterForSessionAt(t, host.endpoint, peer.session, support.FactoryEventReadCursor{AfterEventID: cursor[len(cursor)-1].EventID})
+	if len(events) == 0 || int64(events[0].Context.Sequence) <= cursor[len(cursor)-1].Sequence {
+		t.Fatal("peer cursor did not survive default watch completion")
+	}
+}
+
 // Compatibility default ownership is serialized across real stop/resume. The
 // same process and command edge serve every host; explicit peers remain parallel.
 func TestWorkWatchDefaultAutomaticFreshAndResumed(t *testing.T) {
@@ -434,12 +489,25 @@ func TestWorkWatchDefaultAutomaticFreshAndResumed(t *testing.T) {
 	// A separate fresh recorded host proves the omitted selector without replay.
 	command = &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(true))}
 	observationCommands.routes.Store(filepath.Clean(dir), command)
-	fresh, freshRun := startWatchHost(t, observationWatchProcess, dir, "--record", filepath.Join(t.TempDir(), "fresh.json"))
-	runAutomaticDefaultWatch(t, fresh, command)
+	freshSource := filepath.Join(t.TempDir(), "fresh.json")
+	fresh, freshRun := startWatchHost(t, observationWatchProcess, dir, "--record", freshSource)
+	terminalOutput := runAutomaticDefaultWatch(t, fresh, command)
 	freshRun.Stop(t)
+	terminalHost, terminalRun := startWatchHost(t, observationWatchProcess, dir, "--resume", freshSource, "--record", filepath.Join(t.TempDir(), "terminal-successor.json"))
+	out, diagnostics := newLedgerOutput(), newLedgerOutput()
+	input := controlledWatchInput(t, t.Context(), terminalHost.endpoint, false, out, diagnostics)
+	input.Args = []string{"you", "--server", terminalHost.endpoint, "work", "watch"}
+	retained := support.StartProcessCommand(t, terminalHost.process, input)
+	waitForLedgerCommand(t, retained, out, diagnostics)
+	if out.String() != terminalOutput || diagnostics.String() != "" {
+		t.Fatalf("terminal resumed watch stdout=%s stderr=%s want=%s", out.String(), diagnostics.String(), terminalOutput)
+	}
+	s := &liveObservation{host: terminalHost, session: "~default"}
+	s.assertCanonicalParity(t, decodeWatchLines(t, out.String()))
+	terminalRun.Stop(t)
 }
 
-func runAutomaticDefaultWatch(t *testing.T, host *selectedWatchHost, command *observationCommand) {
+func runAutomaticDefaultWatch(t *testing.T, host *selectedWatchHost, command *observationCommand) string {
 	t.Helper()
 	s := attachLiveObservation(t, host, "~default", command, false)
 	id := s.submit(t, "automatic")
@@ -470,4 +538,5 @@ func runAutomaticDefaultWatch(t *testing.T, host *selectedWatchHost, command *ob
 	if out.String() != s.out.String() {
 		t.Fatalf("retained default differs: live=%s retained=%s", s.out.String(), out.String())
 	}
+	return s.out.String()
 }
