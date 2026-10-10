@@ -32,6 +32,7 @@ func TestExactStopFactoryJoinsAndPreservesSibling(t *testing.T) {
 	runner.slots = append(runner.slots, finalSlot)
 	sessionID := uuid.NewString()
 	server := startExactFactoryStopServer(t, runner, sessionID)
+	caller := support.BuildProcess(t, serviceedges.Edges{})
 	start := postDirectWorkerSession(t, t.Context(), server.URL(), "sibling-request", "exact-sibling", "sibling-dispatch")
 	_ = start.Body.Close()
 	if start.StatusCode != http.StatusAccepted {
@@ -56,7 +57,7 @@ func TestExactStopFactoryJoinsAndPreservesSibling(t *testing.T) {
 			t.Fatalf("live no-reference Worker = %#v", live)
 		}
 		assertFactoryInterruptRefusesBeforeStop(t, server, runner, target, index+2)
-		joinedExactFactoryStop(t, server, runner.slots[index+1], target, action, index == 1)
+		joinedExactFactoryStop(t, server, runner.slots[index+1], target, action, true, caller)
 		state := "CANCELED"
 		if action == "terminate" {
 			state = "TERMINATED"
@@ -176,11 +177,19 @@ func startExactFactoryStopServer(t *testing.T, runner *fleetCharacterizationRunn
 	return server
 }
 
-func executeExactFactoryStop(t *testing.T, server *fleetCharacterizationServer, ctx context.Context, id, action string, cli bool) (factoryapi.WorkerSessionControlResponse, error) {
+func executeExactFactoryStop(t *testing.T, server *fleetCharacterizationServer, ctx context.Context, id, action string, cli bool, callers ...support.Process) (factoryapi.WorkerSessionControlResponse, error) {
 	var result factoryapi.WorkerSessionControlResponse
 	if cli {
 		inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", server.URL(), "worker-sessions", action, id, "--output", "json"})
-		if err := server.Execute(t, inputs.Input); err != nil {
+		var err error
+		if len(callers) > 0 {
+			inputs.Input.Args = []string{"you", "--server", server.URL(), "worker-sessions", action, id, "--output", "json"}
+			inputs.Env, inputs.WorkingDirectory = server.env, server.dir
+			err = callers[0].Execute(inputs.Input)
+		} else {
+			err = server.Execute(t, inputs.Input)
+		}
+		if err != nil {
 			return result, fmt.Errorf("CLI %s: %w; %s", action, err, inputs.Stderr())
 		}
 		return result, json.Unmarshal([]byte(inputs.Stdout()), &result)
@@ -200,7 +209,7 @@ func executeExactFactoryStop(t *testing.T, server *fleetCharacterizationServer, 
 	return result, json.NewDecoder(response.Body).Decode(&result)
 }
 
-func joinedExactFactoryStop(t *testing.T, server *fleetCharacterizationServer, slot *fleetCharacterizationSlot, target routeCharacterizationDispatch, action string, cli bool) {
+func joinedExactFactoryStop(t *testing.T, server *fleetCharacterizationServer, slot *fleetCharacterizationSlot, target routeCharacterizationDispatch, action string, cli bool, callers ...support.Process) {
 	t.Helper()
 	type outcome struct {
 		result   factoryapi.WorkerSessionControlResponse
@@ -221,7 +230,7 @@ func joinedExactFactoryStop(t *testing.T, server *fleetCharacterizationServer, s
 	})
 	go func() {
 		defer close(done)
-		result, err := executeExactFactoryStop(t, server, ctx, target.workerSessionID, action, cli)
+		result, err := executeExactFactoryStop(t, server, ctx, target.workerSessionID, action, cli, callers...)
 		returned := false
 		select {
 		case <-slot.returned:

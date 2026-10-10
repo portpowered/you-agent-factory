@@ -46,7 +46,9 @@ func TestWorkerSessionSummaryClosedScopeUsesCapturedFacts(t *testing.T) {
 		RecordingHealth: recordings.WorkerRecordingStatusComplete, TerminalCause: &cause,
 		TokenUsage: &workersessions.TokenUsage{InputTokens: &input, OutputTokens: &output, TotalTokens: &total},
 	}}
-	live := &fakeObservationService{getByWorkerErr: workersessions.ErrObservationSessionNotFound}
+	live := &fakeObservationService{getByWorkerResult: workersessions.Observation{
+		WorkerSessionID: "worker-original", FactorySessionID: "factory-original", State: workersessions.StateCompleted,
+	}}
 	adapter := NewAdapter(live, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
 	got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), " factory-original ", " worker-original ")
 	if err != nil {

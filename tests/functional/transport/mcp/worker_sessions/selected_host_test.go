@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -51,7 +52,11 @@ func runSelectedHostScenarios(t *testing.T) {
 		env := append([]string(nil), process.environment...)
 		source := support.InstallPackagedFactoryWithProcess(t, process, env, workDir, "@you/subagent")
 		support.CreateNamedFactoryAtRootWithProcess(t, process, env, workDir, filepath.Join(workDir, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
-		session, ctx, _ := startCancellableMCP(t, process, "http://127.0.0.1:1", workDir)
+		host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: support.ScaffoldSingleStepFactory(t, "subagent-host"), WorkingDirectory: workDir, Env: env,
+			Edges: serviceedges.Edges{ProviderCommandRunner: subagentScenarioRunner{t: t}},
+		})
+		session, ctx, _ := startCancellableMCP(t, process, host.URL(), workDir)
 		for _, action := range []string{"", "RUN"} {
 			args := map[string]any{"prompt": "Return the controlled answer", "provider": "codex", "model": "test-model", "workingRoot": workDir}
 			if action != "" {

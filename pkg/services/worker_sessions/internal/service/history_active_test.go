@@ -156,21 +156,30 @@ func TestActiveHistoryCursorNormalizesEquivalentStateFilters(t *testing.T) {
 
 func TestFleetHistorySamplesAllOwnersBeforeSharedArchive(t *testing.T) {
 	t.Parallel()
-	direct, factory := newObservationRegistry(nil), newObservationRegistry(nil)
-	addActiveHistoryFixture(direct, "a-live", true)
-	addActiveHistoryFixture(factory, "b-live", false)
-	fake := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{
-		historyCapture(t, "a-live", "", direct.observations["a-live"].attemptID, false),
-		historyCapture(t, "b-live", "factory-1", factory.observations["b-live"].attemptID, false),
-		historyCapture(t, "c-ended", "factory-old", "attempt-ended", true),
-		historyCapture(t, "d-lost", "", "attempt-lost", false),
+	direct := fleetHistoryOwnerFixture(fleetObservation("a-live", true, workersessions.StateRunning))
+	factory := fleetHistoryOwnerFixture(fleetObservation("b-live", false, workersessions.StateRunning))
+	logs := fleetHistoryLogsFake{read: func(_ context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
+		if len(owners) != 2 {
+			t.Fatalf("archive exclusions = %+v", owners)
+		}
+		archived := []workersessions.Observation{
+			{WorkerSessionID: "c-ended", FactorySessionID: "factory-old", AttemptID: "attempt-ended", State: workersessions.StateCompleted},
+			{WorkerSessionID: "d-lost", AttemptID: "attempt-lost", State: workersessions.StateFailed, Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone}, RecordingHealth: recordings.WorkerRecordingStatusIncomplete},
+		}
+		rows := make([]workersessions.Observation, 0)
+		for _, row := range archived {
+			if observationStateMatches(row.State, req.States) {
+				rows = append(rows, row)
+			}
+		}
+		return rows, nil
 	}}
 	clock := platformclock.NewDeterministic(time.Now(), time.Millisecond)
 	catalogCalls := 0
 	query := NewFleetHistory(func(context.Context) ([]workersessions.Service, error) {
 		catalogCalls++
 		return []workersessions.Service{factory, direct, factory}, nil
-	}, fake, clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
+	}, logs, clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
 	for _, tc := range []struct {
 		history workersessions.ObservationHistory
 		states  []workersessions.State
@@ -209,29 +218,32 @@ func TestFleetHistorySamplesAllOwnersBeforeSharedArchive(t *testing.T) {
 
 func TestFleetHistoryFreezesMembershipAndRejectsForeignCursors(t *testing.T) {
 	t.Parallel()
-	source := newObservationRegistry(nil)
-	addActiveHistoryFixture(source, "a", true)
-	addActiveHistoryFixture(source, "b", false)
+	live := []workersessions.Observation{fleetObservation("a", true, workersessions.StateRunning), fleetObservation("b", false, workersessions.StateRunning)}
+	live[1].WorkIDs = []string{"work-1"}
+	source := fleetHistoryPageFake{read: func(workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+		return workersessions.ListWorkerSessionObservationsResult{Observations: live}, nil
+	}}
+	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
 	calls := 0
 	catalog := func(context.Context) ([]workersessions.Service, error) {
 		calls++
 		return []workersessions.Service{source}, nil
 	}
-	query := NewFleetHistory(catalog, &historyCatalogFake{}, source.clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
+	query := NewFleetHistory(catalog, nil, clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
 	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
 	first, err := query.ListWorkerSessionObservations(t.Context(), req)
 	if err != nil || first.NextToken == "" {
 		t.Fatalf("first=%+v, %v", first, err)
 	}
-	addActiveHistoryFixture(source, "c", true)
-	source.sessions["b"] = workersessions.Session{ID: "b", State: workersessions.StateCompleted}
-	source.observations["b"].workIDs[0] = "mutated"
+	live = append(live, fleetObservation("c", true, workersessions.StateRunning))
+	live[1].State = workersessions.StateCompleted
+	live[1].WorkIDs[0] = "mutated"
 	req.NextToken = first.NextToken
 	second, err := query.ListWorkerSessionObservations(t.Context(), req)
 	if err != nil || len(second.Observations) != 1 || second.Observations[0].WorkerSessionID != "b" || second.Observations[0].State != workersessions.StateRunning || second.Observations[0].WorkIDs[0] != "work-1" || second.NextToken != "" || calls != 1 {
 		t.Fatalf("frozen=%+v, %v calls=%d", second, err, calls)
 	}
-	foreign := NewFleetHistory(catalog, &historyCatalogFake{}, source.clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
+	foreign := NewFleetHistory(catalog, nil, clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
 	if _, err := foreign.ListWorkerSessionObservations(t.Context(), req); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("foreign token: %v", err)
 	}
@@ -243,13 +255,14 @@ func TestFleetHistoryFreezesMembershipAndRejectsForeignCursors(t *testing.T) {
 
 func TestFleetHistoryKeepsScopedIdentityAndPropagatesUnavailable(t *testing.T) {
 	t.Parallel()
-	first, second := newObservationRegistry(nil), newObservationRegistry(nil)
-	addActiveHistoryFixture(first, "shared-id", false)
-	addActiveHistoryFixture(second, "shared-id", false)
-	second.observations["shared-id"].factorySessionID = "factory-2"
+	firstRow := fleetObservation("shared-id", false, workersessions.StateRunning)
+	secondRow := firstRow.Clone()
+	secondRow.FactorySessionID = "factory-2"
+	first, second := fleetHistoryOwnerFixture(firstRow), fleetHistoryOwnerFixture(secondRow)
+	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
 	query := NewFleetHistory(func(context.Context) ([]workersessions.Service, error) {
 		return []workersessions.Service{first, second}, nil
-	}, nil, first.clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
+	}, nil, clock, logging.NoopLogger{}, newTestHistoryBudget(), nil)
 	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 1}
 	one, err := query.ListWorkerSessionObservations(t.Context(), req)
 	if err != nil || len(one.Observations) != 1 || one.NextToken == "" {
@@ -406,4 +419,100 @@ func TestFleetHistoryReadsBoundedOwnerPagesAndRejectsMalformedSources(t *testing
 			}
 		})
 	}
+}
+
+type fleetHistoryLogsFake struct {
+	read func(context.Context, workersessions.ListWorkerSessionObservationsRequest, map[historyIdentity]struct{}) ([]workersessions.Observation, error)
+}
+
+func (f fleetHistoryLogsFake) archivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
+	return f.read(ctx, req, owners)
+}
+
+func TestFleetHistoryInjectedRolesFreezePagesAndLogOutcomes(t *testing.T) {
+	t.Parallel()
+	row := func(id, factory string, state workersessions.State) workersessions.Observation {
+		return workersessions.Observation{WorkerSessionID: id, FactorySessionID: factory, AttemptID: "attempt-" + id, State: state, DurationBasis: workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable}
+	}
+	live := []workersessions.Observation{row("a", "factory-a", workersessions.StateRunning), row("b", "factory-b", workersessions.StateRunning)}
+	catalogCalls, archiveCalls := 0, 0
+	catalog := func(context.Context) ([]workersessions.Service, error) {
+		catalogCalls++
+		return []workersessions.Service{fleetHistoryPageFake{read: func(workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+			return workersessions.ListWorkerSessionObservationsResult{Observations: live}, nil
+		}}}, nil
+	}
+	archived := row("c", "factory-old", workersessions.StateCompleted)
+	var archiveErr error
+	logs := fleetHistoryLogsFake{read: func(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
+		archiveCalls++
+		if req.History != workersessions.ObservationHistoryAll || len(owners) != len(live) {
+			t.Fatalf("archive selection: %+v owners=%+v", req, owners)
+		}
+		if archiveErr != nil {
+			return nil, archiveErr
+		}
+		return []workersessions.Observation{archived}, ctx.Err()
+	}}
+	logger := &recordingLogger{}
+	query := NewFleetHistory(catalog, logs, platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), logger, newTestHistoryBudget(), nil)
+	req := workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryAll, MaxResults: 1}
+	first, err := query.ListWorkerSessionObservations(t.Context(), req)
+	if err != nil || len(first.Observations) != 1 || first.Observations[0].WorkerSessionID != "a" || first.NextToken == "" {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	live = append(live, row("d", "factory-new", workersessions.StateRunning))
+	req.NextToken = first.NextToken
+	req = assertFrozenFleetHistoryPages(t, query, req, "b", "c")
+	if req.NextToken != "" || catalogCalls != 1 || archiveCalls != 1 {
+		t.Fatal("continuation resampled completed roles")
+	}
+	fresh, err := query.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 10})
+	assertFleetHistoryAdmittedOwner(t, fresh, err, archiveCalls)
+	archiveErr = workersessions.ErrObservationProjectionUnavailable
+	assertFleetHistoryFailureAndLogOutcomes(t, query, req, logger, archiveErr)
+	if catalogCalls != 3 {
+		t.Fatalf("expired read sampled catalog: calls=%d", catalogCalls)
+	}
+}
+
+func assertFleetHistoryAdmittedOwner(t *testing.T, fresh workersessions.ListWorkerSessionObservationsResult, err error, archiveCalls int) {
+	t.Helper()
+	if err != nil || len(fresh.Observations) != 3 || fresh.Observations[2].FactorySessionID != "factory-new" || archiveCalls != 1 {
+		t.Fatalf("new owner=%+v err=%v", fresh, err)
+	}
+}
+
+func assertFrozenFleetHistoryPages(t *testing.T, query *FleetHistory, req workersessions.ListWorkerSessionObservationsRequest, ids ...string) workersessions.ListWorkerSessionObservationsRequest {
+	t.Helper()
+	for _, id := range ids {
+		page, err := query.ListWorkerSessionObservations(t.Context(), req)
+		if err != nil || len(page.Observations) != 1 || page.Observations[0].WorkerSessionID != id {
+			t.Fatalf("frozen=%+v err=%v", page, err)
+		}
+		req.NextToken = page.NextToken
+	}
+	return req
+}
+
+func assertFleetHistoryFailureAndLogOutcomes(t *testing.T, query *FleetHistory, req workersessions.ListWorkerSessionObservationsRequest, logger *recordingLogger, archiveErr error) {
+	t.Helper()
+	if _, err := query.ListWorkerSessionObservations(t.Context(), req); !errors.Is(err, archiveErr) {
+		t.Fatalf("archive failure=%v", err)
+	}
+	entries := logger.entriesFor("worker session fleet history list")
+	if len(entries) != 5 || entries[4].fields["failed"] != true || entries[0].fields["has_next"] != true {
+		t.Fatalf("selected logger outcomes=%+v", entries)
+	}
+	ctx, cancel := context.WithDeadline(t.Context(), time.Unix(0, 0))
+	defer cancel()
+	if _, err := query.ListWorkerSessionObservations(ctx, req); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deadline=%v", err)
+	}
+}
+
+func fleetHistoryOwnerFixture(rows ...workersessions.Observation) workersessions.Service {
+	return fleetHistoryPageFake{read: func(workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+		return workersessions.ListWorkerSessionObservationsResult{Observations: rows}, nil
+	}}
 }

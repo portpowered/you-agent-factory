@@ -17,11 +17,13 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -119,20 +121,18 @@ func provideWorkerSessionsService(
 	clock factoryruntime.Clock,
 	scheduler platformclock.TimerSource,
 	recorder recordings.WorkerSessionRecordingService,
-	writer recordings.WorkerRecordingWriter,
+	logs *workersessionswire.LogReader,
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	snapshots *workersessionswire.HistorySnapshotBudget,
 	providerService providers.Service,
 	inspection providersessions.Service,
 ) (workersessions.Service, error) {
-	// Legacy injected writers still support execution without captured reads.
-	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
 	tokenEntropy := edges.WorkerSessionTokenEntropy
 	if tokenEntropy == nil {
 		tokenEntropy = rand.Reader
 	}
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, reader, operations, restart, snapshots, providerService, inspection, tokenEntropy)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, logs, operations, restart, snapshots, providerService, inspection, tokenEntropy)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {
@@ -141,4 +141,22 @@ func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.
 		return nil, fmt.Errorf("worker sessions runtime attempt capability is required")
 	}
 	return opener, nil
+}
+
+// Catalog membership is evaluated on each read, after new Sessions are admitted.
+func provideFleetObservationCatalog(root *factorysessionwire.Root, logs workersessions.Service) workersessionswire.ObservationServiceCatalog {
+	return func(ctx context.Context) ([]workersessions.Service, error) {
+		hostID, _ := workersessionshttp.RuntimeHostSession(ctx)
+		selected, err := workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
+		if err != nil {
+			return nil, err
+		}
+		// Direct successors remain owned here after their Factory runtime closes.
+		return append(selected, logs), nil
+	}
+}
+
+func provideFleetCapturedActivity(writer recordings.WorkerRecordingWriter) recordings.WorkerCapturedActivityReader {
+	reader, _ := writer.(recordings.WorkerCapturedActivityReader)
+	return reader
 }

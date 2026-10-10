@@ -142,7 +142,7 @@ func runRealHostControls(t *testing.T, process support.Process) {
 		retry := callWorker(t, ctx, session, "control", args)["result"]
 		assertOwnedControl(t, retry.(map[string]any), id, operation, "NOOP")
 		assertJSONEqual(t, retry, requestHost(t, http.MethodPost, host.URL()+"/worker-sessions/"+id+"/"+strings.ToLower(operation)))
-		assertCLIControlParity(t, host, retry, id, strings.ToLower(operation))
+		assertCLIControlParity(t, host, retry, id, strings.ToLower(operation), process)
 		assertStoppedObservationParity(t, ctx, session, host, id, operation)
 		read := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id, "view": "events", "limit": 1})["result"].(map[string]any)
 		assertJSONEqual(t, read["session"], getHost(t, host.URL()+"/worker-sessions/"+id))
@@ -382,10 +382,19 @@ func assertOwnedControl(t *testing.T, result map[string]any, id, operation, outc
 	}
 }
 
-func assertCLIControlParity(t *testing.T, host *support.FunctionalAPIServer, expected any, id, operation string) {
+func assertCLIControlParity(t *testing.T, host *support.FunctionalAPIServer, expected any, id, operation string, callers ...support.Process) {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), []string{"you", "worker-sessions", operation, id, "--server", host.URL(), "--json"})
-	if err := host.Execute(t, inputs.Input); err != nil {
+	var err error
+	if len(callers) > 0 {
+		home := t.TempDir()
+		inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+		inputs.WorkingDirectory = home
+		err = callers[0].Execute(inputs.Input)
+	} else {
+		err = host.Execute(t, inputs.Input)
+	}
+	if err != nil {
 		t.Fatalf("CLI control: %v, stderr=%s", err, inputs.Stderr())
 	}
 	var actual any

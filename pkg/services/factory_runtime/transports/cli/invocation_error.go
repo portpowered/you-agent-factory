@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +11,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -106,15 +106,18 @@ func WriteInvocationError(w io.Writer, err error, _ bool) bool {
 	if !ok {
 		return false
 	}
-	if w == nil {
-		return true
-	}
-	data, marshalErr := json.Marshal(payload)
-	if marshalErr == nil {
-		_, _ = fmt.Fprintln(w, string(data))
-	}
-	return true
+	return clidiag.WriteFailure(w, invocationDiagnostic{error: err, response: payload})
 }
+
+// invocationDiagnostic adapts the selected runtime envelope to the shared CLI
+// presentation boundary. Classification and original error identity stay here;
+// clidiag owns detached message sanitization and the rendered marker.
+type invocationDiagnostic struct {
+	error
+	response factoryapi.ErrorResponse
+}
+
+func (e invocationDiagnostic) CLIErrorResponse() factoryapi.ErrorResponse { return e.response }
 
 func invocationErrorResponse(err error) (factoryapi.ErrorResponse, bool) {
 	var invocationErr *InvocationError

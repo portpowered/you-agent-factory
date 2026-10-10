@@ -174,3 +174,14 @@ func (r *registry) bindExecutionIdentityEnvironment(id string, caller *workerses
 	}
 	return environment, nil
 }
+
+// CallerValidation selects the required live-owner capability at construction.
+func CallerValidation(service workersessions.Service) (workersessions.CallerValidator, error) {
+	validator, ok := service.(interface {
+		ValidateCaller(context.Context, *workersessions.CallerIdentity) error
+	})
+	if !ok || validator == nil {
+		return nil, fmt.Errorf("compose Worker Session caller validator: capability is required")
+	}
+	return validator.ValidateCaller, nil
+}

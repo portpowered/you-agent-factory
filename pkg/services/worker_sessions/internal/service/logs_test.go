@@ -45,10 +45,7 @@ func TestCapturedLogsRetainCommittedIdentityAndDetachedTime(t *testing.T) {
 			ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"MESSAGE"}`),
 		}, CapturedAt: &stamp}},
 	}}
-	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, fake, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil, continuationInspectionFake{}, newTestHistoryBudget().Entropy)
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := NewLogReader(fake, logging.NoopLogger{})
 	page, err := service.ReadLogs(t.Context(), workersessions.ReadLogsRequest{WorkerSessionID: "worker", Limit: 1, NextToken: "previous"})
 	if err != nil {
 		t.Fatal(err)
@@ -92,13 +89,18 @@ func TestCapturedLogsReturnSafeTypedStorageOutcomes(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, &capturedActivityFake{err: cell.source}, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil, continuationInspectionFake{}, newTestHistoryBudget().Entropy)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = service.ReadLogs(t.Context(), workersessions.ReadLogsRequest{WorkerSessionID: "worker"})
+			logger := &recordingLogger{}
+			service := NewLogReader(&capturedActivityFake{err: cell.source}, logger)
+			_, err := service.ReadLogs(t.Context(), workersessions.ReadLogsRequest{WorkerSessionID: "worker"})
 			if !errors.Is(err, cell.want) {
 				t.Fatalf("error = %v, want %v", err, cell.want)
+			}
+			entries := logger.entriesFor("worker session logs read")
+			if len(entries) != 1 || entries[0].fields["workerSessionID"] != "worker" || entries[0].fields["outcome"] != "unavailable" {
+				t.Fatalf("selected logger = %+v", entries)
+			}
+			if len(entries[0].fields) != 2 {
+				t.Fatalf("unsafe log fields: %+v", entries[0].fields)
 			}
 		})
 	}

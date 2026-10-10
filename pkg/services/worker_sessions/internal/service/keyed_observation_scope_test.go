@@ -53,7 +53,7 @@ func TestDirectIdentityHandoffUsesReservedMetadataWithoutChangingRestartInput(t 
 	if !reflect.DeepEqual(got.Target.Environment.ProcessEnvironment, []string{"PATH=explicit"}) || !got.Target.Environment.SkipProcessInheritance {
 		t.Fatal("identity binding changed ordinary explicit environment policy")
 	}
-	if !reflect.DeepEqual(result.Session.Metadata, metadata) || !reflect.DeepEqual(r.executionIdentityEnvironment("child"), want) {
+	if !reflect.DeepEqual(result.Session.Metadata, metadata) || !reflect.DeepEqual(result.Session.IdentityEnvironment(), want) {
 		t.Fatal("runner mutated admitted identity")
 	}
 	supervision := r.supervisions["child"]
@@ -87,8 +87,11 @@ func TestRuntimeIdentityHandoffIsDetachedScopedAndAbsentOnRejectedAdmission(t *t
 	if !reflect.DeepEqual(got[:len(want)], want) {
 		t.Fatal("runtime identity changed public scoped facts")
 	}
-	key := scopedWorkerAddress(request.ID, request.Execution.Execution.FactorySessionID)
-	if !reflect.DeepEqual(r.executionIdentityEnvironment(key), want) {
+	admitted, err := r.Get(t.Context(), workersessions.GetRequest{ID: request.ID, FactorySessionID: request.Execution.Execution.FactorySessionID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(admitted.IdentityEnvironment(), want) {
 		t.Fatal("runtime callback mutated registry facts")
 	}
 	if err := attempt.Complete(t.Context(), runtimeAttemptCompletedDispatch("identity-dispatch"), nil); err != nil {
