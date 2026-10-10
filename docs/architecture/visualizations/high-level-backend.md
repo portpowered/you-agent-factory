@@ -17,7 +17,7 @@ flowchart TB
     s_services_factory_sessions["factory sessions<br/>60028 LOC · 3 subservices"]
   end
   subgraph execution["Execution"]
-    s_services_models["models<br/>38242 LOC · 5 subservices"]
+    s_services_models["models<br/>38584 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>1283 LOC · 0 subservices"]
     s_services_providers["providers<br/>15321 LOC · 3 subservices"]
     s_services_worker_sessions["worker sessions<br/>26401 LOC · 0 subservices"]
@@ -32,7 +32,7 @@ flowchart TB
     s_services_factory_visualization["factory visualization<br/>10184 LOC · 3 subservices"]
   end
   subgraph support["Support"]
-    s_services_edges["edges<br/>941 LOC · 0 subservices"]
+    s_services_edges["edges<br/>963 LOC · 0 subservices"]
     s_services_system_initialization["system initialization<br/>754 LOC · 0 subservices"]
   end
   s_services_automations --> s_services_factory_definitions
