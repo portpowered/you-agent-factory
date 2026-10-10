@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	mockworkerbehavior "github.com/portpowered/infinite-you/pkg/services/workers/internal/mockworker"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -30,10 +31,10 @@ type runner struct {
 	files  mockworkerbehavior.GateFileSystem
 }
 
-var _ workers.Runner = (*runner)(nil)
+var _ runners.Strategy = (*runner)(nil)
 
 // New validates and snapshots one mock Strategy. Construction is inert.
-func New(config Config, next workerprocess.CommandRunner, files mockworkerbehavior.GateFileSystem) (workers.Runner, error) {
+func New(config Config, next workerprocess.CommandRunner, files mockworkerbehavior.GateFileSystem) (runners.Strategy, error) {
 	if config.WorkersConfig == nil {
 		return nil, errors.New("construct mock runner: mock workers config is required")
 	}

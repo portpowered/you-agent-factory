@@ -20,6 +20,7 @@ import (
 
 type ExecuteCapability = workersinternal.ExecuteCapability
 type Registry = runners.Service
+type Strategy = runners.Strategy
 type Harness = agentrun.HarnessAdapter
 type ScriptConfig = runnerswire.ScriptRunnerConfig
 type InferenceConfig = runnerswire.InferenceRunnerConfig
@@ -47,7 +48,7 @@ var (
 func NewScriptRunner(config ScriptConfig, command platformprocess.CommandRunner,
 	docs workers.FactoryDocsLoader, now func() time.Time,
 	publish workers.ProgressPublisher, record workers.ScriptEventRecorder,
-) (workers.Runner, error) {
+) (Strategy, error) {
 	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
 		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command is required", nil)
 	}

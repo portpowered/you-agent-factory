@@ -145,7 +145,7 @@ type InferenceDependencies struct {
 	Models interface {
 		InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 	}
-	Delegate            workers.Runner
+	Delegate            runners.Strategy
 	ContentMaterializer work.ContentMaterializer
 	MediaFiles          platformfilesystem.ReadOpener
 }
@@ -299,7 +299,7 @@ func productionStrategies(
 	scriptDependencies legacyScriptDependencies,
 	inferenceConfig InferenceConfig,
 	inferenceDependencies InferenceDependencies,
-) (workers.Runner, workers.Runner, workers.Runner, error) {
+) (runners.Strategy, runners.Strategy, runners.Strategy, error) {
 	agent, err := agentImplementation(agentDependencies)
 	if err != nil {
 		return nil, nil, nil, invalidRunnerConstruction(runners.AgentIdentity, err)
@@ -331,7 +331,7 @@ func invalidRunnerConstruction(identity string, err error) error {
 func legacyScriptImplementation(
 	config ScriptConfig,
 	dependencies legacyScriptDependencies,
-) (workers.Runner, error) {
+) (runners.Strategy, error) {
 	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
 		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command is required", nil)
 	}
@@ -357,7 +357,7 @@ func legacyScriptImplementation(
 func inferenceImplementation(
 	config InferenceConfig,
 	dependencies InferenceDependencies,
-) (workers.Runner, error) {
+) (runners.Strategy, error) {
 	return runnerswire.NewInferenceRunner(
 		runnerswire.InferenceRunnerConfig{
 			Worker: snapshotInferenceWorker(config.Worker),
@@ -373,7 +373,7 @@ func inferenceImplementation(
 
 func agentImplementation(
 	dependencies AgentDependencies,
-) (workers.Runner, error) {
+) (runners.Strategy, error) {
 	return runnerswire.NewAgentRunner(
 		dependencies.Providers,
 		dependencies.Publish,

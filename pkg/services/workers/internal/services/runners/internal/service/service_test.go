@@ -459,7 +459,7 @@ func TestResolveRejectsUnsupportedCapabilityWithSafeContext(t *testing.T) {
 func registration(
 	identity string,
 	displayName string,
-	runner workers.Runner,
+	runner runners.Strategy,
 ) runners.Registration {
 	return runners.Registration{
 		Identity: identity,
@@ -518,31 +518,8 @@ func TestCompletedStrategiesPreserveSelectionResultsAndFailure(t *testing.T) {
 					t.Fatalf("normal mock selection: %v", err)
 				}
 			}
-			for identity, strategy := range strategies {
-				if _, err := registry.Resolve(runners.ResolutionRequest{Identity: identity}); err != nil {
-					t.Fatal(err)
-				}
-				if strategy.calls.Load() != 0 {
-					t.Fatal("construction/resolution executed strategy")
-				}
-			}
-			// A rejected request cannot execute its strategy or poison the
-			// completed registry used by the successful peers below.
-			_, denied := registry.Execute(t.Context(), runners.ExecuteRequest{
-				Identity: runners.ScriptIdentity,
-				RequiredCapabilities: []workers.RunnerOptionalCapability{
-					workers.RunnerOptionalCapabilityStructuredOutput,
-				},
-			})
-			var capabilityError *workers.UnsupportedRunnerCapabilityError
-			if !errors.As(denied, &capabilityError) ||
-				capabilityError.RunnerID != runners.ScriptIdentity ||
-				capabilityError.Capability != workers.RunnerOptionalCapabilityStructuredOutput {
-				t.Fatalf("denied request error = %v, want typed Script structured-output denial", denied)
-			}
-			if script.calls.Load() != 0 {
-				t.Fatal("denied request executed the Script strategy")
-			}
+			assertCompletedStrategiesRemainInert(t, registry, strategies)
+			assertScriptCapabilityDenialWithoutExecution(t, registry, script)
 			var joined sync.WaitGroup
 			for identity, strategy := range strategies {
 				joined.Add(1)
@@ -561,5 +538,38 @@ func TestCompletedStrategiesPreserveSelectionResultsAndFailure(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func assertCompletedStrategiesRemainInert(t *testing.T, registry runners.Service, strategies map[string]*completedStrategy) {
+	t.Helper()
+	for identity, strategy := range strategies {
+		if _, err := registry.Resolve(runners.ResolutionRequest{Identity: identity}); err != nil {
+			t.Fatal(err)
+		}
+		if strategy.calls.Load() != 0 {
+			t.Fatal("construction/resolution executed strategy")
+		}
+	}
+}
+
+func assertScriptCapabilityDenialWithoutExecution(t *testing.T, registry runners.Service, script *completedStrategy) {
+	t.Helper()
+	// A rejected request cannot execute its strategy or poison the
+	// completed registry used by the successful peers.
+	_, denied := registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: runners.ScriptIdentity,
+		RequiredCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilityStructuredOutput,
+		},
+	})
+	var capabilityError *workers.UnsupportedRunnerCapabilityError
+	if !errors.As(denied, &capabilityError) ||
+		capabilityError.RunnerID != runners.ScriptIdentity ||
+		capabilityError.Capability != workers.RunnerOptionalCapabilityStructuredOutput {
+		t.Fatalf("denied request error = %v, want typed Script structured-output denial", denied)
+	}
+	if script.calls.Load() != 0 {
+		t.Fatal("denied request executed the Script strategy")
 	}
 }

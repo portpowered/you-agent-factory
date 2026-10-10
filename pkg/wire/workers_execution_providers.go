@@ -62,9 +62,9 @@ func provideWorkersWorktreeRelease(
 
 // Distinct interface types give Wire each completed strategy edge without
 // wrapper instances or selection through a dependency container.
-type workersAgentRunner workers.Runner
-type workersScriptRunner workers.Runner
-type workersInferenceRunner workers.Runner
+type workersAgentRunner workerswire.Strategy
+type workersScriptRunner workerswire.Strategy
+type workersInferenceRunner workerswire.Strategy
 type workersContextualScriptCommandRunner platformprocess.CommandRunner
 type workersLoggedScriptCommandRunner platformprocess.CommandRunner
 

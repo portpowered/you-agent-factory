@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
 const Identity = "inference"
@@ -36,22 +37,22 @@ type runner struct {
 	resources           []models.LocalResource
 	scope               models.RuntimeScopeRef
 	models              ModelInvoker
-	delegate            workers.Runner
+	delegate            runners.Strategy
 	contentMaterializer work.ContentMaterializer
 	mediaFiles          platformfilesystem.ReadOpener
 }
 
-var _ workers.Runner = (*runner)(nil)
+var _ runners.Strategy = (*runner)(nil)
 
 // New validates domain configuration and snapshots an Inference Runner with
 // the Models edge supplied by process composition.
 func New(
 	config Config,
 	modelsService ModelInvoker,
-	delegate workers.Runner,
+	delegate runners.Strategy,
 	contentMaterializer work.ContentMaterializer,
 	mediaFiles platformfilesystem.ReadOpener,
-) (workers.Runner, error) {
+) (runners.Strategy, error) {
 	worker := snapshotWorker(config.Worker)
 	if err := validateWorker(worker); err != nil {
 		return nil, err

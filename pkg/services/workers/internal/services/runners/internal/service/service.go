@@ -149,7 +149,7 @@ func validateIdentity(identity string) error {
 	return nil
 }
 
-func nilRunner(runner workers.Runner) bool {
+func nilRunner(runner runners.Strategy) bool {
 	if runner == nil {
 		return true
 	}
@@ -191,19 +191,19 @@ func supportedOptionalCapabilities(
 
 // NewProduction publishes completed production strategies. Construction
 // validates and snapshots registrations without invoking any strategy.
-func NewProduction(agent, script, inference workers.Runner) (runners.Service, error) {
+func NewProduction(agent, script, inference runners.Strategy) (runners.Service, error) {
 	return New(productionRegistrations(agent, script, inference))
 }
 
 // NewMockProduction adds the completed opt-in Mock strategy.
-func NewMockProduction(agent, script, inference, mock workers.Runner) (runners.Service, error) {
+func NewMockProduction(agent, script, inference, mock runners.Strategy) (runners.Service, error) {
 	registrations := productionRegistrations(agent, script, inference)
 	return New(append(registrations, runners.Registration{
 		Identity: runners.MockIdentity, Metadata: mockMetadata(), Runner: mock,
 	}))
 }
 
-func productionRegistrations(agent, script, inference workers.Runner) []runners.Registration {
+func productionRegistrations(agent, script, inference runners.Strategy) []runners.Registration {
 	return []runners.Registration{
 		{Identity: runners.AgentIdentity, Metadata: agentMetadata(), Runner: agent},
 		{Identity: runners.ScriptIdentity, Metadata: scriptMetadata(), Runner: script},
