@@ -26,13 +26,17 @@ import (
 // NewDurableSessionID allocates one durable Factory Session identifier.
 func NewDurableSessionID(generateID internalcontracts.SessionIDGenerator) (string, error) {
 	if generateID == nil {
-		return "", errors.New("Factory Session ID generator is required")
+		return "", errors.New("factory session ID generator is required")
 	}
 	identity := strings.ReplaceAll(strings.TrimSpace(generateID()), "-", "")
 	if identity == "" {
-		return "", errors.New("Factory Session ID generator returned an empty identity")
+		return "", errors.New("factory session ID generator returned an empty identity")
 	}
-	return "dur-sess-" + identity, nil
+	id := "dur-sess-" + identity
+	if !internalcontracts.SessionIdentity(id).Valid() {
+		return "", errors.New("factory session ID generator returned an invalid identity")
+	}
+	return id, nil
 }
 
 type runtimeSessionState struct {

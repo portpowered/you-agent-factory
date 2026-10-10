@@ -12,6 +12,7 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) {
@@ -24,6 +25,29 @@ func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) 
 	const want = "canonical Factory Session ID generator is required"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error = %q, want %q", err, want)
+	}
+}
+
+func TestPrepareCanonicalSessionIDPreservesExplicitSessionUUID(t *testing.T) {
+	t.Parallel()
+	const id = "00000000-0000-4000-8000-000000000001"
+	cfg, err := prepareCanonicalSessionIDForRun(RunConfig{FactorySessionID: id, RecordPath: "source.jsonl", CanonicalSessionIDGenerator: func() string {
+		t.Fatal("explicit UUID must not allocate a second recording identity")
+		return ""
+	}})
+	if err != nil || cfg.CanonicalSessionID != id {
+		t.Fatalf("recording identity = %q err=%v", cfg.CanonicalSessionID, err)
+	}
+}
+
+func TestMapCurrentFactoryFailurePreservesSessionIdentityDiagnostic(t *testing.T) {
+	t.Parallel()
+	err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: "validation-factory"})
+	if got := MapCurrentFactoryFailure(err); !errors.Is(got, err) {
+		t.Fatalf("mapped identity diagnostic = %v, want original %v", got, err)
+	}
+	if got := MapInvocationFailure(err); !errors.Is(got, err) {
+		t.Fatalf("mapped invocation diagnostic = %v, want original %v", got, err)
 	}
 }
 
@@ -304,4 +328,23 @@ func (s *selectionDirectJavaScriptStub) Run(
 		discloseStartup()
 	}
 	return nil
+}
+
+func TestRunSessionIdentity(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"validation-factory", "../escape"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: id})
+			var invalid *clidiag.LocalFailure
+			if !errors.As(err, &invalid) || invalid.Code != "BAD_REQUEST" || invalid.Message != "--session must be "+factorysessions.SessionIdentityForm {
+				t.Fatalf("identity error = %v", err)
+			}
+		})
+	}
+	for _, id := range []string{"", "  ", "~default", "12345678-1234-1234-1234-1234567890ab"} {
+		if err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: id}); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

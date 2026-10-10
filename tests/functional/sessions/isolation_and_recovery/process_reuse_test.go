@@ -391,7 +391,7 @@ func (s *reusableRootAPIServerStarter) start(
 }
 
 func (r *rootProcessReuseIdentities) generateSessionID() string {
-	return fmt.Sprintf("story006-session-%d", r.session.Add(1))
+	return fmt.Sprintf("00000000-0000-4000-8000-%012x", r.session.Add(1))
 }
 
 func (r *rootProcessReuseIdentities) generateRuntimeID() string {

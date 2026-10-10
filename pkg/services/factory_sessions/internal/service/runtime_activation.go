@@ -456,7 +456,13 @@ func ensureDefaultCanonicalSessionID(
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
+	if !factorysessions.SessionIdentity(sessionID).Valid() {
+		return &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+	}
 	selection := sessionRuntimeSelection(session)
+	if canonical := strings.TrimSpace(selection.CanonicalSessionID); canonical != "" && !factorysessions.SessionIdentity(canonical).Valid() {
+		return fmt.Errorf("open Factory Session: invalid canonical session identity")
+	}
 	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(selection.CanonicalSessionID) != "" {
 		return nil
 	}
@@ -464,8 +470,8 @@ func ensureDefaultCanonicalSessionID(
 		return fmt.Errorf("open Factory Session: canonical session ID generator is required")
 	}
 	canonicalID := strings.TrimSpace(generateID())
-	if canonicalID == "" {
-		return fmt.Errorf("open Factory Session: canonical session ID generator returned an empty identity")
+	if !factorysessions.SessionIdentity(canonicalID).Valid() {
+		return fmt.Errorf("open Factory Session: canonical session ID generator returned an invalid identity")
 	}
 	selection.CanonicalSessionID = canonicalID
 	return nil

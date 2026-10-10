@@ -15533,7 +15533,7 @@
         "you.run.flag.session": {
           "id": "you.run.flag.session",
           "long": "session",
-          "usage": "select the Factory Session identity for this invocation; local runs open that isolated session, while --remote invokes the already-open session on the selected server",
+          "usage": "Select a Factory Session identity: ~default, a lowercase hyphenated UUID, or dur-sess- followed by 32 lowercase hexadecimal digits. Local runs open that session. Remote runs invoke an already-open session on the selected server.",
           "shorthand": "",
           "aliases": [],
           "scope": "local",

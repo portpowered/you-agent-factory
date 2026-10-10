@@ -54,6 +54,9 @@ func prepareRunFactoryConfig(
 	rootOptions CommandFactory,
 	defaultInvocation bool,
 ) (runcli.RunConfig, error) {
+	if err := runcli.ValidateRunSessionIdentity(cfg); err != nil {
+		return runcli.RunConfig{}, err
+	}
 	cfg = applyRunScopedServerMode(cfg)
 	if err := validateRunFactoryOptions(&cfg, defaultInvocation); err != nil {
 		return runcli.RunConfig{}, err

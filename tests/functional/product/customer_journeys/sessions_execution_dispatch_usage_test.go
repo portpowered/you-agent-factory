@@ -66,7 +66,7 @@ func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) (factoryap
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", test.workerConfig)
-	const sessionID = "sess-petri-dispatch-usage"
+	const sessionID = "00000000-0000-4000-8000-000000000001"
 	providerRunner := testutil.NewProviderCommandRunner(test.providerResult)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,

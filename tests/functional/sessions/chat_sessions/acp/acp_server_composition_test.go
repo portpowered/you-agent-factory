@@ -747,7 +747,7 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 					ProviderCommandRunner: runner,
 					FactorySessionIDGenerator: func() string {
 						n := cohort.factorySessionIDCalls.Add(1)
-						return fmt.Sprintf("acp-cohort-factory-session-%d", n)
+						return fmt.Sprintf("00000000-0000-4000-8000-%012x", n)
 					},
 				})
 				if err != nil {

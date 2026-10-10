@@ -174,7 +174,7 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 		nil,
 		factory.JavaScriptWorkerSettings{},
 		boundaryRecordingWriter{},
-		func() string { return "dur-sess-boundary-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+		func() string { return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
 		nil,
 		nil,
 		nil,

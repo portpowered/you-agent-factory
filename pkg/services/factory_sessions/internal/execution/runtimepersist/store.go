@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 )
 
 const (
@@ -89,8 +90,6 @@ func (s DirectoryStore) Load(sessionID string) ([]byte, error) {
 	return LoadBytes(s.Dir, sessionID, s.files)
 }
 
-var durableSessionIDPattern = regexp.MustCompile(`^(dur-sess-[a-f0-9]{32}|~default|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$`)
-
 // DirForProjectRoot returns the project-local durable session persistence directory.
 func DirForProjectRoot(projectRoot string) string {
 	return filepath.Join(strings.TrimSpace(projectRoot), durableSessionsHomeDir, durableSessionsSubdir)
@@ -161,8 +160,7 @@ func LoadBytes(
 }
 
 func validateSessionID(sessionID string) error {
-	trimmed := strings.TrimSpace(sessionID)
-	if !durableSessionIDPattern.MatchString(trimmed) {
+	if !contracts.SessionIdentity(sessionID).Valid() {
 		return fmt.Errorf("invalid durable session id %q", sessionID)
 	}
 	return nil

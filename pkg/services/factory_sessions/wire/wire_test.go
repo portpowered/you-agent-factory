@@ -580,7 +580,7 @@ func newProcessDurableFixture(resolve factorysessions.HomeDirectoryResolver, sto
 	}}
 	return NewProcessDurableExecution(resolve, factorysessions.ChildExecutorModeFake, stores, clock,
 		platformclock.Real{}, checkpointfixtures.CheckpointSummariesFixture{}, workflows, workflows,
-		processDurableWriter{}, func() string { return "selected-id" }, nil, nil, nil,
+		processDurableWriter{}, func() string { return "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" }, nil, nil, nil,
 		scope, nil, nil, zap.NewNop())
 }
 
