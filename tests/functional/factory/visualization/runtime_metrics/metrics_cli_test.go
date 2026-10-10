@@ -394,7 +394,7 @@ func int64Pointer(value int64) *int64 { return &value }
 // M3-S: local retained history is read through the customer CLI, including
 // compressed backups and an interrupted final write. Exact sums detect both
 // dropped and duplicated records; the component reader owns ordering proof.
-func TestMetricsRetainedHistoryThroughRootProcess(t *testing.T) {
+func TestMetricsCoverageRetainedHistoryThroughRootProcess(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
 	root := platformmetrics.RuntimeMetricsRoot(home)
@@ -404,16 +404,72 @@ func TestMetricsRetainedHistoryThroughRootProcess(t *testing.T) {
 		return map[string]any{"metric_name": runtimeProviderInputTokens, "value": value,
 			"session_id": session, "dispatch_id": dispatch, "provider": "codex"}
 	}
+	records := func(dispatch string, value int) []map[string]any {
+		input := record(dispatch, value)
+		output := record(dispatch, 2)
+		output["metric_name"] = runtimeProviderOutputTokens
+		completed := record(dispatch, 1)
+		completed["metric_name"] = "dispatch.completed"
+		return []map[string]any{input, output, completed}
+	}
 	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-history.log"), false,
-		[]map[string]any{record("active", 3)}, `{"private-tail":`)
+		records("active", 3), "\n"+`{"private-tail":`)
 	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-history-2026-08-20T12-01-00.000.log"), false,
-		[]map[string]any{record("plain", 5)})
+		records("plain", 5))
 	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-history-2026-08-20T12-02-00.000.log.gz"), true,
-		[]map[string]any{record("gzip", 7)})
+		records("gzip", 7))
 	writeRuntimeMetricsArtifact(t, filepath.Join(root, "130000.000000000-runtime-metrics-peer.log"), false,
 		[]map[string]any{{"metric_name": runtimeProviderInputTokens, "value": 100,
 			"session_id": "other", "dispatch_id": "foreign", "provider": "codex"}})
 	assertRetainedMetricsTokens(t, home, server, session, 15)
+	assertMetricsCoverageTotals(t, home, server, session, 15, 6, 3)
+	human := retainedMetricsInputs(t, home, server, "--session", session)
+	human.Args = human.Args[0:1]
+	human.Args = append(human.Args, "--server", server, "metrics", "--session", session)
+	if err := runtimeMetricsProcess(t).Execute(human.Input); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(human.Stdout(), "Input tokens: 15") || !strings.Contains(human.Stdout(), "Output tokens: 6") || human.Stderr() != "" {
+		t.Fatalf("human retained report = %q, stderr=%q", human.Stdout(), human.Stderr())
+	}
+	empty := uuid.NewString()
+	emptyHome := t.TempDir()
+	emptyServer := startRetainedMetricsHost(t, emptyHome, empty)
+	writeRuntimeMetricsArtifact(t, filepath.Join(platformmetrics.RuntimeMetricsRoot(emptyHome),
+		"130000.000000000-runtime-metrics-peer.log"), false,
+		[]map[string]any{{"metric_name": runtimeProviderInputTokens, "value": 100, "session_id": uuid.NewString()}})
+	assertRetainedMetricsTokens(t, home, emptyServer, empty, 0)
+	assertMetricsCoverageTotals(t, home, emptyServer, empty, 0, 0, 0)
+	unknown := retainedMetricsInputs(t, home, server, "--session", uuid.NewString())
+	assertBoundaryCodedFailure(t, runtimeMetricsProcess(t).Execute(unknown.Input), unknown, "METRICS_SESSION_NOT_FOUND")
+}
+
+func assertMetricsCoverageTotals(t *testing.T, home, server, session string, input, output, completed int) {
+	t.Helper()
+	query := retainedMetricsInputs(t, home, server)
+	if session != "" {
+		query.Args = append(query.Args, "--session", session)
+	}
+	if err := runtimeMetricsProcess(t).Execute(query.Input); err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		Totals struct {
+			Input     int `json:"input_tokens"`
+			Output    int `json:"output_tokens"`
+			Completed int `json:"completed_dispatches"`
+		} `json:"totals"`
+		Groups []any `json:"groups"`
+	}
+	if err := json.Unmarshal([]byte(query.Stdout()), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Totals.Input != input || report.Totals.Output != output || report.Totals.Completed != completed || query.Stderr() != "" {
+		t.Fatalf("metrics totals = %+v, stderr=%q; want %d/%d/%d", report.Totals, query.Stderr(), input, output, completed)
+	}
+	if input == 0 && output == 0 && completed == 0 && len(report.Groups) != 0 {
+		t.Fatalf("empty metrics scope has groups: %#v", report.Groups)
+	}
 }
 
 // M3-F: a bad complete record or gzip backup fails atomically after a valid
@@ -458,9 +514,13 @@ type damagedMetricsHistoryCase struct {
 // Damaged backups and complete non-object records must fail the customer read
 // atomically, even after a valid artifact. Repairing that same selected file
 // restores the report without duplicating earlier facts or including a peer.
-func TestMetricsDamagedHistoryFailsClosedAndRecoversThroughRootProcess(t *testing.T) {
+func TestMetricsCoverageDamagedHistoryFailsClosedAndRecoversThroughRootProcess(t *testing.T) {
 	t.Parallel()
 	for _, test := range []damagedMetricsHistoryCase{
+		{name: "gzip invalid header", compressed: true, damage: func(data []byte) []byte {
+			data[0] = 0
+			return data
+		}},
 		{name: "gzip checksum", compressed: true, damage: func(data []byte) []byte {
 			data[len(data)-8] ^= 1
 			return data
@@ -593,7 +653,7 @@ func assertRetainedMetricsTokens(t *testing.T, home, server, session string, wan
 // One immutable server edge routes each invocation to its own listener; the
 // process graph is shared while sessions, homes and transport cleanup are owned
 // by parallel scenarios. Empty factories keep provider facts out of history sums.
-func startRetainedMetricsHost(t *testing.T, home, session string) string {
+func startRetainedMetricsHost(t *testing.T, home, session string, flags ...string) string {
 	t.Helper()
 	server := support.NewProcessAPIServer()
 	ctx := context.WithValue(t.Context(), retainedMetricsServerKey{}, server)
@@ -601,7 +661,11 @@ func startRetainedMetricsHost(t *testing.T, home, session string) string {
 	inputs := support.FakeInputs(ctx, []string{"you", "run", "--dir", factory,
 		"--session", session, "--continuously", "--with-server", "--server", "http://127.0.0.1:1",
 		"--quiet", "--no-record"})
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Args = append(inputs.Args, flags...)
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home,
+		"APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"),
+		"XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"),
+		"XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
 	inputs.Input.WorkingDirectory = home
 	support.StartProcessCommand(t, runtimeMetricsProcess(t), inputs.Input)
 	return server.WaitForURL(t)
