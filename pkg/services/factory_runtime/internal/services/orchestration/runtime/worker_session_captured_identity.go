@@ -102,7 +102,8 @@ func (s *recordedWorkerSessionObservation) selectedRecordingHealth(ctx context.C
 
 // Canonical associations establish physical membership, including restored
 // attempts rebound to the current Factory Session. Capture is selected by that
-// identity and recording, and contributes only committed usage/kill facts.
+// identity and recording, and contributes physical execution facts independently
+// of the Work processing outcome.
 // Health and confirmation retain their request-owned samples in ListObservations.
 func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
 	observation.TokenUsage = nil
@@ -148,6 +149,9 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 	if !s.selectedCaptureMatches(observation.WorkerSessionID, item.Catalog) {
 		return workersessions.Observation{}, workersessions.ErrObservationRecordingCorrupt
 	}
+	if capturedWorkerAliasOwner(item, observation.WorkerSessionID, observation.AttemptID) != "" {
+		observation.FactorySessionID = opening.FactorySessionID
+	}
 	if restoredScope != "" {
 		observation, err = s.withRestoredCaptureHealth(observation, item)
 		if err != nil {
@@ -173,9 +177,10 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedTerminal(ctx cont
 	if err != nil || !found {
 		return observation, err
 	}
-	if captured.AttemptID != observation.AttemptID || captured.State != observation.State {
+	if captured.AttemptID != observation.AttemptID || !captured.State.Terminal() {
 		return observation, nil
 	}
+	observation.FactorySessionID, observation.State = captured.FactorySessionID, captured.State
 	observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
 	observation.DurationBasis = captured.DurationBasis
 	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable
@@ -233,9 +238,11 @@ func (s *recordedWorkerSessionObservation) selectedCapturedCancellation(ctx cont
 	if err != nil || !found {
 		return workersessions.Observation{}, false, err
 	}
+	if archived.AttemptID != observation.AttemptID {
+		return observation, true, nil
+	}
 	observation.TokenUsage = cloneRecordedTokenUsage(archived.TokenUsage)
 	if archived.State == workersessions.StateTerminated && archived.TerminalCause != nil && *archived.TerminalCause == "OPERATOR_KILL" {
-		archived.FactorySessionID = observation.FactorySessionID
 		return archived, true, nil
 	}
 	return observation, true, nil

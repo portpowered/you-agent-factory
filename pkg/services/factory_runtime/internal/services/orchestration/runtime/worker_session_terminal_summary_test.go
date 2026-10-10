@@ -27,24 +27,37 @@ func TestCapturedTerminalSummaryUsesExactOriginalScopeAndCaptureTiming(t *testin
 			}
 			if name == "different-outcome" {
 				captured.State = workersessions.StateCompleted
+				captured.Failure = nil
+				cause := "COMPLETED"
+				captured.TerminalCause = &cause
 			}
 			peer := &capturedForceService{observation: captured}
 			service := &recordedWorkerSessionObservation{Service: peer}
 			item := recordings.WorkerCapturedCatalogItem{Catalog: recordings.WorkerSessionCatalogEntry{FactorySessionID: "original", CommittedPosition: 3}, Terminal: &recordings.WorkerRecordingTerminal{Position: 3}}
 			got, err := service.withSelectedCapturedTerminal(t.Context(), workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "rebound", AttemptID: "attempt", State: workersessions.StateFailed, EndedAt: &start}, item)
-			if err != nil || got.FactorySessionID != "rebound" || got.State != workersessions.StateFailed || peer.request.FactorySessionID != "original" {
-				t.Fatalf("physical selection changed canonical identity: %+v %v %+v", got, err, peer.request)
+			wantScope, wantState := "original", captured.State
+			if name == "wrong-attempt" {
+				wantScope, wantState = "rebound", workersessions.StateFailed
 			}
-			assertSelectedTerminalSummaryTiming(t, name, got, end, captured.Failure.Detail)
+			if err != nil || got.FactorySessionID != wantScope || got.State != wantState || peer.request.FactorySessionID != "original" {
+				t.Fatalf("physical selection lost exact captured identity/state: %+v %v %+v", got, err, peer.request)
+			}
+			assertSelectedTerminalSummaryTiming(t, name, got, end)
 		})
 	}
 }
 
-func assertSelectedTerminalSummaryTiming(t *testing.T, name string, got workersessions.Observation, end time.Time, detail string) {
+func assertSelectedTerminalSummaryTiming(t *testing.T, name string, got workersessions.Observation, end time.Time) {
 	t.Helper()
-	if name == "captured" {
-		if got.EndedAt == nil || !got.EndedAt.Equal(end) || got.Duration == nil || *got.Duration != time.Second || got.Failure == nil || got.Failure.Detail != detail {
+	if name == "captured" || name == "different-outcome" {
+		if got.EndedAt == nil || !got.EndedAt.Equal(end) || got.Duration == nil || *got.Duration != time.Second {
 			t.Fatalf("captured terminal facts lost: %+v", got)
+		}
+		if name == "captured" && (got.Failure == nil || got.Failure.Detail != "expected artifact was not produced") {
+			t.Fatalf("physical failure lost: %+v", got)
+		}
+		if name == "different-outcome" && (got.Failure != nil || got.TerminalCause == nil || *got.TerminalCause != "COMPLETED") {
+			t.Fatalf("Work rejection overwrote physical success: %+v", got)
 		}
 	} else if got.EndedAt != nil || got.Duration != nil || got.DurationBasis != workersessions.DurationBasisUnavailable {
 		t.Fatalf("invented terminal timing: %+v", got)
