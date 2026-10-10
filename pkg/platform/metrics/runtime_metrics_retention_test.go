@@ -1713,6 +1713,138 @@ func (filesystem *incompleteRetentionFileSystem) WalkDir(root string, walk fs.Wa
 	return walk(filepath.Join(root, "010000.000000000-runtime-metrics-failed-runtime-failed.log"), nil, filesystem.walkErr)
 }
 
+// Changes at the existing claim/removal effects model another owner changing a
+// candidate after inventory. Sweep must revalidate it without recursive removal.
+func TestRuntimeMetricsRetentionRevalidatesDisappearedOrReplacedArtifactAndRecovers(t *testing.T) {
+	for _, transition := range []string{"missing after claim", "directory after claim", "missing during removal"} {
+		t.Run(transition, func(t *testing.T) {
+			t.Parallel()
+			assertRetentionArtifactTransitionRecovery(t, transition)
+		})
+	}
+}
+
+func assertRetentionArtifactTransitionRecovery(t *testing.T, transition string) {
+	t.Helper()
+	root := t.TempDir()
+	selected := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "selected-runtime-selected", 11)
+	peer := writeRetentionArtifact(t, root, "2026/07/02", "010000.000000000", "peer-runtime-peer", 7)
+	unknown := filepath.Join(root, "customer-note.txt")
+	if err := os.WriteFile(unknown, []byte("preserve customer content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rootLock, claim := &metricsTestCloser{}, &metricsTestCloser{}
+	coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaim: claim}
+	filesystem := &retentionTransitionFileSystem{Local: platformfilesystem.Local{}}
+	change := func(path string) {
+		changeRetentionArtifact(t, transition, selected, path)
+	}
+	if transition == "missing during removal" {
+		filesystem.beforeRemove = change
+	} else {
+		coordination.onTryClaim = change
+	}
+	retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	}, coordination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
+	report, err := retention.Sweep(t.Context(), request)
+	assertRetentionArtifactTransitionReport(t, transition, report, err, selected)
+	if rootLock.closed != 1 || claim.closed != 2 {
+		t.Fatalf("transition releases: root=%d claim=%d, want 1/2", rootLock.closed, claim.closed)
+	}
+	assertRetentionPathAbsent(t, peer, "independently pruned peer")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+	coordination.onTryClaim, filesystem.beforeRemove = nil, nil
+	restoreRetentionArtifact(t, transition, selected)
+	report, err = retention.Sweep(t.Context(), request)
+	if err != nil || len(report.Failures) != 0 || report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 11}) || report.After.Files != 0 || report.Protected.Files != 0 {
+		t.Fatalf("recovered sweep = %#v, %v", report, err)
+	}
+	if rootLock.closed != 2 || claim.closed != 3 {
+		t.Fatalf("recovery releases: root=%d claim=%d, want 2/3", rootLock.closed, claim.closed)
+	}
+	assertRetentionPathAbsent(t, selected, "recovered eligible artifact")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+}
+
+func changeRetentionArtifact(t *testing.T, transition, selected, path string) {
+	t.Helper()
+	if path != selected {
+		return
+	}
+	if err := os.Remove(selected); err != nil {
+		t.Fatal(err)
+	}
+	if transition == "directory after claim" {
+		if err := os.Mkdir(selected, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(selected, "customer.txt"), []byte("replacement content"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func restoreRetentionArtifact(t *testing.T, transition, selected string) {
+	t.Helper()
+	if transition == "directory after claim" {
+		// Remove only the scenario-owned replacement after proving its bytes
+		// survived the failed candidate validation; never recursively delete it.
+		if err := os.Remove(filepath.Join(selected, "customer.txt")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(selected); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(selected), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(selected, bytes.Repeat([]byte("m"), 11), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertRetentionArtifactTransitionReport(
+	t *testing.T, transition string, report RuntimeMetricsRetentionReport, err error, selected string,
+) {
+	t.Helper()
+	if err != nil || len(report.Failures) != 0 || report.Failed.Files != 0 || report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) || report.After.Files != 0 {
+		t.Fatalf("transition sweep = %#v, %v", report, err)
+	}
+	if transition == "directory after claim" {
+		info, statErr := os.Stat(selected)
+		if statErr != nil {
+			t.Fatal(statErr)
+		}
+		if !info.IsDir() || report.Protected != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: info.Size()}) || report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) {
+			t.Fatalf("replacement protection = %#v, info=%v", report, info)
+		}
+		assertRetentionPreservedContent(t, filepath.Join(selected, "customer.txt"), "replacement content")
+		return
+	}
+	if report.Protected.Files != 0 || report.Removed != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) {
+		t.Fatalf("already missing candidate = %#v", report)
+	}
+	assertRetentionPathAbsent(t, selected, "already removed candidate")
+}
+
+type retentionTransitionFileSystem struct {
+	platformfilesystem.Local
+	beforeRemove func(string)
+}
+
+func (filesystem *retentionTransitionFileSystem) Remove(path string) error {
+	if filesystem.beforeRemove != nil {
+		filesystem.beforeRemove(path)
+	}
+	return filesystem.Local.Remove(path)
+}
+
 func writeRetentionArtifact(t *testing.T, root, date, clock, suffix string, size int) string {
 	t.Helper()
 	datePath := filepath.Join(root, filepath.FromSlash(date))
