@@ -579,7 +579,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		requiredToolChecker = stubRequiredToolChecker{}
 	}
 
-	service, err := factorydefinitionswire.NewService(
+	service, err := newFixtureService(
 		stubSessionHost{},
 		wireStubActivationGateway{},
 		validator,
@@ -592,7 +592,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		applyStarterWork,
 		namedPaths,
 		factorydefinitionswire.NewCatalogService(namedPaths, fileSystem),
-		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
+		fixtureClock{instant: time.Unix(0, 0)},
 		fileSystem,
 		listEffective,
 		packagedCatalog,

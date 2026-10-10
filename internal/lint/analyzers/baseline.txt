@@ -2896,7 +2896,6 @@ construction-recorded-site|pkg/services/factory_sessions/internal/execution|pkg/
 # Production defaults: measured unchanged merge-base occurrences (pkgboundarycheck migration).
 production-default|pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts|pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts/resolver.go#LocalFactoryNameResolver#filesystem#os.ReadFile::count=1
 production-default|pkg/services/factory_definitions/transports/mcp|pkg/services/factory_definitions/transports/mcp/install_packaged.go#resolveInstallRootDir#environment#os.UserHomeDir::count=1
-production-default|pkg/services/factory_definitions/wire|pkg/services/factory_definitions/wire/wire.go#composeFactoryDefinitionSupport#platform-adapter-selection#github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep.NewLocal::count=1
 production-default|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#findFactoryRoot#filesystem#os.Stat::count=1
 production-default|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#workflowBundleFileSystem.ReadDir#filesystem#os.ReadDir::count=1
 production-default|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#workflowBundleFileSystem.ReadFile#filesystem#os.ReadFile::count=1

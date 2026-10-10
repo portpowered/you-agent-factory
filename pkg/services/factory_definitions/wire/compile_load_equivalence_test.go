@@ -85,7 +85,7 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 	ports := validConstructionPorts(t)
 	ports.loader = loader
 
-	service, err := factorydefinitionswire.NewService(
+	service, err := newFixtureService(
 		ports.sessionHost,
 		ports.activationGateway,
 		ports.validator,

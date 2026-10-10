@@ -425,7 +425,7 @@ func newWireLifecycleBehaviorService(
 	fileSystem := platformfilesystem.Local{}
 	applySupportedFiles, applyStarterWork, _ := factorydefinitiontestcomposition.PortableOperations(fileSystem)
 
-	packagedCatalog, err := factorydefinitionswire.NewService(
+	packagedCatalog, err := newFixtureService(
 		cfg.sessionHost,
 		cfg.activationGateway,
 		validator,
@@ -438,7 +438,7 @@ func newWireLifecycleBehaviorService(
 		applyStarterWork,
 		namedPaths,
 		factorydefinitionswire.NewCatalogService(namedPaths, fileSystem),
-		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
+		fixtureClock{instant: time.Unix(0, 0)},
 		fileSystem,
 		wireLifecycleListEffective(composition),
 		wireLifecyclePackagedCatalog(t),

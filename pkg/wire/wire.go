@@ -412,6 +412,15 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionsAuthoringFileSystem,
+	provideFactoryDefinitionsAuthoringInbox,
+	provideFactoryDefinitionsHost,
+	provideFactoryDefinitionsDistribution,
+	provideFactoryDefinitionsSnapshotsPortability,
+	provideFactoryDefinitionsAuthoredWriter,
+	provideFactoryDefinitionsAuthoringLayout,
+	factorydefinitionswire.PortableFactoryConfigPreparer,
+	factorydefinitionswire.FactorySnapshotCapturer,
 	provideFactoryDefinitionCompilation,
 	provideFactoryDefinitionRuntimeSnapshot,
 	provideFactoryDefinitionValidationOwner,

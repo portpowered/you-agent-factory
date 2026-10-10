@@ -568,7 +568,6 @@ pkg/services/factory_definitions/definition/shim.go: unreachable func: NewWithCo
 pkg/services/factory_definitions/definition/shim.go: unreachable func: NewWithValidation
 pkg/services/factory_definitions/definition/shim.go: unreachable func: SessionFactoryPersistRoot
 pkg/services/factory_definitions/definition/shim.go: unreachable func: StubActivationGateway
-pkg/services/factory_definitions/internal/composition_options.go: unreachable func: WithDistributionScaffold
 pkg/services/factory_definitions/internal/contracts/factory_runtime.go: unreachable func: FirstRuntimeFactoryConfigLookup
 pkg/services/factory_definitions/internal/contracts/factory_runtime.go: unreachable func: FirstRuntimeWorkstationLookup
 pkg/services/factory_definitions/internal/contracts/public_factory_enums.go: unreachable func: IsPollerRunWorkstationType
@@ -709,11 +708,8 @@ pkg/services/factory_definitions/transports/mcp/schemas.go: unreachable func: to
 pkg/services/factory_definitions/transports/mcp/schemas.go: unreachable func: toolResponseSchema
 pkg/services/factory_definitions/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
 pkg/services/factory_definitions/transports/mcp/validate.go: unreachable func: Validate
-pkg/services/factory_definitions/wire/composition.go: unreachable func: WithDistributionScaffold
 pkg/services/factory_definitions/wire/snapshots.go: unreachable func: PrepareFactorySnapshotImport
 pkg/services/factory_definitions/wire/wire.go: unreachable func: EffectiveFactoryDefinitionNormalizerFromMapper
-pkg/services/factory_definitions/wire/wire.go: unreachable func: StaticClock
-pkg/services/factory_definitions/wire/wire.go: unreachable func: staticClock.Now
 pkg/services/factory_definitions/work_propagation_contract.go: unreachable func: WorkPropagationPolicyFunc.Mode
 pkg/services/factory_runtime/execution_contracts.go: unreachable func: ExecutionCatalogMapper.MapExecutionCatalogEntry
 pkg/services/factory_runtime/execution_contracts.go: unreachable func: ExecutionCatalogMapper.MapExecutionCatalogSelection

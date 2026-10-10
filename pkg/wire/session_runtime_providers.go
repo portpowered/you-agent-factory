@@ -514,20 +514,11 @@ func provideEditableFactoryValidator(
 }
 
 func provideInitialFactorySnapshotFactory(
-	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
+	prepare factorydefinitions.PortableFactoryConfigPreparer,
+	capture factorydefinitions.LoadedFactorySnapshotCapturer,
 ) factorydefinitions.InitialFactorySnapshotFactory {
-	return func(
-		loaded factorydefinitions.LoadedFactorySource,
-	) (*factorydefinitions.FactorySnapshot, error) {
-		return factorydefinitionswire.CaptureInitialSnapshot(
-			loaded,
-			factorydefinitionswire.PortableFactoryConfigPreparer(
-				applySupportedFiles,
-				applyStarterWork,
-			),
-			factorydefinitionswire.LoadedFactorySnapshotCapturer(),
-		)
+	return func(loaded factorydefinitions.LoadedFactorySource) (*factorydefinitions.FactorySnapshot, error) {
+		return factorydefinitionswire.CaptureInitialSnapshot(loaded, prepare, capture)
 	}
 }
 

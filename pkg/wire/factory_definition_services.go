@@ -17,6 +17,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -28,6 +29,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
 // newDefaultWorkTypeResolver binds Work admission's omitted-type policy to the
@@ -396,54 +399,106 @@ func provideFactoryDefinitionCompilation(
 	)
 }
 
-func provideFactoryDefinitionsRoot(
+func provideFactoryDefinitionsHost(
 	router *factorysessions.DefinitionRuntimeRouter,
-	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *factorydefinitionswire.Loader,
-	compilation factorydefinitionswire.Compilation,
-	validationService factorydefinitionswire.Validation,
-	runtimeSnapshot factorydefinitionswire.RuntimeSnapshot,
-	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
-	namedPaths factorydefinitions.NamedPathResolver,
-	catalogService factorydefinitionswire.Catalog,
-	clock factorydefinitions.Clock,
-	versionFileSystem factorydefinitions.VersionFileSystem,
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
-	requiredToolChecker factorydefinitions.RequiredToolChecker,
-	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
-	portableFileSystem portablefiles.FileSystem,
-	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
-) (factorydefinitions.Service, error) {
+	paths factorydefinitions.NamedPathResolver,
+	prepare factorydefinitions.PortableFactoryConfigPreparer,
+	capture factorydefinitions.FactorySnapshotCapturer,
+) (factorydefinitionswire.LifecycleHost, error) {
 	if router == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: runtime router is required")
 	}
-	return factorydefinitionswire.NewService(
-		router.Host(),
-		router.ActivationGateway(),
-		validator,
-		persistence,
-		loader,
-		compilation,
-		validationService,
-		runtimeSnapshot,
-		applySupportedFiles,
-		applyStarterWork,
-		namedPaths,
-		catalogService,
-		clock,
-		versionFileSystem,
-		listEffective,
-		packagedCatalog,
-		packagedInstaller,
-		requiredToolChecker,
-		orchestratorValidator,
-		portableFileSystem,
-		directoryReplacementStore,
-	)
+	return factorydefinitionswire.NewLifecycleHost(router.Host(), persistence, loader, paths, prepare, capture)
+}
+
+func provideFactoryDefinitionsRoot(
+	router *factorysessions.DefinitionRuntimeRouter,
+	host factorydefinitionswire.LifecycleHost,
+	catalog factorydefinitionswire.Catalog,
+	validation factorydefinitionswire.Validation,
+	authoring factorydefinitionswire.AuthoringLayout,
+	distribution factorydefinitionswire.Distribution,
+	snapshot factorydefinitionswire.RuntimeSnapshot,
+	compilation factorydefinitionswire.Compilation,
+	files factorydefinitions.VersionFileSystem,
+	list factorydefinitions.EffectiveFactoryCatalogOperation,
+	portability factorydefinitionswire.SnapshotsPortability,
+) (factorydefinitions.Service, error) {
+	return factorydefinitionswire.NewService(host, router.ActivationGateway(), catalog, validation,
+		authoring, distribution, snapshot, compilation, files, list, portability)
+}
+
+func provideFactoryDefinitionsDistribution(
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	installer factorydefinitions.PackagedFactoryInstallationOperations,
+) (factorydefinitionswire.Distribution, error) {
+	// Root scaffolding remains explicitly unavailable; CLI scaffold owns its separate command boundary.
+	return factorydefinitionswire.NewDistribution(catalog, installer, nil, nil)
+}
+
+func provideFactoryDefinitionsSnapshotsPortability(
+	loader *factorydefinitionswire.Loader,
+	capture factorydefinitions.LoadedFactorySnapshotCapturer,
+	prepare factorydefinitions.PortableFactoryConfigPreparer,
+	decode factorydefinitions.FactorySnapshotJSONDecoder,
+	materialize factorydefinitions.PortableBundledFilesMaterializer,
+	validate factorydefinitions.PortableBundledFileWritesValidator,
+) (factorydefinitionswire.SnapshotsPortability, error) {
+	return factorydefinitionswire.NewSnapshotsPortability(loader.LoadSourceFromCanonicalJSON,
+		capture, prepare, decode, materialize, validate)
+}
+
+// definitionsAuthoringFileSystem preserves the portable filesystem selected for root authoring.
+type definitionsAuthoringFileSystem interface {
+	portablefiles.FileSystem
+	factorydefinitions.AuthoredLayoutWriterFileSystem
+	factorydefinitions.PersistenceFileSystem
+}
+
+func provideFactoryDefinitionsAuthoringFileSystem(files portablefiles.FileSystem) (definitionsAuthoringFileSystem, error) {
+	authored, ok := files.(definitionsAuthoringFileSystem)
+	if !ok {
+		return nil, fmt.Errorf("construct Factory Definitions: portable filesystem must support authoring_layout persistence")
+	}
+	return authored, nil
+}
+
+type definitionsAuthoringInbox interface {
+	factorydefinitions.InputInboxSentinelEnsurer
+}
+
+func provideFactoryDefinitionsAuthoringInbox(files definitionsAuthoringFileSystem) definitionsAuthoringInbox {
+	return inboxgitkeep.NewLocal(files)
+}
+
+func provideFactoryDefinitionsAuthoredWriter(
+	files definitionsAuthoringFileSystem,
+	inbox definitionsAuthoringInbox,
+) *factorydefinitionswire.AuthoredLayoutWriter {
+	return factorydefinitionswire.NewAuthoredLayoutWriter(files, inbox, factorydefinitionswire.AuthoredAgentsFileWriter(files))
+}
+
+func provideFactoryDefinitionsAuthoringLayout(
+	validator factorydefinitions.Validator,
+	loader *factorydefinitionswire.Loader,
+	writer *factorydefinitionswire.AuthoredLayoutWriter,
+	materialize factorydefinitions.PortableBundledFilesMaterializer,
+	prune factorydefinitions.PortableBundledDocsPruner,
+	validate factorydefinitions.PortableBundledFileWritesValidator,
+	copyFiles factorydefinitions.PortableBundledFilesCopier,
+	files definitionsAuthoringFileSystem,
+	paths factorydefinitions.NamedPathResolver,
+	directories factorydefinitions.DirectoryReplacementStore,
+) (factorydefinitionswire.AuthoringLayout, error) {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return factorydefinitionswire.NewAuthoringLayout(validator, validationentry.MapFactoryJSONForPersistence,
+		mapper.Expand, authoredmapping.AuthoredFactoryConfigForExpandedLayout, mapper.Flatten,
+		factorydefinitionswire.PreparedAuthoredLayoutWriter(writer, materialize, prune),
+		factorydefinitionswire.AuthoredLayoutValidator(loader, validate), loader.FlattenFactoryConfig,
+		factorydefinitionswire.AuthoredLayoutExpander(loader, writer, validate, materialize, copyFiles),
+		files, paths.RequireDefinitionDir, directories)
 }
 
 // provideFactoryRuntimeRoot composes the singular process-scoped Runtime root.

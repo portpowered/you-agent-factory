@@ -5,164 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	"io/fs"
 	"reflect"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
-
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	base := validConstructionPorts(t)
-	tests := []struct {
-		name   string
-		mutate func(*constructionPorts)
-		want   string
-	}{
-		{
-			name:   "session host",
-			mutate: func(ports *constructionPorts) { ports.sessionHost = nil },
-			want:   "session host is required",
-		},
-		{
-			name:   "activation gateway",
-			mutate: func(ports *constructionPorts) { ports.activationGateway = nil },
-			want:   "activation gateway is required",
-		},
-		{
-			name:   "validator",
-			mutate: func(ports *constructionPorts) { ports.validator = nil },
-			want:   "validator is required",
-		},
-		{
-			name:   "persistence",
-			mutate: func(ports *constructionPorts) { ports.persistence = nil },
-			want:   "persistence is required",
-		},
-		{
-			name:   "loader",
-			mutate: func(ports *constructionPorts) { ports.loader = nil },
-			want:   "loader is required",
-		},
-		{
-			name:   "portable bundled files applier",
-			mutate: func(ports *constructionPorts) { ports.applySupportedFiles = nil },
-			want:   "portable bundled files applier is required",
-		},
-		{
-			name:   "starter Work applier",
-			mutate: func(ports *constructionPorts) { ports.applyStarterWork = nil },
-			want:   "starter Work applier is required",
-		},
-		{
-			name:   "named path resolver",
-			mutate: func(ports *constructionPorts) { ports.namedPaths = nil },
-			want:   "named path resolver is required",
-		},
-		{
-			name:   "clock",
-			mutate: func(ports *constructionPorts) { ports.clock = nil },
-			want:   "clock is required",
-		},
-		{
-			name:   "version filesystem",
-			mutate: func(ports *constructionPorts) { ports.versionFileSystem = nil },
-			want:   "version filesystem is required",
-		},
-		{
-			name:   "effective Factory catalog",
-			mutate: func(ports *constructionPorts) { ports.listEffective = nil },
-			want:   "effective Factory catalog is required",
-		},
-		{
-			name: "packaged Factory catalog list operation",
-			mutate: func(ports *constructionPorts) {
-				ports.packagedCatalog.List = nil
-			},
-			want: "packaged Factory catalog list operation is required",
-		},
-		{
-			name: "packaged Factory catalog resolve operation",
-			mutate: func(ports *constructionPorts) {
-				ports.packagedCatalog.Resolve = nil
-			},
-			want: "packaged Factory catalog resolve operation is required",
-		},
-		{
-			name: "packaged Factory installer",
-			mutate: func(ports *constructionPorts) {
-				ports.packagedInstaller.Install = nil
-			},
-			want: "packaged Factory installer is required",
-		},
-		{
-			name:   "required tool checker",
-			mutate: func(ports *constructionPorts) { ports.requiredToolChecker = nil },
-			want:   "required tool checker is required",
-		},
-		{
-			name:   "orchestrator definition validator",
-			mutate: func(ports *constructionPorts) { ports.orchestratorValidator = nil },
-			want:   "orchestrator definition validator is required",
-		},
-		{
-			name:   "portable filesystem",
-			mutate: func(ports *constructionPorts) { ports.portableFileSystem = nil },
-			want:   "portable filesystem is required",
-		},
-		{
-			name:   "directory replacement store",
-			mutate: func(ports *constructionPorts) { ports.directoryReplacementStore = nil },
-			want:   "directory replacement store is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ports := base
-			test.mutate(&ports)
-			service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
-				ports.persistence,
-				ports.loader,
-				compilationForLoader(ports.loader),
-				validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
-				runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
-				ports.applySupportedFiles,
-				ports.applyStarterWork,
-				ports.namedPaths,
-				factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
-				ports.clock,
-				ports.versionFileSystem,
-				ports.listEffective,
-				ports.packagedCatalog,
-				ports.packagedInstaller,
-				ports.requiredToolChecker,
-				ports.orchestratorValidator,
-				ports.portableFileSystem,
-				ports.directoryReplacementStore,
-			)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("NewService() error = %v, want %q", err, test.want)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-		})
-	}
-}
 
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
@@ -186,7 +43,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
-	service, err := factorydefinitionswire.NewService(sessionHost, wireStubActivationGateway{}, stubValidator{},
+	service, err := newFixtureService(sessionHost, wireStubActivationGateway{}, stubValidator{},
 		stubPersistence{},
 		&compilationloading.Loader{},
 		compilationForLoader(&compilationloading.Loader{}),
@@ -285,7 +142,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 
 	ports := validConstructionPorts(t)
 	ports.packagedCatalog = packagedCatalog
-	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
+	service, err := newFixtureService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
 		compilationForLoader(ports.loader),
@@ -346,7 +203,7 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(
+	service, err := newFixtureService(
 		ports.sessionHost,
 		ports.activationGateway,
 		ports.validator,
@@ -404,16 +261,6 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 	}
 }
 
-func TestStaticClockReturnsFixedInstant(t *testing.T) {
-	t.Parallel()
-
-	instant := time.Unix(42, 0)
-	clock := factorydefinitionswire.StaticClock(instant)
-	if got := clock.Now(); !got.Equal(instant) {
-		t.Fatalf("StaticClock.Now() = %v, want %v", got, instant)
-	}
-}
-
 func TestEffectiveFactoryDefinitionNormalizerFromMapperHonorsCancelledContext(t *testing.T) {
 	t.Parallel()
 
@@ -431,7 +278,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
+	service, err := newFixtureService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
 		compilationForLoader(ports.loader),
@@ -467,7 +314,7 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(
+	service, err := newFixtureService(
 		ports.sessionHost,
 		ports.activationGateway,
 		ports.validator,
@@ -564,7 +411,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		applyStarterWork:              func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths:                    stubNamedPathResolver{},
 		namedFactoryCatalogFileSystem: platformfilesystem.Local{},
-		clock:                         factorydefinitionswire.StaticClock(time.Unix(0, 0)),
+		clock:                         fixtureClock{instant: time.Unix(0, 0)},
 		versionFileSystem:             platformfilesystem.Local{},
 		listEffective: func(
 			context.Context,
@@ -923,7 +770,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		},
 	}
 
-	service, err := factorydefinitionswire.NewService(
+	service, err := newFixtureService(
 		ports.sessionHost,
 		ports.activationGateway,
 		ports.validator,
@@ -945,7 +792,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		ports.orchestratorValidator,
 		ports.portableFileSystem,
 		ports.directoryReplacementStore,
-		factorydefinitionswire.WithDistributionScaffold(
+		withFixtureDistributionScaffold(
 			scaffoldInitializer,
 			distributionscaffoldfacts.LocalFactoryNameResolver(),
 		),
@@ -987,3 +834,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		)
 	}
 }
+
+type fixtureClock struct{ instant time.Time }
+
+func (c fixtureClock) Now() time.Time { return c.instant }
