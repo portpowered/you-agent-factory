@@ -206,6 +206,140 @@ func TestRuntimeMetricsRetentionSchedulerValidatesConfiguration(t *testing.T) {
 	}
 }
 
+// Whole-sweep failures are reported without retiring the root's lease. A
+// manually delivered tick proves recovery without waiting for wall time.
+func TestRuntimeMetricsRetentionSchedulerRecoversRootInspectionFailures(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"startup", "periodic"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			root, artifact, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+			cause := errors.New("root inspection rejected")
+			filesystem := &retentionFailureFileSystem{Local: platformfilesystem.Local{}, lstatErr: cause}
+			retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+				return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			harness := newRuntimeMetricsRetentionSchedulerHarness(t, retention, 3)
+			t.Cleanup(func() {
+				if err := harness.scheduler.Close(t.Context()); err != nil {
+					t.Errorf("scheduler cleanup: %v", err)
+				}
+			})
+			if stage == "startup" {
+				filesystem.failPath = root
+			}
+			lease := harness.start(t, root)
+			if stage == "periodic" {
+				assertRetentionReportBefore(t, harness.next(t), RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9})
+				filesystem.failPath = root
+				harness.ticker.Tick(time.Now())
+			}
+			failed := harness.next(t)
+			if !errors.Is(failed.err, cause) || failed.report.RootDirectory != root || failed.report.Removed.Files != 0 {
+				t.Fatalf("failed %s sweep = %#v, want selected root and inspection cause", stage, failed)
+			}
+			if stage == "startup" {
+				assertRetentionPathExists(t, marker, "orphan marker after failed startup")
+			}
+			assertRetentionPreservedContent(t, artifact, "mmmmmmmmm")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+			assertHourlyTicker(t, harness.intervals)
+			filesystem.failPath = ""
+			harness.ticker.Tick(time.Now())
+			recovered := harness.next(t)
+			if recovered.err != nil || len(recovered.report.Failures) != 0 || recovered.report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) {
+				t.Fatalf("recovered %s sweep = %#v", stage, recovered)
+			}
+			assertRetentionPathAbsent(t, marker, "orphan marker after recovery")
+			assertRetentionPreservedContent(t, artifact, "mmmmmmmmm")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+			if err := lease.Close(); err != nil || !harness.ticker.Stopped() {
+				t.Fatalf("recovered lease close = %v, stopped=%v", err, harness.ticker.Stopped())
+			}
+		})
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerCanceledStartupCanRetry(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC))
+	harness := newRuntimeMetricsRetentionSchedulerHarness(t, retention, 3)
+	t.Cleanup(func() {
+		if err := harness.scheduler.Close(t.Context()); err != nil {
+			t.Errorf("scheduler cleanup: %v", err)
+		}
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	// Startup publication is synchronous and precedes timer construction. This
+	// observed sweep boundary cancels the caller without a production hook.
+	reporter := harness.scheduler.reporter
+	harness.scheduler.reporter = func(report RuntimeMetricsRetentionReport, err error) {
+		reporter(report, err)
+		cancel()
+	}
+	lease, err := harness.scheduler.Start(ctx, RuntimeMetricsRetentionRequest{RootDirectory: root})
+	if lease != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled startup = %v, %v, want no lease and cancellation", lease, err)
+	}
+	assertEmptyRetentionReport(t, harness.next(t))
+	if len(harness.intervals) != 0 {
+		t.Fatalf("canceled startup created timers: %v", harness.intervals)
+	}
+	harness.scheduler.reporter = reporter
+	lease = harness.start(t, root)
+	assertEmptyRetentionReport(t, harness.next(t))
+	assertHourlyTicker(t, harness.intervals)
+	harness.ticker.Tick(time.Now())
+	assertEmptyRetentionReport(t, harness.next(t))
+	if err := lease.Close(); err != nil || !harness.ticker.Stopped() {
+		t.Fatalf("retried lease close = %v, stopped=%v", err, harness.ticker.Stopped())
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerInvalidTickerCanRetry(t *testing.T) {
+	t.Parallel()
+	root, artifact, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC))
+	harness := newRuntimeMetricsRetentionSchedulerHarness(t, retention, 3)
+	t.Cleanup(func() {
+		if err := harness.scheduler.Close(t.Context()); err != nil {
+			t.Errorf("scheduler cleanup: %v", err)
+		}
+	})
+	invalid := newManualRuntimeMetricsRetentionTicker()
+	invalid.ticks = nil
+	factory := harness.scheduler.tickerFactory
+	harness.scheduler.tickerFactory = func(interval time.Duration) RuntimeMetricsRetentionTicker {
+		if !invalid.Stopped() {
+			return invalid
+		}
+		return factory(interval)
+	}
+	lease, err := harness.scheduler.Start(t.Context(), RuntimeMetricsRetentionRequest{RootDirectory: root})
+	if lease != nil || err == nil || !strings.Contains(err.Error(), "ticker is not configured") || !invalid.Stopped() {
+		t.Fatalf("invalid ticker start = %v, %v, stopped=%v", lease, err, invalid.Stopped())
+	}
+	assertRetentionReportBefore(t, harness.next(t), RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9})
+	assertRetentionPathAbsent(t, marker, "safe startup cleanup before ticker rejection")
+	assertRetentionPreservedContent(t, artifact, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+	lease = harness.start(t, root)
+	assertRetentionReportBefore(t, harness.next(t), RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9})
+	assertHourlyTicker(t, harness.intervals)
+	harness.ticker.Tick(time.Now())
+	assertRetentionReportBefore(t, harness.next(t), RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9})
+	if err := lease.Close(); err != nil || !harness.ticker.Stopped() {
+		t.Fatalf("retried ticker lease close = %v, stopped=%v", err, harness.ticker.Stopped())
+	}
+	assertRetentionPreservedContent(t, artifact, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+}
+
 func TestRuntimeMetricsRetentionSchedulerStartsAndClosesDeterministically(t *testing.T) {
 	root := t.TempDir()
 	coordination := &metricsTestCoordination{
