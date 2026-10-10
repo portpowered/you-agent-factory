@@ -51,6 +51,7 @@ type invokeContinuePackageFixture struct {
 	managerRepositoryB s8Repository
 	readiness          *t7ReadinessBoundary
 	ackStore           *interruptPhaseAckStore
+	lateStarts         *requesterLateStartBoundary
 
 	sessionsMu        sync.Mutex
 	openedSessionIDs  []string
@@ -193,6 +194,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		managerRepositoryB: setup.managerRepositoryB,
 		readiness:          readiness,
 		ackStore:           started.ackStore,
+		lateStarts:         started.lateStarts,
 	}, nil
 }
 

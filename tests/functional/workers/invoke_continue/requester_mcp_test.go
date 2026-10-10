@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -63,7 +64,7 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-child", child, child, nil, nil, nil, child.Reset); err != nil {
 		return err
 	}
-	for _, mode := range []string{"auth", "timeout"} {
+	for _, mode := range []string{"auth", "timeout", "late"} {
 		parent := &t7GatedProviderRunner{}
 		parent.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-failure-parent-"+mode, parent, parent, nil, nil, nil, parent.reset); err != nil {
@@ -76,7 +77,11 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 	}
 	timeout := &t7GatedProviderRunner{}
 	timeout.reset()
-	return appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-failure-timeout", timeout, timeout, nil, nil, nil, timeout.reset)
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-failure-timeout", timeout, timeout, nil, nil, nil, timeout.reset); err != nil {
+		return err
+	}
+	late := newInvokeContinueResettableProviderCommandRunner(result)
+	return appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-failure-late", late, late, nil, nil, nil, late.Reset)
 }
 
 // The existing recording-store edge pauses sync-confirmed preparation. Public
@@ -670,7 +675,7 @@ func TestRequesterMCPSelectedHostFailures(t *testing.T) {
 		}
 	})
 	fixture := ensureInvokeContinuePackageFixture(t)
-	for _, mode := range []string{"auth", "timeout"} {
+	for _, mode := range []string{"auth", "timeout", "late"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			parent := fixture.scenario(t, "requester-mcp-failure-parent-"+mode)
@@ -688,6 +693,10 @@ func TestRequesterMCPSelectedHostFailures(t *testing.T) {
 			}
 			t19AwaitSignal(t, ctx, runner.started, "failure caller running")
 			token := requesterSourceToken(t, runner, parentID)
+			if mode == "late" {
+				assertRequesterMCPLateStart(t, fixture, child, parent, ctx, parentID, token)
+				return
+			}
 			timeoutMillis := 30000
 			if mode == "timeout" {
 				timeoutMillis = 3000
@@ -718,6 +727,126 @@ func assertRequesterMCPFailure(t *testing.T, fixture *invokeContinuePackageFixtu
 		t.Fatal("MCP failure disclosed provider diagnostics")
 	}
 	assertRequesterRefusal(t, fixture, child, ctx, "failed-mcp-child", env["YOU_WORKER_SESSION_ID"], env["YOU_WORKER_SESSION_TOKEN"])
+}
+
+// Delay only response delivery at the existing HTTP server edge, after the real
+// LIVE owner has opened the exact child. No provider or lifecycle is substituted.
+type requesterLateStartBoundary struct {
+	openings    sync.Map
+	retirements sync.Map
+}
+
+type requesterLateStartGate struct {
+	opened, release, retired chan struct{}
+	releaseOnce              sync.Once
+	sessionID                string
+	status                   int
+}
+
+func (gate *requesterLateStartGate) unblock() { gate.releaseOnce.Do(func() { close(gate.release) }) }
+
+func (boundary *requesterLateStartBoundary) handler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/factory-sessions" {
+			boundary.open(next, w, r)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			if value, ok := boundary.retirements.Load(r.URL.Path); ok {
+				recorded := httptest.NewRecorder()
+				next.ServeHTTP(recorded, r)
+				copyRequesterHTTPResponse(w, recorded)
+				if recorded.Code >= 200 && recorded.Code < 300 {
+					close(value.(*requesterLateStartGate).retired)
+				}
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (boundary *requesterLateStartBoundary) open(next http.Handler, w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "controlled open body unavailable", http.StatusBadRequest)
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	var input api.OpenFactorySessionRequest
+	if json.Unmarshal(body, &input) != nil {
+		next.ServeHTTP(w, r)
+		return
+	}
+	value, ok := boundary.openings.Load(input.FolderPath)
+	if !ok {
+		next.ServeHTTP(w, r)
+		return
+	}
+	gate := value.(*requesterLateStartGate)
+	recorded := httptest.NewRecorder()
+	next.ServeHTTP(recorded, r)
+	var opened api.OpenFactorySessionResponse
+	if json.Unmarshal(recorded.Body.Bytes(), &opened) == nil && opened.Session != nil {
+		gate.sessionID = opened.Session.Id
+		boundary.retirements.Store("/factory-sessions/"+gate.sessionID, gate)
+	}
+	gate.status = recorded.Code
+	close(gate.opened)
+	select {
+	case <-gate.release:
+		copyRequesterHTTPResponse(w, recorded)
+	case <-r.Context().Done():
+	}
+}
+
+func copyRequesterHTTPResponse(w http.ResponseWriter, recorded *httptest.ResponseRecorder) {
+	for key, values := range recorded.Header() {
+		w.Header()[key] = values
+	}
+	w.WriteHeader(recorded.Code)
+	_, _ = w.Write(recorded.Body.Bytes())
+}
+
+func assertRequesterMCPLateStart(t *testing.T, fixture *invokeContinuePackageFixture, child, parent *invokeContinueScenario, ctx context.Context, parentID, token string) {
+	t.Helper()
+	for _, explicit := range []bool{true, false} {
+		gate := &requesterLateStartGate{opened: make(chan struct{}), release: make(chan struct{}), retired: make(chan struct{})}
+		fixture.lateStarts.openings.Store(child.workingDirectory, gate)
+		defer gate.unblock()
+		defer fixture.lateStarts.openings.Delete(child.workingDirectory)
+		response := make(chan factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult], 1)
+		go func() {
+			// The operation deadline expires while a successful open response is
+			// gated. Signals, rather than a latency sleep, order release and close.
+			response <- executeRequesterMCPTimeout(t, fixture, child, ctx, parentID, token, explicit, 3000)
+		}()
+		t19AwaitSignal(t, ctx, gate.opened, "late child LIVE activation")
+		if gate.status != http.StatusOK || gate.sessionID == "" {
+			t.Fatal("controlled late start did not open a real child")
+		}
+		defer fixture.lateStarts.retirements.Delete("/factory-sessions/" + gate.sessionID)
+		select {
+		case result := <-response:
+			if result.Error == nil || result.Error.Code != "factory_session.subagent.timed_out" || result.Error.Details["phase"] != "start" || result.Error.Details["sessionClosed"] == true {
+				t.Fatal("late start lost typed timeout or claimed premature retirement")
+			}
+			encoded, err := json.Marshal(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertRequesterTokenAbsent(t, token, string(encoded))
+		case <-ctx.Done():
+			t.Fatal("late start held the MCP response")
+		}
+		gate.unblock()
+		t19AwaitSignal(t, ctx, gate.retired, "late child safe DELETE completion")
+		status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+gate.sessionID, nil)
+		if status != http.StatusNotFound || child.providerRunner.CallCount() != 0 {
+			t.Fatal("late activation was not retired without provider launch")
+		}
+		assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
+	}
 }
 
 func assertRequesterMCPFailureOutcome(t *testing.T, mode string, response factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]) string {

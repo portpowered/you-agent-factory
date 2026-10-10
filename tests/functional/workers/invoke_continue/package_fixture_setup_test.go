@@ -36,6 +36,7 @@ type invokeContinueStartedProcess struct {
 	apiStarts     *atomic.Int32
 	processBuilds *atomic.Int32
 	ackStore      *interruptPhaseAckStore
+	lateStarts    *requesterLateStartBoundary
 }
 
 type invokeContinueRecordingDirectory string
@@ -434,6 +435,7 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 	processBuilds := &atomic.Int32{}
 	processBuilds.Add(1)
 	ackStore := &interruptPhaseAckStore{}
+	lateStarts := &requesterLateStartBoundary{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Merge(serviceedges.Edges{
 		WorkerRecordingWriter: ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
@@ -445,6 +447,7 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		ProviderCommandRunner: route,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
+			request.Handler = lateStarts.handler(request.Handler)
 			err := api.Start(ctx, request)
 			apiStopOnce.Do(func() { close(apiStopped) })
 			return err
@@ -474,5 +477,5 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		cancel()
 		return invokeContinueStartedProcess{}, fmt.Errorf("wait for package fixture API: %w; command result: %v", err, commandErr)
 	}
-	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds, ackStore: ackStore}, nil
+	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds, ackStore: ackStore, lateStarts: lateStarts}, nil
 }
