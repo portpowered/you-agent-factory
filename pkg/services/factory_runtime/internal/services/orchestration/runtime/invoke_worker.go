@@ -99,9 +99,15 @@ func startThroughStatelessWorkers(
 		ctx, cfg, request, executeRequest,
 		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil, accept,
 	)
-	if startErr != nil && errors.Is(startErr, workersessions.ErrStartOpeningPublication) {
+	if startErr != nil && (errors.Is(startErr, workersessions.ErrStartOpeningPublication) || errors.Is(startErr, workersessions.ErrCallerInvalid)) {
 		result, dispatchErr := failedWorkstationDispatchResult(request, startErr)
-		markPreAdmissionInfrastructureFailure(&result)
+		if errors.Is(startErr, workersessions.ErrCallerInvalid) {
+			// The dispatch has already consumed Work. Complete its existing result
+			// route even though the revoked caller must never launch a provider.
+			result.Result.FailureMetadata = &workers.WorkFailureMetadata{Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypePermanentBadRequest}
+		} else {
+			markPreAdmissionInfrastructureFailure(&result)
+		}
 		if accept != nil {
 			accept(context.Background(), request, result, dispatchErr)
 		}

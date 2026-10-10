@@ -25,7 +25,7 @@ import (
 )
 
 func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSetup) error {
-	for _, mode := range []string{"cli", "http"} {
+	for _, mode := range []string{"cli", "http", "factory", "mcp"} {
 		parent := &t7GatedProviderRunner{}
 		parent.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-fence-parent-"+mode, parent, parent, nil, nil, nil, parent.reset); err != nil {
@@ -83,16 +83,18 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 // cancellation ends the caller while admission is held; no private owner state
 // is changed and provider execution remains observable at the command edge.
 type requesterPreparationGate struct {
-	once     sync.Once
-	prepared chan struct{}
-	release  chan struct{}
+	once      sync.Once
+	prepared  chan struct{}
+	release   chan struct{}
+	workerID  string
+	sessionID string
 }
 
 func TestRequesterPreparationOwnerLoss(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.show", "rest/startWorkerSession")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.show", "rest/startWorkerSession", "cli/you.server.mcp", "mcp/mcp.tool.you.subagent", "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/terminateFactorySession", "rest/closeFactorySession")
 	fixture := ensureInvokeContinuePackageFixture(t)
-	for _, mode := range []string{"cli", "http"} {
+	for _, mode := range []string{"cli", "http", "factory", "mcp"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			runRequesterPreparationOwnerLoss(t, fixture, mode)
@@ -128,7 +130,7 @@ func runRequesterPreparationOwnerLoss(t *testing.T, fixture *invokeContinuePacka
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
-		outcome <- requesterPreparationInvoke(fixture, child, ctx, mode, path, parentID, token)
+		outcome <- requesterPreparationOperation(t, fixture, child, ctx, mode, path, parentID, token)
 	}()
 	defer func() {
 		release.Do(func() { close(gate.release) })
@@ -151,16 +153,86 @@ func runRequesterPreparationOwnerLoss(t *testing.T, fixture *invokeContinuePacka
 	release.Do(func() { close(gate.release) })
 	select {
 	case result := <-outcome:
-		assertRequesterPreparationRefusal(t, mode, result, token)
+		if mode == "cli" || mode == "http" {
+			assertRequesterPreparationRefusal(t, mode, result, token)
+		} else {
+			assertRequesterRuntimePreparationFailure(t, mode, result, token)
+		}
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
 	if child.providerRunner.CallCount() != 0 || runner.CallCount() != 1 {
 		t.Fatal("preparation owner loss launched a child or changed the source attempt")
 	}
-	observation := requesterObservation(t, fixture, child, ctx, childID)
+	assertRequesterPreparedChild(t, fixture, child, ctx, gate, parentID, token)
+}
+
+func assertRequesterPreparedChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, gate *requesterPreparationGate, parentID, token string) {
+	t.Helper()
+	args := []string{"show", "--worker-session-id", gate.workerID}
+	if gate.sessionID != "" {
+		args = append(args, "--session", gate.sessionID)
+	}
+	show := t7RemoteCLIInputs(child, ctx, fixture.baseURL, args...)
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatal(err)
+	}
+	var observation api.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, show.Stdout(), &observation)
+	assertRequesterTokenAbsent(t, token, show.Stdout()+show.Stderr())
 	if observation.State != api.WorkerSessionObservationStateFailed || observation.Requester == nil || observation.Requester.WorkerSessionId != parentID {
 		t.Fatal("refused child lost terminal outcome or its detached prepared requester")
+	}
+}
+
+func requesterPreparationOperation(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, mode, path, parentID, token string) string {
+	t.Helper()
+	if mode == "mcp" {
+		response := executeRequesterMCP(t, fixture, child, ctx, parentID, token, true)
+		if response.Error != nil && response.Error.SessionID != "" {
+			status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+response.Error.SessionID, nil)
+			if status != http.StatusNotFound {
+				t.Fatal("owner loss returned before exact MCP child retirement")
+			}
+		}
+		encoded, err := json.Marshal(response)
+		return fmt.Sprint(err) + string(encoded)
+	}
+	if mode == "factory" {
+		status, body := requesterFactoryHTTP(t, ctx, fixture.baseURL+"/factory-sessions", map[string]any{"folderPath": child.workingDirectory, "factoryId": "@you/subagent"}, parentID, token)
+		if status < 200 || status >= 300 {
+			return fmt.Sprint(status) + body
+		}
+		var opened api.OpenFactorySessionResponse
+		if json.Unmarshal([]byte(body), &opened) != nil || opened.Session == nil {
+			return "missing opened Factory Session"
+		}
+		defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+		status, body = requesterFactoryHTTP(t, ctx, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/invocations", map[string]any{"args": map[string]any{"input": "Factory fence prompt", "workerProvider": "codex", "workerModel": "gpt-5-codex", "workingRoot": child.workingDirectory}, "timeoutMillis": 10000}, parentID, token)
+		return fmt.Sprint(status) + body
+	}
+	return requesterPreparationInvoke(fixture, child, ctx, mode, path, parentID, token)
+}
+
+// This protects dispatch completion and owner cleanup. The existing terminal
+// transport classification is permanent_bad_request; preserving caller-invalid
+// as the invocation's public error code remains a separate retained obligation.
+func assertRequesterRuntimePreparationFailure(t *testing.T, mode, result, token string) {
+	t.Helper()
+	assertRequesterTokenAbsent(t, token, result)
+	if mode == "factory" {
+		var response api.InvocationResponse
+		if !strings.HasPrefix(result, "200") || json.Unmarshal([]byte(result[3:]), &response) != nil || response.Status != api.InvocationTerminalStatusFailed || response.FailureReason == nil || *response.FailureReason != api.WorkFailureTypePermanentBadRequest {
+			t.Fatalf("Factory preparation refusal did not complete its failed Work: %s", result)
+		}
+		return
+	}
+	var response factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]
+	if !strings.HasPrefix(result, "<nil>") || json.Unmarshal([]byte(result[5:]), &response) != nil || response.Error == nil || response.Result != nil {
+		t.Fatal("MCP preparation loss did not return a terminal error")
+	}
+	if response.Error.Code != "factory_session.subagent.provider_request_rejected" || response.Error.Retryable || response.Error.Details["failureReason"] != string(api.WorkFailureTypePermanentBadRequest) || response.Error.Details["sessionClosed"] != true {
+		t.Fatalf("MCP preparation loss did not complete/retire its child: %#v", response.Error)
 	}
 }
 

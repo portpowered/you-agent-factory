@@ -229,7 +229,10 @@ func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context
 	}
 	if value, exists := store.requesterPreparations.Load(filepath.Base(request.Execution.WorkingDirectory)); exists {
 		gate := value.(*requesterPreparationGate)
-		gate.once.Do(func() { close(gate.prepared) })
+		gate.once.Do(func() {
+			gate.workerID, gate.sessionID = target.WorkerSessionID, target.FactorySessionID
+			close(gate.prepared)
+		})
 		select {
 		case <-gate.release:
 		case <-ctx.Done():

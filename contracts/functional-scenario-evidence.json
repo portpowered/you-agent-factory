@@ -449,10 +449,16 @@
     {
       "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
       "stableIds": [
+        "cli/you.server.mcp",
         "cli/you.worker-sessions.cancel",
         "cli/you.worker-sessions.invoke",
         "cli/you.worker-sessions.show",
-        "rest/startWorkerSession"
+        "mcp/mcp.tool.you.subagent",
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/startWorkerSession",
+        "rest/terminateFactorySession"
       ]
     },
     {
