@@ -2332,8 +2332,6 @@
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestRootValidateEquivalence_PeerExercisesRootWithoutValidationImport",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestSaveDefaultCurrentFactoryForSession_RestoresTreeOnActivationFailure",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestValidateEditableFactoryTopology_AllowsRecoverableLayoutWarnings",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestValidateEditableFactoryTopology_AllowsSingleDefaultHandlingWorkType",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition::TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationReturnFinding",

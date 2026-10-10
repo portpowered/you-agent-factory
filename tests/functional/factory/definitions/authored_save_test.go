@@ -43,6 +43,9 @@ func TestDefinitionsAuthoredSavePreservesBodiesAndLayout(t *testing.T) {
 			version.Logical++
 			version.Physical = version.Physical.Add(time.Nanosecond)
 			before.Version = &version
+			// Replacement must retain the selected target even when an imported
+			// payload carries a different name.
+			before.Name = "drifted-import"
 			findings, status := postValidateFactory(t, host.URL(), before)
 			if status != http.StatusOK {
 				t.Fatalf("validate authored input = %d %#v", status, findings)
@@ -61,6 +64,9 @@ func TestDefinitionsAuthoredSavePreservesBodiesAndLayout(t *testing.T) {
 				t.Fatalf("save authored input = %d %s", status, response)
 			}
 			after := support.GetJSON[factoryapi.Factory](t, endpoint)
+			if after.Name != factoryapi.FactoryName(name) {
+				t.Fatalf("replacement selected name = %q, want %q", after.Name, name)
+			}
 			assertAuthoredSaveLayout(t, after, schema)
 			if stringValue((*after.Workers)[0].Body) != workerBody || stringValue((*after.Workstations)[0].Body) != stationBody {
 				t.Fatal("save/readback changed inline authored bodies")
@@ -68,6 +74,57 @@ func TestDefinitionsAuthoredSavePreservesBodiesAndLayout(t *testing.T) {
 			assertAuthoredSaveFiles(t, target, after, workerBody, stationBody)
 		})
 	}
+}
+
+// Explicit default targets own their folder and session; the shared host's
+// Current Factory is unaffected by parallel default-target replacements.
+func TestDefinitionsDefaultSavePersistsSplitBodies(t *testing.T) {
+	t.Parallel()
+	host := sharedDefinitionsValidationServer(t)
+	cfg := validAPIValidationFactoryConfig()
+	cfg["layout"] = authoredSaveLayout(1)
+	cfg["workers"].([]map[string]string)[0]["type"] = "MODEL_WORKER"
+	dir := support.ScaffoldFactory(t, cfg)
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
+		FolderPath: dir,
+		Target:     &factoryapi.FactorySessionTargetRef{Kind: factoryapi.FactorySessionTargetRefKindDefault},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, _, status := definitionsHTTPRequest(t, http.MethodPost, host.URL()+"/factory-sessions", payload)
+	if status != http.StatusOK {
+		t.Fatalf("open default target = %d %s", status, response)
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(response, &opened); err != nil {
+		t.Fatal(err)
+	}
+	if opened.Session == nil {
+		t.Fatal("missing default session")
+	}
+	id := opened.Session.Id
+	t.Cleanup(func() { closeDefinitionsFactorySession(t, host.URL(), id) })
+	endpoint := host.URL() + "/factory-sessions/" + id + "/factory"
+	before := support.GetJSON[factoryapi.Factory](t, endpoint)
+	workerBody, stationBody := "Default worker split instructions.", "Default workstation split instructions."
+	(*before.Workers)[0].Body = &workerBody
+	(*before.Workstations)[0].Body = &stationBody
+	before.Version.Logical++
+	before.Version.Physical = before.Version.Physical.Add(time.Nanosecond)
+	payload, err = json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: before})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, _, status = definitionsHTTPRequest(t, http.MethodPut, endpoint, payload)
+	if status != http.StatusOK {
+		t.Fatalf("save default target = %d %s", status, response)
+	}
+	after := support.GetJSON[factoryapi.Factory](t, endpoint)
+	if after.Name != before.Name || stringValue((*after.Workers)[0].Body) != workerBody || stringValue((*after.Workstations)[0].Body) != stationBody {
+		t.Fatalf("default save/readback changed selected name or authored bodies: before=%#v after=%#v worker=%q station=%q", before.Name, after.Name, stringValue((*after.Workers)[0].Body), stringValue((*after.Workstations)[0].Body))
+	}
+	assertAuthoredSaveFiles(t, dir, after, workerBody, stationBody)
 }
 
 func stringSchemaName(schema int32) string {
