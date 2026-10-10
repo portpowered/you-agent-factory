@@ -707,13 +707,11 @@ func newJoinedInvocationRootWithModel(
 	host := &joinedHostService{events: events}
 	assets := &joinedAssetsService{events: events, requests: assetRequests}
 	root := &Root{logger: zap.NewNop(), now: time.Now,
-		resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration, bool) (modelseffects.BackendArtifactSelection, error) {
-			return completedTestBackendResolver(context.Background(), modelseffects.ResolvedHostConfiguration{}, false)
-		},
-		runtimeScopes: scopes,
-		assets:        assets,
-		runtimeHost:   host,
-		inference:     inference,
+		resolveBackendArtifact: completedTestBackendResolver,
+		runtimeScopes:          scopes,
+		assets:                 assets,
+		runtimeHost:            host,
+		inference:              inference,
 	}
 	return root, scope, host
 }
