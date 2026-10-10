@@ -52,6 +52,7 @@ func (scheduler *selectedSyncScheduler) poll(t *testing.T) selectedSyncPoll {
 			t.Fatalf("sync poll = %s", poll.delay)
 		}
 		return poll
+	//nolint:testsleep // Selected poll registration is the signal; host time only bounds a broken fixture.
 	case <-time.After(30 * time.Second):
 		t.Fatal("selected sync wait not registered")
 		return selectedSyncPoll{}
@@ -77,18 +78,15 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 	support.CleanupProcess(t, process)
-	for _, cancelOnTimeout := range []bool{false, true} {
-		name := "completion"
-		if cancelOnTimeout {
-			name = "timeout cancels owned session"
-		}
+	for _, name := range []string{"completion", "timeout keeps session running", "timeout cancels owned session"} {
 		t.Run(name, func(t *testing.T) {
+			cancelOnTimeout := name == "timeout cancels owned session"
 			server := startComposedMemoryMCP(t, process)
 			initializeMCPClient(t, server.client)
 			gate := runner.gate(t, server.root)
 			reply := make(chan mcpJSONRPCResponse, 1)
 			timeout := int64(3600000)
-			if cancelOnTimeout {
+			if name != "completion" {
 				timeout = 20
 			}
 			go func() { reply <- selectedSyncCall(server.client, timeout, cancelOnTimeout) }()
@@ -105,7 +103,7 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 				t.Fatalf("held sync returned: %#v", response)
 			default:
 			}
-			if !cancelOnTimeout {
+			if name == "completion" {
 				close(gate.release)
 			}
 			scheduler.advance()
@@ -114,7 +112,10 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 			if result.SessionId == "" {
 				t.Fatal("sync response lost session identity")
 			}
-			if cancelOnTimeout {
+			if name == "timeout keeps session running" {
+				assertSelectedSyncStillRunning(t, server, result)
+				close(gate.release)
+			} else if cancelOnTimeout {
 				if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeTimedOut || result.SessionCanceledByTimeout == nil || !*result.SessionCanceledByTimeout {
 					t.Fatalf("timeout cancellation = %#v", result)
 				}
@@ -136,6 +137,21 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 	peer.closeInput(t)
 }
 
+func assertSelectedSyncStillRunning(t *testing.T, server *composedMemoryMCP, result factoryapi.FactorySessionSyncExecutionResponse) {
+	t.Helper()
+	if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeTimedOut || result.Result != nil ||
+		result.SessionCanceledByTimeout != nil && *result.SessionCanceledByTimeout {
+		t.Fatalf("non-canceling timeout = %#v", result)
+	}
+	inspected := decodeComposedTool[factoryapi.FactorySessionDurableReadModel](t, server.client.call("tools/call", map[string]any{
+		"name": factorysessionmcp.ToolGetSession, "arguments": factorysessionmcp.GetSessionInput{SessionID: result.SessionId},
+	}))
+	if inspected.SessionId != result.SessionId || inspected.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("timed-out waiter changed running session: %#v", inspected)
+	}
+	t.Log("S02: selected timeout returns no result and retains the running session for subsequent public inspection")
+}
+
 func selectedSyncCall(client *stdioMCPClient, timeout int64, cancelOnTimeout bool) mcpJSONRPCResponse {
 	return client.call("tools/call", map[string]any{"name": factorysessionmcp.ToolStartSync, "arguments": map[string]any{
 		"requestId": uuid.NewString(),
@@ -146,6 +162,7 @@ func selectedSyncCall(client *stdioMCPClient, timeout int64, cancelOnTimeout boo
 
 func advanceSelectedSyncToReply(t *testing.T, scheduler *selectedSyncScheduler, reply <-chan mcpJSONRPCResponse) mcpJSONRPCResponse {
 	t.Helper()
+	//nolint:testsleep // Selected polls synchronize progress; host time only bounds a missing protocol reply.
 	ceiling, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	for {

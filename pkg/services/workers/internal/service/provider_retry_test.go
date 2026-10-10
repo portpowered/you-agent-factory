@@ -804,6 +804,7 @@ func TestSelectedRetryWaitCarriesContinuationAndStopsTimer(t *testing.T) {
 			var timer *selectedRetryTimer
 			select {
 			case timer = <-scheduler.registered:
+			//nolint:testsleep // Registration is the synchronization signal; host time only bounds a broken fixture.
 			case <-time.After(5 * time.Second):
 				t.Fatal("retry timer not registered")
 			}
@@ -828,6 +829,7 @@ func TestSelectedRetryWaitCarriesContinuationAndStopsTimer(t *testing.T) {
 				if !canceled && (err != nil || attempts.Load() != 2) {
 					t.Fatalf("advance = %v, attempts = %d", err, attempts.Load())
 				}
+			//nolint:testsleep // Completion is the synchronization signal; host time only bounds a broken fixture.
 			case <-time.After(5 * time.Second):
 				t.Fatal("retry did not join")
 			}
