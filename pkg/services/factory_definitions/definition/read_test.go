@@ -92,9 +92,7 @@ func (h stubDefinitionHost) CaptureFactorySnapshot(
 	sourceDirectory string,
 	metadata map[string]string,
 ) (*factorydefinitions.FactorySnapshot, error) {
-	return factorysnapshotcapture.NewExplicit(
-		factorysnapshot.ObjectFromFactoryConfig,
-	)(
+	return factorysnapshotcapture.NewExplicit(factorysnapshotcapture.NewLoaded(factorysnapshot.ObjectFromFactoryConfig))(
 		factoryDir,
 		factoryConfig,
 		runtimeConfig,

@@ -149,7 +149,7 @@ func composeFactoryDefinitionSupport(
 	error,
 ) {
 	preparePortableFactoryConfig := factorydefinitionswire.PortableFactoryConfigPreparer(applySupportedFiles, applyStarterWork)
-	captureFactorySnapshot := factorydefinitionswire.FactorySnapshotCapturer()
+	captureFactorySnapshot := factorydefinitionswire.FactorySnapshotCapturer(factorydefinitionswire.LoadedFactorySnapshotCapturer())
 	snapshotsPortability, err := snapshotsportabilitywire.NewService(
 		loader.LoadSourceFromCanonicalJSON,
 		factorydefinitionswire.LoadedFactorySnapshotCapturer(),

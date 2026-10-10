@@ -96,3 +96,24 @@ func TestPruneRemovedDocsPreservesDeclaredAndIgnoredFiles(t *testing.T) {
 		t.Fatalf("removed doc stat error = %v, want not-exist", err)
 	}
 }
+
+func TestPruneRemovedDocsRequiresFilesystemAndAcceptsAbsentDocs(t *testing.T) {
+	t.Parallel()
+	if err := PruneRemovedDocs(nil, "selected", nil); err == nil || err.Error() != "portable filesystem is required" {
+		t.Fatalf("missing filesystem = %v", err)
+	}
+	factoryDir := t.TempDir()
+	if err := PruneRemovedDocs(platformfilesystem.Local{}, factoryDir, nil); err != nil {
+		t.Fatalf("absent docs = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "docs"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := PruneRemovedDocs(platformfilesystem.Local{}, factoryDir, nil); err != nil {
+		t.Fatalf("non-directory docs = %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(factoryDir, "docs"))
+	if err != nil || string(content) != "keep" {
+		t.Fatalf("non-directory docs changed: %q, %v", content, err)
+	}
+}

@@ -33,10 +33,8 @@ func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
 
 // FactorySnapshotCapturer binds canonical representation mapping to explicit
 // Factory Definition snapshot capture.
-func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
-	return snapshotsportabilitycapture.NewExplicit(
-		factorysnapshot.ObjectFromFactoryConfig,
-	)
+func FactorySnapshotCapturer(capture contracts.LoadedFactorySnapshotCapturer) contracts.FactorySnapshotCapturer {
+	return snapshotsportabilitycapture.NewExplicit(capture)
 }
 
 // CaptureInitialSnapshot captures the portable Factory Definition stored with

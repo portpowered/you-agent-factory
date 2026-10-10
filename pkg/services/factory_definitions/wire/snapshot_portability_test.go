@@ -43,7 +43,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("PortableFactoryConfigPreparer() = %#v, want alpha config", prepared)
 	}
 
-	capture := factorydefinitionswire.FactorySnapshotCapturer()
+	capture := factorydefinitionswire.FactorySnapshotCapturer(factorydefinitionswire.LoadedFactorySnapshotCapturer())
 	snapshot, err := capture("/factories/alpha", prepared, nil, "", nil)
 	if err != nil {
 		t.Fatalf("FactorySnapshotCapturer() error = %v", err)
