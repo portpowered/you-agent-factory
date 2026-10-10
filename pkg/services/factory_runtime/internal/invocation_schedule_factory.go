@@ -226,6 +226,14 @@ func (wrapped *invocationScheduleFactory) InvokeWorker(ctx context.Context, requ
 	return wrapped.runtimeService().InvokeWorker(ctx, request)
 }
 
+func (wrapped *invocationScheduleFactory) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+	owner := wrapped.runtimeService()
+	if owner == nil {
+		return work.SubmitRequest{}, nil, factory.ErrNotRunning
+	}
+	return owner.PrepareInvocation(ctx, request, caller)
+}
+
 func (wrapped *invocationScheduleFactory) PreviewResourceCapacity(
 	ctx context.Context,
 	request factory.ResourceCapacityRequest,

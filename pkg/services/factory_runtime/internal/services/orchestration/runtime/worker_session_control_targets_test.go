@@ -1063,6 +1063,101 @@ func assertCallerAbsentFromPublishedAdmission(t *testing.T, token string, values
 	}
 }
 
+func TestInvocationCallerScopeDetachesAndRefusesReleasedOrConflictingWork(t *testing.T) {
+	t.Parallel()
+	cfg := &runtimeConfig{}
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	original := *caller
+	release, err := cfg.retainInvocationCaller("source", caller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caller.WorkerSessionID, caller.Token = "changed", "changed"
+	inputs := []workers.WorkInput{{WorkID: "source", Kind: string(workers.DataTypeWork)}}
+	first := cfg.invocationCaller(inputs)
+	if first == nil || *first != original {
+		t.Fatal("invocation caller was not detached")
+	}
+	first.Token = "changed again"
+	if got := cfg.invocationCaller(inputs); got == nil || *got != original {
+		t.Fatal("dispatch mutated retained authority")
+	}
+	if _, err := cfg.retainInvocationCaller("source", caller); !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatal("another invocation replaced retained authority")
+	}
+	if cfg.invocationCaller([]workers.WorkInput{{WorkID: "peer"}}) != nil || cfg.invocationCaller([]workers.WorkInput{{WorkID: "source", Kind: string(workers.DataTypeResource)}}) != nil {
+		t.Fatal("authority crossed Work or resource scope")
+	}
+	if got := cfg.invocationCaller(append(inputs, workers.WorkInput{WorkID: "peer"})); got == nil || got.Token != "" {
+		t.Fatal("mixed Work inputs borrowed one invocation's authority")
+	}
+	release()
+	release()
+	if got := cfg.invocationCaller(inputs); got == nil || got.WorkerSessionID != "" || got.Token != "" {
+		t.Fatal("released pending invocation kept credentials or became unattributed")
+	}
+	if _, err := cfg.retainInvocationCaller("source", caller); !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatal("released Work acquired new caller authority")
+	}
+}
+
+type invocationCallerValidationService struct {
+	workersessions.Service
+	validate func(*workersessions.CallerIdentity) error
+}
+
+func (s invocationCallerValidationService) ValidateCaller(_ context.Context, caller *workersessions.CallerIdentity) error {
+	return s.validate(caller)
+}
+
+func TestPrepareInvocationCallerValidatesBeforeRetainingAuthority(t *testing.T) {
+	t.Parallel()
+	for _, refused := range []bool{false, true} {
+		t.Run(map[bool]string{false: "running", true: "owner lost during preparation"}[refused], func(t *testing.T) {
+			t.Parallel()
+			caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: strings.Repeat("A", 43)}
+			original := *caller
+			f := &factoryImpl{cfg: &runtimeConfig{
+				workRequestIDs: func() string { return "child-work" },
+				workerSessions: invocationCallerValidationService{validate: func(got *workersessions.CallerIdentity) error {
+					if got == caller || *got != original {
+						t.Fatal("caller was not detached before owner validation")
+					}
+					caller.Token = "mutated"
+					if refused {
+						return workersessions.ErrCallerInvalid
+					}
+					return nil
+				}},
+			}}
+			request, release, err := f.PrepareInvocation(t.Context(), work.SubmitRequest{RequestID: "request", WorkTypeID: "task"}, caller)
+			inputs := []workers.WorkInput{{WorkID: "child-work"}}
+			if refused {
+				if !errors.Is(err, workersessions.ErrCallerInvalid) || release != nil || request.WorkID != "" || f.cfg.invocationCaller(inputs) != nil {
+					t.Fatal("invalid caller acquired Work or execution authority")
+				}
+				return
+			}
+			if err != nil || release == nil || request.WorkID != "child-work" || request.RequestID != "request" {
+				t.Fatal("prepared invocation changed ordinary request facts")
+			}
+			defer release()
+			assertRetainedInvocationCaller(t, f.cfg, inputs, original, request)
+		})
+	}
+}
+
+func assertRetainedInvocationCaller(t *testing.T, cfg *runtimeConfig, inputs []workers.WorkInput, original workersessions.CallerIdentity, request work.SubmitRequest) {
+	t.Helper()
+	if got := cfg.invocationCaller(inputs); got == nil || *got != original {
+		t.Fatal("preparation lost invocation-local caller")
+	}
+	encoded, err := json.Marshal(request)
+	if err != nil || strings.Contains(string(encoded), original.Token) {
+		t.Fatal("caller token entered prepared Work")
+	}
+}
+
 func TestRuntimeAttemptAdmissionDoesNotInventScriptInference(t *testing.T) {
 	t.Parallel()
 	planned := workers.WorkstationDispatchRequest{WorkstationName: "script"}

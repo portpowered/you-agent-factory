@@ -62,6 +62,10 @@ func runtimeAttemptPreparation(
 		if err != nil {
 			return nil, err
 		}
+		admittedCaller := caller.Clone()
+		if admittedCaller == nil {
+			admittedCaller = cfg.invocationCaller(executeRequest.Input.Work)
+		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
@@ -72,7 +76,7 @@ func runtimeAttemptPreparation(
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
 				Metadata:                    metadata,
-				Caller:                      caller,
+				Caller:                      admittedCaller,
 				BindEnvironment: func(environment []string) {
 					if executing != nil {
 						executing.Target.Environment.SupervisedEnvironment = append([]string(nil), environment...)

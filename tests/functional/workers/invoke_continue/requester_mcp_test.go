@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 		return err
 	}
 	result := platformprocess.CommandResult{Stdout: directCodexSessionOutput("mcp-child-thread", "selected host MCP output COMPLETE")}
-	child := newInvokeContinueResettableProviderCommandRunner(result, result, result)
+	child := newInvokeContinueResettableProviderCommandRunner(result, result, result, result)
 	return appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-child", child, child, nil, nil, nil, child.Reset)
 }
 
@@ -52,6 +53,7 @@ func TestRequesterMCPSelectedHostDefaultsAndRefusals(t *testing.T) {
 		}
 		assertRequesterMCPUnattributedChild(t, fixture, child, ctx, result.Result.SessionID)
 	}
+	assertRequesterMCPRunningCalls(t, fixture, child, parent, ctx, parentID, token)
 	before := child.providerRunner.CallCount()
 	refused := executeRequesterMCP(t, fixture, child, ctx, parentID, strings.Repeat("A", 43), true)
 	if refused.Error == nil || refused.Error.Code != "WORKER_SESSION_CALLER_INVALID" || child.providerRunner.CallCount() != before {
@@ -67,6 +69,18 @@ func TestRequesterMCPSelectedHostDefaultsAndRefusals(t *testing.T) {
 		t.Fatalf("ended caller was not refused: %#v", refused.Error)
 	}
 	functionalevidence.Covers(t, "cli/you.server.mcp", "mcp/mcp.tool.you.subagent", "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/terminateFactorySession", "rest/closeFactorySession")
+}
+
+func assertRequesterMCPRunningCalls(t *testing.T, fixture *invokeContinuePackageFixture, child, parent *invokeContinueScenario, ctx context.Context, parentID, token string) {
+	t.Helper()
+	for _, explicit := range []bool{true, false} {
+		result := executeRequesterMCP(t, fixture, child, ctx, parentID, token, explicit)
+		if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
+			t.Fatalf("running-caller selected-host RUN failed: %#v", result.Error)
+		}
+		assertRequesterMCPChild(t, fixture, child, ctx, result.Result.SessionID, parentID, token)
+		assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
+	}
 }
 
 func assertRequesterMCPParentActive(t *testing.T, fixture *invokeContinuePackageFixture, parent *invokeContinueScenario, ctx context.Context, parentID string) {
@@ -167,4 +181,35 @@ func decodeRequesterMCPResult(t *testing.T, raw json.RawMessage) factorysessionm
 		t.Fatal("MCP typed result unavailable")
 	}
 	return result
+}
+
+func assertRequesterMCPChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, sessionID, parentID, token string) {
+	t.Helper()
+	requests := child.providerRunner.Requests()
+	command := requests[len(requests)-1]
+	environment := requesterEnvironment(command.Env)
+	if environment["YOU_MESSAGE_TARGET"] != parentID || environment["YOU_FACTORY_SESSION_ID"] != sessionID || environment["YOU_SERVER"] != fixture.baseURL || environment["YOU_WORKER_SESSION_TOKEN"] == token || len(environment["YOU_WORKER_SESSION_TOKEN"]) != 43 || command.WorkDir != child.workingDirectory {
+		t.Fatalf("MCP child agreement target=%t factory=%t host=%t fresh=%t root=%t", environment["YOU_MESSAGE_TARGET"] == parentID, environment["YOU_FACTORY_SESSION_ID"] == sessionID, environment["YOU_SERVER"] == fixture.baseURL, environment["YOU_WORKER_SESSION_TOKEN"] != token, command.WorkDir == child.workingDirectory)
+	}
+	observation := requesterObservation(t, fixture, child, ctx, environment["YOU_WORKER_SESSION_ID"])
+	if observation.Requester == nil || observation.Requester.WorkerSessionId != parentID || observation.Correlation == nil || observation.Correlation.FactorySessionId == nil || *observation.Correlation.FactorySessionId != sessionID {
+		t.Fatal("MCP runner and observation disagree")
+	}
+	assertRequesterMCPMetadata(t, observation.Labels, observation.Correlation.WorkId, environment["YOU_WORK_ID"], parentID)
+	status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+sessionID, nil)
+	if status != http.StatusNotFound {
+		t.Fatal("RUN returned before owner retirement")
+	}
+	if requesterObservation(t, fixture, child, ctx, environment["YOU_WORKER_SESSION_ID"]).State != "COMPLETED" {
+		t.Fatal("MCP child did not complete")
+	}
+}
+
+func assertRequesterMCPMetadata(t *testing.T, labels *[]string, workID *string, executionWorkID, parentID string) {
+	t.Helper()
+	if labels == nil || !slices.Contains(*labels, "parent:"+parentID) || workID == nil || *workID == "" || *workID != executionWorkID {
+		t.Fatal("MCP child lost its parent label or actual Work correlation")
+	}
+	// Packaged invocation creates actual Work tags. These belong to the child;
+	// caller tag inheritance is guarded by Worker Sessions admission units.
 }

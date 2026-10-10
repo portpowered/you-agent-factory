@@ -385,6 +385,16 @@ func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWo
 	return a.scopedInvokeWorker(fs, ctx, req)
 }
 
+func (fs *SessionRuntime) PrepareInvocation(ctx context.Context, request factory.InvocationWork, caller *factory.InvocationCaller) (factory.InvocationWork, func(), error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.InvocationWork{}, nil, factory.ErrNotFound
+	}
+	return runtime.PrepareInvocation(ctx, request, caller.Clone())
+}
+
+var _ factory.Service = (*SessionRuntime)(nil)
+
 func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.ObservationService {
 	var a *Assembly
 	if fs != nil {

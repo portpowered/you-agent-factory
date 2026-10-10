@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -12,12 +13,74 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
+
+func TestSessionOwnerCallerRemainsDetachedAndReleasesOnEveryExit(t *testing.T) {
+	t.Parallel()
+	for _, outcome := range []string{"completed", "refused", "canceled"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: strings.Repeat("A", 43)}
+			original := *caller
+			released := 0
+			owner := newTestSessionOwner(sessionOwnerFixture{
+				FactoryConfig: func(string) (*interfaces.FactoryConfig, error) {
+					caller.WorkerSessionID, caller.Token = "mutated", "mutated"
+					return sessionOwnerFactoryConfig(), nil
+				},
+				SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+					t.Fatal("attributed invocation used ordinary submission")
+					return work.WorkRequestSubmitResult{}, nil
+				},
+				SubmitInvocation: func(_ context.Context, id string, submitted work.SubmitRequest, got *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error) {
+					assertInvocationCallerSubmission(t, id, submitted, got, caller, original)
+					var submitErr error
+					if outcome == "refused" {
+						submitErr = workersessions.ErrCallerInvalid
+					}
+					if outcome == "canceled" {
+						cancel()
+					}
+					return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, func() { released++ }, submitErr
+				},
+				Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+					if released != 0 {
+						t.Fatal("authority released before invocation outcome")
+					}
+					return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
+				},
+			})
+			sourceKind := factorysessions.InvocationInputSourceKindText
+			_, err := owner.Invoke(ctx, "session-1", InvocationRequest{
+				Caller: caller, ContentProvided: true,
+				SourceKind: &sourceKind,
+				Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+			})
+			if released != 1 || (outcome == "completed" && err != nil) || (outcome == "refused" && !errors.Is(err, workersessions.ErrCallerInvalid)) {
+				t.Fatalf("release count %d, error %v", released, err)
+			}
+		})
+	}
+}
+
+func assertInvocationCallerSubmission(t *testing.T, id string, submitted work.SubmitRequest, got, caller *workersessions.CallerIdentity, original workersessions.CallerIdentity) {
+	t.Helper()
+	if id != "session-1" || got == caller || got == nil || *got != original {
+		t.Fatal("caller changed during preparation or addressed another session")
+	}
+	encoded, err := json.Marshal(submitted)
+	if err != nil || strings.Contains(string(encoded), original.Token) || strings.Contains(string(encoded), original.WorkerSessionID) {
+		t.Fatal("caller entered canonical Work")
+	}
+}
 
 func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *testing.T) {
 	cfg := sessionOwnerFactoryConfig()
