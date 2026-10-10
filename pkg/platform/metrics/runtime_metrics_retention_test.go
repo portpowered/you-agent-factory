@@ -237,6 +237,114 @@ func TestRuntimeMetricsCoordinationCancelsWaitingLocksAndClassifiesBusyClaims(t 
 	}
 }
 
+// These component witnesses use real host locks and scenario-owned paths. They
+// prove safe rejection and handoff without launching another OS process.
+func TestRuntimeMetricsCoordinationRejectsFileRootAndRecovers(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), "selected-root")
+	const content = "customer content"
+	if err := os.WriteFile(root, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	coordination := runtimeMetricsCoordination{}
+	lock, err := coordination.TryLockRoot(root)
+	if lock != nil || err == nil || !strings.Contains(err.Error(), "create runtime metrics coordination root") {
+		t.Fatalf("file root = (%v, %v), want rejected acquisition", lock, err)
+	}
+	if data, err := os.ReadFile(root); err != nil || string(data) != content {
+		t.Fatalf("rejected root content = %q, %v", data, err)
+	}
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	lock, err = coordination.TryLockRoot(root)
+	if err != nil {
+		t.Fatalf("corrected root acquisition: %v", err)
+	}
+	t.Cleanup(func() { _ = lock.Close() })
+	if _, err := coordination.TryLockRoot(root); !errors.Is(err, ErrRuntimeMetricsRootBusy) {
+		t.Fatalf("healthy root ownership = %v, want busy", err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRuntimeMetricsCoordinationRejectsDirectoryMarkerAndRecovers(t *testing.T) {
+	t.Parallel()
+	marker := filepath.Join(t.TempDir(), "selected-marker.active")
+	if err := os.Mkdir(marker, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	protected := filepath.Join(marker, "customer.txt")
+	if err := os.WriteFile(protected, []byte("preserved"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	coordination := runtimeMetricsCoordination{}
+	lock, err := coordination.TryClaimMarker(marker)
+	if lock != nil || err == nil || !strings.Contains(err.Error(), "open runtime metrics coordination file") {
+		t.Fatalf("directory marker = (%v, %v), want rejected acquisition", lock, err)
+	}
+	if data, err := os.ReadFile(protected); err != nil || string(data) != "preserved" {
+		t.Fatalf("protected marker content = %q, %v", data, err)
+	}
+	// Move the unsafe candidate intact; a valid marker can then be selected.
+	if err := os.Rename(marker, marker+".protected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lock, err = coordination.TryClaimMarker(marker)
+	if err != nil {
+		t.Fatalf("corrected marker acquisition: %v", err)
+	}
+	t.Cleanup(func() { _ = lock.Close() })
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(marker+".protected", "customer.txt")); err != nil || string(data) != "preserved" {
+		t.Fatalf("recovery changed protected content = %q, %v", data, err)
+	}
+}
+
+func TestRuntimeMetricsCoordinationKeepsPeerClaimsIndependentDuringHandoff(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	first := filepath.Join(root, "2026", "08", "24", "first.log")
+	peer := filepath.Join(root, "2026", "08", "24", "peer.log")
+	coordination := runtimeMetricsCoordination{}
+	owner, err := coordination.Claim(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = owner.Close() })
+	peerOwner, err := coordination.TryClaim(peer)
+	if err != nil {
+		t.Fatalf("independent peer claim: %v", err)
+	}
+	t.Cleanup(func() { _ = peerOwner.Close() })
+	if _, err := coordination.TryClaim(first); !errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
+		t.Fatalf("active selected claim = %v, want busy", err)
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := coordination.TryClaim(first)
+	if err != nil {
+		t.Fatalf("released claim handoff: %v", err)
+	}
+	t.Cleanup(func() { _ = replacement.Close() })
+	if err := owner.Close(); err != nil {
+		t.Fatalf("old owner repeated close: %v", err)
+	}
+	for _, path := range []string{first, peer} {
+		if _, err := coordination.TryClaim(path); !errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
+			t.Fatalf("handoff disturbed live claim %q: %v", path, err)
+		}
+	}
+}
+
 func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaimAndMarker(t *testing.T) {
 	root := t.TempDir()
 	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "stale-claim-runtime-stale-collision", 9)
