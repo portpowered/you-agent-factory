@@ -468,6 +468,7 @@ func TestFileWriterSelectedSummaryNeverReadsHistory(t *testing.T) {
 	}
 	terminal := opening
 	terminal.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "selected"), 3)
+	terminal.Record.Payload = []byte(`{"kind":"SESSION","phase":"FAILED","dispatchId":"attempt","payload":{"status":"FAILED","continuation":{"provider":"codex","kind":"session_id","id":"selected-provider"},"failureCause":"WORKERS_EXECUTION_FAILURE","failureDetail":"expected artifact was not produced"}}`)
 	if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
 		t.Fatal(err)
 	}
@@ -485,11 +486,12 @@ func TestFileWriterSelectedSummaryNeverReadsHistory(t *testing.T) {
 	probe.fault = errors.New("recording reads denied")
 	for i := 0; i < 3; i++ {
 		got, err := reader.LookupWorkerSessionSummary(t.Context(), "selected")
-		if err != nil || got.Capture.Catalog.CommittedPosition != 3 || len(got.Capture.MetadataRecords) != 2 || got.Capture.Terminal.Status != "COMPLETED" {
+		if err != nil || got.Capture.Catalog.CommittedPosition != 3 || len(got.Capture.MetadataRecords) != 2 || got.Capture.Terminal.Status != "FAILED" || !bytes.Equal(got.Capture.MetadataRecords[1].Payload, terminal.Record.Payload) || got.Capture.CapturedAt["3"].IsZero() {
 			t.Fatalf("summary=%+v err=%v", got, err)
 		}
 		got.Capture.Opening.Payload[0] = '!'
 		got.Capture.MetadataRecords[0].Payload[0] = '!'
+		got.Capture.MetadataRecords[1].Payload[0] = '!'
 		got.Capture.CapturedAt["1"] = time.Time{}
 	}
 	if _, err := reader.LookupWorkerSessionSummary(t.Context(), "missing"); !errors.Is(err, os.ErrNotExist) {

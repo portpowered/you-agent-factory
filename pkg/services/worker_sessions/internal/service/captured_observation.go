@@ -55,20 +55,15 @@ func (r *registry) capturedObservationUsage(ctx context.Context, id string) *wor
 	if recordingID == "" {
 		return nil
 	}
-	snapshot, err := r.LoadWorkerRecording(ctx, recordingID)
-	if err != nil || snapshot.RecordingID != recordingID {
+	reader, ok := r.recording.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
 		return nil
 	}
-	return capturedSnapshotUsage(snapshot, publicWorkerID(id), ^uint64(0))
-}
-
-func capturedSnapshotUsage(snapshot recordings.WorkerRecordingSnapshot, id string, head uint64) *workersessions.TokenUsage {
-	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID == id {
-			return capturedSessionUsage(session, head)
-		}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, publicWorkerID(id))
+	if err != nil || summary.Capture.Catalog.RecordingID != recordingID {
+		return nil
 	}
-	return nil
+	return capturedSessionUsage(recordings.WorkerSessionRecordingSnapshot{Records: summary.Capture.MetadataRecords}, summary.Capture.Catalog.CommittedPosition)
 }
 
 func capturedSessionUsage(session recordings.WorkerSessionRecordingSnapshot, head uint64) *workersessions.TokenUsage {

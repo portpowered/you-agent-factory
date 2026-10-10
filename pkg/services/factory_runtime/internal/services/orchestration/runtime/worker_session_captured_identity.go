@@ -155,6 +155,32 @@ func (s *recordedWorkerSessionObservation) withSelectedCapturedIdentity(ctx cont
 		}
 	}
 	observation.TokenUsage = capturedWorkerUsageRecords(item.MetadataRecords, item.Catalog.CommittedPosition)
+	if (observation.State == workersessions.StateCompleted || observation.State == workersessions.StateFailed) && s.Service != nil {
+		observation, err = s.withSelectedCapturedTerminal(ctx, observation, item)
+	}
+	return observation, err
+}
+
+// Canonical Work state stays independent of execution capture. Only an exact,
+// matching terminal enriches its summary; no recording activity is replayed.
+func (s *recordedWorkerSessionObservation) withSelectedCapturedTerminal(ctx context.Context, observation workersessions.Observation, item recordings.WorkerCapturedCatalogItem) (workersessions.Observation, error) {
+	observation.EndedAt, observation.Duration = nil, nil
+	observation.DurationBasis = workersessions.DurationBasisUnavailable
+	if item.Terminal == nil || item.Terminal.Position < 1 || uint64(item.Terminal.Position) > item.Catalog.CommittedPosition {
+		return observation, nil
+	}
+	captured, found, err := archivedFactoryWorker(ctx, s.Service, item.Catalog.FactorySessionID, observation.WorkerSessionID)
+	if err != nil || !found {
+		return observation, err
+	}
+	if captured.AttemptID != observation.AttemptID || captured.State != observation.State {
+		return observation, nil
+	}
+	observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
+	observation.DurationBasis = captured.DurationBasis
+	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable
+	observation.Transcript = captured.Transcript
+	observation.Failure, observation.TerminalCause = captured.Failure, captured.TerminalCause
 	return observation, nil
 }
 
@@ -218,6 +244,9 @@ func (s *recordedWorkerSessionObservation) selectedCapturedCancellation(ctx cont
 // Optional activity reads use exact physical identity and the same list budget.
 // Missing, failed or slow transcript capture leaves committed facts intact.
 func (s *recordedWorkerSessionObservation) withSelectedCapturedTranscript(ctx, optionalCtx context.Context, observation workersessions.Observation) (workersessions.Observation, error) {
+	if _, prepared := s.recordingReader.(recordings.WorkerCapturedSummaryReader); prepared && s.recordingID != "" && (observation.State == workersessions.StateCompleted || observation.State == workersessions.StateFailed) {
+		return observation, observationContextError(ctx)
+	}
 	if s.Service == nil || !observation.State.Terminal() || !observation.ProviderSessionAvailable || optionalCtx.Err() != nil {
 		return observation, observationContextError(ctx)
 	}

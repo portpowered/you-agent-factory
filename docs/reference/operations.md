@@ -1094,10 +1094,17 @@ including list, show, live and terminal stream frames, and read.
 
 ### Captured usage
 
-Archived Worker Session timing uses the recorded start and the host's terminal
+Completed captured Worker Session timing uses the recorded start and the host's terminal
 capture time. The duration includes capture completion and has basis
 `RECORDED_TIMESTAMPS`. Captures without both timestamps leave end and duration
-unavailable. Restart does not create missing timestamps.
+unavailable. Live-ended and archived summaries use the same committed timestamp.
+This timestamp measures host capture completion, not provider execution completion.
+Restart does not create missing timestamps.
+
+Completed summaries retain the captured Provider Session reference and transcript
+availability after restart. Captured failure details remain available for `FAILED`
+Worker Sessions. A downstream Work rejection remains independent of the captured
+execution outcome. Missing associations and failure facts remain unavailable.
 
 Worker Session observations use facts captured by `you`. Captured `tokenUsage`
 remains available after reload when retained usage records are readable. Missing
