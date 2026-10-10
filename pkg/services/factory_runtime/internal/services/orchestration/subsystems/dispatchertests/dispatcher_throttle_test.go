@@ -2,6 +2,7 @@ package subsystems_test
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"sort"
 	"strings"
 	"testing"
@@ -45,16 +46,10 @@ func TestDispatcher_ExecuteExposesActiveThrottlePausesFromLoweredInferenceThrott
 			},
 		},
 	}
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		&mockScheduler{},
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
-		), func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{}, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+	), func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -96,7 +91,7 @@ func TestDispatcher_ExecuteOmitsThrottlePauseObservabilityWithoutAuthoredInferen
 			},
 		},
 	}
-	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{}, nil, logging.NoopLogger{}, nil, func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{}, nil, logging.NoopLogger{}, nil, func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	result, err := dispatcher.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -133,13 +128,18 @@ func TestDispatcher_ExecuteLeavesLaneRunnableWhenAuthoredThrottleRuntimeLookupIs
 		},
 	}
 	sched := &recordingScheduler{}
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		n,
 		sched,
 		nil,
 		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(), func() time.Time { return now }, testDispatchID)
+		dispatcherRuntimeConfig(),
+		func() time.Time { return now },
+		testDispatchID,
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
+	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -205,16 +205,10 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		sched,
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
-		), func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+	), func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -286,7 +280,7 @@ func TestDispatcher_ThrottleHistoryWithoutAuthoredGuardDoesNotFilterEnabledTrans
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -356,15 +350,9 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		},
 	}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		sched,
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return currentTime }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return currentTime }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	pausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -430,15 +418,9 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 		},
 	}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		&mockScheduler{},
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return currentTime }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{}, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return currentTime }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	firstSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -501,15 +483,9 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 	}
 	sched := &mockScheduler{}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		sched,
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return currentTime }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return currentTime }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	firstFailure := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -563,15 +539,9 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		},
 	}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		&mockScheduler{},
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{}, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -613,15 +583,9 @@ func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *test
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		sched,
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -668,15 +632,9 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		},
 	}
 	currentTime := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		&mockScheduler{},
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return currentTime }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{}, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return currentTime }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	pausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -755,16 +713,10 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.April, 8, 11, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		sched,
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
-		), func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+	), func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -826,16 +778,10 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 	}
 	sched := &recordingScheduler{}
 	now := time.Date(2026, time.May, 2, 5, 0, 0, 0, time.UTC)
-	dispatcher := subsystems.NewDispatcher(
-		n,
-		sched,
-		nil,
-		logging.NoopLogger{},
-
-		dispatcherRuntimeConfig(
-			interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
-		), func() time.Time { return now }, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, dispatcherRuntimeConfig(
+		interfaces.FactoryWorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+		interfaces.FactoryWorkerConfig{Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
+	), func() time.Time { return now }, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{

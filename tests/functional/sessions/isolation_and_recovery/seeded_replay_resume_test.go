@@ -107,6 +107,9 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 	t.Run("successor history", func(t *testing.T) {
 		testSeededReplayResumePreservesSuccessorHistory(t, reusable)
 	})
+	t.Run("explicit resume reader failure", func(t *testing.T) {
+		testResumeReaderFailurePreservesCompletedRecording(t, reusable)
+	})
 	t.Run("F01 read failure safety", func(t *testing.T) {
 		testRecordStartupSafetyReadFailurePreservesTargetAndCause(t, reusable)
 	})
@@ -119,6 +122,57 @@ func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t
 	t.Run("F05 fresh recording boundaries", func(t *testing.T) {
 		testRecordStartupSafetyFreshTargets(t, reusable)
 	})
+}
+
+func testResumeReaderFailurePreservesCompletedRecording(t *testing.T, reusable *seededReplayResumeProcess) {
+	t.Helper()
+	t.Parallel()
+	dir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	source := filepath.Join(dir, "completed.json")
+	payload := seededReplayResumeArtifactPayload(t, true)
+	if err := os.WriteFile(source, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cause := &fs.PathError{Op: "read resume recording", Path: source, Err: fs.ErrPermission}
+	reusable.mu.Lock()
+	reusable.readErrorsByPath[filepath.Clean(source)] = cause
+	reusable.mu.Unlock()
+	t.Cleanup(func() {
+		reusable.mu.Lock()
+		delete(reusable.readErrorsByPath, filepath.Clean(source))
+		reusable.mu.Unlock()
+	})
+	sessionID := uuid.NewString()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--session", sessionID,
+		"--dir", dir, "--resume", source, "--record", filepath.Join(dir, "failed-successor.json"), "--quiet"})
+	home := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = dir
+	err := reusable.process.Execute(inputs.Input)
+	if !errors.Is(err, cause) {
+		t.Fatalf("resume error = %v, want original read failure", err)
+	}
+	if !bytes.Equal(payload, mustReadSeededReplayArtifact(t, source)) || inputs.Stdout() != "" {
+		t.Fatal("failed resume changed completed recording or emitted a result")
+	}
+	if !strings.Contains(inputs.Stderr(), "permission denied") {
+		t.Fatal("resume omitted its read diagnostic")
+	}
+	// A healthy explicit Session on the same process still restores completed
+	// Work and its retained history, without a new provider dispatch.
+	peerDir := support.ScaffoldFactory(t, seededReplayResumeFactoryConfig())
+	peerSource := filepath.Join(peerDir, "healthy.json")
+	if err := os.WriteFile(peerSource, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	peer := reusable.runForSession(t, peerDir, peerSource, uuid.NewString(), "--resume", peerSource, "--record", filepath.Join(peerDir, "successor.json"))
+	assertSeededSuccessorWorkAndHistory(t, peer, true)
+	for _, event := range support.GetFactoryEventsForSessionAt(t, peer.url, peer.sessionID) {
+		if event.Type == factoryapi.FactoryEventTypeDispatchRequest {
+			t.Fatal("completed peer Work was redispatched")
+		}
+	}
+	peer.daemon.Stop(t)
 }
 
 func testRecordStartupSafetyFreshTargets(t *testing.T, reusable *seededReplayResumeProcess) {

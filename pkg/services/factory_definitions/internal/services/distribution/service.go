@@ -39,14 +39,3 @@ type Service interface {
 // ScaffoldFactoryNameResolver reads the authored factory aggregate name from a
 // scaffolded factory directory after materialization.
 type ScaffoldFactoryNameResolver func(factoryDir string) (string, error)
-
-// Dependencies are the exact collaborator ports required by distribution.
-// They are supplied by Factory Definitions composition and never selected here:
-// distribution does not choose host filesystem/SQL/OS adapters or Wire/root
-// constructors.
-type Dependencies struct {
-	PackagedCatalog             factorydefinitions.PackagedFactoryCatalogOperations
-	PackagedInstaller           factorydefinitions.PackagedFactoryInstallationOperations
-	ScaffoldInitializer         factorydefinitions.ScaffoldInitializer
-	ScaffoldFactoryNameResolver ScaffoldFactoryNameResolver
-}

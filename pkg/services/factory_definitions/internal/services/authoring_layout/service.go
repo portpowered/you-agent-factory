@@ -39,22 +39,3 @@ type Service interface {
 		factorydefinitions.ReplaceNamedFactoryRequest,
 	) (factorydefinitions.ReplaceNamedFactoryResult, error)
 }
-
-// Dependencies are the exact collaborator ports required by authoring_layout.
-// They are supplied by Factory Definitions composition and never selected here:
-// authoring_layout does not choose host filesystem adapters or Wire/root
-// constructors.
-type Dependencies struct {
-	Validator            factorydefinitions.Validator
-	MapInput             factorydefinitions.FactoryLayoutPayloadMapper
-	DecodeFactory        factorydefinitions.FactoryConfigJSONDecoder
-	NormalizeAuthored    func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
-	EncodeFactory        func(*factorydefinitions.FactoryConfig) ([]byte, error)
-	Write                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error
-	Validate             func(string) error
-	Flatten              factorydefinitions.FactoryLayoutFlattener
-	Expand               factorydefinitions.FactoryLayoutExpander
-	FileSystem           factorydefinitions.PersistenceFileSystem
-	RequireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
-	Directories          factorydefinitions.DirectoryReplacementStore
-}

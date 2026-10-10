@@ -433,10 +433,6 @@
       "minimum": 80.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-      "minimum": 58.82
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
       "minimum": 50.00
     },
@@ -547,10 +543,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
       "minimum": 44.82
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",

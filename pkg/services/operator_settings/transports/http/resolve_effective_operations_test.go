@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -177,5 +178,75 @@ func TestAdapter_ResolveEffectiveDoesNotMutateOperatorDocumentState(t *testing.T
 	})
 	if err != nil {
 		t.Fatalf("ResolveEffective error = %v", err)
+	}
+}
+
+func TestAdapter_ResolveEffectiveForwardsAllFacts(t *testing.T) {
+	t.Parallel()
+	baseline := operatorsettings.DocumentDefaults{WorkerModelProvider: "codex", WorkerModel: "gpt-5"}
+	presets := []operatorsettings.DocumentWorkerPreset{
+		{ID: "focused", ModelProvider: "codex", Model: "gpt-5", ReasoningEffort: "high"},
+	}
+	requests := make(chan operatorsettings.ResolveEffectiveRequest, 1)
+	fake := &rootFake{
+		loadDocument: func(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error) {
+			t.Error("resolve invoked load")
+			return operatorsettings.LoadDocumentResult{}, nil
+		},
+		applyDocumentUpdate: func(operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error) {
+			t.Error("resolve invoked update")
+			return operatorsettings.ApplyDocumentUpdateResult{}, nil
+		},
+		resolveEffective: func(request operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error) {
+			requests <- request
+			return operatorsettings.ResolveEffectiveResult{Selection: operatorsettings.EffectiveSelection{
+				BackendScopeID: " scope ", ConfigPath: " /owner/config.json ", WorkerPresets: presets,
+				WorkerModelProvider: " codex ", WorkerModel: " gpt-5 ",
+				WorkerModelProviderSource: operatorsettings.EffectiveLayerSourceEnv,
+				WorkerModelSource:         operatorsettings.EffectiveLayerSourceFlag,
+			}}, nil
+		},
+	}
+	response, err := NewAdapter(fake).ResolveEffective(context.Background(), ResolveEffectiveInput{
+		DocumentBaseline: baseline, ExpectedDocumentBaseline: &baseline, WorkerPresets: presets,
+		BackendScopeID: " scope ", ConfigPath: " /request/config.json ",
+		EnvironmentOverrides: EffectiveOverrideFactsInput{
+			WorkerModelProvider: " openai ", WorkerModel: " env-model ", WorkerPresetID: " env-preset ",
+		},
+		InvocationOverrides: EffectiveOverrideFactsInput{
+			WorkerModelProvider: " codex ", WorkerModel: " flag-model ", WorkerPresetID: " focused ",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: baseline, ExpectedDocumentBaseline: &baseline, WorkerPresets: presets,
+		BackendScopeID: "scope", ConfigPath: "/request/config.json",
+		EnvironmentOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "openai", WorkerModel: "env-model", WorkerPresetID: "env-preset",
+		},
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "codex", WorkerModel: "flag-model", WorkerPresetID: "focused",
+		},
+	}
+	if got := <-requests; !reflect.DeepEqual(got, want) {
+		t.Fatalf("owner request = %#v, want %#v", got, want)
+	}
+	assertOwnerSelection(t, response.Selection)
+}
+
+func assertOwnerSelection(t *testing.T, selection EffectiveSelectionResponse) {
+	t.Helper()
+	if selection.BackendScopeID != "scope" || selection.ConfigPath != "/owner/config.json" ||
+		selection.WorkerModelProvider != "codex" || selection.WorkerModel != "gpt-5" ||
+		selection.WorkerModelProviderSource != "env" || selection.WorkerModelSource != "flag" ||
+		len(selection.WorkerPresets) != 1 {
+		t.Fatalf("selection = %#v, want owner values and sources", selection)
+	}
+	preset := selection.WorkerPresets[0]
+	if preset.Id != "focused" || preset.ModelProvider != "codex" || preset.Model == nil ||
+		*preset.Model != "gpt-5" || preset.ReasoningEffort == nil || *preset.ReasoningEffort != "high" {
+		t.Fatalf("preset = %#v, want all owner preset facts", preset)
 	}
 }

@@ -53,13 +53,18 @@ func TestDispatcher_CronTransitionDispatchesThroughWorkerPathWithTimeToken(t *te
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
-		logging.NoopLogger{}, nil,
-
-		func() time.Time { return currentTime }, testDispatchID)
+		logging.NoopLogger{},
+		nil,
+		func() time.Time { return currentTime },
+		testDispatchID,
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
+	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -155,7 +160,7 @@ func TestDispatcher_RepeatedRunsProduceStableDispatchAndTokenSequences(t *testin
 	wantResourceTokens := []string{"slot-a-1", "slot-b-1"}
 
 	for i := 0; i < 10; i++ {
-		dispatcher := subsystems.NewDispatcher(n, scheduler.NewFIFOScheduler(), nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+		dispatcher := subsystems.NewDispatcherWithSeededReplay(n, scheduler.NewFIFOScheduler(), nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, scheduler.NewEnablementEvaluator(), nil, nil)
 		snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 			Marking: petri.MarkingSnapshot{
 				Tokens: map[string]*factorytoken.Token{
@@ -225,13 +230,18 @@ func TestDispatcher_UsesDispatcherClockForCronTimeWindowGuard(t *testing.T) {
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
-		logging.NoopLogger{}, nil,
-
-		func() time.Time { return currentTime }, testDispatchID)
+		logging.NoopLogger{},
+		nil,
+		func() time.Time { return currentTime },
+		testDispatchID,
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
+	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -289,13 +299,18 @@ func TestDispatcher_CronLogicalMoveDispatchUsesWorkstationRunnerKey(t *testing.T
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		n,
 		scheduler.NewFIFOScheduler(),
 		nil,
-		logging.NoopLogger{}, nil,
-
-		func() time.Time { return currentTime }, testDispatchID)
+		logging.NoopLogger{},
+		nil,
+		func() time.Time { return currentTime },
+		testDispatchID,
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
+	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{

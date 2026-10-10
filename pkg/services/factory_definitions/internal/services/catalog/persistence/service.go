@@ -318,13 +318,7 @@ func (s *service) persistNamedFactory(
 		name,
 		prepared,
 		replaceExisting,
-		authoringlayoutpersist.Ports{
-			Write:                s.write,
-			Validate:             s.validate,
-			FileSystem:           s.fileSystem,
-			RequireDefinitionDir: s.requireDefinitionDir,
-			Directories:          s.directories,
-		},
+		s.write, s.validate, s.fileSystem, s.requireDefinitionDir, s.directories,
 	)
 }
 

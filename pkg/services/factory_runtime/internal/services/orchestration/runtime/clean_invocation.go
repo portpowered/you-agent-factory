@@ -13,7 +13,6 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -121,11 +120,7 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 	snap := state.NewEngineStateSnapshot(runtimeSnap, string(currentState), uptime, f.topology)
 	snap.LifecycleControlStatus = lifecycleControlStatusFromWorldState(worldState, string(currentState))
 	enablementStartedAt := f.clock.Now()
-	snap.EnabledTransitions = scheduler.NewEnablementEvaluator(
-		f.logger,
-		f.clock.Now,
-		f.cfg.runtimeConfig,
-	).FindEnabledTransitionsWithSnapshot(ctx, f.topology, &snap)
+	snap.EnabledTransitions = f.cfg.enablement.FindEnabledTransitionsWithSnapshot(ctx, f.topology, &snap, f.logger, f.clock.Now, f.cfg.runtimeConfig)
 	f.logger.Debug(
 		"factory runtime state snapshot phases",
 		"engine_snapshot_duration_ms", engineSnapshotDuration.Milliseconds(),

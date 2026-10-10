@@ -2,148 +2,73 @@ package service_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
-	"strings"
 	"testing"
 
-	"bytes"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-
-	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
-	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
-	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
-	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
-	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
-	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
+	distributionserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/service"
 )
 
-func TestDistributionListsAndResolvesBuiltInPackagedFactories(t *testing.T) {
+func TestDistributionDelegatesCatalogRequestsResultsAndFailures(t *testing.T) {
 	t.Parallel()
-
-	catalog, err := distributionpackagedcatalog.New([]factorydefinitions.PackagedDefinition{
-		{
-			Name: "@you/review", Project: "builtin-review",
-			JSON: []byte(`{"name":"review"}`),
-			Formats: []factorydefinitions.PackagedFactoryFormat{
-				factorydefinitions.PackagedFactoryFormatJSON,
-			},
-		},
-		{
-			Name: "@you/goal", Project: "builtin-goal",
-			JSON: []byte(`{"name":"goal"}`),
-			Formats: []factorydefinitions.PackagedFactoryFormat{
-				factorydefinitions.PackagedFactoryFormatJSON,
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("New catalog: %v", err)
-	}
-
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog: catalog,
-		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
-			Install: func(
-				context.Context,
-				factorydefinitions.PackagedFactoryInstallParams,
-			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+	failure := errors.New("catalog unavailable")
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			listRequest := factorydefinitions.ListBuiltInPackagedFactoriesRequest{}
+			resolveRequest := factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"}
+			listed := factorydefinitions.ListBuiltInPackagedFactoriesResult{Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{Name: "@you/goal", Project: "builtin-goal", Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON}}}}
+			resolved := factorydefinitions.ResolveBuiltInPackagedFactoryResult{Definition: factorydefinitions.PackagedDefinition{Name: "@you/goal", JSON: []byte(`{"name":"goal"}`)}}
+			calls := []string{}
+			catalog := factorydefinitions.PackagedFactoryCatalogOperations{
+				List: func(gotCtx context.Context, request factorydefinitions.ListBuiltInPackagedFactoriesRequest) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+					calls = append(calls, "list")
+					if gotCtx != ctx || !reflect.DeepEqual(request, listRequest) {
+						t.Fatal("list request changed")
+					}
+					if fail {
+						return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, failure
+					}
+					return listed, nil
+				},
+				Resolve: func(gotCtx context.Context, request factorydefinitions.ResolveBuiltInPackagedFactoryRequest) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+					calls = append(calls, "resolve")
+					if gotCtx != ctx || request != resolveRequest {
+						t.Fatal("resolve request changed")
+					}
+					if fail {
+						return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, failure
+					}
+					return resolved, nil
+				},
+			}
+			svc := newDistributionService(t, catalog, factorydefinitions.PackagedFactoryInstallationOperations{Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				t.Fatal("catalog called installer")
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
-			},
-		},
-		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
-		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-
-	listed, err := svc.ListBuiltInPackagedFactories(
-		t.Context(),
-		factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
-	)
-	if err != nil {
-		t.Fatalf("ListBuiltInPackagedFactories: %v", err)
-	}
-	gotNames := []string{listed.Entries[0].Name, listed.Entries[1].Name}
-	if !reflect.DeepEqual(gotNames, []string{"@you/goal", "@you/review"}) {
-		t.Fatalf("listed names = %v", gotNames)
-	}
-	if listed.Entries[0].Project != "builtin-goal" ||
-		!reflect.DeepEqual(listed.Entries[0].Formats, []factorydefinitions.PackagedFactoryFormat{
-			factorydefinitions.PackagedFactoryFormatJSON,
-		}) {
-		t.Fatalf("listed goal entry = %#v", listed.Entries[0])
-	}
-
-	resolved, err := svc.ResolveBuiltInPackagedFactory(
-		t.Context(),
-		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"},
-	)
-	if err != nil {
-		t.Fatalf("ResolveBuiltInPackagedFactory: %v", err)
-	}
-	if resolved.Definition.Project != "builtin-goal" ||
-		!reflect.DeepEqual(resolved.Formats, []factorydefinitions.PackagedFactoryFormat{
-			factorydefinitions.PackagedFactoryFormatJSON,
-		}) {
-		t.Fatalf("resolved = %#v", resolved)
-	}
-}
-
-func TestDistributionResolveUnknownOrBlankNameFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	catalog, err := distributionpackagedcatalog.New([]factorydefinitions.PackagedDefinition{{
-		Name:    "@you/goal",
-		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
-	}})
-	if err != nil {
-		t.Fatalf("New catalog: %v", err)
-	}
-
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog: catalog,
-		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
-			Install: func(
-				context.Context,
-				factorydefinitions.PackagedFactoryInstallParams,
-			) (factorydefinitions.PackagedFactoryInstallResult, error) {
-				return factorydefinitions.PackagedFactoryInstallResult{}, nil
-			},
-		},
-		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
-		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-
-	_, unknownErr := svc.ResolveBuiltInPackagedFactory(
-		t.Context(),
-		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/missing"},
-	)
-	if !errors.Is(unknownErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
-		t.Fatalf("ResolveBuiltInPackagedFactory(missing) error = %v", unknownErr)
-	}
-	if !strings.Contains(unknownErr.Error(), "@you/goal") {
-		t.Fatalf("ResolveBuiltInPackagedFactory(missing) error = %q, want stable public inventory", unknownErr.Error())
-	}
-
-	_, blankErr := svc.ResolveBuiltInPackagedFactory(
-		t.Context(),
-		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: ""},
-	)
-	if !errors.Is(blankErr, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
-		t.Fatalf("ResolveBuiltInPackagedFactory(blank) error = %v, want ErrUnknownPackagedFactoryIdentity", blankErr)
+			}})
+			if len(calls) != 0 {
+				t.Fatal("construction called catalog")
+			}
+			listResult, listErr := svc.ListBuiltInPackagedFactories(ctx, listRequest)
+			result, resolveErr := svc.ResolveBuiltInPackagedFactory(ctx, resolveRequest)
+			var wantErr error
+			wantList := listed
+			wantResult := resolved
+			if fail {
+				wantErr = failure
+				wantList = factorydefinitions.ListBuiltInPackagedFactoriesResult{}
+				wantResult = factorydefinitions.ResolveBuiltInPackagedFactoryResult{}
+			}
+			assertCatalogErrorIdentity(t, listErr, wantErr)
+			assertCatalogErrorIdentity(t, resolveErr, wantErr)
+			if !reflect.DeepEqual(listResult, wantList) || !errors.Is(listErr, wantErr) || !errors.Is(resolveErr, wantErr) || !reflect.DeepEqual(result, wantResult) || !reflect.DeepEqual(calls, []string{"list", "resolve"}) {
+				t.Fatalf("catalog result=%#v errors=%v/%v calls=%v", result, listErr, resolveErr, calls)
+			}
+		})
 	}
 }
 
@@ -244,7 +169,7 @@ func TestDistributionInstallPackagedFactoryWrapsInstallerFailure(t *testing.T) {
 			Name:    "@you/goal",
 		},
 	)
-	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
+	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) || !errors.Is(err, installErr) {
 		t.Fatalf("InstallPackagedFactory() error = %v, want ErrFactoryDistributeFailed", err)
 	}
 }
@@ -356,74 +281,6 @@ func TestDistributionInstallPackagedFactoryRejectsIncompatibleScaffoldOptions(t 
 	}
 	if resolveCalls != 0 {
 		t.Fatalf("resolve calls = %d, want 0 before incompatible-option rejection", resolveCalls)
-	}
-}
-
-func TestDistributionInstallPackagedFactoryThroughInjectedPorts(t *testing.T) {
-	t.Parallel()
-
-	goalJSON, err := json.Marshal(factoryfixtures.MinimalFactoryConfig())
-	if err != nil {
-		t.Fatalf("marshal goal factory: %v", err)
-	}
-	catalog, err := distributionpackagedcatalog.New([]factorydefinitions.PackagedDefinition{{
-		Name:    "@you/goal",
-		Project: "builtin-goal",
-		JSON:    goalJSON,
-		Formats: []factorydefinitions.PackagedFactoryFormat{
-			factorydefinitions.PackagedFactoryFormatJSON,
-		},
-	}})
-	if err != nil {
-		t.Fatalf("New catalog: %v", err)
-	}
-
-	fileSystem := platformfilesystem.Local{}
-	persistence := factorydefinitioncomposition.FactoryDefinitionPersistenceWithValidator(
-		factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON),
-	)
-	installer := distributionpackagedinstallation.New(persistence, fileSystem, os.Mkdir, func(pid int) (platformprocess.Incarnation, error) {
-		return platformprocess.Incarnation{PID: pid, Host: "test-host", Start: "test-start"}, nil
-	}, logging.NoopLogger{})
-	svc := newDistributionService(t, catalog, factorydefinitions.PackagedFactoryInstallationOperations{
-		Install: installer.InstallPackagedFactory,
-	})
-
-	root := t.TempDir()
-	request := factorydefinitions.InstallPackagedFactoryRequest{
-		RootDir: root,
-		Name:    "@you/goal",
-		Format:  factorydefinitions.PackagedFactoryFormatJSON,
-	}
-
-	created, err := svc.InstallPackagedFactory(t.Context(), request)
-	if err != nil {
-		t.Fatalf("initial InstallPackagedFactory: %v", err)
-	}
-	if created.Definition.Name != "@you/goal" ||
-		created.Definition.FactoryDir == "" ||
-		created.Outcome != factorydefinitions.PackagedFactoryInstallCreated {
-		t.Fatalf("created = %#v", created)
-	}
-
-	skipped, err := svc.InstallPackagedFactory(t.Context(), request)
-	if err != nil {
-		t.Fatalf("repeat InstallPackagedFactory: %v", err)
-	}
-	if skipped.Outcome != factorydefinitions.PackagedFactoryInstallSkipped {
-		t.Fatalf("skipped outcome = %q", skipped.Outcome)
-	}
-
-	request.Replace = true
-	replaced, err := svc.InstallPackagedFactory(t.Context(), request)
-	if err != nil {
-		t.Fatalf("replace InstallPackagedFactory: %v", err)
-	}
-	if replaced.Outcome != factorydefinitions.PackagedFactoryInstallReplaced {
-		t.Fatalf("replaced outcome = %q", replaced.Outcome)
-	}
-	if replaced.Definition.Name != "@you/goal" || replaced.Definition.FactoryDir == "" {
-		t.Fatalf("replaced facts = %#v", replaced.Definition)
 	}
 }
 
@@ -569,47 +426,8 @@ func TestDistributionCreateFactoryScaffoldWrapsInitializerFailure(t *testing.T) 
 			TargetDir: "/customer/factories/alpha",
 		},
 	)
-	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
+	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) || !errors.Is(err, initErr) {
 		t.Fatalf("CreateFactoryScaffold() error = %v, want ErrFactoryDistributeFailed", err)
-	}
-}
-
-func TestDistributionCreateFactoryScaffoldThroughInjectedPorts(t *testing.T) {
-	t.Parallel()
-
-	fileSystem := platformfilesystem.Local{}
-	output := &bytes.Buffer{}
-	initialize, err := factorydefaultscaffold.NewScaffoldInitializer(fileSystem, output)
-	if err != nil {
-		t.Fatalf("NewScaffoldInitializer: %v", err)
-	}
-	svc := newDistributionServiceWithScaffold(
-		t,
-		goalPackagedCatalog(t),
-		factorydefinitions.PackagedFactoryInstallationOperations{
-			Install: func(
-				context.Context,
-				factorydefinitions.PackagedFactoryInstallParams,
-			) (factorydefinitions.PackagedFactoryInstallResult, error) {
-				return factorydefinitions.PackagedFactoryInstallResult{}, nil
-			},
-		},
-		initialize,
-		distributionscaffoldfacts.LocalFactoryNameResolver(),
-	)
-
-	targetDir := t.TempDir()
-	result, err := svc.CreateFactoryScaffold(
-		t.Context(),
-		factorydefinitions.CreateFactoryScaffoldRequest{TargetDir: targetDir},
-	)
-	if err != nil {
-		t.Fatalf("CreateFactoryScaffold: %v", err)
-	}
-	if result.Definition.Name != "factory" ||
-		result.Definition.FactoryDir != targetDir ||
-		result.ScaffoldType != factorydefinitions.DefaultScaffoldType {
-		t.Fatalf("CreateFactoryScaffold() = %#v", result)
 	}
 }
 
@@ -634,14 +452,14 @@ func newDistributionServiceWithScaffold(
 	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
 	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
 ) distributionservice.Service {
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:             catalog,
-		PackagedInstaller:           installer,
-		ScaffoldInitializer:         scaffoldInitializer,
-		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
+	svc := distributionserviceimpl.New(
+		catalog,
+		installer,
+		scaffoldInitializer,
+		scaffoldFactoryNameResolver,
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }
@@ -652,17 +470,83 @@ func scaffoldNameResolver(name string) distributionservice.ScaffoldFactoryNameRe
 	}
 }
 
+// Controlled catalog answers keep Distribution tests inside their orchestration
+// boundary. Catalog identity/format policy has its own component suite.
 func goalPackagedCatalog(t *testing.T) factorydefinitions.PackagedFactoryCatalogOperations {
-	catalog, err := distributionpackagedcatalog.New([]factorydefinitions.PackagedDefinition{{
-		Name:    "@you/goal",
-		Project: "builtin-goal",
-		JSON:    []byte(`{"name":"goal"}`),
-		Formats: []factorydefinitions.PackagedFactoryFormat{
-			factorydefinitions.PackagedFactoryFormatJSON,
+	t.Helper()
+	return factorydefinitions.PackagedFactoryCatalogOperations{
+		List: func(context.Context, factorydefinitions.ListBuiltInPackagedFactoriesRequest) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+			t.Fatal("install/scaffold listed catalog")
+			return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
 		},
-	}})
-	if err != nil {
-		t.Fatalf("New catalog: %v", err)
+		Resolve: func(_ context.Context, request factorydefinitions.ResolveBuiltInPackagedFactoryRequest) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+			if request.Name != "@you/goal" {
+				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, factorydefinitions.ErrUnknownPackagedFactoryIdentity
+			}
+			return factorydefinitions.ResolveBuiltInPackagedFactoryResult{Definition: factorydefinitions.PackagedDefinition{Name: "@you/goal", Project: "builtin-goal", JSON: []byte(`{"name":"goal"}`)}}, nil
+		},
 	}
-	return catalog
+}
+
+func TestScaffoldResolvesNameAfterInitializationAndPreservesResolutionFailure(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("name unavailable")
+	for _, tc := range []struct {
+		name     string
+		resolved string
+		err      error
+	}{
+		{name: "resolved", resolved: "alpha"},
+		{name: "failure", err: failure},
+		{name: "blank", resolved: " "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			calls := []string{}
+			svc := newDistributionServiceWithScaffold(t, unusedScaffoldCatalog(t), factorydefinitions.PackagedFactoryInstallationOperations{Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				t.Fatal("scaffold called installer")
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			}},
+				func(cfg factorydefinitions.ScaffoldConfig) error {
+					calls = append(calls, "initialize")
+					if cfg.Dir != "/target" {
+						t.Fatalf("initialize dir=%q", cfg.Dir)
+					}
+					return nil
+				},
+				func(dir string) (string, error) {
+					calls = append(calls, "resolve")
+					if dir != "/target" {
+						t.Fatalf("resolve dir=%q", dir)
+					}
+					return tc.resolved, tc.err
+				})
+			if len(calls) != 0 {
+				t.Fatal("construction invoked scaffold ports")
+			}
+			result, err := svc.CreateFactoryScaffold(t.Context(), factorydefinitions.CreateFactoryScaffoldRequest{TargetDir: " /target "})
+			if !reflect.DeepEqual(calls, []string{"initialize", "resolve"}) {
+				t.Fatalf("calls=%v", calls)
+			}
+			assertScaffoldResolution(t, result, err, tc.resolved, tc.err)
+		})
+	}
+}
+
+func assertCatalogErrorIdentity(t *testing.T, got, want error) {
+	t.Helper()
+	if got != want { //nolint:errorlint // Catalog delegation must forward the identical error without wrapping.
+		t.Fatalf("catalog error = %v, want identical %v", got, want)
+	}
+}
+
+func assertScaffoldResolution(t *testing.T, result factorydefinitions.CreateFactoryScaffoldResult, err error, resolved string, resolutionErr error) {
+	t.Helper()
+	if resolutionErr != nil || resolved == " " {
+		if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) || (resolutionErr != nil && !errors.Is(err, resolutionErr)) || !reflect.DeepEqual(result, factorydefinitions.CreateFactoryScaffoldResult{}) {
+			t.Fatalf("result=%#v error=%v", result, err)
+		}
+	} else if err != nil || result.Definition.Name != resolved || result.Definition.FactoryDir != "/target" || result.ScaffoldType != factorydefinitions.DefaultScaffoldType {
+		t.Fatalf("result=%#v error=%v", result, err)
+	}
 }

@@ -13,9 +13,9 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
-	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
 	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
+	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -43,6 +43,7 @@ type Service struct {
 	versionFileSystem      factoryroot.VersionFileSystem
 	distributionService    distributionservice.Service
 	listEffective          factoryroot.EffectiveFactoryCatalogOperation
+	snapshotsPortability   snapshotsportability.Service
 }
 
 // CompilationOperations is the lifecycle's exact effective-source compilation dependency.
@@ -88,127 +89,6 @@ func (s *Service) ResolveExecutionCatalog(
 	return workstationexecution.ResolveExecutionCatalog(ctx, request)
 }
 
-// NewWithCatalogAndPackages constructs the Definitions root collaborator with
-// both persisted and embedded catalog operations routed through Distribution.
-func NewWithCatalogAndPackages(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	var versionFileSystem factoryroot.VersionFileSystem
-	if len(versionFileSystems) > 0 {
-		versionFileSystem = versionFileSystems[0]
-	}
-	service := NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		host,
-		activationGateway,
-		catalogService,
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		nil,
-		factoryroot.UnimplementedService{},
-		versionFileSystem,
-		factoryroot.UnimplementedService{}.ListEffectiveFactories,
-	)
-	service.distributionService = ComposeDistributionService(
-		packagedCatalog,
-		factoryroot.PackagedFactoryInstallationOperations{},
-		nil,
-		nil,
-	)
-	return service
-}
-
-// NewWithCatalogPackagesAndInstallation constructs the complete Definitions
-// root collaborator for catalog selection and canonical packaged installation.
-func NewWithCatalogPackagesAndInstallation(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
-	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	var versionFileSystem factoryroot.VersionFileSystem
-	if len(versionFileSystems) > 0 {
-		versionFileSystem = versionFileSystems[0]
-	}
-	service := NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		host,
-		activationGateway,
-		catalogService,
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		nil,
-		factoryroot.UnimplementedService{},
-		versionFileSystem,
-		factoryroot.UnimplementedService{}.ListEffectiveFactories,
-	)
-	service.distributionService = ComposeDistributionService(
-		packagedCatalog,
-		packagedInstaller,
-		nil,
-		nil,
-	)
-	return service
-}
-
-// NewWithCompilation constructs the Definitions root collaborator with private
-// compilation ownership for the CTR-DEF compile slice.
-func NewWithCompilation(
-	host Host,
-	compilationService CompilationOperations,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	var versionFileSystem factoryroot.VersionFileSystem
-	if len(versionFileSystems) > 0 {
-		versionFileSystem = versionFileSystems[0]
-	}
-	service := NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		host,
-		StubActivationGateway(),
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		factoryroot.UnimplementedService{},
-		nil,
-		compilationService,
-		versionFileSystem,
-		factoryroot.UnimplementedService{}.ListEffectiveFactories,
-	)
-	return service
-}
-
-// NewWithCatalogPackagesValidationInstallationAndAuthoring constructs the
-// complete Definitions root collaborator with catalog, validation, packaged
-// installation, and private authoring_layout ownership.
-func NewWithCatalogPackagesValidationInstallationAndAuthoring(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	validationService validationservice.Service,
-	authoringLayoutService authoringlayout.Service,
-	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
-	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	service := NewWithCatalogPackagesAndInstallation(
-		host,
-		activationGateway,
-		catalogService,
-		packagedCatalog,
-		packagedInstaller,
-		versionFileSystems...,
-	)
-	service.validationService = validationService
-	service.authoringLayoutService = authoringLayoutService
-	return service
-}
-
 // NewWithCatalogPackagesValidationDistributionAndAuthoring constructs the
 // complete Definitions root collaborator with catalog, validation, private
 // Distribution ownership, and authoring_layout ownership.
@@ -223,6 +103,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	compilation CompilationOperations,
 	versionFileSystem factoryroot.VersionFileSystem,
 	listEffective factoryroot.EffectiveFactoryCatalogOperation,
+	snapshotsPortability snapshotsportability.Service,
 ) *Service {
 	return &Service{
 		nonCatalogDefaults:     factoryroot.UnimplementedService{},
@@ -236,39 +117,8 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		versionFileSystem:      versionFileSystem,
 		distributionService:    distributionService,
 		listEffective:          listEffective,
+		snapshotsPortability:   snapshotsPortability,
 	}
-}
-
-// ComposeDistributionService constructs the private Distribution subservice from
-// exact injected distribute ports for Factory Definitions composition.
-func ComposeDistributionService(
-	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
-	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
-	scaffoldInitializer factoryroot.ScaffoldInitializer,
-	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
-) distributionservice.Service {
-	if packagedInstaller.Install == nil {
-		packagedInstaller = factoryroot.PackagedFactoryInstallationOperations{
-			Install: func(
-				context.Context,
-				factoryroot.PackagedFactoryInstallParams,
-			) (factoryroot.PackagedFactoryInstallResult, error) {
-				return factoryroot.PackagedFactoryInstallResult{},
-					fmt.Errorf("%w: packaged Factory installation collaborator is required",
-						factoryroot.ErrFactoryDistributeFailed)
-			},
-		}
-	}
-	service, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:             packagedCatalog,
-		PackagedInstaller:           packagedInstaller,
-		ScaffoldInitializer:         scaffoldInitializer,
-		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
-	})
-	if err != nil {
-		return nil
-	}
-	return service
 }
 
 func (s *Service) CompileEffectiveFactorySource(
@@ -562,4 +412,16 @@ func (s *Service) ResolveRuntimeSnapshot(
 	request factoryroot.ResolveRuntimeSnapshotRequest,
 ) (factoryroot.ResolveRuntimeSnapshotResult, error) {
 	return s.runtimeSnapshot.ResolveRuntimeSnapshot(ctx, request)
+}
+
+func (s *Service) CaptureFactorySnapshot(ctx context.Context, request factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error) {
+	return s.snapshotsPortability.CaptureFactorySnapshot(ctx, request)
+}
+
+func (s *Service) PrepareFactorySnapshotImport(ctx context.Context, request factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error) {
+	return s.snapshotsPortability.PrepareFactorySnapshotImport(ctx, request)
+}
+
+func (s *Service) MaterializeFactorySnapshot(ctx context.Context, request factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error) {
+	return s.snapshotsPortability.MaterializeFactorySnapshot(ctx, request)
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -35,42 +36,19 @@ func (constructionInvocationRuntime) Invoke(
 	return inference.InvocationRuntimeResult{}, nil
 }
 
-func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
+func TestCompletedRootPreservesInvalidScopeAndCancellation(t *testing.T) {
 	t.Parallel()
-
-	valid := newRootConstructionArgs(t)
-	root, err := valid.build()
-	if err != nil || root == nil {
-		t.Fatalf("NewRoot valid dependencies = (%v, %v), want constructed root", root, err)
+	root, err := newRootConstructionArgs(t).build()
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	tests := []struct {
-		name    string
-		mutate  func(*rootConstructionArgs)
-		message string
-	}{
-		{name: "scoped pull", mutate: func(args *rootConstructionArgs) { args.pullModel = nil }, message: "scoped model pull"},
-		{name: "scope close", mutate: func(args *rootConstructionArgs) { args.closeScope = nil }, message: "scoped execution close"},
-		{name: "execution close", mutate: func(args *rootConstructionArgs) { args.closeExecution = nil }, message: "execution close"},
-		{name: "resource limiter", mutate: func(args *rootConstructionArgs) { args.resources = nil }, message: "local model resource limiter"},
-		{name: "runtime scopes", mutate: func(args *rootConstructionArgs) { args.runtimeScopes = nil }, message: "Models Runtime Scopes service"},
-		{name: "catalog", mutate: func(args *rootConstructionArgs) { args.catalog = nil }, message: "Models Catalog service"},
-		{name: "assets", mutate: func(args *rootConstructionArgs) { args.assets = nil }, message: "Models Assets service"},
-		{name: "runtime host", mutate: func(args *rootConstructionArgs) { args.runtimeHost = nil }, message: "Models Runtime Host service"},
-		{name: "inference", mutate: func(args *rootConstructionArgs) { args.inference = nil }, message: "Models Inference service"},
-		{name: "logger", mutate: func(args *rootConstructionArgs) { args.logger = nil }, message: "Models logger"},
-		{name: "revision resolver", mutate: func(args *rootConstructionArgs) { args.revisionResolver = nil }, message: "Models revision resolver"},
-		{name: "process clock", mutate: func(args *rootConstructionArgs) { args.now = nil }, message: "Models process clock"},
+	if _, err := root.CloseRuntimeScope(t.Context(), models.CloseRuntimeScopeRequest{}); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
+		t.Fatalf("zero scope: %v", err)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			args := newRootConstructionArgs(t)
-			test.mutate(&args)
-			root, err := args.build()
-			if root != nil || !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), test.message) {
-				t.Fatalf("NewRoot missing %s = (%v, %v), want classified dependency error", test.name, root, err)
-			}
-		})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled scope open: %v", err)
 	}
 }
 
@@ -98,7 +76,7 @@ func (args rootConstructionArgs) build() (*Root, error) {
 		args.runtimeHost,
 		args.inference,
 		args.logger, args.now, nil, nil,
-		args.revisionResolver, nil, models.AssetHostPlatform{},
+		args.revisionResolver, completedTestBackendResolver, models.AssetHostPlatform{},
 	)
 }
 
@@ -245,6 +223,10 @@ func TestScopedRuntimeResolutionDoesNotReplaceInjectedInferenceOwner(t *testing.
 
 	privateInference := &delegatingInferenceService{}
 	root := &Root{
+		logger: zap.NewNop(), now: time.Now,
+		pullModel: func(context.Context, models.PullModelRequest) (models.PullResult, error) {
+			return models.PullResult{}, models.ErrUnavailable
+		},
 		runtimeScopes: scopes,
 		assets:        inferenceRecordingAssetsService{},
 		inference:     privateInference,
@@ -444,14 +426,14 @@ func (inferenceRecordingAssetsService) ResolveRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,
 ) (scopedassets.RuntimeCacheLayout, error) {
-	return scopedassets.RuntimeCacheLayout{}, models.ErrUnsupportedOperation
+	return scopedassets.RuntimeCacheLayout{CachePath: "test-cache", Files: []string{"test-cache/model.gguf"}}, nil
 }
 
 func (inferenceRecordingAssetsService) InspectRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,
 ) (scopedassets.RuntimeCacheInspection, error) {
-	return scopedassets.RuntimeCacheInspection{}, models.ErrUnsupportedOperation
+	return scopedassets.RuntimeCacheInspection{}, models.ErrModelCacheNotFound
 }
 
 func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
@@ -852,4 +834,77 @@ func mustResourceLimiter(t *testing.T) *localmodels.ResourceLimiter {
 		t.Fatal(err)
 	}
 	return resources
+}
+
+func TestRootCloseSurfacesHostFailureAndRetiresAdmissionBeforeRetry(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("host shutdown failure")
+	host := &rootCleanupHost{failure: failure}
+	retired := false
+	root := &Root{runtimeHost: host, resources: mustResourceLimiter(t), closeExecution: func() { retired = true }}
+	host.retired = func() bool { return retired }
+	if err := root.Close(t.Context()); !errors.Is(err, failure) {
+		t.Fatalf("close: %v", err)
+	}
+	if !host.sawRetired || host.calls != 1 {
+		t.Fatalf("shutdown did not observe retired admission: %#v", host)
+	}
+	host.failure = nil
+	if err := root.Close(t.Context()); err != nil || host.calls != 2 {
+		t.Fatalf("retry close: %v, calls %d", err, host.calls)
+	}
+}
+
+func TestRootScopeCloseSurfacesCleanupFailureWithoutCancelingCleanup(t *testing.T) {
+	t.Parallel()
+	scope, err := (models.RuntimeScopeRef{}).Parse("cleanup:scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	failure := errors.New("scope cleanup failure")
+	host := &rootCleanupHost{failure: failure}
+	root := &Root{runtimeScopes: &rootClosingScopes{cancel: cancel}, runtimeHost: host,
+		resources: mustResourceLimiter(t), closeScopedExecution: func(got models.RuntimeScopeRef) {
+			if got != scope {
+				t.Fatal("wrong scope retired")
+			}
+		}}
+	result, err := root.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: scope})
+	if !errors.Is(err, failure) || result.Closed || host.scope != scope || host.contextErr != nil {
+		t.Fatalf("scope close: %#v %v, host %#v", result, err, host)
+	}
+}
+
+type rootClosingScopes struct {
+	runtimescopes.Service
+	cancel context.CancelFunc
+}
+
+func (s *rootClosingScopes) Close(runtimescopes.Reference) error { s.cancel(); return nil }
+
+type rootCleanupHost struct {
+	runtimehost.Service
+	failure    error
+	retired    func() bool
+	sawRetired bool
+	calls      int
+	scope      models.RuntimeScopeRef
+	contextErr error
+}
+
+func (h *rootCleanupHost) Shutdown(context.Context) error {
+	h.calls++
+	h.sawRetired = h.retired()
+	return h.failure
+}
+func (h *rootCleanupHost) CloseRuntimeScope(ctx context.Context, scope models.RuntimeScopeRef) error {
+	h.scope = scope
+	h.contextErr = ctx.Err()
+	return h.failure
+}
+
+func completedTestBackendResolver(context.Context, modelseffects.ResolvedHostConfiguration, bool) (modelseffects.BackendArtifactSelection, error) {
+	path, err := filepath.Abs("test-backend")
+	return modelseffects.BackendArtifactSelection{InstalledPath: path}, err
 }

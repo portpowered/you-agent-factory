@@ -3,9 +3,10 @@ package http_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,117 +48,6 @@ func TestRootErrorResponse_MapsRequestContextFailures(t *testing.T) {
 	status, response, ok = operatorsettingshttp.SettingsRootErrorResponseForTest(context.DeadlineExceeded)
 	if !ok || status != http.StatusGatewayTimeout || response.Message != "operator settings request timed out" {
 		t.Fatalf("deadline = (%d, %#v, %v), want 504 timeout outcome", status, response, ok)
-	}
-}
-
-func TestAdapter_LoadDocumentCanceledBeforeRootCallCompletesWithoutInvoke(t *testing.T) {
-	t.Parallel()
-
-	var invoked bool
-	fake := &blockingSettingsRootFake{
-		loadDocument: func(
-			operatorsettings.LoadDocumentRequest,
-		) (operatorsettings.LoadDocumentResult, error) {
-			invoked = true
-			return operatorsettings.LoadDocumentResult{}, nil
-		},
-	}
-	adapter := operatorsettingshttp.NewAdapter(fake)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	_, err := adapter.LoadDocument(ctx, operatorsettingshttp.LoadDocumentInput{
-		Path:            "/tmp/config.json",
-		RequireExisting: true,
-	})
-	if invoked {
-		t.Fatal("LoadDocument invoked fake root after request context was canceled")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("LoadDocument error = %v, want context.Canceled", err)
-	}
-}
-
-func TestAdapter_LoadDocumentCanceledDuringRootCallCompletesWithoutHang(t *testing.T) {
-	t.Parallel()
-
-	blocker := make(chan struct{})
-	started := make(chan struct{}, 1)
-	fake := &blockingSettingsRootFake{
-		loadDocument: func(
-			operatorsettings.LoadDocumentRequest,
-		) (operatorsettings.LoadDocumentResult, error) {
-			started <- struct{}{}
-			<-blocker
-			return operatorsettings.LoadDocumentResult{}, nil
-		},
-	}
-	adapter := operatorsettingshttp.NewAdapter(fake)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer close(blocker)
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := adapter.LoadDocument(ctx, operatorsettingshttp.LoadDocumentInput{
-			Path:            "/tmp/config.json",
-			RequireExisting: true,
-		})
-		done <- err
-	}()
-
-	<-started
-	cancel()
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("LoadDocument error = %v, want context.Canceled", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("LoadDocument hung after request context cancellation")
-	}
-}
-
-func TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang(t *testing.T) {
-	t.Parallel()
-
-	blocker := make(chan struct{})
-	started := make(chan struct{}, 1)
-	fake := &blockingSettingsRootFake{
-		loadDocument: func(
-			operatorsettings.LoadDocumentRequest,
-		) (operatorsettings.LoadDocumentResult, error) {
-			started <- struct{}{}
-			<-blocker
-			return operatorsettings.LoadDocumentResult{}, nil
-		},
-	}
-	adapter := operatorsettingshttp.NewAdapter(fake)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
-	defer cancel()
-	defer close(blocker)
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := adapter.LoadDocument(ctx, operatorsettingshttp.LoadDocumentInput{
-			Path:            "/tmp/config.json",
-			RequireExisting: true,
-		})
-		done <- err
-	}()
-
-	<-started
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("LoadDocument error = %v, want context.DeadlineExceeded", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("LoadDocument hung after request context deadline")
 	}
 }
 
@@ -231,4 +121,129 @@ func (fake *blockingSettingsRootFake) ResolveEffective(
 		return fake.resolveEffective(request)
 	}
 	return operatorsettings.ResolveEffectiveResult{}, operatorsettings.ErrResolutionInvalidInput
+}
+
+// outcomeContext signals a deadline deterministically; wall time is only a
+// generous deadlock ceiling, never the trigger for the behavior under test.
+type outcomeContext struct {
+	context.Context
+	outcome error
+}
+
+func (ctx outcomeContext) Err() error {
+	if ctx.Context.Err() != nil {
+		return ctx.outcome
+	}
+	return nil
+}
+
+func contextOperations() map[string]func(*operatorsettingshttp.Adapter, context.Context) error {
+	return map[string]func(*operatorsettingshttp.Adapter, context.Context) error{
+		"load": func(a *operatorsettingshttp.Adapter, ctx context.Context) error {
+			_, err := a.LoadDocument(ctx, operatorsettingshttp.LoadDocumentInput{Path: "/tmp/config.json", RequireExisting: true})
+			return err
+		},
+		"update": func(a *operatorsettingshttp.Adapter, ctx context.Context) error {
+			model := "gpt-5"
+			_, err := a.ApplyDocumentUpdate(ctx, operatorsettingshttp.ApplyDocumentUpdateInput{Path: "/tmp/config.json", Model: &model})
+			return err
+		},
+		"resolve": func(a *operatorsettingshttp.Adapter, ctx context.Context) error {
+			_, err := a.ResolveEffective(ctx, operatorsettingshttp.ResolveEffectiveInput{})
+			return err
+		},
+	}
+}
+
+func contextRoot(invoke func()) *blockingSettingsRootFake {
+	return &blockingSettingsRootFake{
+		loadDocument: func(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error) {
+			invoke()
+			return operatorsettings.LoadDocumentResult{}, nil
+		},
+		applyDocumentUpdate: func(operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error) {
+			invoke()
+			return operatorsettings.ApplyDocumentUpdateResult{}, nil
+		},
+		resolveEffective: func(operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error) {
+			invoke()
+			return operatorsettings.ResolveEffectiveResult{}, nil
+		},
+	}
+}
+
+func TestAdapter_ContextEndedBeforeOwnerEntry(t *testing.T) {
+	t.Parallel()
+	for name, invoke := range contextOperations() {
+		for _, outcome := range []error{context.Canceled, context.DeadlineExceeded} {
+			t.Run(fmt.Sprintf("%s/%s", name, outcome), func(t *testing.T) {
+				t.Parallel()
+				var calls atomic.Int32
+				adapter := operatorsettingshttp.NewAdapter(contextRoot(func() { calls.Add(1) }))
+				base, cancel := context.WithCancel(context.Background())
+				cancel()
+				err := invoke(adapter, outcomeContext{Context: base, outcome: outcome})
+				//nolint:errorlint // Exact request-context cause identity is the adapter contract.
+				if err != outcome || calls.Load() != 0 {
+					t.Fatalf("error = %v, calls = %d; want %v without owner entry", err, calls.Load(), outcome)
+				}
+			})
+		}
+	}
+}
+
+func TestAdapter_ContextEndsBeforeBlockedOwnerRelease(t *testing.T) {
+	t.Parallel()
+	for name, invoke := range contextOperations() {
+		for _, outcome := range []error{context.Canceled, context.DeadlineExceeded} {
+			t.Run(fmt.Sprintf("%s/%s", name, outcome), func(t *testing.T) {
+				t.Parallel()
+				assertBlockedOwnerContext(t, invoke, outcome)
+			})
+		}
+	}
+}
+
+func assertBlockedOwnerContext(t *testing.T, invoke func(*operatorsettingshttp.Adapter, context.Context) error, outcome error) {
+	t.Helper()
+	entered, release, joined := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	adapter := operatorsettingshttp.NewAdapter(contextRoot(func() {
+		close(entered)
+		<-release
+		close(joined)
+	}))
+	base, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	//nolint:contextcheck // The test wraps its cancellable parent to signal DeadlineExceeded deterministically.
+	go func() { done <- invoke(adapter, outcomeContext{Context: base, outcome: outcome}) }()
+	// Always release and join the fake, including assertion failures.
+	defer func() {
+		close(release)
+		select {
+		case <-joined:
+		case <-time.After(10 * time.Second):
+			t.Error("owner did not join after release")
+		}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("owner did not enter")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		//nolint:errorlint // Exact request-context cause identity is the adapter contract.
+		if err != outcome {
+			t.Fatalf("error = %v, want exact %v", err, outcome)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("adapter did not return before owner release")
+	}
+	select {
+	case <-joined:
+		t.Fatal("owner completed before test release")
+	default:
+	}
 }

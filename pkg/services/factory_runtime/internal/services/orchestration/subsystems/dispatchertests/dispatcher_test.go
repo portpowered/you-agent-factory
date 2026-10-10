@@ -3,6 +3,7 @@ package subsystems_test
 import (
 	"context"
 	"fmt"
+	schedulerenablement "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"sort"
 	"strings"
 	"testing"
@@ -97,6 +98,7 @@ func TestDispatcherSeededReplayDispatchPolicy(t *testing.T) {
 				nil,
 				time.Now,
 				testDispatchID,
+				schedulerenablement.NewEnablementEvaluator(),
 				replayDispatchResolver{recorded: test.recordedDispatch},
 				test.seededWorkIDs,
 			)
@@ -256,7 +258,7 @@ func TestDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(t *t
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok1": {
@@ -311,9 +313,9 @@ func TestDispatcher_RecordsStableExpectedArtifactTemplateContext(t *testing.T) {
 			},
 		},
 	}
-	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{decisions: []interfaces.FiringDecision{{
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{decisions: []interfaces.FiringDecision{{
 		TransitionID: "publish", ConsumeTokens: []string{"token-1"}, WorkerType: "script",
-	}}}, &factory_context.FactoryContext{ProjectID: "project-7", SessionID: "session-9"}, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	}}}, &factory_context.FactoryContext{ProjectID: "project-7", SessionID: "session-9"}, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"token-1": {ID: "token-1", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork, Payload: []byte("payload-1")}},
@@ -348,9 +350,9 @@ func TestDispatcher_UsesTokenProjectAndFallbackWorkTypeIdentityForArtifactContex
 			},
 		},
 	}
-	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{decisions: []interfaces.FiringDecision{{
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{decisions: []interfaces.FiringDecision{{
 		TransitionID: "publish", ConsumeTokens: []string{"token-1"}, WorkerType: "script",
-	}}}, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	}}}, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"token-1": {ID: "token-1", PlaceID: "task:init", Color: factorytoken.Color{
@@ -396,7 +398,7 @@ func TestDispatcher_ForwardsObservedInputsWithoutConsumingThem(t *testing.T) {
 		WorkerType:    "agent",
 		InputBindings: map[string][]string{"parent": {"parent"}, "children": {"child"}},
 	}}}
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"parent": {ID: "parent", PlaceID: "parent:waiting", Color: factorytoken.Color{WorkID: "work-parent", WorkTypeID: "parent", DataType: factorytoken.DataTypeWork}},
@@ -464,7 +466,7 @@ func TestDispatcher_MultipleDecisionsProcessInOneTick(t *testing.T) {
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: factorytoken.Color{WorkID: "w-a", WorkTypeID: "wt"}},
@@ -521,7 +523,7 @@ func TestDispatcher_AllowsRepeatedTransitionWithDistinctTokensInOneTick(t *testi
 			{TransitionID: "process", ConsumeTokens: []string{"tok-b"}, WorkerType: "script"},
 		},
 	}
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"tok-a": {ID: "tok-a", PlaceID: "p-init", Color: factorytoken.Color{WorkID: "w-a", WorkTypeID: "task"}},
 		"tok-b": {ID: "tok-b", PlaceID: "p-init", Color: factorytoken.Color{WorkID: "w-b", WorkTypeID: "task"}},
@@ -588,7 +590,7 @@ func TestDispatcher_InvalidAndDuplicateDecisionTargetsAreSkipped(t *testing.T) {
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: factorytoken.Color{WorkID: "w-a", WorkTypeID: "wt"}},
@@ -648,7 +650,7 @@ func TestDispatcher_AlwaysProducesDispatches(t *testing.T) {
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"tok1": {ID: "tok1", PlaceID: "p-init", Color: factorytoken.Color{WorkID: "w1", WorkTypeID: "wt-code"}},
@@ -687,7 +689,7 @@ func TestDispatcher_NoEnabledTransitions(t *testing.T) {
 	}
 
 	sched := &mockScheduler{}
-	dispatcher := subsystems.NewDispatcher(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID)
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, sched, nil, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
@@ -736,7 +738,7 @@ func newSingleTransitionDispatchFixture() (*subsystems.DispatcherSubsystem, *int
 		},
 	}
 
-	dispatcher := subsystems.NewDispatcher(n, &mockScheduler{
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(n, &mockScheduler{
 		decisions: []interfaces.FiringDecision{
 			{TransitionID: "t1", ConsumeTokens: []string{"tok1"}, WorkerType: "script"},
 		},
@@ -744,9 +746,7 @@ func newSingleTransitionDispatchFixture() (*subsystems.DispatcherSubsystem, *int
 		FactoryDirectory: "wf-1",
 		WorkDirectory:    "/tmp/work",
 		ProjectID:        "analytics-platform",
-	}, logging.NoopLogger{}, nil, time.Now,
-
-		testDispatchID)
+	}, logging.NoopLogger{}, nil, time.Now, testDispatchID, schedulerenablement.NewEnablementEvaluator(), nil, nil)
 
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{

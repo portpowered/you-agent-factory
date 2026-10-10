@@ -69,6 +69,11 @@ func TestConcurrencySharedProcess(t *testing.T) {
 		t.Run("CC-13", func(t *testing.T) { t.Parallel(); fixture.runRecovery(t) })
 	})
 	t.Run("Timeout", func(t *testing.T) { t.Parallel(); fixture.runTimeoutRecovery(t) })
+	t.Run("ScriptCommandOutcomes", func(t *testing.T) {
+		t.Parallel()
+		t.Run("B12-SS-SF", func(t *testing.T) { t.Parallel(); fixture.runScriptCommandOutcomes(t) })
+		t.Run("B12-C", func(t *testing.T) { t.Parallel(); fixture.runScriptCommandCancellation(t) })
+	})
 }
 
 type concurrencySharedProcessFixture struct {
@@ -136,6 +141,7 @@ func newConcurrencySharedProcessFixture(t *testing.T) *concurrencySharedProcessF
 			return err
 		},
 		ProviderCommandRunner:                  fixture.router,
+		ScriptCommandRunner:                    fixture.router,
 		FactorySessionsWorkingDirectory:        platformfilesystem.Local{WorkingDirectory: hostDir},
 		FactorySessionIDGenerator:              fixture.identities.nextSessionID,
 		FactorySessionResponseEventIDGenerator: fixture.identities.nextResponseEventID,
@@ -189,12 +195,16 @@ func (fixture *concurrencySharedProcessFixture) openCase(
 	marker string,
 	failMarker string,
 	maxRetries int,
+	script ...bool,
 ) *concurrencySession {
 	t.Helper()
 	dir := scaffoldConcurrencyFactory(t, name, capacity, maxRetries)
 	support.ClearSeedInputs(t, dir)
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "concurrency-"+strings.ToLower(name)))
 	support.WriteWorkstationConfig(t, dir, "process", concurrencyWorkstationConfig(maxRetries))
+	if len(script) != 0 && script[0] {
+		configureConcurrencyScript(t, dir)
+	}
 	runner := newConcurrencyScenarioRunner(behavior, marker, failMarker)
 	fixture.router.register(t, dir, runner)
 	fixture.addOwnedDir(dir)

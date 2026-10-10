@@ -6,25 +6,12 @@
 # Unlisted findings and stale entries fail. Absent merge-base rule IDs seed once.
 # Established exact-debt rule IDs admit no new keys; -test identifies test-file findings.
 application-graph-test|tests/integration/models/managed_process_test|pkg/wire
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/apitypes
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/http/generated
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/definition_test|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/http/generated
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/mapping
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/definition|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/contracts/failuremetadatatests|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/internal/contracts/failuremetadatatests|pkg/transports/mapping/workerdiagnostics
 domain-transport-test|pkg/services/factory_definitions/internal/contracts|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/internal/contracts|pkg/transports/mapping/workerdiagnostics
 domain-transport-test|pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout|pkg/transports/http/generated
 domain-transport-test|pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/internal/services/authoring_layout/internal/service_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/internal/services/authoring_layout/internal/service_test|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/internal/services/authoring_layout/wire_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/internal/services/authoring_layout/wire_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/catalog/persistence_test|pkg/transports/mapping/factoryconfig
@@ -34,20 +21,12 @@ domain-transport-test|pkg/services/factory_definitions/internal/services/compila
 domain-transport-test|pkg/services/factory_definitions/internal/services/compilation/runtimetests|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/compilation_test|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/internal/services/compilation_test|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/internal/services/distribution/internal/service_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/internal/services/distribution/internal/service_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/distribution/promptassets_test|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/internal/services/distribution/promptassets_test|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/editable_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/editable_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests_test|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_definitions/systeminitializationtests|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_definitions/systeminitializationtests|pkg/transports/mapping/factoryconfig/authored
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/http/generated
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/mapping
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/mapping/factoryconfig
-domain-transport-test|pkg/services/factory_definitions/wire_test|pkg/transports/mapping/factoryconfig/authored
 domain-transport-test|pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests|pkg/transports/mapping/factoryconfig
 domain-transport-test|pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime_test|pkg/transports/mapping/workcontent
 domain-transport-test|pkg/services/factory_runtime/internal/services/orchestration/runtime|pkg/transports/http/generated
@@ -1845,9 +1824,6 @@ testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_pr
 testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_process_order_test.go::awaitInvocation::deadline::1
 testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_process_order_test.go::awaitRPCStart::deadline::1
 testsleep-deadline-test|pkg/services/models/wire|pkg/services/models/wire/asr_process_order_test.go::awaitSignal::deadline::1
-testsleep-deadline-test|pkg/services/operator_settings/transports/http_test|pkg/services/operator_settings/transports/http/request_context_test.go::TestAdapter_LoadDocumentCanceledDuringRootCallCompletesWithoutHang::deadline::1
-testsleep-deadline-test|pkg/services/operator_settings/transports/http_test|pkg/services/operator_settings/transports/http/request_context_test.go::TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang::deadline::1
-testsleep-deadline-test|pkg/services/operator_settings/transports/http_test|pkg/services/operator_settings/transports/http/request_context_test.go::TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang::deadline::2
 testsleep-deadline-test|pkg/services/provider_sessions/transports/http|pkg/services/provider_sessions/transports/http/handler_test.go::TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot::deadline::1
 testsleep-deadline-test|pkg/services/provider_sessions/transports/http|pkg/services/provider_sessions/transports/http/handler_test.go::TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot::deadline::2
 testsleep-deadline-test|pkg/services/provider_sessions/transports/http|pkg/services/provider_sessions/transports/http/handler_test.go::TestHandlerGetProviderSessionDetailsMapsDeadlineExceededRequestContextDuringRoot::deadline::1
@@ -2656,8 +2632,6 @@ service-root-interface-count|pkg/services/work/internal/services/state_access|pk
 service-root-interface-count|pkg/services/workers|pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service
 service-root-interface-count|pkg/services/work|pkg/services/work/admission_contract.go:ContentPreparation,pkg/services/work/admission_contract.go:FactoryRequestBatchPreparation,pkg/services/work/admission_contract.go:FileSource,pkg/services/work/admission_contract.go:RequestPreparationService,pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/invocation_return_policy_contract.go:InvocationInputPreparation,pkg/services/work/lineage_contract.go:VisualizationFileSystem,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service
 service-root-unexpected-directory|pkg/services/factory_definitions/clonetests|pkg/services/factory_definitions/clonetests
-service-root-unexpected-directory|pkg/services/factory_definitions/definition_test|pkg/services/factory_definitions/definition
-service-root-unexpected-directory|pkg/services/factory_definitions/definition|pkg/services/factory_definitions/definition
 service-root-unexpected-directory|pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout|pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout
 service-root-unexpected-directory|pkg/services/factory_definitions/internal/services/authoring_layout/expand|pkg/services/factory_definitions/internal/services/authoring_layout/expand
 service-root-unexpected-directory|pkg/services/factory_definitions/internal/services/authoring_layout/flatten|pkg/services/factory_definitions/internal/services/authoring_layout/flatten
@@ -2899,9 +2873,6 @@ construction-recorded-site|pkg/services/factory_sessions/internal/execution|pkg/
 # Production defaults: measured unchanged merge-base occurrences (pkgboundarycheck migration).
 production-default|pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts|pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts/resolver.go#LocalFactoryNameResolver#filesystem#os.ReadFile::count=1
 production-default|pkg/services/factory_definitions/transports/mcp|pkg/services/factory_definitions/transports/mcp/install_packaged.go#resolveInstallRootDir#environment#os.UserHomeDir::count=1
-production-default|pkg/services/factory_definitions/wire|pkg/services/factory_definitions/wire/wire.go#composeFactoryDefinitionSupport#platform-adapter-selection#github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep.NewLocal::count=1
-production-default|pkg/services/factory_runtime/internal/services/orchestration/subsystems|pkg/services/factory_runtime/internal/services/orchestration/subsystems/termination.go#NewTerminationCheck#clock#time.Now::count=1
-production-default|pkg/services/factory_runtime/internal/services/orchestration/subsystems|pkg/services/factory_runtime/internal/services/orchestration/subsystems/termination.go#NewTerminationCheckWithRuntime#clock#time.Now::count=1
 production-default|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#findFactoryRoot#filesystem#os.Stat::count=1
 production-default|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#workflowBundleFileSystem.ReadDir#filesystem#os.ReadDir::count=1
 production-default|pkg/services/factory_sessions/internal/execution|pkg/services/factory_sessions/internal/execution/prepare_start_bundle.go#workflowBundleFileSystem.ReadFile#filesystem#os.ReadFile::count=1
@@ -2923,7 +2894,6 @@ recording-read|pkg/services/factory_runtime/internal|pkg/services/factory_runtim
 recording-read|pkg/services/factory_sessions/internal/runtimebinding|pkg/services/factory_sessions/internal/runtimebinding/live_change_events.go#liveChangeEventLog.AppendLiveChangeEvent#CanonicalEvents::count=2
 recording-read|pkg/services/factory_sessions/internal/runtimebinding|pkg/services/factory_sessions/internal/runtimebinding/live_change_events.go#liveChangeEventLog.LiveChangeEvents#CanonicalEvents::count=1
 recording-read|pkg/services/factory_sessions/internal/service|pkg/services/factory_sessions/internal/service/open.go#lastCanonicalCursor#CanonicalEvents::count=1
-recording-read|pkg/services/factory_sessions/internal/sessionservice|pkg/services/factory_sessions/internal/sessionservice/work_runtime_adapter.go#annotateRuntimeWorkStateSequences#CanonicalEvents::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#QuerySimpleDashboard#QuerySimpleDashboard::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#ReconstructWorldState#ReconstructWorldState::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#ValidateReconnectReplay#ValidateReconnectReplayFrom::count=1

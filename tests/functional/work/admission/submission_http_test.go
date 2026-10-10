@@ -38,6 +38,7 @@ func TestWorkSubmissionJourneys(t *testing.T) {
 	support.ClearSeedInputs(t, idle)
 	server := support.StartFunctionalAPIServer(t, submissionServerConfig(idle, submissionInputPreservingProviderRunner()))
 	if !t.Run("Cases", func(t *testing.T) {
+		t.Run("SelectedReads", func(t *testing.T) { t.Parallel(); runSelectedWorkReadJourneys(t, server) })
 		t.Run("HTTPBatchAndFiles", func(t *testing.T) { t.Parallel(); runWorkBatchHTTPSubmission(t, server) })
 		t.Run("StructuredContent", func(t *testing.T) { t.Parallel(); runStructuredSubmissionSimplePipeline(t, server) })
 		t.Run("BatchContent", func(t *testing.T) {

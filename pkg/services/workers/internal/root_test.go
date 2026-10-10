@@ -88,14 +88,6 @@ func TestDetachedValuesCloneAndFallback(t *testing.T) {
 	}
 }
 
-func TestNewRootRejectsMissingOwners(t *testing.T) {
-	t.Parallel()
-
-	if _, err := workersinternal.NewRoot(nil); err == nil {
-		t.Fatal("NewRoot(nil execute) error = nil, want missing execution owner")
-	}
-}
-
 func TestNewRootExecuteDelegatesDetachedAttempt(t *testing.T) {
 	t.Parallel()
 

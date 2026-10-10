@@ -10,7 +10,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
-	_ "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 )
 
 func TestComposedLifecycleHostExercisesVersionSurface(t *testing.T) {
@@ -36,13 +35,14 @@ func TestCompletedLifecycleDelegatesRuntimeSnapshot(t *testing.T) {
 	t.Parallel()
 	called := false
 	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 		snapshotOperation(func(ctx context.Context, request factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
 			called = true
 			return factorydefinitions.ResolveRuntimeSnapshotResult{Snapshot: factorydefinitions.RuntimeSnapshot{FactoryDir: request.FactoryDir}}, nil
 		}),
 		factorydefinitions.UnimplementedService{}, nil,
 		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+		factorydefinitions.UnimplementedService{},
 	)
 	if called {
 		t.Fatal("construction queried snapshot owner")
@@ -92,9 +92,10 @@ func TestCompletedLifecycleDelegatesCompilation(t *testing.T) {
 				return expected, operationError
 			})
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-				nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
+				nil, nil, nil, nil, nil, nil,
 				factorydefinitions.UnimplementedService{}, owner, nil,
 				factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+				factorydefinitions.UnimplementedService{},
 			)
 			if calls != 0 {
 				t.Fatal("construction invoked compilation")
@@ -138,8 +139,9 @@ func TestCompletedLifecycleDelegatesEffectiveCatalog(t *testing.T) {
 			}
 			disabled := factorydefinitions.UnimplementedService{}
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-				nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
+				nil, nil, disabled, disabled, disabled, disabled,
 				disabled, disabled, nil, listEffective,
+				factorydefinitions.UnimplementedService{},
 			)
 			if calls != 0 {
 				t.Fatal("construction queried effective catalog")

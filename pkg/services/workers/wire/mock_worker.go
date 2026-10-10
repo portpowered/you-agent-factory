@@ -113,6 +113,7 @@ func workerCommandRequest(request providers.CommandRequest) workerprocess.Comman
 	private.WorkDir = request.WorkDir
 	private.FactorySessionID = request.FactorySessionID
 	private.ExecutionLogger = request.ExecutionLogger
+	private.ProviderDiagnostics = true
 	private.ProcessLifecycleObserver = request.ProcessLifecycleObserver
 	private.OwnedProcessObserver = request.OwnedProcessObserver
 	return private

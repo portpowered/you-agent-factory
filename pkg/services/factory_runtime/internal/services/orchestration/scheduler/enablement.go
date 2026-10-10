@@ -14,45 +14,42 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// EnablementEvaluator wraps transition enablement logic with structured logging.
-// Each transition evaluation uses the supplied logger to describe
-// the transition ID, whether it was enabled or disabled, and the reason for
-// disablement.
-type EnablementEvaluator struct {
-	logger        logging.Logger
-	now           func() time.Time
-	runtimeConfig interfaces.RuntimeDefinitionLookup
+// Enablement evaluates a runtime snapshot without retaining session dependencies.
+type Enablement interface {
+	FindEnabledTransitionsWithSnapshot(
+		context.Context,
+		*state.Net,
+		*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+		logging.Logger,
+		func() time.Time,
+		interfaces.RuntimeDefinitionLookup,
+	) []interfaces.EnabledTransition
+	ExpandRepeatedBindings(
+		*state.Net,
+		*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+		[]interfaces.EnabledTransition,
+		logging.Logger,
+		func() time.Time,
+		interfaces.RuntimeDefinitionLookup,
+	) []interfaces.EnabledTransition
 }
 
-// NewEnablementEvaluator creates an EnablementEvaluator with the given logger.
-// Logger is required; callers that disable diagnostics supply logging.NoopLogger{}.
-func NewEnablementEvaluator(
-	logger logging.Logger,
-	now func() time.Time,
-	runtimeConfig interfaces.RuntimeDefinitionLookup,
-) *EnablementEvaluator {
-	if now == nil {
-		panic("Factory Runtime scheduler clock is required")
-	}
-	return &EnablementEvaluator{
-		logger:        logger,
-		now:           now,
-		runtimeConfig: runtimeConfig,
-	}
-}
+// EnablementEvaluator owns stateless transition evaluation behavior.
+type EnablementEvaluator struct{}
 
-// FindEnabledTransitions identifies all transitions whose input arcs are satisfied
-// in the current marking. Each transition evaluation is logged with its result.
-func (e *EnablementEvaluator) FindEnabledTransitions(ctx context.Context, n *state.Net, marking *petri.MarkingSnapshot) []interfaces.EnabledTransition {
-	return e.FindEnabledTransitionsWithSnapshot(ctx, n, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking:  *marking,
-		Topology: n,
-	})
-}
+// NewEnablementEvaluator constructs reusable behavior without capturing scope.
+func NewEnablementEvaluator() *EnablementEvaluator { return &EnablementEvaluator{} }
 
 // FindEnabledTransitionsWithSnapshot evaluates transitions with access to the
 // broader runtime snapshot for guards that depend on dispatch history or time.
-func (e *EnablementEvaluator) FindEnabledTransitionsWithSnapshot(ctx context.Context, n *state.Net, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.EnabledTransition {
+func (e *EnablementEvaluator) FindEnabledTransitionsWithSnapshot(
+	ctx context.Context,
+	n *state.Net,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	logger logging.Logger,
+	now func() time.Time,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+) []interfaces.EnabledTransition {
 	var enabled []interfaces.EnabledTransition
 	if snapshot == nil {
 		return enabled
@@ -60,8 +57,8 @@ func (e *EnablementEvaluator) FindEnabledTransitionsWithSnapshot(ctx context.Con
 
 	transitions := sortedTransitions(n.Transitions)
 	for _, tr := range transitions {
-		if et, ok := e.checkTransitionEnabled(ctx, tr, snapshot); ok {
-			e.logger.Info("enablement: transition enabled",
+		if et, ok := e.checkTransitionEnabled(ctx, tr, snapshot, logger, now, runtimeConfig); ok {
+			logger.Info("enablement: transition enabled",
 				"transitionID", tr.ID,
 				"transitionName", tr.Name,
 				"workerType", tr.WorkerType,
@@ -70,7 +67,7 @@ func (e *EnablementEvaluator) FindEnabledTransitionsWithSnapshot(ctx context.Con
 		}
 	}
 
-	e.logger.Debug("enablement: evaluation complete",
+	logger.Debug("enablement: evaluation complete",
 		"totalTransitions", len(n.Transitions),
 		"enabledCount", len(enabled))
 
@@ -79,17 +76,24 @@ func (e *EnablementEvaluator) FindEnabledTransitionsWithSnapshot(ctx context.Con
 
 // checkTransitionEnabled evaluates a single transition and logs the reason if disabled.
 // portos:func-length-exception owner=agent-factory reason=legacy-enable-evaluation-loop review=2026-07-18 removal=split-binding-phases-before-next-scheduler-expansion
-func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (interfaces.EnabledTransition, bool) {
+func (e *EnablementEvaluator) checkTransitionEnabled(
+	_ context.Context,
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	logger logging.Logger,
+	now func() time.Time,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+) (interfaces.EnabledTransition, bool) {
 	marking := &snapshot.Marking
 	if len(tr.InputArcs) == 0 {
-		e.logger.Debug("enablement: transition disabled",
+		logger.Debug("enablement: transition disabled",
 			"transitionID", tr.ID,
 			"transitionName", tr.Name,
 			"reason", "no input arcs")
 		return interfaces.EnabledTransition{}, false
 	}
 
-	if et, enabled, handled := e.checkSingleTokenGuardedTransition(tr, snapshot); handled {
+	if et, enabled, handled := e.checkSingleTokenGuardedTransition(tr, snapshot, logger, now, runtimeConfig); handled {
 		return et, enabled
 	}
 
@@ -113,7 +117,7 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
 		matched := ApplyCardinality(candidates, arc.Cardinality)
 		if matched == nil {
-			e.logger.Debug("enablement: transition disabled",
+			logger.Debug("enablement: transition disabled",
 				"transitionID", tr.ID,
 				"transitionName", tr.Name,
 				"reason", fmt.Sprintf("insufficient tokens for unguarded arc %q (place %s, cardinality %d, candidates %d)",
@@ -136,7 +140,7 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 			guardedPeerBinding = append(guardedPeerBinding, idx)
 			continue
 		}
-		if !e.evaluateGuardedArc(tr, snapshot, arc, marking, guardBindings, result, arcModes) {
+		if !e.evaluateGuardedArc(tr, snapshot, arc, marking, guardBindings, result, arcModes, logger, now, runtimeConfig) {
 			return interfaces.EnabledTransition{}, false
 		}
 	}
@@ -144,12 +148,12 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 	// Phase 3: evaluate peer-binding guards after their match arcs are bound.
 	for _, idx := range guardedPeerBinding {
 		arc := &tr.InputArcs[idx]
-		if !e.evaluateGuardedArc(tr, snapshot, arc, marking, guardBindings, result, arcModes) {
+		if !e.evaluateGuardedArc(tr, snapshot, arc, marking, guardBindings, result, arcModes, logger, now, runtimeConfig) {
 			return interfaces.EnabledTransition{}, false
 		}
 	}
 	if !e.bindingDependenciesMet(tr, snapshot, result) {
-		e.logger.Debug("enablement: transition disabled",
+		logger.Debug("enablement: transition disabled",
 			"transitionID", tr.ID,
 			"transitionName", tr.Name,
 			"reason", "dependency guard failed for selected binding")
@@ -167,11 +171,14 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 func (e *EnablementEvaluator) checkSingleTokenGuardedTransition(
 	tr *petri.Transition,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	logger logging.Logger,
+	now func() time.Time,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
 ) (interfaces.EnabledTransition, bool, bool) {
 	if !singleTokenGuardedTransition(tr) {
 		return interfaces.EnabledTransition{}, false, false
 	}
-	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot); ok {
+	if et, ok := e.findSingleTokenBindingTransition(tr, snapshot, now, runtimeConfig); ok {
 		return et, true, true
 	}
 	if !shouldFailClosedSameNameJoin(tr, snapshot) {
@@ -183,7 +190,7 @@ func (e *EnablementEvaluator) checkSingleTokenGuardedTransition(
 	// historical same-name child when the canonical current child is in another
 	// state. Fail closed only when the canonical registration projection proves
 	// that the current registered child is elsewhere.
-	e.logger.Debug("enablement: transition disabled",
+	logger.Debug("enablement: transition disabled",
 		"transitionID", tr.ID,
 		"transitionName", tr.Name,
 		"reason", "guard failed for registered single-token binding")
@@ -198,20 +205,23 @@ func (e *EnablementEvaluator) evaluateGuardedArc(
 	guardBindings map[string]*factorytoken.Token,
 	result map[string][]factorytoken.Token,
 	arcModes map[string]interfaces.ArcMode,
+	logger logging.Logger,
+	now func() time.Time,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
 ) bool {
 	candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
 	guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
-		Now:                      e.now(),
+		Now:                      now(),
 		CurrentTransitionID:      tr.ID,
 		DispatchHistory:          snapshot.DispatchHistory,
 		ActiveDispatches:         snapshot.Dispatches,
-		RuntimeConfig:            e.runtimeConfig,
+		RuntimeConfig:            runtimeConfig,
 		TransitionWorkers:        transitionWorkerTypes(snapshot.Topology, tr),
 		StateCategoryForPlace:    stateCategoryForPlace(snapshot.Topology),
 		ParentChildRegistrations: marking.ParentChildRegistrations,
-	}, candidates, guardBindings, marking)
+	}, candidates, guardBindings, marking, now)
 	if !ok {
-		e.logger.Debug("enablement: transition disabled",
+		logger.Debug("enablement: transition disabled",
 			"transitionID", tr.ID,
 			"transitionName", tr.Name,
 			"reason", fmt.Sprintf("guard failed for arc %q (place %s, candidates %d)",
@@ -220,7 +230,7 @@ func (e *EnablementEvaluator) evaluateGuardedArc(
 	}
 	matched := ApplyCardinality(stableTokens(guardMatched), arc.Cardinality)
 	if matched == nil {
-		e.logger.Debug("enablement: transition disabled",
+		logger.Debug("enablement: transition disabled",
 			"transitionID", tr.ID,
 			"transitionName", tr.Name,
 			"reason", fmt.Sprintf("insufficient tokens after guard for arc %q (place %s, cardinality %d, matched %d)",
@@ -257,34 +267,27 @@ func guardRequiresPeerBinding(guard petri.Guard) bool {
 	}
 }
 
-func (e *EnablementEvaluator) findSingleTokenBindingTransition(
-	tr *petri.Transition,
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-) (interfaces.EnabledTransition, bool) {
+func (e *EnablementEvaluator) findSingleTokenBindingTransition(tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], now func() time.Time, runtimeConfig interfaces.RuntimeDefinitionLookup) (interfaces.EnabledTransition, bool) {
 	if tr == nil || snapshot == nil || len(tr.InputArcs) == 0 {
 		return interfaces.EnabledTransition{}, false
 	}
 	if !singleTokenGuardedTransition(tr) {
 		return interfaces.EnabledTransition{}, false
 	}
-	search := e.newSingleTokenBindingSearch(tr, snapshot, nil, nil)
+	search := e.newSingleTokenBindingSearch(tr, snapshot, nil, nil, now, runtimeConfig)
 	if !search.search(0) {
 		return interfaces.EnabledTransition{}, false
 	}
 	return search.enabledTransition(), true
 }
 
-func (e *EnablementEvaluator) newSingleTokenBindingSearch(
-	tr *petri.Transition,
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	excludedConsumeTokenIDs map[string]bool,
-	excludedConsumeWorkIDs map[string]bool,
-) *singleTokenBindingSearch {
+func (e *EnablementEvaluator) newSingleTokenBindingSearch(tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], excludedConsumeTokenIDs map[string]bool, excludedConsumeWorkIDs map[string]bool, now func() time.Time, runtimeConfig interfaces.RuntimeDefinitionLookup) *singleTokenBindingSearch {
 	return &singleTokenBindingSearch{
 		evaluator:               e,
+		now:                     now,
 		transition:              tr,
 		snapshot:                snapshot,
-		runtime:                 singleTokenRuntimeContext(e, tr, snapshot),
+		runtime:                 singleTokenRuntimeContext(tr, snapshot, now, runtimeConfig),
 		order:                   singleTokenBindingOrder(tr),
 		bindings:                make(map[string]*factorytoken.Token, len(tr.InputArcs)),
 		result:                  make(map[string][]factorytoken.Token, len(tr.InputArcs)),
@@ -337,13 +340,18 @@ func singleTokenBindingOrder(tr *petri.Transition) []int {
 	return order
 }
 
-func singleTokenRuntimeContext(e *EnablementEvaluator, tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) petri.RuntimeGuardContext {
+func singleTokenRuntimeContext(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	now func() time.Time,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+) petri.RuntimeGuardContext {
 	return petri.RuntimeGuardContext{
-		Now:                      e.now(),
+		Now:                      now(),
 		CurrentTransitionID:      tr.ID,
 		DispatchHistory:          snapshot.DispatchHistory,
 		ActiveDispatches:         snapshot.Dispatches,
-		RuntimeConfig:            e.runtimeConfig,
+		RuntimeConfig:            runtimeConfig,
 		TransitionWorkers:        transitionWorkerTypes(snapshot.Topology, tr),
 		StateCategoryForPlace:    stateCategoryForPlace(snapshot.Topology),
 		ParentChildRegistrations: snapshot.Marking.ParentChildRegistrations,
@@ -361,6 +369,7 @@ func stateCategoryForPlace(topology *state.Net) func(string) string {
 
 type singleTokenBindingSearch struct {
 	evaluator               *EnablementEvaluator
+	now                     func() time.Time
 	transition              *petri.Transition
 	snapshot                *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	runtime                 petri.RuntimeGuardContext
@@ -441,7 +450,7 @@ func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates 
 		}
 		return candidates
 	}
-	guardMatched, ok := s.evaluator.evaluateGuard(arc.Guard, s.runtime, candidates, s.bindings, &s.snapshot.Marking)
+	guardMatched, ok := s.evaluator.evaluateGuard(arc.Guard, s.runtime, candidates, s.bindings, &s.snapshot.Marking, s.now)
 	if !ok || len(guardMatched) == 0 {
 		return nil
 	}
@@ -479,7 +488,7 @@ func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, ke
 	return false
 }
 
-func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *petri.MarkingSnapshot) ([]factorytoken.Token, bool) {
+func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *petri.MarkingSnapshot, now func() time.Time) ([]factorytoken.Token, bool) {
 	if guard == nil {
 		return nil, false
 	}
@@ -487,7 +496,7 @@ func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.Run
 		return runtimeGuard.EvaluateRuntime(runtime, candidates, bindings, marking)
 	}
 	if clocked, ok := guard.(petri.ClockedGuard); ok {
-		return clocked.EvaluateAt(e.now(), candidates, bindings, marking)
+		return clocked.EvaluateAt(now(), candidates, bindings, marking)
 	}
 	return guard.Evaluate(candidates, bindings, marking)
 }
@@ -516,8 +525,11 @@ func (e *EnablementEvaluator) ExpandRepeatedBindings(
 	n *state.Net,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	enabled []interfaces.EnabledTransition,
+	_ logging.Logger,
+	now func() time.Time,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
 ) []interfaces.EnabledTransition {
-	if e == nil || n == nil || snapshot == nil || len(enabled) == 0 {
+	if n == nil || snapshot == nil || len(enabled) == 0 {
 		return enabled
 	}
 
@@ -529,7 +541,7 @@ func (e *EnablementEvaluator) ExpandRepeatedBindings(
 			continue
 		}
 		if transitionUsesSameNameGuard(tr) {
-			expanded = append(expanded, e.expandRepeatedSameNameBindings(tr, snapshot, et)...)
+			expanded = append(expanded, e.expandRepeatedSameNameBindings(tr, snapshot, et, now, runtimeConfig)...)
 			continue
 		}
 		expanded = append(expanded, expandRepeatedCardinalityOneBindings(tr, &snapshot.Marking, et)...)
@@ -537,11 +549,7 @@ func (e *EnablementEvaluator) ExpandRepeatedBindings(
 	return expanded
 }
 
-func (e *EnablementEvaluator) expandRepeatedSameNameBindings(
-	tr *petri.Transition,
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	base interfaces.EnabledTransition,
-) []interfaces.EnabledTransition {
+func (e *EnablementEvaluator) expandRepeatedSameNameBindings(tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], base interfaces.EnabledTransition, now func() time.Time, runtimeConfig interfaces.RuntimeDefinitionLookup) []interfaces.EnabledTransition {
 	if !singleTokenGuardedTransition(tr) || !transitionHasConsumableWorkInput(tr, &snapshot.Marking) {
 		return []interfaces.EnabledTransition{base}
 	}
@@ -549,7 +557,7 @@ func (e *EnablementEvaluator) expandRepeatedSameNameBindings(
 	excludedTokenIDs, excludedWorkIDs := activeConsumedBindingIdentities(snapshot)
 	expanded := make([]interfaces.EnabledTransition, 0, len(base.Bindings))
 	for {
-		search := e.newSingleTokenBindingSearch(tr, snapshot, excludedTokenIDs, excludedWorkIDs)
+		search := e.newSingleTokenBindingSearch(tr, snapshot, excludedTokenIDs, excludedWorkIDs, now, runtimeConfig)
 		if !search.search(0) {
 			break
 		}
@@ -907,3 +915,5 @@ func ApplyCardinality(tokens []factorytoken.Token, cardinality petri.ArcCardinal
 		return nil
 	}
 }
+
+var _ Enablement = (*EnablementEvaluator)(nil)

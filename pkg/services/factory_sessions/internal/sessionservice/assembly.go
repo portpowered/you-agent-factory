@@ -200,7 +200,6 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 				runtime:        runtimebinding.ServiceForSession(session),
 				ingress:        ingress,
 				admissions:     projection,
-				ledger:         ledger,
 				readMetrics:    session.InvocationMetricsRecorder,
 			}, nil
 		}

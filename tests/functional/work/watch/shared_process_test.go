@@ -20,6 +20,8 @@ import (
 var watchProfileRoot string
 var workWatchProcess support.ApplicationProcess
 var selectedWatchProcess support.ApplicationProcess
+var observationWatchProcess support.ApplicationProcess
+var observationCommands observationCommandRouter
 var legacyWatchSource watchObservationSource
 var selectedWatchSource watchObservationSource
 var selectedWatchScheduler = &watchSelectedScheduler{
@@ -128,6 +130,14 @@ func initializeWatchProcesses() error {
 	selectedWatchProcess, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		Clock: &selectedWatchSource, ProcessScheduler: selectedWatchScheduler, APIServerStarter: watchAPIStarter,
 	})
+	if err != nil {
+		return err
+	}
+	// This cohort exercises actual provider execution through the command edge;
+	// the existing timing cohorts deliberately contain no workers.
+	observationWatchProcess, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: &observationCommands, APIServerStarter: watchAPIStarter,
+	})
 	return err
 }
 
@@ -136,7 +146,7 @@ func closeWatchProcesses() error {
 	closeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var errs []error
-	for _, process := range []support.ApplicationProcess{workWatchProcess, selectedWatchProcess} {
+	for _, process := range []support.ApplicationProcess{workWatchProcess, selectedWatchProcess, observationWatchProcess} {
 		if process != nil {
 			errs = append(errs, process.Close(closeContext))
 		}

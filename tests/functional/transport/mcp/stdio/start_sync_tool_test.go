@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -56,9 +57,16 @@ func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
 		t.Parallel()
 		assertComposedPeerLifetime(t, process, runner, sessions)
 	})
+	t.Run("configured subagent provider selection", func(t *testing.T) {
+		t.Parallel()
+		assertMCPConfiguredProviderSelection(t, process, runner)
+	})
 }
 
-type mcpRootResultRunner struct{ gates sync.Map }
+type mcpRootResultRunner struct {
+	gates    sync.Map
+	requests sync.Map
+}
 
 type mcpCommandGate struct {
 	entered chan struct{}
@@ -74,6 +82,7 @@ func (runner *mcpRootResultRunner) gate(t *testing.T, root string) *mcpCommandGa
 }
 
 func (runner *mcpRootResultRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.requests.Store(filepath.Clean(req.WorkDir), req)
 	if value, ok := runner.gates.LoadAndDelete(filepath.Clean(req.WorkDir)); ok {
 		gate := value.(*mcpCommandGate)
 		close(gate.entered)
@@ -89,16 +98,23 @@ func (runner *mcpRootResultRunner) Run(ctx context.Context, req platformprocess.
 type composedMemoryMCP struct {
 	client *stdioMCPClient
 	root   string
+	home   string
 	input  *io.PipeWriter
 	done   <-chan error
 }
 
 func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemoryMCP {
+	return startComposedMemoryMCPWithLifetime(t, t, process)
+}
+
+// A non-canceling sync timeout can outlive its request. Its directories and
+// connection context belong to the cohort that joins the reusable process.
+func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.Process) *composedMemoryMCP {
 	t.Helper()
-	projectRoot := support.ScaffoldSingleStepFactory(t, "composed-mcp")
+	projectRoot := support.ScaffoldSingleStepFactory(lifetime, "composed-mcp")
 	stdin, input := io.Pipe()
 	output, stdout := io.Pipe()
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(lifetime.Context(), time.Minute)
 	done := make(chan error, 1)
 	t.Cleanup(func() {
 		cancel()
@@ -107,7 +123,7 @@ func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemo
 		_ = stdout.Close()
 		_ = output.Close()
 	})
-	home := t.TempDir()
+	home := lifetime.TempDir()
 	go func() {
 		err := process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
@@ -118,7 +134,63 @@ func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemo
 		_ = stdout.Close()
 		done <- err
 	}()
-	return &composedMemoryMCP{client: newStdioMCPClient(t, input, output), root: projectRoot, input: input, done: done}
+	return &composedMemoryMCP{client: newStdioMCPClient(t, input, output), root: projectRoot, home: home, input: input, done: done}
+}
+
+// The connection owns its profile and working root. Rejected selections must
+// not enter the provider command edge; a subsequent valid request remains usable.
+func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process, runner *mcpRootResultRunner) {
+	t.Helper()
+	server := startComposedMemoryMCP(t, process)
+	initializeMCPClient(t, server.client)
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(server.home)
+	source := support.InstallPackagedFactoryWithProcess(t, process, env, server.root, "@you/subagent")
+	support.CreateNamedFactoryAtRootWithProcess(t, process, env, server.root,
+		filepath.Join(server.root, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
+	configPath := filepath.Join(server.home, ".you-agent-factory", "config.json")
+	before, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { runner.requests.Delete(filepath.Clean(server.root)) })
+	call := func(provider string) mcpJSONRPCResponse {
+		return server.client.call("tools/call", map[string]any{
+			"name": "you.subagent", "arguments": map[string]any{
+				"prompt": "Complete the selected request", "provider": provider, "model": "gpt-5-codex",
+			},
+		})
+	}
+	unknown := decodeComposedEnvelope[factorysessionmcp.SubagentResult](t, call("unknown-wfc-provider"))
+	if unknown.Error == nil || unknown.Result != nil || unknown.Error.Code != "factory_session.subagent.provider_not_found" || unknown.Error.Retryable {
+		t.Fatalf("unknown provider result = %#v", unknown)
+	}
+	if err := os.WriteFile(configPath, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	broken := call("codex")
+	if broken.Error == nil && broken.Result["isError"] != true {
+		t.Fatalf("malformed configuration returned success: %#v", broken)
+	}
+	if _, invoked := runner.requests.Load(filepath.Clean(server.root)); invoked {
+		t.Fatal("rejected provider or malformed profile admitted a provider attempt")
+	}
+	if err := os.WriteFile(configPath, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertMCPHealthyProviderRecovery(t, call, runner, server.root)
+	server.closeInput(t)
+}
+
+func assertMCPHealthyProviderRecovery(t *testing.T, call func(string) mcpJSONRPCResponse, runner *mcpRootResultRunner, workingRoot string) {
+	t.Helper()
+	result := decodeComposedTool[factorysessionmcp.SubagentResult](t, call("codex"))
+	if result.SessionID == "" || result.Status != "COMPLETED" || !strings.Contains(result.Text, "completed at "+filepath.Clean(workingRoot)) {
+		t.Fatalf("configured provider result = %#v", result)
+	}
+	request, invoked := runner.requests.LoadAndDelete(filepath.Clean(workingRoot))
+	if !invoked || request.(platformprocess.CommandRequest).Command != "codex" {
+		t.Fatalf("selected provider request = %#v", request)
+	}
 }
 
 func (server *composedMemoryMCP) closeInput(t *testing.T) {

@@ -691,12 +691,13 @@ type catalogOutcome struct {
 	reason      string
 	preCanceled bool
 	empty       bool
+	global      bool
 }
 
 func TestCatalogPathsSelectedLoggerPreservesOperationOutcomes(t *testing.T) {
 	t.Parallel()
 	cases := []catalogOutcome{
-		{name: "success"}, {name: "empty", empty: true},
+		{name: "success"}, {name: "global", global: true}, {name: "empty", empty: true},
 		{name: "generic", cause: errors.New("private-name /private/path secret-error"), reason: "operation_failed"},
 		{name: "invalid", cause: factorydefinitions.ErrInvalidNamedFactoryName, reason: "invalid_name"},
 		{name: "missing", cause: factorydefinitions.ErrNamedFactoryNotFound, reason: "named_factory_not_found"},
@@ -729,7 +730,7 @@ func checkCatalogOutcome(t *testing.T, operation string, outcome catalogOutcome)
 		if quiet {
 			logger = logging.NoopLogger{}
 		}
-		invoke, want, zero, fields, called := catalogOutcomeOperation(t, operation, outcome.empty, ctx, wantErr, logger)
+		invoke, want, zero, fields, called := catalogOutcomeOperation(t, operation, outcome.empty, outcome.global, ctx, wantErr, logger)
 		got, err := invoke(ctx)
 		expectedErr := wantErr
 		if outcome.preCanceled && operation != "list_effective_factories" {
@@ -788,7 +789,7 @@ func expectedCatalogOutcomeRecords(operation string, outcome catalogOutcome, qui
 	return expectedCalls
 }
 
-func catalogOutcomeOperation(t *testing.T, operation string, empty bool, ctx context.Context, cause error, logger logging.Logger) (
+func catalogOutcomeOperation(t *testing.T, operation string, empty, global bool, ctx context.Context, cause error, logger logging.Logger) (
 	func(context.Context) (any, error), any, any, []any, *bool,
 ) {
 	t.Helper()
@@ -801,6 +802,9 @@ func catalogOutcomeOperation(t *testing.T, operation string, empty bool, ctx con
 		listResult = factorydefinitions.ListEffectiveFactoriesResult{}
 	}
 	namedResult := factorydefinitions.ResolveNamedFactoryResult{Resolution: factorydefinitions.NamedFactoryResolution{Name: "private-name", FactoryDir: "/private/path", Source: factorydefinitions.NamedFactoryResolutionSourceProjectLocal}}
+	if global {
+		namedResult.Resolution.Source = factorydefinitions.NamedFactoryResolutionSourceGlobal
+	}
 	listEffective := func(gotCtx context.Context, request factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
 		called = true
 		if gotCtx != ctx || request != listRequest {

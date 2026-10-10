@@ -85,6 +85,7 @@ type runtimeConfig struct {
 	requestRuntimeBaseDir              string
 	net                                *state.Net
 	scheduler                          scheduler.Scheduler
+	enablement                         scheduler.Enablement
 	executeService                     executeCapability
 	workerExecution                    workers.Service
 	workerAttemptScheduler             platformclock.TimerSource
@@ -142,6 +143,7 @@ var _ TickableFactory = (*factoryImpl)(nil)
 // Open allocates the marking, buffers, attempts and dispatch state for one runtime.
 type EngineOpening struct {
 	dispatchOpening            dispatchplanning.OutboxOpening
+	enablement                 scheduler.Enablement
 	invocationInterpolation    interfaces.InvocationInterpolationService
 	providerSessions           providersessions.Service
 	quorumPolicy               interfaces.QuorumPolicyService
@@ -166,9 +168,11 @@ func NewEngineOpening(
 	expectedArtifactFileSystemValue any,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	dispatchOpening dispatchplanning.OutboxOpening,
+	enablement scheduler.Enablement,
 ) *EngineOpening {
 	return &EngineOpening{
 		dispatchOpening:            dispatchOpening,
+		enablement:                 enablement,
 		invocationInterpolation:    invocationInterpolation,
 		providerSessions:           providerSessions,
 		quorumPolicy:               quorumPolicy,
@@ -221,6 +225,7 @@ func (opening *EngineOpening) Open(
 	cfg := &runtimeConfig{
 		net:                                net,
 		scheduler:                          runtimeScheduler,
+		enablement:                         opening.enablement,
 		executeService:                     statelessService,
 		workerExecution:                    statelessService,
 		workerAttemptScheduler:             workerAttemptScheduler,

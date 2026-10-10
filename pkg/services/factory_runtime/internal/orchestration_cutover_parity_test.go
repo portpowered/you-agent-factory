@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -120,7 +121,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(nil, nil, nil, nil, factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
 			return factorydefinitions.WorkPropagationModeOutputAsPayload
-		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
+		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator()),
 		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
@@ -181,7 +182,20 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows)),
 		platformclock.Real{}, testDefinitionMapper(),
-		runtimeopening.NewEngineOpening(nil, nil, nil, nil, nil, nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening()),
+		runtimeopening.NewEngineOpening(
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
+			testRuntimeID,
+			testRuntimeID,
+			localRuntimeFiles{},
+			nil,
+			dispatchplanningwire.NewOpening(),
+			scheduler.NewEnablementEvaluator(),
+		),
 		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",

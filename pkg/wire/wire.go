@@ -5,8 +5,6 @@ package wire
 import (
 	"context"
 
-	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
-
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -25,10 +23,12 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -236,16 +236,15 @@ var servicesSet = wire.NewSet(
 	provideWorkSubmittedFilePathInspector,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
-	provideFactoryInvocationPolicyPorts,
 	provideWorkersInferenceMediaFileReader,
-	provideDecisionEnvelopeService,
-	provideInvocationInterpolationService,
-	provideInvocationOutputShapingService,
-	provideInvocationWorkTypeService,
-	provideQuorumPolicyService,
-	provideWorkPropagationPolicyService,
-	provideWorkstationExecutionPolicyService,
-	provideTTSObservabilityService,
+	factorydefinitionswire.NewDecisionEnvelopeService,
+	factorydefinitionswire.NewInvocationInterpolationService,
+	factorydefinitionswire.NewInvocationOutputShapingService,
+	factorydefinitionswire.NewInvocationWorkTypeService,
+	factorydefinitionswire.NewQuorumPolicyService,
+	factorydefinitionswire.NewWorkPropagationPolicyService,
+	factorydefinitionswire.NewWorkstationExecutionPolicyService,
+	factorydefinitionswire.NewTTSObservabilityService,
 	provideAutomationHostedClock,
 	provideAutomationHostedHTTPClient,
 	provideAutomationHostedSecretResolver,
@@ -342,6 +341,9 @@ var servicesSet = wire.NewSet(
 	providePortableBundledFilesApplier,
 	provideFactoryStarterWorkApplier,
 	providePortableBundledDocsPruner,
+	provideFactoryDefinitionAuthoredReader,
+	provideFactoryDefinitionConfigDecoder,
+	provideFactoryDefinitionCanonicalNormalizer,
 	provideFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeMetricsClock,
@@ -415,6 +417,15 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionsAuthoringFileSystem,
+	provideFactoryDefinitionsAuthoringInbox,
+	provideFactoryDefinitionsHost,
+	provideFactoryDefinitionsDistribution,
+	provideFactoryDefinitionsSnapshotsPortability,
+	provideFactoryDefinitionsAuthoredWriter,
+	provideFactoryDefinitionsAuthoringLayout,
+	factorydefinitionswire.PortableFactoryConfigPreparer,
+	factorydefinitionswire.FactorySnapshotCapturer,
 	provideFactoryDefinitionCompilation,
 	provideFactoryDefinitionRuntimeSnapshot,
 	provideFactoryDefinitionValidationOwner,
@@ -429,6 +440,8 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideNamedFactoryCatalog,
 	provideLoadedFactorySnapshotCapturer,
 	provideFactoryScaffoldCommandInitializer,
+	provideFactoryDefinitionPersistenceWriter,
+	provideFactoryDefinitionPersistenceEncoder,
 	provideFactoryDefinitionPersistence,
 	provideNamedFactoryPersistenceOperation,
 	provideEffectiveFactoryCatalogDiscovery,
@@ -440,7 +453,16 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 )
 
 var workerServiceSet = wire.NewSet(
-	provideStatelessWorkersService,
+	workerswire.NewService,
+	provideWorkersFactoryDocs,
+	provideWorkersAgentRunner,
+	provideWorkersScriptRunner,
+	provideWorkersInferenceRunner,
+	provideWorkersRegistry,
+	provideWorkersExecute,
+	provideWorkersHarness,
+	provideWorkersContextualScriptCommandRunner,
+	provideWorkersLoggedScriptCommandRunner,
 	provideWorkersAgentToolFileSystem,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -39,11 +40,11 @@ func TestNewServiceExecuteManagedInferenceUsesModelsDespiteProviderRunner(t *tes
 	input := newStatelessConstructionInputs()
 	local := &statelessTestLocalInvoker{}
 	delegate := &statelessInferenceDelegate{}
-	input.inferenceDependencies = runners.InferenceDependencies{
+	input.inferenceDependencies = InferenceDependencies{
 		Models:   local,
 		Delegate: delegate,
 	}
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -51,14 +52,14 @@ func TestNewServiceExecuteManagedInferenceUsesModelsDespiteProviderRunner(t *tes
 		input.inferenceDependencies,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
@@ -248,7 +249,7 @@ func TestNewMockServiceExecutesMockThroughCanonicalWorkersBehavior(t *testing.T)
 		RunType:    workers.MockWorkerRunTypeAccept,
 	}}}
 	var observations []workers.ExecutionObservation
-	service, err := NewMockService(
+	service, err := newLegacyMockStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -261,14 +262,14 @@ func TestNewMockServiceExecutesMockThroughCanonicalWorkersBehavior(t *testing.T)
 			return nil
 		},
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewMockService() error = %v", err)
+		t.Fatalf("newLegacyMockStatelessService() error = %v", err)
 	}
 
 	request := workers.ExecuteRequest{
@@ -310,7 +311,7 @@ func TestNewMockServiceRequiresExplicitMockComposition(t *testing.T) {
 	t.Parallel()
 
 	input := newStatelessConstructionInputs()
-	if _, err := NewMockService(
+	if _, err := newLegacyMockStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -320,13 +321,13 @@ func TestNewMockServiceRequiresExplicitMockComposition(t *testing.T) {
 		MockDependencies{},
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
 		nil,
 	); err == nil {
-		t.Fatal("NewMockService() error = nil, want explicit mock configuration error")
+		t.Fatal("newLegacyMockStatelessService() error = nil, want explicit mock configuration error")
 	}
 }
 
@@ -377,13 +378,13 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 	provider := &statelessTestProviders{}
 	command := &statelessTestCommandRunner{}
 	local := &statelessTestLocalInvoker{}
-	service, err := NewService(
-		runners.AgentDependencies{
+	service, err := newLegacyStatelessService(
+		AgentDependencies{
 			Providers:         provider,
 			Publish:           func(workers.ProgressFragment) {},
 			DecisionEnvelopes: statelessDecisionEnvelopeDouble{},
 		},
-		runners.ScriptConfig{
+		ScriptConfig{
 			Command:          "fixture-script",
 			FactoryDirectory: "factory-root",
 		},
@@ -394,7 +395,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 			Publish:       func(workers.ProgressFragment) {},
 			Record:        func(workers.ScriptEvent) {},
 		},
-		runners.InferenceConfig{
+		InferenceConfig{
 			Worker: models.LocalWorker{
 				Name:          "local-inference",
 				Type:          factorydefinitions.WorkerTypeInference,
@@ -403,17 +404,17 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 			},
 			Scope: statelessTestScope(),
 		},
-		runners.InferenceDependencies{Models: local},
+		InferenceDependencies{Models: local},
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 	if command.calls.Load() != 0 || local.calls.Load() != 0 || provider.executeCalls.Load() != 0 {
 		t.Fatalf("construction effects = command %d model %d provider %d, want zero",
@@ -425,33 +426,25 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 	return statelessTestFixture{service: service, provider: provider, command: command, local: local}
 }
 
-func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
+func TestNewServiceRejectsInvalidRunnerConfiguration(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
 		mutate func(*statelessConstructionInputs)
 	}{
-		{name: "agent providers", mutate: func(input *statelessConstructionInputs) { input.agentDependencies.Providers = nil }},
-		{name: "agent publisher", mutate: func(input *statelessConstructionInputs) { input.agentDependencies.Publish = nil }},
 		{name: "script command", mutate: func(input *statelessConstructionInputs) {
 			input.scriptConfig.Command = ""
 			input.scriptConfig.RequestSelected = false
 		}},
-		{name: "script command runner", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.CommandRunner = nil }},
-		{name: "script factory docs", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.FactoryDocs = nil }},
-		{name: "script clock", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Now = nil }},
-		{name: "script publisher", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Publish = nil }},
-		{name: "script recorder", mutate: func(input *statelessConstructionInputs) { input.scriptDependencies.Record = nil }},
 		{name: "inference worker", mutate: func(input *statelessConstructionInputs) { input.inferenceConfig.Worker.Name = "" }},
-		{name: "inference models", mutate: func(input *statelessConstructionInputs) { input.inferenceDependencies.Models = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			input := newStatelessConstructionInputs()
 			test.mutate(&input)
-			if _, err := NewService(
+			if _, err := newLegacyStatelessService(
 				input.agentDependencies,
 				input.scriptConfig,
 				input.scriptDependencies,
@@ -459,46 +452,24 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 				input.inferenceDependencies,
 				nil,
 				logging.NoopLogger{},
-				func() time.Time { return time.Unix(1, 0) },
+				func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 				nil,
 				nil,
 				nil,
 				nil,
 			); err == nil {
-				t.Fatal("NewService() error = nil, want construction validation error")
+				t.Fatal("newLegacyStatelessService() error = nil, want construction validation error")
 			}
 		})
 	}
 }
 
-func TestNewServiceRejectsMissingExecuteClock(t *testing.T) {
-	t.Parallel()
-
-	input := newStatelessConstructionInputs()
-	if _, err := NewService(
-		input.agentDependencies,
-		input.scriptConfig,
-		input.scriptDependencies,
-		input.inferenceConfig,
-		input.inferenceDependencies,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	); err == nil {
-		t.Fatal("NewService() error = nil, want missing Execute clock error")
-	}
-}
-
 type statelessConstructionInputs struct {
-	agentDependencies     runners.AgentDependencies
-	scriptConfig          runners.ScriptConfig
+	agentDependencies     AgentDependencies
+	scriptConfig          ScriptConfig
 	scriptDependencies    ScriptDependencies
-	inferenceConfig       runners.InferenceConfig
-	inferenceDependencies runners.InferenceDependencies
+	inferenceConfig       InferenceConfig
+	inferenceDependencies InferenceDependencies
 }
 
 func statelessTestScope() models.RuntimeScopeRef {
@@ -511,12 +482,12 @@ func statelessTestScope() models.RuntimeScopeRef {
 
 func newStatelessConstructionInputs() statelessConstructionInputs {
 	return statelessConstructionInputs{
-		agentDependencies: runners.AgentDependencies{
+		agentDependencies: AgentDependencies{
 			Providers:         &statelessTestProviders{},
 			Publish:           func(workers.ProgressFragment) {},
 			DecisionEnvelopes: statelessDecisionEnvelopeDouble{},
 		},
-		scriptConfig: runners.ScriptConfig{
+		scriptConfig: ScriptConfig{
 			Command:          "fixture-script",
 			FactoryDirectory: "factory-root",
 		},
@@ -527,7 +498,7 @@ func newStatelessConstructionInputs() statelessConstructionInputs {
 			Publish:       func(workers.ProgressFragment) {},
 			Record:        func(workers.ScriptEvent) {},
 		},
-		inferenceConfig: runners.InferenceConfig{
+		inferenceConfig: InferenceConfig{
 			Worker: models.LocalWorker{
 				Name:          "local-inference",
 				Type:          factorydefinitions.WorkerTypeInference,
@@ -536,7 +507,7 @@ func newStatelessConstructionInputs() statelessConstructionInputs {
 			},
 			Scope: statelessTestScope(),
 		},
-		inferenceDependencies: runners.InferenceDependencies{
+		inferenceDependencies: InferenceDependencies{
 			Models: &statelessTestLocalInvoker{},
 		},
 	}

@@ -12,7 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
-	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	compilationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/internal/service"
 )
 
 type stubLoadedSource struct {
@@ -54,7 +54,7 @@ func newCompilationService(
 			return nil, factoryroot.ErrInvalidNamedFactory
 		}
 	}
-	svc := compilationwire.NewService(
+	svc := compilationimpl.New(
 		loadCanonical,
 		loadFromFactoryDir,
 		stubEncodeFactory,
@@ -79,7 +79,7 @@ func TestCompileEffectiveFactorySource_CancellationPrecedesLoading(t *testing.T)
 		t.Fatal("canceled compilation reached the directory loader")
 		return nil, nil
 	}
-	svc := compilationwire.NewService(loadCanonical, loadDirectory, stubEncodeFactory)
+	svc := compilationimpl.New(loadCanonical, loadDirectory, stubEncodeFactory)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	result, err := svc.CompileEffectiveFactorySource(ctx, factoryroot.CompileEffectiveFactorySourceRequest{
@@ -102,7 +102,7 @@ func TestCompileEffectiveFactorySource_LoaderFailureRetainsCause(t *testing.T) {
 			loadDirectory := func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, cause
 			}
-			svc := compilationwire.NewService(loadCanonical, loadDirectory, stubEncodeFactory)
+			svc := compilationimpl.New(loadCanonical, loadDirectory, stubEncodeFactory)
 			request := factoryroot.CompileEffectiveFactorySourceRequest{FactoryDir: "/factories/alpha"}
 			if source == "canonical" {
 				request.Canonical = []byte(`{"name":"alpha"}`)
@@ -170,6 +170,43 @@ func TestCompileEffectiveFactorySource_EquivalentCanonicalInputsShareIdentity(t 
 	if first.Effective.FactoryDir != "/factories/alpha" ||
 		first.Effective.RuntimeBaseDir != "/factories/alpha" {
 		t.Fatalf("CompileEffectiveFactorySource effective = %#v, want alpha identity facts", first.Effective)
+	}
+}
+
+func TestCompilationDirectoryAndCanonicalInputsPreserveLoadedIdentity(t *testing.T) {
+	t.Parallel()
+	config := &factorydefinitions.FactoryConfig{Name: "alpha"}
+	source := stubLoadedSource{cfg: config, factoryDir: "/factories/alpha", runtimeBaseDir: "/runtime/alpha"}
+	canonicalCalls, directoryCalls := 0, 0
+	svc := compilationimpl.New(
+		func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			canonicalCalls++
+			if string(payload) != `{"name":"alpha"}` || loader != nil {
+				t.Fatalf("canonical arguments = %q, %v", payload, loader)
+			}
+			return source, nil
+		},
+		func(dir string, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			directoryCalls++
+			if dir != source.factoryDir || loader != nil {
+				t.Fatalf("directory arguments = %q, %v", dir, loader)
+			}
+			return source, nil
+		}, stubEncodeFactory,
+	)
+	fromDirectory, err := svc.CompileEffectiveFactorySource(t.Context(), factoryroot.CompileEffectiveFactorySourceRequest{FactoryDir: source.factoryDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromCanonical, err := svc.CompileEffectiveFactorySource(t.Context(), factoryroot.CompileEffectiveFactorySourceRequest{Canonical: []byte(`{"name":"alpha"}`), FactoryDir: source.factoryDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromDirectory != fromCanonical || fromDirectory.Effective.ContentIdentity == "" || fromDirectory.Effective.FactoryDir != source.factoryDir || fromDirectory.Effective.RuntimeBaseDir != source.runtimeBaseDir {
+		t.Fatalf("effective outcomes = %#v, %#v; want equal content and loaded directory identities", fromDirectory, fromCanonical)
+	}
+	if canonicalCalls != 1 || directoryCalls != 1 {
+		t.Fatalf("loader calls = canonical %d, directory %d; want one selected load each", canonicalCalls, directoryCalls)
 	}
 }
 
@@ -289,7 +326,7 @@ func TestCanonicalLoadingPreservesArgumentsAndOutcome(t *testing.T) {
 				}
 				return expected, tc.err
 			}
-			svc := compilationwire.NewService(loadCanonical, nil, nil)
+			svc := compilationimpl.New(loadCanonical, nil, nil)
 			result, err := svc.LoadCanonicalFactorySource(payload, workstationLoader)
 			if result != expected || err != tc.err {
 				t.Fatalf("canonical outcome = %v, %v; want original source and error %v", result, err, tc.err)
@@ -305,4 +342,31 @@ type canonicalWorkstationLoader struct{}
 
 func (*canonicalWorkstationLoader) Load(string) (*factorydefinitions.FactoryWorkstationConfig, error) {
 	panic("canonical delegation must pass the workstation loader without invoking it")
+}
+
+func TestCompileEffectiveFactorySource_UsesOnlyInjectedCanonicalLoader(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	loadCanonical := factorydefinitions.CanonicalFactoryJSONLoader(func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		calls++
+		return stubLoadCanonical(payload, loader)
+	})
+	loadDirectory := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		t.Fatal("directory loader must not be used for canonical compile")
+		return nil, nil
+	})
+	encodeCalls := 0
+	svc := compilationimpl.New(loadCanonical, loadDirectory, func(config *factorydefinitions.FactoryConfig) ([]byte, error) {
+		encodeCalls++
+		return stubEncodeFactory(config)
+	})
+	if calls != 0 || encodeCalls != 0 {
+		t.Fatal("construction invoked a collaborator")
+	}
+	_, err := svc.CompileEffectiveFactorySource(t.Context(), factoryroot.CompileEffectiveFactorySourceRequest{
+		Canonical: []byte(`{"name":"alpha"}`), FactoryDir: "/factories/alpha",
+	})
+	if err != nil || calls != 1 {
+		t.Fatalf("canonical compile = %v, loader calls = %d, want 1", err, calls)
+	}
 }

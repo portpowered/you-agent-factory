@@ -39,7 +39,7 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 	adapter := NewAdapter(fake)
 
 	response, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{
-		Path:            configPath,
+		Path:            " " + configPath + " ",
 		RequireExisting: true,
 	})
 	if !invoked {
@@ -56,8 +56,12 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 	}
 	if response.Document.Defaults == nil ||
 		response.Document.Defaults.WorkerModelProvider == nil ||
-		*response.Document.Defaults.WorkerModelProvider != "codex" {
+		*response.Document.Defaults.WorkerModelProvider != "codex" ||
+		response.Document.Defaults.WorkerModel == nil || *response.Document.Defaults.WorkerModel != "gpt-5" {
 		t.Fatalf("response.Document.Defaults = %#v, want codex/gpt-5 defaults", response.Document.Defaults)
+	}
+	if response.Document.Runtime == nil || response.Document.Runtime.Logging == nil || *response.Document.Runtime.Logging.MaxSizeMB != operatorsettings.EmptyDocument.Runtime.Logging.MaxSizeMB {
+		t.Fatalf("runtime = %#v, want owner runtime", response.Document.Runtime)
 	}
 }
 

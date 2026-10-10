@@ -26,14 +26,20 @@ func TestAgentProviderRequestPreservesAttemptControlObserver(t *testing.T) {
 	}
 }
 
-func TestNewRejectsMissingDependencies(t *testing.T) {
+func TestExecuteWithoutOptionalProgressPublisher(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New(nil, noopPublisher); err == nil {
-		t.Fatal("New(nil publisher) error = nil, want missing Providers service")
+	fake := &providersFake{}
+	runner, err := New(fake, nil, nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
 	}
-	if _, err := New(&providersFake{}, nil); err == nil {
-		t.Fatal("New(nil publish) error = nil, want missing progress publisher")
+	result, err := runner.Execute(t.Context(), baseAgentRequest())
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if fake.executeCalls != 1 || result.Content != "ok" {
+		t.Fatalf("Execute() calls = %d, content = %q, want one provider call and ok", fake.executeCalls, result.Content)
 	}
 }
 
@@ -41,7 +47,7 @@ func TestExecuteForwardsEnvThroughProviderRequest(t *testing.T) {
 	t.Parallel()
 
 	fake := &providersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -102,7 +108,7 @@ func TestExecutePublishesLiveProviderSessionObservationBeforeProviderReturns(t *
 	var published []workers.ProgressFragment
 	runner, err := New(fake, func(fragment workers.ProgressFragment) {
 		published = append(published, fragment)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -178,7 +184,7 @@ func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			fake := &failingProvidersFake{failure: test.failure}
-			runner, err := New(fake, noopPublisher)
+			runner, err := New(fake, noopPublisher, nil)
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -210,7 +216,7 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 	}
 	fake := &failingProvidersFake{failure: failure}
 	var published []workers.ProgressFragment
-	runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) })
+	runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) }, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -255,7 +261,7 @@ func TestExecuteFailureAcceptsPointerExecuteFailure(t *testing.T) {
 		Message: "rate limited",
 	}
 	fake := &pointerFailureProvidersFake{failure: &failure}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -274,7 +280,7 @@ func TestExecuteResumesThroughContinueWhenSessionIDPresent(t *testing.T) {
 	t.Parallel()
 
 	fake := &providersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -299,7 +305,7 @@ func TestExecuteResumesThroughExactWorkerSessionReferenceWithoutLegacyReconstruc
 	t.Parallel()
 
 	fake := &providersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -338,7 +344,7 @@ func TestExecuteUnsupportedContinuationReturnsProviderError(t *testing.T) {
 	t.Parallel()
 
 	fake := &unsupportedContinuationProvidersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -451,7 +457,7 @@ func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t
 				continuationErr:     test.continuationErr,
 				continuationOutcome: test.continuationOutcome,
 			}
-			runner, err := New(fake, noopPublisher)
+			runner, err := New(fake, noopPublisher, nil)
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -508,7 +514,7 @@ func TestExecuteExactContinuationRejectsMismatchedProviderResultBeforePublishing
 				continuationResultReference:   test.resultReference,
 			}
 			var published []workers.ProgressFragment
-			runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) })
+			runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) }, nil)
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -538,7 +544,7 @@ func TestExecuteForwardsInputTokensToProviders(t *testing.T) {
 	t.Parallel()
 
 	fake := &providersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -581,7 +587,7 @@ func TestExecuteRejectsInvalidRequestsBeforeProviderCall(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			fake := &providersFake{}
-			runner, err := New(fake, noopPublisher)
+			runner, err := New(fake, noopPublisher, nil)
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -600,7 +606,7 @@ func TestExecuteRejectsInvalidRequestsBeforeProviderCall(t *testing.T) {
 func TestExecuteNormalizesUnexpectedProviderError(t *testing.T) {
 	t.Parallel()
 
-	runner, err := New(&genericErrorProvidersFake{}, noopPublisher)
+	runner, err := New(&genericErrorProvidersFake{}, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

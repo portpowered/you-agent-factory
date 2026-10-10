@@ -40,20 +40,6 @@ func TestAuthorizeProviderTargetValidatesProviderRequests(t *testing.T) {
 			wantRunner: "script",
 		},
 		{
-			name:     "nil service is unavailable",
-			identity: runners.AgentIdentity,
-			request:  agentProviderRequest(),
-			service:  nil,
-			wantErr:  workers.ErrExecuteUnavailable,
-		},
-		{
-			name:     "nil providers service is unavailable",
-			identity: runners.AgentIdentity,
-			request:  agentProviderRequest(),
-			service:  &Service{},
-			wantErr:  workers.ErrExecuteUnavailable,
-		},
-		{
 			name:     "empty identity is rejected",
 			identity: runners.AgentIdentity,
 			request:  workers.ExecuteRequest{},

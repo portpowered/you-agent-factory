@@ -49,6 +49,8 @@ type modesInvocationSpec struct {
 	result         string
 	emptyResult    bool
 	stdinSignature bool
+	workerMode     string
+	workerTimeout  string
 	behavior       modesRouteBehavior
 	includePrompt  bool
 	context        context.Context
@@ -272,6 +274,9 @@ func (fixture *modesPackageFixture) start(t testing.TB, spec modesInvocationSpec
 	invocationFactoryPath := filepath.Join(workingRoot, "factory", "factory.json")
 	if err := copyModesFactory(fixture.factoryPath, invocationFactoryPath, spec.emptyResult, spec.stdinSignature); err != nil {
 		t.Fatalf("copy invocation Factory: %v", err)
+	}
+	if spec.workerMode != "" {
+		configureModesTypedWorker(t, invocationFactoryPath, spec.workerMode, spec.workerTimeout)
 	}
 	opened := support.OpenFactorySessionAt(t, fixture.serverURL, filepath.Dir(invocationFactoryPath))
 	sessionID := opened.Session.Id

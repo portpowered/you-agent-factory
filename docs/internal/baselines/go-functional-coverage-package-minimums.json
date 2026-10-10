@@ -257,7 +257,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
-      "minimum": 63.15
+      "minimum": 72.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
@@ -416,16 +416,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
       "minimum": 44.60
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-      "exception": {
-        "kind": "migration",
-        "justification": "CUT-DEF-SES moved activation lock, idle, and swap ports from definition Host wrappers to the Sessions DefinitionActivationGateway; the functional profile no longer executes the removed host adapter statements.",
-        "owner": "factory-definition-maintainers",
-        "deadline": "2026-12-31",
-        "removalGate": "Functional coverage for the definition package is restored through gateway integration tests without reintroducing Host activation wrappers."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
@@ -1591,7 +1581,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 71.49
+      "minimum": 75.13
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend",

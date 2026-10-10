@@ -61,16 +61,10 @@ func (s *applicationService) SubmitFileForSession(
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	if s.readSubmittedFile == nil {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("submitted Work Request file reader is required")
-	}
 	return submitFile(ctx, path, runtime, s.readSubmittedFile)
 }
 
 func (s *applicationService) runtime(sessionID string) (work.Runtime, error) {
-	if s == nil || s.runtimes == nil {
-		return nil, fmt.Errorf("Factory Session runtime service is required")
-	}
 	runtime, err := s.runtimes.ResolveWorkRuntime(sessionID)
 	if err != nil {
 		return nil, err
@@ -177,14 +171,14 @@ type SubmitTarget interface {
 }
 
 func SubmitFile(ctx context.Context, path string, target SubmitTarget, readFile work.SubmittedFileReader) error {
+	if readFile == nil {
+		return fmt.Errorf("submitted Work Request file reader is required")
+	}
 	_, err := submitFile(ctx, path, target, readFile)
 	return err
 }
 
 func submitFile(ctx context.Context, path string, target SubmitTarget, readFile work.SubmittedFileReader) (work.WorkRequestSubmitResult, error) {
-	if readFile == nil {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("submitted Work Request file reader is required")
-	}
 	data, err := readFile(path)
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("read work file %s: %w", path, err)

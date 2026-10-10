@@ -3,6 +3,7 @@ package subsystems
 import (
 	"context"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"reflect"
 	"strings"
 	"testing"
@@ -321,9 +322,31 @@ func executeLoggerParityDispatch(scenario string, logger logging.Logger) (*inter
 	if scenario == "no enabled transitions" {
 		tokens = nil
 	}
-	d := NewDispatcher(n, loggerParityScheduler{decisions}, nil, logger, nil, loggerParityNow, func() string { return "dispatch-1" })
+	d := NewDispatcherWithSeededReplay(
+		n,
+		loggerParityScheduler{decisions},
+		nil,
+		logger,
+		nil,
+		loggerParityNow,
+		func() string { return "dispatch-1" },
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
+	)
 	if scenario == "seeded replay" {
-		d = NewDispatcherWithSeededReplay(n, loggerParityScheduler{decisions}, nil, logger, nil, loggerParityNow, func() string { return "dispatch-1" }, loggerParityReplay{}, map[string]struct{}{"work-1": {}})
+		d = NewDispatcherWithSeededReplay(
+			n,
+			loggerParityScheduler{decisions},
+			nil,
+			logger,
+			nil,
+			loggerParityNow,
+			func() string { return "dispatch-1" },
+			scheduler.NewEnablementEvaluator(),
+			loggerParityReplay{},
+			map[string]struct{}{"work-1": {}},
+		)
 	}
 	return d.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: loggerParityMarking(tokens)})
 }
@@ -474,5 +497,5 @@ func executeLoggerParityTermination(scenario string, logger logging.Logger) (*in
 		mode = interfaces.RuntimeModeService
 	}
 	snapshot.Marking = loggerParityMarking(snapshot.Marking.Tokens)
-	return NewTerminationCheckWithRuntime(n, logger, mode, nil, loggerParityNow).Execute(context.Background(), snapshot)
+	return NewTerminationCheckWithRuntime(n, logger, mode, nil, loggerParityNow, scheduler.NewEnablementEvaluator()).Execute(context.Background(), snapshot)
 }

@@ -93,6 +93,10 @@ func (runner *controlledACPCommandRunner) Run(
 
 	prompt := string(request.Stdin)
 	switch {
+	case strings.Contains(prompt, "[wfc-command-success]"):
+		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"healthy command output"}`), nil
+	case strings.Contains(prompt, "[wfc-command-failure]"):
+		return process.CommandResult{ExitCode: 1, Stderr: []byte("controlled provider failure")}, nil
 	case strings.Contains(prompt, "[selected-recovery]"):
 		// The later request wins over the failed turn retained in prompt history.
 		return controlledACPResult(`{"decision":"accepted","feedback":"","output":"selected recovery answer"}`), nil

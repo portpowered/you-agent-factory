@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
@@ -41,18 +42,19 @@ func mustExecuteServiceWithEdges(
 	if len(selectedLogger) > 0 {
 		logger = selectedLogger[0]
 	}
-	service, err := executeservice.New(
+	service, err := executeservice.NewWithProviderOverride(
 		&staticRunners{runner: runner},
 		nil,
 		observe,
 		logger,
-		func() time.Time { return time.Unix(10, 0) },
+		func() time.Time { return time.Unix(10, 0) }, platformclock.Real{},
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
+		nil, nil, nil, nil,
 	)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewWithProviderOverride() error = %v", err)
 	}
 	return service
 }

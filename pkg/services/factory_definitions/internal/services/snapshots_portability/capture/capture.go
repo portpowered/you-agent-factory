@@ -36,9 +36,8 @@ func NewLoaded(
 // NewExplicit adapts explicit Factory Definition values to the snapshot
 // capturer used by Factory Definitions persistence.
 func NewExplicit(
-	mapSnapshotObject factorydefinitions.FactorySnapshotObjectMapper,
+	captureLoaded factorydefinitions.LoadedFactorySnapshotCapturer,
 ) factorydefinitions.FactorySnapshotCapturer {
-	captureLoaded := NewLoaded(mapSnapshotObject)
 	return func(
 		factoryDir string,
 		factoryConfig *factorydefinitions.FactoryConfig,

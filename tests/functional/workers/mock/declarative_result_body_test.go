@@ -52,6 +52,319 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 			runDeclaredResultScenario(t, host, name, nil)
 		})
 	}
+	for _, mode := range []string{"inference", "agent", "batch"} {
+		for _, flag := range []string{"equals", "optional-path"} {
+			t.Run("matched-rejection/"+mode+"/"+flag, func(t *testing.T) {
+				t.Parallel()
+				runMatchedMockRejection(t, host, mode, flag)
+			})
+		}
+	}
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run("empty-config/"+mode, func(t *testing.T) {
+			t.Parallel()
+			runTypedEmptyMockAcceptance(t, host, mode)
+		})
+	}
+	for _, flag := range []string{"equals", "optional-path"} {
+		t.Run("topology-only/"+flag, func(t *testing.T) {
+			t.Parallel()
+			runTopologyOnlyMockConfig(t, host, flag)
+		})
+	}
+}
+
+// B1's name-only worker is a supported topology placeholder, not an execution
+// definition. Preserve that public routing behavior alongside the typed
+// rejection/gate witnesses: mock policy must not invent a provider attempt.
+func runTopologyOnlyMockConfig(t *testing.T, host *support.FunctionalAPIServer, flag string) {
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"workTypes":    []map[string]any{batchWorkTypeConfig("task")},
+		"workers":      []map[string]string{{"name": "processor"}},
+		"workstations": []map[string]any{batchWorkstationConfig("process-task", "processor", "task", "complete", "failed")},
+	})
+	// Match the original factory.json-only fixture, without synthesizing an
+	// execution definition in the scaffolder's default workstation document.
+	if err := os.Remove(filepath.Join(dir, "workstations", "process-task", "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+	id := uuid.NewString()
+	gate := support.NewMockWorkerGate(t)
+	path := writeBatchMockWorkersConfig(t, workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		ID: "topology-rejection", RunType: workers.MockWorkerRunTypeReject,
+		RejectConfig: &workers.MockWorkerRejectConfig{Stderr: configuredRejectStderr}, GateConfig: gate.Config(30 * time.Second),
+	}}})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "target", WorkTypeID: "task", TraceID: id, Payload: []byte("preserved topology payload")})
+	args := []string{"you", "run", "--session=" + id, "--dir", dir, "--continuously", "--quiet", "--no-record"}
+	if flag == "equals" {
+		args = append(args, "--with-mock-workers="+path)
+	} else {
+		args = append(args, "--with-mock-workers", path)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.WorkingDirectory, inputs.Input.Env = dir, sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	joined := make(chan struct{})
+	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-joined:
+		case <-time.After(30 * time.Second):
+			t.Error("topology invocation did not join")
+		}
+	})
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, host.URL()+"/factory-sessions/"+id+"/work")
+	if support.CountWorkAtCustomerState(listed, "task:complete") != 1 || support.CountWorkAtCustomerState(listed, "task:failed") != 0 {
+		t.Fatalf("topology Work outcome = %+v", listed)
+	}
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	if len(dispatches) != 1 || dispatches[0].Response == nil || dispatches[0].Response.Outcome != factoryapi.WorkOutcomeAccepted ||
+		support.StringPointerValue(dispatches[0].Response.Output) != "" || !support.DispatchObservationIncludesWork(dispatches[0], "target") {
+		t.Fatalf("topology dispatch = %+v, want accepted correlated traversal without provider output", dispatches)
+	}
+	if _, err := os.Stat(gate.Config(30 * time.Second).ArrivedFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("topology traversal reached mock execution gate: %v", err)
+	}
+}
+
+// M3 observes default acceptance with an explicitly empty configuration on
+// both typed paths. The shared host denies every native execution effect.
+func runTypedEmptyMockAcceptance(t *testing.T, host *support.FunctionalAPIServer, mode string) {
+	dir := matchedMockRejectionFactory(t, mode)
+	id := uuid.NewString()
+	for _, name := range []string{"target", "sibling"} {
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkID: name, WorkTypeID: "task", TraceID: id + "-" + name, Payload: []byte(name),
+		})
+	}
+	path := filepath.Join(dir, "empty-mock.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--session=" + id, "--dir", dir,
+		"--with-mock-workers=" + path, "--continuously", "--quiet", "--no-record"})
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	joined := make(chan struct{})
+	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-joined:
+		case <-time.After(30 * time.Second):
+			t.Error("empty-mock invocation did not join")
+		}
+	})
+	// Continuous execution retains the session for public terminal inspection;
+	// this wait observes committed Work state rather than delaying the command.
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	base := host.URL() + "/factory-sessions/" + url.PathEscape(id)
+	assertDeclaredWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work"), false)
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	assertEmptyMockAcceptanceDispatches(t, dispatches)
+}
+
+func assertEmptyMockAcceptanceDispatches(t *testing.T, dispatches []support.DispatchEventObservation) {
+	t.Helper()
+	if len(dispatches) != 2 {
+		t.Fatalf("default acceptance dispatch count = %d, want two", len(dispatches))
+	}
+	seen := map[string]bool{}
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != "process-task" || dispatch.Response == nil ||
+			dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted ||
+			support.StringPointerValue(dispatch.Response.Output) != "mock worker accepted" ||
+			dispatch.Response.FailureDetail != nil || dispatch.Response.Error != nil {
+			t.Fatalf("empty-config terminal dispatch = %+v", dispatch)
+		}
+		for _, name := range []string{"target", "sibling"} {
+			if support.DispatchObservationIncludesWork(dispatch, name) {
+				if seen[name] {
+					t.Fatalf("duplicate default acceptance for %s", name)
+				}
+				seen[name] = true
+			}
+		}
+	}
+	if !seen["target"] || !seen["sibling"] {
+		t.Fatalf("default acceptance Work correlation = %v", seen)
+	}
+}
+
+// The matched worker/workstation pair and both documented flag forms must
+// select rejection rather than the host's empty-config acceptance. Each row
+// owns its profile, UUID session and gate; all rows reuse the effect-denying
+// process above. Public dispatch/Work outcomes prove assembled routing, which
+// an isolated runner test cannot establish.
+func matchedMockRejectionFactory(t *testing.T, mode string) string {
+	t.Helper()
+	workerType, workstationType := "INFERENCE_WORKER", "INFERENCE_RUN"
+	if mode == "agent" {
+		workerType, workstationType = "AGENT_WORKER", "AGENT_RUN"
+	}
+	workerConfig := map[string]any{"name": "processor", "type": workerType, "modelProvider": "CODEX", "model": "gpt-5", "executorProvider": "SCRIPT_WRAP"}
+	workstationConfig := batchWorkstationConfig("process-task", "processor", "task", "complete", "failed")
+	workstationConfig["type"] = workstationType
+	if mode != "agent" {
+		workerConfig["operations"] = []map[string]any{{"name": "OMNI",
+			"inputs":  []map[string]any{{"name": "prompt", "contentTypes": []string{"TEXT"}, "required": true}},
+			"outputs": []map[string]any{{"name": "completion", "contentTypes": []string{"TEXT"}}},
+		}}
+		workstationConfig["operation"] = "OMNI"
+		workstationConfig["operationBindings"] = []map[string]any{{"slot": "prompt", "defaultContent": []map[string]string{{"type": "TEXT", "text": "Process the requested Work."}}}}
+	}
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"workTypes":    []map[string]any{batchWorkTypeConfig("task")},
+		"workers":      []map[string]any{workerConfig},
+		"workstations": []map[string]any{workstationConfig},
+	})
+	support.WriteAgentConfig(t, dir, "processor", "---\ntype: "+workerType+"\nmodelProvider: CODEX\nmodel: gpt-5\nexecutorProvider: SCRIPT_WRAP\n---\nProcess the requested Work.\n")
+	workstationPath := filepath.Join(dir, "workstations", "process-task", "AGENTS.md")
+	if err := os.WriteFile(workstationPath, []byte("---\ntype: "+workstationType+"\n---\nProcess {{ (index .Inputs 0).Payload }}.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func runMatchedMockRejection(t *testing.T, host *support.FunctionalAPIServer, mode, flag string) {
+	dir := matchedMockRejectionFactory(t, mode)
+	id := uuid.NewString()
+	args := []string{"you"}
+	if mode == "batch" {
+		args = append(args, "--json")
+	}
+	args = append(args, "run", "--session="+id, "--dir", dir, "--no-record")
+	config := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		ID: "matched-rejection", WorkerName: "processor", WorkstationName: "process-task",
+		RunType:      workers.MockWorkerRunTypeReject,
+		RejectConfig: &workers.MockWorkerRejectConfig{Stdout: configuredRejectStdout, Stderr: configuredRejectStderr},
+	}}}
+	var gate *support.MockWorkerGate
+	if mode == "batch" {
+		args = append(args, "--work", writeBatchWorksWithTypes(t,
+			batchWorkSpec{Name: "first rejected Work", WorkTypeID: "task"},
+			batchWorkSpec{Name: "second rejected Work", WorkTypeID: "task"}))
+	} else {
+		gate = support.NewMockWorkerGate(t)
+		config.MockWorkers[0].WorkInputs = []workers.MockWorkInputSelector{{WorkID: "target"}}
+		config.MockWorkers[0].GateConfig = gate.Config(30 * time.Second)
+		for _, name := range []string{"target", "sibling"} {
+			testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: name, WorkTypeID: "task", TraceID: id + "-" + name, Payload: []byte(name)})
+		}
+		args = append(args, "--continuously", "--quiet")
+	}
+	path := writeBatchMockWorkersConfig(t, config)
+	if flag == "equals" {
+		args = append(args, "--with-mock-workers="+path)
+	} else {
+		args = append(args, "--with-mock-workers", path)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	done := make(chan error, 1)
+	joined := make(chan struct{})
+	go func() { defer close(joined); done <- host.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-joined:
+			if t.Failed() {
+				t.Logf("matched rejection stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
+			}
+		case <-time.After(30 * time.Second):
+			t.Error("matched rejection invocation did not join")
+		}
+	})
+	if mode == "batch" {
+		assertMatchedMockBatchFailure(t, done, inputs)
+		return
+	}
+	assertMatchedMockGatedFailure(t, host, id, gate)
+}
+
+func assertMatchedMockBatchFailure(t *testing.T, done <-chan error, inputs *support.CapturedInputs) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatalf("matched batch rejection succeeded: %s", inputs.Stdout())
+		}
+		if strings.TrimSpace(inputs.Stdout()) == "" {
+			t.Fatalf("matched batch produced no report: %v stderr=%q", err, inputs.Stderr())
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("matched batch rejection did not finish")
+	}
+	report := decodeBatchProcessReport(t, inputs.Stdout())
+	if report.Status != "FAILED" || len(report.Failures) != 2 {
+		t.Fatalf("matched batch report = %+v, want two failed Works", report)
+	}
+	failures := map[string]bool{}
+	for _, failure := range report.Failures {
+		if failure.WorkState != "task:failed" || !strings.Contains(failure.Reason, stableProviderRefusalErr) {
+			t.Fatalf("matched batch failure = %+v, want provider refusal", failure)
+		}
+		failures[failure.WorkName] = true
+	}
+	if !failures["first rejected Work"] || !failures["second rejected Work"] {
+		t.Fatalf("matched batch failures = %+v", report.Failures)
+	}
+}
+
+func assertMatchedMockGatedFailure(t *testing.T, host *support.FunctionalAPIServer, id string, gate *support.MockWorkerGate) {
+	t.Helper()
+	gate.WaitForArrival(t, 30*time.Second)
+	base := host.URL() + "/factory-sessions/" + url.PathEscape(id)
+	assertMatchedMockTargetHeld(t, host, id, base)
+	gate.Release()
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work")
+	assertDeclaredWork(t, listed, true)
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	assertMatchedMockTerminalDispatches(t, dispatches)
+}
+
+func assertMatchedMockTargetHeld(t *testing.T, host *support.FunctionalAPIServer, id, base string) {
+	t.Helper()
+	active := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, base+"/worker-sessions?workId=target")
+	if len(active.Sessions) != 1 || active.Sessions[0].EndedAt != nil {
+		t.Fatalf("matched gate did not hold target execution: %+v", active)
+	}
+	for _, dispatch := range support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id)) {
+		if support.DispatchObservationIncludesWork(dispatch, "target") && dispatch.Response != nil {
+			t.Fatalf("target returned before gate release: %+v", dispatch.Response)
+		}
+	}
+}
+
+func assertMatchedMockTerminalDispatches(t *testing.T, dispatches []support.DispatchEventObservation) {
+	t.Helper()
+	if len(dispatches) != 2 {
+		t.Fatalf("matched dispatch count = %d, want target and sibling", len(dispatches))
+	}
+	var targetCount, siblingCount int
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != "process-task" {
+			t.Fatalf("matched workstation = %q", dispatch.Request.TransitionId)
+		}
+		if support.DispatchObservationIncludesWork(dispatch, "target") {
+			targetCount++
+			assertStableMockRejectDispatch(t, dispatch)
+		} else if !support.DispatchObservationIncludesWork(dispatch, "sibling") || dispatch.Response == nil ||
+			dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted || support.StringPointerValue(dispatch.Response.Output) != "mock worker accepted" {
+			t.Fatalf("unmatched sibling inherited rejection: %+v", dispatch)
+		} else {
+			siblingCount++
+		}
+	}
+	if targetCount != 1 || siblingCount != 1 {
+		t.Fatalf("matched dispatch correlation: target=%d sibling=%d, want one each", targetCount, siblingCount)
+	}
 }
 
 func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, name string, rendezvous func(*testing.T)) {

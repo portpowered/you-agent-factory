@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -27,7 +28,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 
 	input := newStatelessConstructionInputs()
 	override := &statelessProviderOverride{}
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -35,7 +36,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 		input.inferenceDependencies,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -43,7 +44,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 		override,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 	var events []workers.InferenceEvent
 	request := workers.ExecuteRequest{
@@ -109,7 +110,7 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 	override := &statelessProviderOverride{
 		content: `{"decision":"ACCEPTED","feedback":"ready","output":"ship"}`,
 	}
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -117,7 +118,7 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 		input.inferenceDependencies,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -125,7 +126,7 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 		override,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
@@ -178,7 +179,7 @@ func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuation
 	input.agentDependencies.Providers = provider
 	var observationsMu sync.Mutex
 	observations := make(map[string][]workers.ExecutionObservation, attemptCount)
-	service, err := NewService(
+	service, err := newLegacyStatelessService(
 		input.agentDependencies,
 		input.scriptConfig,
 		input.scriptDependencies,
@@ -193,14 +194,14 @@ func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuation
 			return nil
 		},
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+		t.Fatalf("newLegacyStatelessService() error = %v", err)
 	}
 
 	results := make(chan concurrentAgentExecutionResult, attemptCount)

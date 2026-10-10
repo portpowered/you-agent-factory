@@ -12,3 +12,9 @@ func FactoryConfigDecoder(source factorydefinitions.SerializedFactoryConfigReade
 	mapper := factorymapping.NewFactoryConfigMapper()
 	return compilationwire.NewSerializedFactoryConfigDecoder(source, mapper.Expand)
 }
+
+// CanonicalFactoryConfigEncoder binds persistence serialization before operations run.
+func CanonicalFactoryConfigEncoder(source factorydefinitions.CanonicalFactoryConfigReader) factorydefinitions.FactoryConfigJSONEncoder {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return compilationwire.NewCanonicalFactoryConfigEncoder(source, mapper.Flatten)
+}

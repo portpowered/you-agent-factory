@@ -170,6 +170,10 @@ GO_BUILD_FLAGS ?=
 GO_LOCAL_BUILD_FLAGS ?= -buildvcs=false
 
 GO_TEST_TIMEOUT ?= 300s
+
+.PHONY: test-work-list-load
+test-work-list-load:
+	$(GO) test -p=1 -parallel=1 ./tests/load/work_list -run '^TestWorkListPageLargeBoard$$' -count=1 -timeout 5m -v
 GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 75.9
 GO_COVERAGE_FLOOR_POLICY ?= blocking

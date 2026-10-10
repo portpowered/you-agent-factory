@@ -179,11 +179,113 @@ func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.
 	if strings.Contains(strings.ToLower(secondResp.Error.Error()), "busy") {
 		t.Errorf("second session/prompt error = %v, want a fresh dispatch failure rather than a stranded busy rejection", secondResp.Error)
 	}
+	peerRoot := controlledACPWorkingDirectoryForCohort(t, cohort, "healthy-command-peer")
+	peerID := assertSessionNewReturnsDefaultTarget(t, server, peerRoot, "factory:@you/goal")
+	if peerID == sessionID {
+		t.Fatal("peer reused failed Chat Session")
+	}
+	peer := sendSessionPrompt(t, server, peerID, "please help with this goal [healthy-command-peer]")
+	if peer.Error != nil {
+		t.Fatalf("healthy peer after provider failure: %v", peer.Error)
+	}
+	assertPromptResponseStopReason(t, peer, acpsdk.StopReasonEndTurn)
 }
 
 // internalErrorCode is JSON-RPC's reserved internal-error code, which
 // acpsdk.NewInternalError sets.
 const internalErrorCode = -32603
+
+func TestACPTargetCommandFailureIsolation(t *testing.T) {
+	t.Parallel()
+	cohort := controlledACPCohortForTest(t)
+	server := controlledACPServerForCohort(t, cohort)
+	failedRoot := controlledACPWorkingDirectoryForCohort(t, cohort, "command-failure")
+	failedID := assertSessionNewReturnsDefaultTarget(t, server, failedRoot, "factory:@you/goal")
+	failed := sendSessionPrompt(t, server, failedID, "please help with this goal [wfc-command-failure]")
+	if failed.Error == nil || failed.Error.Code != internalErrorCode {
+		t.Fatalf("provider command failure returned %#v", failed)
+	}
+	data, err := json.Marshal(failed.Error.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reason map[string]string
+	if err := json.Unmarshal(data, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if len(reason) != 1 || reason["reason"] != string(factorysessions.InvocationErrorCodeRuntimeFailure) {
+		t.Fatalf("provider failure data = %s", data)
+	}
+	peerRoot := controlledACPWorkingDirectoryForCohort(t, cohort, "command-success")
+	peerID := assertSessionNewReturnsDefaultTarget(t, server, peerRoot, "factory:@you/goal")
+	if peerID == failedID {
+		t.Fatal("peer reused failed Chat Session")
+	}
+	peer, frames := observedSessionPrompt(t, server, peerID, "please help with this goal [wfc-command-success]")
+	if peer.Error != nil {
+		t.Fatalf("healthy command peer: %v", peer.Error)
+	}
+	assertPromptResponseStopReason(t, peer, acpsdk.StopReasonEndTurn)
+	if !strings.Contains(frames, "healthy command output") || strings.Contains(frames, "controlled provider failure") {
+		t.Fatal("healthy peer output was missing or contained the failed provider diagnostic")
+	}
+	assertPromptFrameSession(t, frames, peerID)
+	if cohort.runner.requestCountContaining("[wfc-command-success]") == 0 {
+		t.Fatal("healthy turn never reached its provider")
+	}
+}
+
+// Observe actual ACP notifications as well as the terminal prompt response.
+// The transport owns Chat Session identity; provider diagnostics cannot appear
+// as a peer's agent output.
+func observedSessionPrompt(t *testing.T, server acp.Server, sessionID, text string) (rpcMessage, string) {
+	t.Helper()
+	params, err := json.Marshal(map[string]any{
+		"sessionId": sessionID, "prompt": []map[string]any{{"type": "text", "text": text}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
+	var out bytes.Buffer
+	if err := serveChatRequest(server, t.Context(), strings.NewReader(line), &out); err != nil {
+		t.Fatal(err)
+	}
+	responses := responseLinesOnlyErr(&out)
+	if len(responses) != 1 {
+		t.Fatalf("prompt responses = %d", len(responses))
+	}
+	return responses[0], out.String()
+}
+
+func assertPromptFrameSession(t *testing.T, frames, sessionID string) {
+	t.Helper()
+	scanner := bufio.NewScanner(strings.NewReader(frames))
+	updates := 0
+	for scanner.Scan() {
+		var frame struct {
+			Method string `json:"method"`
+			Params struct {
+				SessionID string `json:"sessionId"`
+			} `json:"params"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.Method == "session/update" {
+			updates++
+			if frame.Params.SessionID != sessionID {
+				t.Fatal("peer ACP observation lost its Chat Session identity")
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if updates == 0 {
+		t.Fatal("prompt returned no session-scoped observations")
+	}
+}
 
 // TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes
 // proves that when the admitted episode's Factory target can no longer
@@ -223,6 +325,21 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	if got := scenario.runner.requestCount(); got != 0 {
 		t.Fatalf("provider command calls during resolver failures = %d, want 0 (all failures precede Factory execution)", got)
 	}
+	peerRoot := t.TempDir()
+	seedProjectPackagedFactory(t, peerRoot, "@you/goal")
+	peerID := assertSessionNewReturnsDefaultTarget(t, scenario.server, peerRoot, "factory:@you/goal")
+	if peerID == scenario.sessionID {
+		t.Fatal("peer reused failed Chat Session")
+	}
+	peer, frames := observedSessionPrompt(t, scenario.server, peerID, "please help with this goal [healthy-target-peer]")
+	if peer.Error != nil {
+		t.Fatalf("healthy peer after target failure: %v", peer.Error)
+	}
+	assertPromptResponseStopReason(t, peer, acpsdk.StopReasonEndTurn)
+	if !strings.Contains(frames, "goal reached over ACP") || strings.Contains(frames, "dependency_unavailable") {
+		t.Fatal("healthy target peer output was missing or included failed-target diagnostics")
+	}
+	assertPromptFrameSession(t, frames, peerID)
 }
 
 type unresolvableFactoryScenario struct {

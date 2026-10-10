@@ -2,11 +2,13 @@ package internal_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
@@ -14,6 +16,10 @@ import (
 
 type recordingFactory struct {
 	submitted work.WorkRequest
+	ctx       context.Context
+	result    work.WorkRequestSubmitResult
+	err       error
+	calls     int
 	movedID   string
 	source    work.WorkStateChangeSource
 }
@@ -27,9 +33,148 @@ func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 	return r.runtime, r.err
 }
 
-func (f *recordingFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+func (f *recordingFactory) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	f.submitted = request
-	return work.WorkRequestSubmitResult{}, nil
+	f.ctx = ctx
+	f.calls++
+	return f.result, f.err
+}
+
+type selectedWorkResolver func(string) (work.Runtime, error)
+
+func (r selectedWorkResolver) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
+	return r(sessionID)
+}
+
+func TestSubmitFileForSessionPreservesSelectionAndFailures(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"success", "resolver", "unavailable", "read", "parse", "admission", "canceled", "deadline"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runSelectedFileSubmission(t, name)
+		})
+	}
+}
+
+func runSelectedFileSubmission(t *testing.T, name string) {
+	t.Helper()
+	failure := errors.New("controlled failure")
+	canonical := `{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[{"name":"item","workId":"work-edge","workTypeName":"task","state":"init","payload":{"value":"hello"}}]}`
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	want := work.WorkRequestSubmitResult{RequestID: "request-edge", WorkID: "work-edge", Accepted: true}
+	peer := &recordingFactory{result: want}
+	wantErr := error(nil)
+	if name == "admission" {
+		peer.err, wantErr = failure, failure
+	}
+	if name == "canceled" {
+		cancel()
+		peer.err, wantErr = ctx.Err(), context.Canceled
+	}
+	if name == "deadline" {
+		deadlineCtx, deadlineCancel := context.WithDeadline(ctx, time.Time{})
+		defer deadlineCancel()
+		ctx = deadlineCtx
+		peer.err, wantErr = ctx.Err(), context.DeadlineExceeded
+	}
+	readCalls := 0
+	resolverCalls := 0
+	service := newTestWorkService(selectedWorkResolver(func(id string) (work.Runtime, error) {
+		resolverCalls++
+		if id != "selected-session" {
+			t.Fatalf("session = %q", id)
+		}
+		if name == "resolver" {
+			return nil, failure
+		}
+		if name == "unavailable" {
+			return nil, nil
+		}
+		return peer, nil
+	}), func(path string) ([]byte, error) {
+		readCalls++
+		if path != "owned.json" {
+			t.Fatalf("path = %q", path)
+		}
+		if name == "read" {
+			return nil, failure
+		}
+		if name == "parse" {
+			return []byte(`{`), nil
+		}
+		return []byte(canonical), nil
+	}, nil, nil, nil)
+	got, err := service.SubmitFileForSession(ctx, "selected-session", "owned.json")
+	if resolverCalls != 1 {
+		t.Fatalf("resolver calls = %d", resolverCalls)
+	}
+	switch name {
+	case "resolver", "unavailable":
+		assertSelectedFileResolutionFailure(t, name, err, failure, readCalls, peer.calls)
+	case "read", "parse":
+		assertSelectedFileReadFailure(t, name, err, failure, readCalls, peer.calls)
+	default:
+		assertSelectedFileAdmission(t, ctx, peer, readCalls, got, want, err, wantErr)
+	}
+	if err != nil && !reflect.DeepEqual(got, work.WorkRequestSubmitResult{}) {
+		t.Fatalf("failure returned success: %#v", got)
+	}
+}
+
+func assertSelectedFileResolutionFailure(t *testing.T, name string, err, failure error, readCalls, admissionCalls int) {
+	t.Helper()
+	if readCalls != 0 || admissionCalls != 0 {
+		t.Fatal("failed resolution reached reader/admission")
+	}
+	// Is proves sentinel identity; DeepEqual also rejects an added wrapper.
+	if name == "resolver" && (!errors.Is(err, failure) || !reflect.DeepEqual(err, failure)) {
+		t.Fatalf("resolver error = %v", err)
+	}
+	if name == "unavailable" && (err == nil || err.Error() != "Factory Session runtime is unavailable: selected-session") {
+		t.Fatalf("absence error = %v", err)
+	}
+}
+
+func assertSelectedFileReadFailure(t *testing.T, name string, err, failure error, readCalls, admissionCalls int) {
+	t.Helper()
+	if readCalls != 1 || admissionCalls != 0 {
+		t.Fatal("failed file reached admission")
+	}
+	prefix := name + " work file owned.json: "
+	if err == nil || !strings.HasPrefix(err.Error(), prefix) {
+		t.Fatalf("file error = %v", err)
+	}
+	if name == "read" && !errors.Is(err, failure) {
+		t.Fatalf("read error identity = %v", err)
+	}
+	if name == "read" && err.Error() != "read work file owned.json: controlled failure" {
+		t.Fatalf("read diagnostic = %v", err)
+	}
+	if name == "parse" {
+		var syntaxErr *json.SyntaxError
+		if !errors.As(err, &syntaxErr) {
+			t.Fatalf("parse error lost syntax cause: %v", err)
+		}
+	}
+}
+
+func assertSelectedFileAdmission(t *testing.T, ctx context.Context, peer *recordingFactory, readCalls int, got, want work.WorkRequestSubmitResult, err, wantErr error) {
+	t.Helper()
+	request := work.WorkRequest{RequestID: "request-edge", Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{Name: "item", WorkID: "work-edge", WorkTypeID: "task", State: "init", Payload: map[string]any{"value": "hello"}}}}
+	if readCalls != 1 || peer.calls != 1 || peer.ctx != ctx || !reflect.DeepEqual(peer.submitted, request) {
+		t.Fatalf("admission changed context/request: %#v", peer)
+	}
+	if wantErr != nil && (!errors.Is(err, wantErr) || !strings.HasPrefix(err.Error(), "submit initial work: ")) {
+		t.Fatalf("admission error = %v", err)
+	}
+	if wantErr != nil && err.Error() != "submit initial work: "+wantErr.Error() {
+		t.Fatalf("admission diagnostic = %v", err)
+	}
+	if wantErr == nil && (err != nil || !reflect.DeepEqual(got, want)) {
+		t.Fatalf("result = %#v, error = %v", got, err)
+	}
 }
 
 func (f *recordingFactory) MoveWork(_ context.Context, workID, _ string, source work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
@@ -42,21 +187,24 @@ func (f *recordingFactory) ReadWorkSnapshot(context.Context) (work.ReadSnapshot,
 }
 
 func TestSubmitFileParsesAndSubmitsCanonicalWorkRequest(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "work.json")
-	if err := os.WriteFile(path, []byte(`{
-		"requestId": "request-from-file",
-		"type": "FACTORY_REQUEST_BATCH",
-		"works": [{"name": "work-1", "workTypeName": "test", "state": "init", "payload": {"value": "hello"}}]
-	}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	t.Parallel()
+	ctx := t.Context()
 	target := &recordingFactory{}
-
-	if err := internalservice.SubmitFile(context.Background(), path, target, os.ReadFile); err != nil {
+	reads := 0
+	reader := func(path string) ([]byte, error) {
+		reads++
+		if path != "work.json" || target.calls != 0 {
+			t.Fatal("reader path or admission order changed")
+		}
+		return []byte(`{"requestId":"request-from-file","type":"FACTORY_REQUEST_BATCH","works":[{"name":"work-1","workTypeName":"test","state":"init","payload":{"value":"hello"}}]}`), nil
+	}
+	if err := internalservice.SubmitFile(ctx, "work.json", target, reader); err != nil {
 		t.Fatalf("SubmitFile: %v", err)
 	}
-	if target.submitted.RequestID != "request-from-file" {
-		t.Fatalf("request ID = %q, want request-from-file", target.submitted.RequestID)
+	want := work.WorkRequest{RequestID: "request-from-file", Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{Name: "work-1", WorkTypeID: "test", State: "init", Payload: map[string]any{"value": "hello"}}}}
+	if reads != 1 || target.calls != 1 || target.ctx != ctx || !reflect.DeepEqual(target.submitted, want) {
+		t.Fatalf("admission changed context/request: %#v, reads = %d", target, reads)
 	}
 }
 
@@ -78,39 +226,70 @@ func TestSubmitFileForSessionUsesInjectedReaderAndRuntime(t *testing.T) {
 }
 
 func TestSubmitFileFailsClosedWithoutReader(t *testing.T) {
-	err := internalservice.SubmitFile(context.Background(), "work.json", &recordingFactory{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "file reader is required") {
-		t.Fatalf("error = %v, want missing submitted-file reader failure", err)
+	t.Parallel()
+	target := &recordingFactory{}
+	err := internalservice.SubmitFile(t.Context(), "work.json", target, nil)
+	if err == nil || err.Error() != "submitted Work Request file reader is required" || target.calls != 0 {
+		t.Fatalf("error = %v, admission calls = %d", err, target.calls)
+	}
+	// Reader validation precedes even a missing standalone target.
+	err = internalservice.SubmitFile(t.Context(), "work.json", nil, nil)
+	if err == nil || err.Error() != "submitted Work Request file reader is required" {
+		t.Fatalf("missing reader/target error = %v", err)
 	}
 }
 
 func TestSubmitFileReportsReadParseAndRuntimeFailures(t *testing.T) {
-	t.Run("read", func(t *testing.T) {
-		err := internalservice.SubmitFile(context.Background(), filepath.Join(t.TempDir(), "missing.json"), &recordingFactory{}, os.ReadFile)
-		if err == nil || !strings.Contains(err.Error(), "read work file") {
-			t.Fatalf("error = %v, want read work file failure", err)
-		}
-	})
-	t.Run("parse", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "work.json")
-		if err := os.WriteFile(path, []byte(`{`), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		err := internalservice.SubmitFile(context.Background(), path, &recordingFactory{}, os.ReadFile)
-		if err == nil || !strings.Contains(err.Error(), "parse work file") {
-			t.Fatalf("error = %v, want parse work file failure", err)
-		}
-	})
-	t.Run("runtime", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "work.json")
-		if err := os.WriteFile(path, []byte(`{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[]}`), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		err := internalservice.SubmitFile(context.Background(), path, nil, os.ReadFile)
-		if err == nil || !strings.Contains(err.Error(), "factory runtime is not available") {
-			t.Fatalf("error = %v, want runtime unavailable failure", err)
-		}
-	})
+	t.Parallel()
+	for _, name := range []string{"read", "parse", "runtime", "admission", "canceled", "deadline"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			failure := errors.New("controlled failure")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			target := &recordingFactory{}
+			var submitTarget internalservice.SubmitTarget = target
+			wantErr := failure
+			switch name {
+			case "runtime":
+				submitTarget = nil
+			case "admission":
+				target.err = failure
+			case "canceled":
+				cancel()
+				target.err, wantErr = ctx.Err(), context.Canceled
+			case "deadline":
+				deadlineCtx, deadlineCancel := context.WithDeadline(ctx, time.Time{})
+				defer deadlineCancel()
+				ctx = deadlineCtx
+				target.err, wantErr = ctx.Err(), context.DeadlineExceeded
+			}
+			reads := 0
+			err := internalservice.SubmitFile(ctx, "owned.json", submitTarget, func(path string) ([]byte, error) {
+				reads++
+				if path != "owned.json" || target.calls != 0 {
+					t.Fatal("reader path or admission order changed")
+				}
+				if name == "read" {
+					return nil, failure
+				}
+				if name == "parse" {
+					return []byte(`{`), nil
+				}
+				return []byte(`{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[{"name":"item","workId":"work-edge","workTypeName":"task","state":"init","payload":{"value":"hello"}}]}`), nil
+			})
+			switch name {
+			case "read", "parse":
+				assertSelectedFileReadFailure(t, name, err, failure, reads, target.calls)
+			case "runtime":
+				if err == nil || err.Error() != "factory runtime is not available" || reads != 1 || target.calls != 0 {
+					t.Fatalf("absence error = %v, reads = %d, admission calls = %d", err, reads, target.calls)
+				}
+			default:
+				assertSelectedFileAdmission(t, ctx, target, reads, work.WorkRequestSubmitResult{}, work.WorkRequestSubmitResult{}, err, wantErr)
+			}
+		})
+	}
 }
 
 func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {

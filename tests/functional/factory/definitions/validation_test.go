@@ -72,6 +72,9 @@ func assertDefinitionsHTTPValidationFailures(t *testing.T, host *sharedDefinitio
 		}
 	}
 	for _, target := range result.Targets {
+		if strings.Contains(strings.ToLower(target.Code), "petri") || strings.Contains(strings.ToLower(target.Message), "petri") {
+			t.Fatalf("public validation target uses internal vocabulary: %#v", target)
+		}
 		if target.Code == validationCodeDuplicateIdentifier && target.Subject.Id != valid.Name+"-worker" {
 			t.Fatalf("validation result belongs to a peer: %#v", target)
 		}
@@ -366,7 +369,9 @@ func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
 // list and returns actionable validation targets for invalid definitions without
 // persisting or activating runtime work.
 func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T) {
-	t.Parallel()
+	// The customer invariant is process-wide: validation creates no sessions.
+	// Run before parallel session owners so their admissions cannot change the
+	// shared host's before/after inventory during this observation.
 	server := sharedDefinitionsValidationServer(t)
 	validFactory, err := support.LoadedFactoryWithProcessAndEnv(
 		t,
@@ -469,7 +474,9 @@ func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 // Factory definitions without starting workers, dispatch activation, or new Factory
 // Sessions beyond the already-running service session.
 func TestAPIPreviewDoesNotStartWorkersOrSessions(t *testing.T) {
-	t.Parallel()
+	// This observes the process-wide absence of session creation and dispatch.
+	// Serialize with the other inventory observer before parallel session owners
+	// resume, while retaining the same reusable process and canonical API host.
 	server := sharedDefinitionsValidationServer(t)
 	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
 	writeDefinitionsPreviewWorkflow(t, hostDir)

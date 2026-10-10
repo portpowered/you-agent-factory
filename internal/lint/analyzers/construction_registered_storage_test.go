@@ -80,3 +80,23 @@ func TestConstructionRegisteredStorageBaseline(t *testing.T) {
 	}
 	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registry), owner)
 }
+
+func TestConstructionInterfaceStorage(t *testing.T) {
+	useFixtures(t)
+	const owner = "m/pkg/interfacestorage"
+	service := ConstructionSymbol{ImportPath: owner, Name: "Service"}
+	port := ConstructionSymbol{ImportPath: owner, Name: "Port"}
+	registry := ConstructionRegistry{
+		CapabilitySets: []ConstructionCapabilitySet{{Name: "storage", OwnerTask: "T29", Mode: ConstructionEnforce}},
+		Types: []ConstructionType{
+			{Symbol: service, CapabilitySet: "storage", Kind: ConstructionBehavior},
+			{Symbol: port, CapabilitySet: "storage", Kind: ConstructionEffect},
+		},
+		Constructors: []ConstructionConstructor{{
+			Symbol: ConstructionSymbol{ImportPath: owner, Name: "New"}, CapabilitySet: "storage",
+			Results:            []ConstructionSymbol{service},
+			RequiredParameters: []ConstructionParameter{{Index: 0, TypeExpr: owner + ".Port"}},
+		}},
+	}
+	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registry), owner)
+}

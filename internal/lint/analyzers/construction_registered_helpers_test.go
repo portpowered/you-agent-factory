@@ -65,3 +65,69 @@ func TestConstructionRegisteredHelperBaseline(t *testing.T) {
 	registry.Constructors[0].Results[0].ImportPath = owner
 	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registry), owner)
 }
+
+// A public validator does not excuse a repeated check on the constructed path.
+// Controlled metadata proves the provenance rule without enabling an owner
+// over unresolved production debt. No runtime behavior is inferred here.
+func TestConstructionRequiredReaderThroughSharedValidator(t *testing.T) {
+	useFixtures(t)
+	const owner = "m/pkg/requiredreader"
+	service := ConstructionSymbol{ImportPath: owner, Name: "Service"}
+	registry := ConstructionRegistry{
+		CapabilitySets: []ConstructionCapabilitySet{{Name: "reader", OwnerTask: "T29", Mode: ConstructionEnforce}},
+		Types:          []ConstructionType{{Symbol: service, CapabilitySet: "reader", Kind: ConstructionBehavior}},
+		Constructors: []ConstructionConstructor{{
+			Symbol: ConstructionSymbol{ImportPath: owner, Name: "New"}, CapabilitySet: "reader",
+			Results:            []ConstructionSymbol{service},
+			RequiredParameters: []ConstructionParameter{{Index: 0, TypeExpr: owner + ".Reader"}},
+		}},
+	}
+	dir, cleanup, err := analysistest.WriteFiles(map[string]string{
+		owner + "/reader.go": `package requiredreader
+type Reader func(string) ([]byte, error)
+type Service struct { read Reader }
+func New(read Reader) *Service { return &Service{read: read} }
+func (s *Service) Submit(path string) ([]byte, error) { return validatedRead(path, s.read) }
+func PublicSubmit(path string, read Reader) ([]byte, error) { return validatedRead(path, read) }
+func validatedRead(path string, read Reader) ([]byte, error) {
+ if read == nil { return nil, nil } // want "required-dependency-guard:.*requiredreader.validatedRead.*requiredreader.New"
+ return read(path)
+}
+// Caller validation is lawful when it is separate from the injected path.
+func PublicOnly(path string, read Reader) ([]byte, error) {
+ if read == nil { return nil, nil }
+ return read(path)
+}
+func (s *Service) Direct(path string) ([]byte, error) { return s.read(path) }
+func (s *Service) Variadic(path string, names []string) {
+ omitted(s.read)
+ multiple(s.read, path, path)
+ spread(s.read, names...)
+ optionalNames(s.read, names...)
+}
+func omitted(read Reader, names ...string) {
+ if read == nil { return } // want "required-dependency-guard:.*requiredreader.omitted.*requiredreader.New"
+}
+func multiple(read Reader, names ...string) {
+ if read == nil { return } // want "required-dependency-guard:.*requiredreader.multiple.*requiredreader.New"
+}
+func spread(read Reader, names ...string) {
+ if read == nil { return } // want "required-dependency-guard:.*requiredreader.spread.*requiredreader.New"
+}
+func optionalNames(read Reader, names ...string) {
+ if names == nil { return }
+ read(names[0])
+}
+// Absence of the selected resource is distinct from absence of the resolver.
+func (s *Service) Selected(resolve func() any) bool {
+ resource := resolve()
+ return resource != nil
+}
+`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(registry), owner)
+}
