@@ -90,7 +90,7 @@ excluded. Transport tests retain the legacy composition exception.
 Type-dependent rules analyze compiled handwritten `cmd`, `internal`, and `pkg`
 source. Generated files and registered-construction `_test.go` fixtures remain
 excluded; compiled `servertests` helpers remain in scope. The canonical tags
-are `functionallong,backendconformance,factoryartifact,managed_process_integration`.
+are `integration,functionallong,backendconformance,factoryartifact,managed_process_integration`.
 Excluded import edges alone may use `parser.ImportsOnly`; no excluded call-body
 proof is claimed. Native platform execution owns platform-dependent bodies.
 
