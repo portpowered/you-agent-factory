@@ -988,6 +988,24 @@ func TestContinuationTerminalPublicationWaitHonorsCallerCancellation(t *testing.
 	}
 }
 
+func TestContinuationObservationDoesNotWaitForTerminalPublication(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	supervision := newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	supervision.accepted = true
+	r.supervisions[req.SourceWorkerSessionID] = supervision
+	r.observations[req.SourceWorkerSessionID] = &observation{direct: true}
+	r.logs = &LogReader{reader: &controlCaptureReader{}}
+	_, err := r.readContinuationRecipeContext(t.Context(), req, true)
+	if !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+		t.Fatalf("pending terminal capability = %v, want unavailable", err)
+	}
+	if len(r.continueReplays) != 0 || len(r.sessions) != 1 {
+		t.Fatal("observation reserved a successor")
+	}
+}
+
 func TestWorkNameCaptureUsesPrimaryDispatchedWork(t *testing.T) {
 	t.Parallel()
 	for _, scenario := range []string{"named", "missing-primary", "nameless", "resource"} {

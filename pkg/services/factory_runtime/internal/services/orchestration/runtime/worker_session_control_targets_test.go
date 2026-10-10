@@ -1022,3 +1022,18 @@ func TestRuntimeAttemptAdmissionDoesNotInventScriptInference(t *testing.T) {
 		t.Fatalf("script admission invented inference: %+v", admitted.Execution)
 	}
 }
+
+func TestRuntimeAttemptAdmissionCapturesResolvedAgentProvider(t *testing.T) {
+	t.Parallel()
+	for _, reference := range []workers.ProviderReference{{ID: "cursor"}, {Alias: "cursor"}} {
+		execution := workers.ExecuteRequest{}
+		execution.Target.RunnerID = "codex"
+		execution.Target.Provider = reference
+		execution.Target.ExecutorProvider = workers.ExecutorProviderACP
+		execution.Target.Model.Provider = "cursor"
+		admitted := runtimeAttemptAdmissionRequest(workers.WorkstationDispatchRequest{}, execution)
+		if admitted.Execution.RunnerID != "cursor" || admitted.Execution.ModelProvider != "cursor" {
+			t.Fatalf("resolved provider lost from admission: %+v", admitted.Execution)
+		}
+	}
+}

@@ -134,7 +134,7 @@ func (r *registry) readContinuationRecipeContext(ctx context.Context, req worker
 	if err := validateContinuationSourceAssociation(source); err != nil {
 		return nil, err
 	}
-	if err := waitContinuationPublication(ctx, terminalPublished); err != nil {
+	if err := waitContinuationPublication(ctx, terminalPublished, observationOnly...); err != nil {
 		return nil, err
 	}
 	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
@@ -172,7 +172,17 @@ func (r *registry) continuationPublicationLocked(address string) (string, <-chan
 	return factorySessionID, terminalPublished
 }
 
-func waitContinuationPublication(ctx context.Context, terminalPublished <-chan struct{}) error {
+func waitContinuationPublication(ctx context.Context, terminalPublished <-chan struct{}, observationOnly ...bool) error {
+	// Observation must not join an in-progress publication: its consumer may
+	// be the one releasing that publication. Only completed facts grant capability.
+	if len(observationOnly) != 0 && observationOnly[0] && terminalPublished != nil {
+		select {
+		case <-terminalPublished:
+			return nil
+		default:
+			return workersessions.ErrContinuationExecutionUnavailable
+		}
+	}
 	// Terminal state is visible before capture finalization. Join the exact
 	// admitted attempt's publication, outside the registry lock, before reading
 	// the durable recipe. A peer's completion cannot release this barrier.
