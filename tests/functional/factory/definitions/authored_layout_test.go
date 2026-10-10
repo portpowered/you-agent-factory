@@ -103,6 +103,10 @@ func assertAuthoredLayoutFactoryPreserved(
 		t.Fatalf("Factory name after round trip = %q, want %q", after.Name, before.Name)
 	}
 
+	if before.Id == nil || after.Id == nil || *before.Id != "authored-layout-id" || *after.Id != *before.Id {
+		t.Fatalf("Factory ID after round trip = %v, want %v", after.Id, before.Id)
+	}
+
 	beforeWorkType, ok := authoredLayoutWorkType(before)
 	if !ok {
 		t.Fatalf("Factory before round trip missing work type %q", authoredLayoutWorkTypeName)
@@ -223,6 +227,7 @@ func stringValue(value *string) string {
 func authoredLayoutFactoryJSON() []byte {
 	return []byte(`{
   "name": "` + authoredLayoutFactoryName + `",
+  "id": "authored-layout-id",
   "workTypes": [{
     "name": "` + authoredLayoutWorkTypeName + `",
     "states": [
