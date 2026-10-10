@@ -699,21 +699,7 @@ func runRequesterFactoryProducingDispatch(t *testing.T, batch bool) {
 	defer t7ReleaseAndJoin(t, ctx, runner)()
 	writeRequesterFactoryLineage(t, lead.workingDirectory, lane.workingDirectory)
 	if batch {
-		// The lead must finish without independently propagating its input.
-		path := filepath.Join(lead.workingDirectory, "factory.json")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var document map[string]any
-		if err := json.Unmarshal(data, &document); err != nil {
-			t.Fatal(err)
-		}
-		seed := document["workTypes"].([]any)[0].(map[string]any)
-		seed["states"] = append(seed["states"].([]any), map[string]any{"name": "done", "type": "TERMINAL"})
-		station := document["workstations"].([]any)[0].(map[string]any)
-		station["outputs"] = []any{map[string]any{"workType": "seed", "state": "done"}}
-		writeInvokeContinueJSON(t, path, document)
+		writeRequesterBatchCompletion(t, lead.workingDirectory)
 	}
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, lead.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
@@ -727,6 +713,25 @@ func runRequesterFactoryProducingDispatch(t *testing.T, batch bool) {
 
 	assertRequesterProducedLineage(t, fixture, lead, lane, ctx, opened.Session.Id, *submitted.WorkId)
 	assertRequesterProducedContinuation(t, fixture, lead, lane, ctx, opened.Session.Id)
+}
+
+// The batch producer completes its seed without also propagating a task.
+func writeRequesterBatchCompletion(t *testing.T, root string) {
+	t.Helper()
+	path := filepath.Join(root, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	seed := document["workTypes"].([]any)[0].(map[string]any)
+	seed["states"] = append(seed["states"].([]any), map[string]any{"name": "done", "type": "TERMINAL"})
+	station := document["workstations"].([]any)[0].(map[string]any)
+	station["outputs"] = []any{map[string]any{"workType": "seed", "state": "done"}}
+	writeInvokeContinueJSON(t, path, document)
 }
 
 // Factory-origin continuation is a direct execution. It keeps the original

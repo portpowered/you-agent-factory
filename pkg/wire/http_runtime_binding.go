@@ -257,7 +257,13 @@ func newHTTPWorkerSessionsHandler(
 	resolver := newWorkerSessionsFactorySessionScopeResolver(root)
 	sources := func(ctx context.Context) ([]workersessions.Service, error) {
 		hostID, _ := workersessionshttp.RuntimeHostSession(ctx)
-		return workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
+		selected, err := workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
+		if err != nil {
+			return nil, err
+		}
+		// Direct continuations remain supervised here even after their original
+		// Factory runtime has closed. Retained correlation is not runtime ownership.
+		return append(selected, logs), nil
 	}
 	controller := workerSessionControlRouter{
 		archived: logs,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -126,6 +127,164 @@ func TestRequesterContinuationAfterHostRestart(t *testing.T) {
 	defer child.close(t)
 	assertRequesterRestoredChain(t, fixture, child, sourceID, parentID, parentToken, before)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.show", "cli/you.worker-sessions.continue", "rest/startWorkerSession")
+}
+
+// M7 retains real Factory-produced requester and Project Work facts across a
+// root lifetime, rather than substituting direct invocation's parent metadata.
+func TestRequesterProducedContinuationAfterHostRestart(t *testing.T) {
+	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show")
+	for _, origin := range []string{"dispatch-output", "generated-batch"} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+			runRequesterProducedRestart(t, origin == "generated-batch")
+		})
+	}
+}
+
+func runRequesterProducedRestart(t *testing.T, batch bool) {
+	root := t.TempDir()
+	host, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leadDir, laneDir := filepath.Join(root, "lead"), filepath.Join(root, "requester-factory-lane-restart")
+	if err := os.MkdirAll(laneDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeRequesterFactoryLineage(t, leadDir, laneDir)
+	output := "requester produced COMPLETE"
+	if batch {
+		writeRequesterBatchCompletion(t, leadDir)
+		output = `{"completion":"COMPLETE","request":{"requestId":"restart-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"restart-lane","workId":"restart-lane","workTypeName":"task","payload":"lane input","tags":{"project":"requester-project"}}]},"metadata":{"source":"forged-source","producingDispatchID":"forged-dispatch"}}`
+	}
+	producer := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexOutputWithoutSession(output)})
+	runner := &t7GatedProviderRunner{}
+	runner.reset()
+	defer t7ReleaseAndJoin(t, t.Context(), runner)()
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: leadDir, runner: producer}, {workingDirectory: laneDir, runner: runner}}}
+	first := startContinuationRestartHost(t, root, host, home, route)
+	fixture := &invokeContinuePackageFixture{process: first.process, baseURL: first.baseURL, hostDir: host}
+	lead := &invokeContinueScenario{fixture: fixture, name: "restart-lead", runNumber: 1, workingDirectory: leadDir, homeDirectory: home, providerRunner: producer}
+	lane := &invokeContinueScenario{fixture: fixture, name: "restart-lane", runNumber: 1, workingDirectory: laneDir, homeDirectory: home, providerRunner: runner}
+	opened := support.OpenFactorySessionAt(t, first.baseURL, leadDir)
+	projectName := "requester-project"
+	project := support.SubmitSessionWorkAt(t, first.baseURL, opened.Session.Id, api.SubmitWorkRequest{Name: &projectName, WorkTypeName: "project", Payload: "project input", Tags: &api.StringMap{"project": projectName}})
+	if project.WorkId == nil {
+		t.Fatal("Project Work has no exact ID")
+	}
+	support.SubmitSessionWorkAt(t, first.baseURL, opened.Session.Id, api.SubmitWorkRequest{WorkTypeName: "seed", Payload: "lead input", Tags: &api.StringMap{"project": projectName}})
+	t19AwaitSignal(t, t.Context(), runner.started, "restart produced lane running")
+	assertRequesterProducedLineage(t, fixture, lead, lane, t.Context(), opened.Session.Id, *project.WorkId)
+	sourceEnv := requesterEnvironment(runner.Requests()[0].Env)
+	assertRequesterProducedContinuation(t, fixture, lead, lane, t.Context(), opened.Session.Id)
+	headEnv := requesterEnvironment(runner.Requests()[0].Env)
+	before := requesterObservation(t, fixture, lane, t.Context(), sourceEnv["YOU_WORKER_SESSION_ID"])
+	support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+	if err := first.command.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := startContinuationRestartHost(t, root, host, home, route)
+	fixture.process, fixture.baseURL = fresh.process, fresh.baseURL
+	assertRequesterProducedRestoration(t, fixture, lane, runner, before, sourceEnv, headEnv)
+	if producer.CallCount() != 1 {
+		t.Fatal("reconstruction or direct revival redispatched the producer")
+	}
+}
+
+func assertRequesterProducedRestoration(t *testing.T, fixture *invokeContinuePackageFixture, lane *invokeContinueScenario, runner *t7GatedProviderRunner, before api.WorkerSessionObservation, sourceEnv, headEnv map[string]string) {
+	t.Helper()
+	show := t7RemoteCLIInputs(lane, t.Context(), fixture.baseURL, "show", "--worker-session-id", before.WorkerSessionId, "--session", *before.Correlation.FactorySessionId)
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatalf("restored produced source: %v: %s", err, show.Stderr())
+	}
+	var after api.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, show.Stdout(), &after)
+	assertRequesterTokenAbsent(t, sourceEnv["YOU_WORKER_SESSION_TOKEN"], show.Stdout()+show.Stderr())
+	assertRequesterTokenAbsent(t, headEnv["YOU_WORKER_SESSION_TOKEN"], show.Stdout()+show.Stderr())
+	assertRequesterCopiedMetadata(t, before, after)
+	if after.State != "COMPLETED" || after.ContinuationHeadWorkerSessionId == nil || *after.ContinuationHeadWorkerSessionId != headEnv["YOU_WORKER_SESSION_ID"] {
+		t.Fatal("reconstruction lost the produced source's terminal chain head")
+	}
+	for index, env := range []map[string]string{sourceEnv, headEnv} {
+		assertRequesterRefusal(t, fixture, lane, t.Context(), "old-produced-"+string(rune('a'+index)), env["YOU_WORKER_SESSION_ID"], env["YOU_WORKER_SESSION_TOKEN"])
+		assertRequesterDurableTokenPrivacy(t, fixture, t.Context(), env["YOU_WORKER_SESSION_ID"], env["YOU_WORKER_SESSION_TOKEN"])
+	}
+	runner.reset()
+	id := scenarioScopedID(lane, "produced-rebuilt")
+	args := []string{"continue", before.WorkerSessionId, "--session", *before.Correlation.FactorySessionId, "--head", "--request-id", id + "-request", "--successor-worker-session-id", id, "--user-message", "produced restart follow-up", "--async"}
+	request := t7RemoteCLIInputs(lane, t.Context(), fixture.baseURL, args...)
+	if err := fixture.process.Execute(request.Input); err != nil {
+		t.Fatalf("restored produced continuation: %v: %s", err, request.Stderr())
+	}
+	var admitted directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, request.Stdout(), &admitted)
+	if admitted.SourceWorkerSessionID != headEnv["YOU_WORKER_SESSION_ID"] || admitted.SuccessorWorkerSessionID != id {
+		t.Fatal("restored continuation did not resolve the exact original source head")
+	}
+	t19AwaitSignal(t, t.Context(), runner.started, "restored produced successor running")
+	show = t7RemoteCLIInputs(lane, t.Context(), fixture.baseURL, "show", "--worker-session-id", id, "--session", *before.Correlation.FactorySessionId)
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatalf("restored produced successor: %v: %s", err, show.Stderr())
+	}
+	var successor api.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, show.Stdout(), &successor)
+	assertRequesterCopiedMetadata(t, before, successor)
+	assertRequesterRestoredList(t, lane, successor)
+	command := runner.Requests()[0]
+	assertRequesterProducedResumeCommand(t, command, lane.workingDirectory)
+	environment := requesterEnvironment(command.Env)
+	assertRequesterTokenAbsent(t, environment["YOU_WORKER_SESSION_TOKEN"], show.Stdout()+show.Stderr())
+	assertRequesterEndpoint(t, environment, fixture.baseURL)
+	for _, previous := range []map[string]string{sourceEnv, headEnv} {
+		assertRequesterSuccessorEnvironment(t, environment, id, before.Requester.WorkerSessionId, previous["YOU_WORKER_SESSION_TOKEN"])
+		for _, key := range []string{"YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID"} {
+			if environment[key] != previous[key] {
+				t.Fatalf("reconstructed produced continuation changed %s", key)
+			}
+		}
+	}
+	t7ReleaseAndJoin(t, t.Context(), runner)()
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, lane.homeDirectory, lane.workingDirectory, id, "requester-lineage-thread")
+	assertRequesterDurableTokenPrivacy(t, fixture, t.Context(), id, environment["YOU_WORKER_SESSION_TOKEN"])
+	assertRequesterContinuationReplay(t, lane, t.Context(), args[:len(args)-1], headEnv["YOU_WORKER_SESSION_ID"], id, 1)
+}
+
+func assertRequesterProducedResumeCommand(t *testing.T, command platformprocess.CommandRequest, workingDirectory string) {
+	t.Helper()
+	args := strings.Join(command.Args, " ")
+	if command.WorkDir != workingDirectory || !strings.Contains(args, "resume requester-lineage-thread") || !strings.Contains(args+string(command.Stdin), "produced restart follow-up") {
+		t.Fatal("reconstruction replaced the exact provider continuation or follow-up")
+	}
+}
+
+func assertRequesterRestoredList(t *testing.T, lane *invokeContinueScenario, expected api.WorkerSessionObservation) {
+	t.Helper()
+	args := []string{"list", "--scope", "all", "--history", "active"}
+	seen := make(map[string]bool)
+	for {
+		input := t7RemoteCLIInputs(lane, t.Context(), lane.fixture.baseURL, args...)
+		if err := lane.fixture.process.Execute(input.Input); err != nil {
+			t.Fatalf("restored successor list: %v: %s", err, input.Stderr())
+		}
+		var page api.ListWorkerSessionsResponse
+		decodeDirectWorkerSessionResult(t, input.Stdout(), &page)
+		for _, row := range page.Sessions {
+			if row.WorkerSessionId == expected.WorkerSessionId {
+				assertRequesterCopiedMetadata(t, expected, row)
+				return
+			}
+		}
+		if page.PaginationContext == nil || page.PaginationContext.NextToken == nil || *page.PaginationContext.NextToken == "" || seen[*page.PaginationContext.NextToken] {
+			t.Fatal("restored successor absent from public fleet or cursor repeated")
+		}
+		next := *page.PaginationContext.NextToken
+		seen[next] = true
+		args = []string{"list", "--scope", "all", "--history", "active", "--next-token", next}
+	}
 }
 
 func assertRequesterRestoredChain(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, sourceID, parentID, parentToken string, before api.WorkerSessionObservation) {
@@ -289,7 +448,7 @@ func assertRequesterContinuationReplay(t *testing.T, child *invokeContinueScenar
 		var result directWorkerSessionCLIResult
 		decodeDirectWorkerSessionResult(t, input.Stdout(), &result)
 		if result.SourceWorkerSessionID != sourceID || result.SuccessorWorkerSessionID != successorID || result.State != "COMPLETED" || child.providerRunner.CallCount() != calls {
-			t.Fatal("continuation/replay changed the exact chain or launched a duplicate")
+			t.Fatalf("continuation/replay source=%s successor=%s state=%s calls=%d; want source=%s successor=%s COMPLETED calls=%d", result.SourceWorkerSessionID, result.SuccessorWorkerSessionID, result.State, child.providerRunner.CallCount(), sourceID, successorID, calls)
 		}
 	}
 }

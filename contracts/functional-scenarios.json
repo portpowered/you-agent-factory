@@ -658,6 +658,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
@@ -768,6 +772,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
@@ -800,6 +808,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
@@ -858,6 +870,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
@@ -928,6 +944,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
