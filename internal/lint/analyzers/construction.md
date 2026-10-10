@@ -69,8 +69,11 @@ promoted methods, method values/expressions, pointer receivers, and shadowing.
 Object facts carry classified ancestry and getter observations across imports;
 dependency source is not indexed. Required storage follows keyed/positional
 result literals, grouped/embedded fields, assignments, and local owner aliases.
-Same-package helper parameter requiredness reaches a finite fixed point. Helper
-return summaries skip nested closure returns and retain unresolved origins
+Same-package helper parameter requiredness reaches a finite fixed point. Fixed
+helper parameters retain provenance when variadic trailing arguments are omitted,
+supplied individually or spread. Variadic slice elements remain unsummarized;
+optional trailing domain slices are not classified as required dependencies.
+Helper return summaries skip nested closure returns and retain unresolved origins
 instead of selecting an arbitrary return value.
 
 Provider recursion follows compiled same-package helpers, concrete methods,
@@ -146,16 +149,33 @@ and retired `RootBinding`/`NewAdapterFromRoot`. Optional `diagnosticDecoder` and
 `preserveUnknown`, request/domain validation, cancellation and resource errors
 remain lawful. These source corrections do not classify Settings automatically.
 
-Work still has requiredness findings in `work/internal/service.go`:
-`(applicationService).runtime` checks the constructed receiver and injected
-`runtimes`; `SubmitFileForSession` checks injected `readSubmittedFile`.
-`NewService` stores these completed inputs directly; canonical
-`pkg/wire/runtime_inputs.go:provideWorkService` supplies them, with
-`provideWorkSubmittedFileReader` selecting the host override or `os.ReadFile`.
-The runtime returned by `ResolveWorkRuntime` may legitimately be unavailable
-for a session; its resource/domain absence check must remain. Required receiver
-and stored-input checks need the original T05 owner's correction. T29 cannot
-suppress them, classify them as scoped state or edit production in this lane.
+Work PR #3152 (merge `fe39a4375b053882fe4875ea95066b777beb92f4`)
+removed the required receiver/resolver checks in `(applicationService).runtime`
+and the direct reader check in `SubmitFileForSession`. `NewService` stores these
+completed inputs directly; canonical `pkg/wire/runtime_inputs.go:provideWorkService`
+supplies them, with `provideWorkSubmittedFileReader` selecting the host override
+or `os.ReadFile`. The runtime returned by `ResolveWorkRuntime` may legitimately
+be unavailable for a session; its resource/domain absence check must remain.
+
+The stored reader still reaches the `readFile == nil` check in `submitFile`.
+That helper is shared with public `SubmitFile`, whose caller validation must
+remain. Same-package required provenance does not become optional because a
+helper also has a public caller. `TestConstructionRequiredReaderThroughSharedValidator`
+rejects this shared check while accepting separate public validation, direct
+reader use and selected-resource absence. Its controlled metadata is analyzer
+evidence only, not production-registry or plugin coverage for Work. The smallest
+T05 delta separates public validation from the completed reader path. T29 cannot
+suppress it, classify it as scoped state or edit production in this lane.
+
+The current Runtime termination owner also remains nonterminal:
+`subsystems.NewTerminationCheckWithRuntime` defaults a nil `now` to `time.Now`
+and constructs `scheduler.NewEnablementEvaluator`. The active `buildRuntimeSubsystems`
+caller supplies `cfg.clock.Now`; that caller does not remove the fallback or
+nested construction. `NewTerminationCheck` is a compatibility wrapper selecting
+`time.Now`, with no handwritten production caller found. T15/T23 must supply
+the completed evaluator through focused composition and settle wrapper retirement.
+The mode default and finite-runtime domain checks remain lawful. These findings
+block terminal inventory and repository enablement; no allowance follows.
 
 The Provider Sessions smoke extension uses the unchanged full production
 registry. Both tag configurations add same-owner and new cross-owner construction,
