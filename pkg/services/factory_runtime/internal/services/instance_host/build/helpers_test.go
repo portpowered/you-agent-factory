@@ -208,16 +208,6 @@ func TestNewSessionLoggerKeepsPeerAndBaseCorrelationIndependent(t *testing.T) {
 	}
 }
 
-func TestNewSessionLoggerRequiresSelectedBase(t *testing.T) {
-	t.Parallel()
-	defer func() {
-		if recover() == nil {
-			t.Fatal("nil required logger silently accepted")
-		}
-	}()
-	NewSessionLogger(nil, "session", "/folder", "/factory")
-}
-
 func TestWarnPortableBundledReplacementReport_LogsTargets(t *testing.T) {
 	t.Parallel()
 

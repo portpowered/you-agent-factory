@@ -70,7 +70,7 @@ func TestPrepareExecutionSpecSharedOwnerKeepsReplayAndMockSelectionsIndependent(
 			}
 			spec, err := owner.PrepareExecutionSpec(t.Context(), runtimebuild.BuildDefaults{},
 				runtimebuild.SessionBuildValues{SessionID: id, RuntimeInstanceID: id, LoadedFactoryCfg: candidate},
-				runtimebuild.SessionBuildSpec{ReplayCommandRunner: replay}, mock)
+				runtimebuild.SessionBuildSpec{BaseLogger: zap.NewNop(), ReplayCommandRunner: replay}, mock)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,7 +137,7 @@ func TestPrepareSpecFailedCandidateLeavesOwnerReusable(t *testing.T) {
 		return nil, failure
 	}, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	clock := &platformclock.Real{}
-	selections := runtimebuild.SessionBuildSpec{Clock: clock}
+	selections := runtimebuild.SessionBuildSpec{Clock: clock, BaseLogger: zap.NewNop()}
 	values := runtimebuild.SessionBuildValues{SessionID: "same-session", RuntimeInstanceID: "same-runtime", ExecutionBaseDir: "/runtime"}
 	if spec, err := preparation.PrepareSpec(context.Background(), runtimebuild.BuildDefaults{}, values, selections); !errors.Is(err, failure) || spec.Clock != nil {
 		t.Fatalf("failed preparation = (%#v, %v)", spec, err)
@@ -154,7 +154,7 @@ func TestPrepareSpecRetainsMutationRecorderAcrossRepeatedCandidates(t *testing.T
 	owner := runtimebuild.New(nil, nil, testRuntimeID, zap.NewNop(), nil, nil, nil, nil)
 	wantErr := errors.New("persist mutation")
 	calls := 0
-	selected := runtimebuild.SessionBuildSpec{PetriMutationRecorder: func(id string, mutations []factorydefinitions.TokenMutationRecord) error {
+	selected := runtimebuild.SessionBuildSpec{BaseLogger: zap.NewNop(), PetriMutationRecorder: func(id string, mutations []factorydefinitions.TokenMutationRecord) error {
 		calls++
 		if id != "session" || len(mutations) != 1 || mutations[0].TransitionID != "done" {
 			t.Fatal("recorder inputs changed")
