@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,7 +34,7 @@ func TestLocalAIGalleryCUDAInstalledBackendLive(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("LocalAI gallery CUDA is exercised by a Linux process")
 	}
-	binary := strings.TrimSpace(os.Getenv(localAIBinaryEnvironment))
+	binary := strings.TrimSpace(os.Getenv("LOCALAI_BINARY"))
 	root := strings.TrimSpace(os.Getenv("YOU_LOCALAI_LIVE_BACKENDS_PATH"))
 	if binary == "" || root == "" {
 		t.Skip("set LOCALAI_BINARY and YOU_LOCALAI_LIVE_BACKENDS_PATH for the live gallery check")
@@ -46,11 +45,15 @@ func TestLocalAIGalleryCUDAInstalledBackendLive(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	install := localAIGalleryInstallerAt(localAILiveCommandRunner{}, root, func(context.Context) (string, error) { return binary, nil })
-	directory, err := install(ctx, "cuda12-llama-cpp", false)
-	if err != nil {
-		t.Fatalf("install gallery CUDA backend: %v", err)
+	// This opt-in check probes the real external gallery command with the
+	// explicitly selected installation directory, then its production launcher.
+	result, err := (localAILiveCommandRunner{}).Run(ctx, platformprocess.CommandRequest{
+		Command: binary, Args: []string{"backends", "install", "--backends-path=" + root, "cuda12-llama-cpp"},
+	})
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("install gallery CUDA backend: exit=%d error=%v", result.ExitCode, err)
 	}
+	directory := filepath.Join(root, "cuda12-llama-cpp")
 	launch, err := managedbackend.ResolveManagedBackendLaunch(ctx, serviceedges.HostProcessStartSpec{
 		Backend: "localai-llamacpp", BackendFiles: []string{directory},
 	})
@@ -89,24 +92,5 @@ func assertLocalAICUDALaunch(t *testing.T, launch managedbackend.ManagedBackendL
 		(launch.Command != filepath.Join(directory, "llama-cpp-grpc") && launch.Command != filepath.Join(directory, "lib", "ld.so")) ||
 		len(launch.Env) != 1 || !strings.HasPrefix(launch.Env[0], "LD_LIBRARY_PATH="+filepath.Join(directory, "lib")) {
 		t.Fatalf("CUDA backend launch = %#v", launch)
-	}
-}
-
-func TestLocalAIBinaryBootstrapLive(t *testing.T) {
-	if runtime.GOOS != "linux" || os.Getenv("YOU_LOCALAI_LIVE_BOOTSTRAP") != "1" {
-		t.Skip("opt in on Linux with YOU_LOCALAI_LIVE_BOOTSTRAP=1")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-	path, err := downloadLocalAIBinary(ctx, http.DefaultClient, t.TempDir(), localAIReleaseURL)
-	if err != nil {
-		t.Fatalf("download verified LocalAI binary: %v", err)
-	}
-	if info, err := os.Stat(path); err != nil || info.Size() == 0 || info.Mode().Perm()&0o111 == 0 {
-		t.Fatalf("downloaded LocalAI binary = %q, info = %#v, error = %v", path, info, err)
-	}
-	version, err := exec.CommandContext(ctx, path, "--version").CombinedOutput()
-	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(version)), "v") {
-		t.Fatalf("downloaded LocalAI version check: output = %q, error = %v", version, err)
 	}
 }

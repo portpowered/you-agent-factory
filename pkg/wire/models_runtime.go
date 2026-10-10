@@ -256,7 +256,10 @@ func provideModelBackendArtifactResolver(edges serviceedges.Edges, runner modelR
 	var err error
 	if runtime.GOOS == "linux" && runtime.GOARCH == "amd64" {
 		var installer modelswire.GalleryBackendInstaller
-		installer, err = newLocalAIGalleryInstaller(runner, client)
+		installer, err = modelswire.NewLocalAIGalleryInstaller(runner, client, provideModelAssetResolveEnvironment(edges),
+			provideModelGalleryCache(edges), provideModelGalleryLocator(edges), provideModelAssetMakeDirectories(edges),
+			provideModelAssetInspectPath(edges), provideModelGalleryInspectLink(edges), provideModelAssetOpenFile(edges),
+			provideModelGalleryCreateTempFile(edges), provideModelAssetRenamePath(edges), provideModelAssetRemovePath(edges), runtime.GOOS)
 		if err == nil {
 			resolver, err = newLinuxBackendArtifactResolver(installer, client)
 		}

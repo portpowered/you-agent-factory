@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -79,20 +80,29 @@ type Edges struct {
 	ModelAssetHTTPClient             interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	ModelAssetEndpoints                  models.RuntimeAssetEndpoints
-	ModelAssetHostPlatform               models.AssetHostPlatform
-	ModelResolveHuggingFaceRevision      func(context.Context, string) (string, error)
-	ModelAssetResolveEnvironment         func(string) string
-	ModelAssetMakeDirectories            AssetMakeDirectories
-	ModelAssetInspectPath                AssetInspectPath
-	ModelAssetResolveHomeDirectory       AssetResolveHomeDirectory
-	ModelAssetWriteFile                  AssetWriteFile
-	ModelAssetRenamePath                 AssetRenamePath
-	ModelAssetRemovePath                 AssetRemovePath
-	ModelAssetReadFile                   AssetReadFile
-	ModelAssetReadDirectory              AssetReadDirectory
-	ModelAssetCreateFile                 AssetCreateFile
-	ModelAssetOpenFile                   AssetOpenFile
+	ModelAssetEndpoints             models.RuntimeAssetEndpoints
+	ModelAssetHostPlatform          models.AssetHostPlatform
+	ModelResolveHuggingFaceRevision func(context.Context, string) (string, error)
+	ModelAssetResolveEnvironment    func(string) string
+	ModelAssetMakeDirectories       AssetMakeDirectories
+	ModelAssetInspectPath           AssetInspectPath
+	ModelAssetResolveHomeDirectory  AssetResolveHomeDirectory
+	ModelAssetWriteFile             AssetWriteFile
+	ModelAssetRenamePath            AssetRenamePath
+	ModelAssetRemovePath            AssetRemovePath
+	ModelAssetReadFile              AssetReadFile
+	ModelAssetReadDirectory         AssetReadDirectory
+	ModelAssetCreateFile            AssetCreateFile
+	ModelAssetOpenFile              AssetOpenFile
+	ModelAssetResolveCacheDirectory func() (string, error)
+	ModelAssetExecutableLocator     platformprocess.ExecutableLocator
+	ModelAssetInspectLink           AssetInspectPath
+	ModelAssetCreateTempFile        func(string, string) (interface {
+		io.Writer
+		io.Closer
+		Name() string
+		Chmod(os.FileMode) error
+	}, error)
 	ModelAssetStagingCoordinationFactory AssetStagingCoordinationFactory
 	ModelCLIInputReadFile                ModelCLIInputReadFile
 	ModelCLIOutputCreateTempFile         ModelCLIOutputCreateTempFile
@@ -408,6 +418,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
+	}
+	if replacements.ModelAssetResolveCacheDirectory != nil {
+		defaults.ModelAssetResolveCacheDirectory = replacements.ModelAssetResolveCacheDirectory
+	}
+	if replacements.ModelAssetExecutableLocator != nil {
+		defaults.ModelAssetExecutableLocator = replacements.ModelAssetExecutableLocator
+	}
+	if replacements.ModelAssetInspectLink != nil {
+		defaults.ModelAssetInspectLink = replacements.ModelAssetInspectLink
+	}
+	if replacements.ModelAssetCreateTempFile != nil {
+		defaults.ModelAssetCreateTempFile = replacements.ModelAssetCreateTempFile
 	}
 	if replacements.ModelAssetStagingCoordinationFactory != nil {
 		defaults.ModelAssetStagingCoordinationFactory = replacements.ModelAssetStagingCoordinationFactory
