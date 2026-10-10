@@ -71,6 +71,7 @@ func runRemoteInvocation(
 	}
 	response, err := remote.StartFactorySession(ctx, RemoteInvocationRequest{
 		Server: server, Request: executionRequest, Diagnostics: cfg.Diagnostics, Verbose: cfg.Verbose,
+		Caller: cfg.Caller.Clone(),
 	})
 	if err != nil {
 		return err
@@ -115,6 +116,7 @@ func runRemoteExistingSessionInvocation(
 	}
 	response, err := invoker.InvokeFactorySession(ctx, RemoteExistingSessionInvocationRequest{
 		Server: server, SessionID: sessionID, Request: request,
+		Caller:      cfg.Caller.Clone(),
 		Diagnostics: cfg.Diagnostics, Verbose: cfg.Verbose,
 	})
 	if err != nil {

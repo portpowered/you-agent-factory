@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"go.uber.org/zap"
 )
@@ -33,6 +34,8 @@ const (
 
 // Config holds parameters parsed by the run command.
 type Config struct {
+	// Caller is execution-only authority, detached at the command boundary.
+	Caller       *workersessions.CallerIdentity `json:"-"`
 	Workflow     string
 	Continuously bool
 	// Cancellation is the invocation-local authority supplied by the

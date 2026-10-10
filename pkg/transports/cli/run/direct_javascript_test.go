@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 type directJavaScriptSessionsStub struct {
@@ -62,11 +63,15 @@ func TestCanonicalDirectJavaScriptRunUsesProcessSessions(t *testing.T) {
 		t.Fatalf("NewDirectJavaScriptRunOperation: %v", err)
 	}
 	source := filepath.Join(t.TempDir(), "workflow.mjs")
-	if err := op.Run(context.Background(), factorysessions.DirectJavaScriptRunRequest{SourcePath: source, MockWorkersEnabled: true, ScopeID: "test-scope"}, nil, func() { disclosed = true }); err != nil {
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact/caller", Token: strings.Repeat("A", 43)}
+	if err := op.Run(context.Background(), factorysessions.DirectJavaScriptRunRequest{Caller: caller, SourcePath: source, MockWorkersEnabled: true, ScopeID: "test-scope"}, nil, func() { disclosed = true; caller.Token = "changed" }); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if !disclosed {
 		t.Fatal("startup disclosure was not committed")
+	}
+	if root.request.Caller == caller || root.request.Caller == nil || root.request.Caller.WorkerSessionID != caller.WorkerSessionID || root.request.Caller.Token != strings.Repeat("A", 43) {
+		t.Fatal("direct JavaScript start lost detached caller")
 	}
 	if root.request.Mode != factorysessions.SessionOperationModeDurable || !root.request.Synchronous || root.request.FolderPath != filepath.Dir(source) {
 		t.Fatalf("canonical start = %#v, want durable sync source directory", root.request)

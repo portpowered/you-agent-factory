@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -17,6 +18,42 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
+
+func TestRunCallerEnvironment(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		env     map[string]string
+		invalid bool
+	}{
+		{name: "absent"},
+		{name: "exact", env: map[string]string{"YOU_WORKER_SESSION_ID": "exact/caller", "YOU_WORKER_SESSION_TOKEN": strings.Repeat("A", 43)}},
+		{name: "partial", env: map[string]string{"YOU_WORKER_SESSION_ID": "exact/caller"}, invalid: true},
+		{name: "malformed", env: map[string]string{"YOU_WORKER_SESSION_ID": "exact/caller", "YOU_WORKER_SESSION_TOKEN": "bad"}, invalid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			factory := CommandFactory{lookupEnv: func(key string) (string, bool) { value, ok := test.env[key]; return value, ok }}
+			caller, err := factory.runCaller()
+			if test.invalid {
+				if !errors.Is(err, workersessions.ErrCallerInvalid) || caller != nil {
+					t.Fatal("invalid caller acquired authority")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.env == nil {
+				if caller != nil {
+					t.Fatal("absent caller invented authority")
+				}
+			} else if caller == nil || caller.WorkerSessionID != test.env["YOU_WORKER_SESSION_ID"] || caller.Token != test.env["YOU_WORKER_SESSION_TOKEN"] {
+				t.Fatal("caller pair changed")
+			}
+		})
+	}
+}
 
 func TestWorkerSessionsInvokeForwardsInjectedCallerEnvironment(t *testing.T) {
 	t.Parallel()

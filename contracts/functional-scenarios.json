@@ -293,6 +293,10 @@
         {
           "test": "tests/functional/transport/cli/invocation/run_wiring_test.go::TestCLIRunFactoryByPath",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
+          "boundary": "cli"
         }
       ]
     },

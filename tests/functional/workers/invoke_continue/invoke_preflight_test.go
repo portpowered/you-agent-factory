@@ -415,6 +415,70 @@ func t7AssertRetryHistory(t *testing.T, body string, attempts int) {
 
 // HTTP parity: a caller learned at the controlled native edge opens and invokes
 // a JavaScript Factory through the same public process used by CLI scenarios.
+func TestRequesterFactoryCLICaller(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	parent, child := fixture.scenario(t, "requester-cli-parent"), fixture.scenario(t, "requester-cli-child")
+	defer parent.close(t)
+	defer child.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := parent.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	parentID := scenarioScopedID(parent, "cli-parent")
+	start := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.started, "Factory CLI caller running")
+	token := requesterSourceToken(t, runner, parentID)
+	writeInvokeContinueJSON(t, filepath.Join(child.workingDirectory, "factory.json"), map[string]any{
+		"name": "requester-cli-factory", "orchestrator": map[string]any{"kind": "JAVASCRIPT", "javascript": map[string]any{"inlineSource": map[string]any{"encoding": "utf-8", "inline": `return (async function () { await agent.run({prompt: "CLI requester child", executorProvider: "codex", modelProvider: "codex"}); return "factory caller finished"; })();`}}},
+	})
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, child.workingDirectory)
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	invoke := requesterFactoryCLIInputs(child, ctx, fixture.baseURL, opened.Session.Id, parentID, token)
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("Factory CLI invoke: %v: %s", err, invoke.Stderr())
+	}
+	if strings.Contains(invoke.Stdout()+invoke.Stderr(), token) || child.providerRunner.CallCount() != 1 {
+		t.Fatal("Factory CLI leaked caller or duplicated provider")
+	}
+	var result api.InvocationResponse
+	if err := json.Unmarshal([]byte(invoke.Stdout()), &result); err != nil || result.Status != api.InvocationTerminalStatusCompleted || result.SessionId == nil {
+		t.Fatalf("CLI result not completed: %s", invoke.Stdout())
+	}
+	assertRequesterFactoryHTTPChild(t, fixture, child, ctx, result, parentID, token)
+	assertRequesterFactoryCLIRefused(t, fixture, child, ctx, opened.Session.Id, parentID, strings.Repeat("A", 43))
+	stop := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "cancel", parentID)
+	if err := fixture.process.Execute(stop.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.stopped, "Factory CLI caller ended")
+	assertRequesterFactoryCLIRefused(t, fixture, child, ctx, opened.Session.Id, parentID, token)
+	functionalevidence.Covers(t, "cli/you.run")
+}
+
+func requesterFactoryCLIInputs(child *invokeContinueScenario, ctx context.Context, server, sessionID, callerID, token string) *support.CapturedInputs {
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "--remote", "--server", server, "--session", sessionID, "run", "--factory", filepath.Join(child.workingDirectory, "factory.json"), "--no-record", "--output", "primary", "CLI invocation input"})
+	invoke.Input.Env = append(child.environment(), "YOU_WORKER_SESSION_ID="+callerID, "YOU_WORKER_SESSION_TOKEN="+token)
+	invoke.Input.WorkingDirectory = child.workingDirectory
+	return invoke
+}
+
+func assertRequesterFactoryCLIRefused(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, sessionID, callerID, token string) {
+	t.Helper()
+	before := child.providerRunner.CallCount()
+	invoke := requesterFactoryCLIInputs(child, ctx, fixture.baseURL, sessionID, callerID, token)
+	err := fixture.process.Execute(invoke.Input)
+	if err == nil || !strings.Contains(invoke.Stderr(), "WORKER_SESSION_CALLER_INVALID") || child.providerRunner.CallCount() != before {
+		t.Fatal("Factory CLI caller refusal launched a provider or lost typed code")
+	}
+	if strings.Contains(invoke.Stdout()+invoke.Stderr()+err.Error(), token) {
+		t.Fatal("Factory CLI refusal exposed credential")
+	}
+}
+
 func TestRequesterFactoryHTTPCaller(t *testing.T) {
 	t.Parallel()
 	fixture := ensureInvokeContinuePackageFixture(t)
