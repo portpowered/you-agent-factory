@@ -19,7 +19,7 @@ func TestModelsControlledHostResidual(t *testing.T) {
 		t.Parallel()
 		runResidualHostReadiness(t, server.URL(), hosts, routes)
 	})
-	for _, mode := range []string{"launch", "crash"} {
+	for _, mode := range []string{"launch", "crash", "protocol"} {
 		t.Run(mode+" failure preserves peer and repairs", func(t *testing.T) {
 			t.Parallel()
 			runResidualHostFailure(t, server.URL(), hosts, routes, mode)
@@ -31,6 +31,14 @@ func TestModelsControlledHostResidual(t *testing.T) {
 			runResidualHostCleanup(t, server.URL(), hosts, routes, control)
 		})
 	}
+	t.Run("ready Session close stops only its reused host", func(t *testing.T) {
+		t.Parallel()
+		runResidualReadyHostClose(t, server.URL(), hosts, routes)
+	})
+	t.Run("HTTP-only readiness configuration fails without launching", func(t *testing.T) {
+		t.Parallel()
+		runResidualHealthConfigurationFailure(t, server.URL(), hosts, routes)
+	})
 }
 
 func runResidualHostReadiness(t *testing.T, baseURL string, hosts *residualHosts, routes *fixedLeafRoutes) {
@@ -80,7 +88,7 @@ func runResidualHostFailure(t *testing.T, baseURL string, hosts *residualHosts, 
 	}
 	assertResidualNoInference(t, failedRoute)
 	assertFixedLeafModelEvent(t, baseURL, selected, failed.RequestId, true)
-	assertResidualHostCrashEvent(t, baseURL, selected, failed.RequestId)
+	assertResidualHostFailureEvent(t, baseURL, selected, failed.RequestId, mode)
 	host.fault.Store(false)
 	retry := routes.register(name+"-retry", false)
 	assertFixedLeafSuccess(t, invokeFixedLeafSession(t, baseURL, selected, name+"-retry", name+"-retry"), retry.output)
@@ -127,7 +135,7 @@ func assertResidualHostReuse(t *testing.T, baseURL, session, text, scope string,
 	}
 }
 
-func assertResidualHostCrashEvent(t *testing.T, baseURL, session, requestID string) {
+func assertResidualHostFailureEvent(t *testing.T, baseURL, session, requestID, mode string) {
 	t.Helper()
 	for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, session) {
 		if event.Type != "MODEL_RESPONSE" || event.Context.RequestId == nil || *event.Context.RequestId != requestID {
@@ -136,8 +144,11 @@ func assertResidualHostCrashEvent(t *testing.T, baseURL, session, requestID stri
 		payload, err := event.Payload.AsModelResponseEventPayload()
 		// The public Work diagnostic is bounded by the existing sanitizer.
 		want := "inference failed for worker \"embed-worker\" model \"embed\" operation \"EMBED\": model host \"embed\" readiness is FAILED (lifecycle LOADED): resolve failure class pro..."
+		if mode == "timeout" {
+			want = "inference timed out for model \"embed\" operation \"EMBED\": wait and retry the request"
+		}
 		if err != nil || payload.FailureDetail == nil || payload.FailureDetail.Message != want || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeUnknown {
-			t.Fatalf("host crash diagnostic = %#v, %v, want %s", payload.FailureDetail, err, want)
+			t.Fatalf("host %s diagnostic = %#v, %v, want %s", mode, payload.FailureDetail, err, want)
 		}
 		return
 	}

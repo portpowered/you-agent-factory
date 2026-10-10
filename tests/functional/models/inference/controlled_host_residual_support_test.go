@@ -17,6 +17,8 @@ type residualHostRoute struct {
 	fault     atomic.Bool
 	mode      string
 	starts    atomic.Int64
+	stops     atomic.Int64
+	exits     atomic.Int64
 	probed    chan struct{}
 	ready     chan struct{}
 	stopped   chan struct{}
@@ -69,6 +71,13 @@ func (hosts *residualHosts) Negotiate(ctx context.Context, endpoint string, requ
 	route.probeOnce.Do(func() { close(route.probed) })
 	result := serviceedges.ModelHostProtocolNegotiationResult{ProtocolVersion: request.ProtocolVersion, Backend: request.Backend}
 	if route.fault.Load() {
+		if route.mode == "protocol" {
+			result.ProtocolVersion = "incompatible-controlled-protocol"
+			return result, nil
+		}
+		if route.mode == "timeout" {
+			return result, nil
+		}
 		if route.mode == "crash" {
 			return result, nil
 		}
@@ -92,6 +101,7 @@ type residualHostProcess struct {
 
 func (process *residualHostProcess) HealthEndpoint() string { return process.endpoint }
 func (process *residualHostProcess) Wait() error {
+	defer process.route.exits.Add(1)
 	if process.crashed {
 		return errors.New("controlled child exited before readiness")
 	}
@@ -99,12 +109,15 @@ func (process *residualHostProcess) Wait() error {
 	return nil
 }
 func (process *residualHostProcess) Stop(context.Context) error {
-	process.once.Do(func() { close(process.done) })
+	process.once.Do(func() {
+		process.route.stops.Add(1)
+		close(process.done)
+	})
 	process.route.stopOnce.Do(func() { close(process.route.stopped) })
 	return nil
 }
 
-func startResidualHostServer(t *testing.T, hosts *residualHosts, routes *fixedLeafRoutes) *support.FunctionalAPIServer {
+func startResidualHostServer(t *testing.T, hosts *residualHosts, routes *fixedLeafRoutes, clocks ...genericCLIHostClock) *support.FunctionalAPIServer {
 	t.Helper()
 	home := t.TempDir()
 	body := []byte("controlled-host-embedding-backend")
@@ -118,6 +131,9 @@ func startResidualHostServer(t *testing.T, hosts *residualHosts, routes *fixedLe
 	edges.ModelEmbeddingBackend = nil
 	edges.ModelInvocationBackend = routes.invoke
 	edges.ModelRuntimeCommandRunner = support.NewRecordingCommandRunner("unexpected controlled host command")
+	if len(clocks) != 0 {
+		edges.ModelHostClock = clocks[0]
+	}
 	return functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
 		Env:        functionalHomeEnvironment(home), Edges: edges,
@@ -130,6 +146,19 @@ func startResidualHostServer(t *testing.T, hosts *residualHosts, routes *fixedLe
 func openResidualHostSession(t *testing.T, baseURL, endpoint string) string {
 	t.Helper()
 	session, _ := openResidualHostSessionWithClose(t, baseURL, endpoint)
+	return session
+}
+
+func openResidualHealthSession(t *testing.T, baseURL, endpoint string) string {
+	t.Helper()
+	config := fixedLeafFactoryConfig()
+	worker := config["workers"].([]map[string]any)[0]
+	worker["command"] = "controlled-health-embed"
+	worker["args"] = []string{"--health-endpoint", endpoint}
+	dir := functionalScaffoldFactory(t, config)
+	support.WriteWorkstationConfig(t, dir, "embed", "---\ntype: MODEL_INVOKE\n---\nEmbed the selected text.\n")
+	session := support.OpenFactorySessionAt(t, baseURL, dir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, session) })
 	return session
 }
 
