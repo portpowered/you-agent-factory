@@ -64,6 +64,7 @@ func TestLoadDocument_MalformedBytesFailClosedWithoutPartialDocument(t *testing.
 		{name: "malformed-json", data: `{"defaults":`},
 		{name: "trailing-json", data: `{} {}`},
 		{name: "null-document", data: `null`},
+		{name: "malformed-profile", data: `{"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/review","allowedTargets":["factory:@you/factory-builder"]}}}}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()

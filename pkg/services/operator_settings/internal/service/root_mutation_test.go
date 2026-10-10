@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -129,5 +130,33 @@ func TestRootOptionalIntegrationDefaultsAndValidation(t *testing.T) {
 				t.Fatalf("invalid price = %v, published=%v", err, document.published)
 			}
 		})
+	}
+}
+
+func TestRootProfileUpdatesSerializeCompleteCandidates(t *testing.T) {
+	t.Parallel()
+	document := &gatedMutationDocument{entered: make(chan struct{}), release: make(chan struct{})}
+	root := newControlledRoot(t, document, &constructionResolution{})
+	first := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/first", AllowedTargets: []string{"factory:@you/first"}}
+	second := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/second", AllowedTargets: []string{"factory:@you/second", "factory:@you/factory-builder"}}
+	results := make(chan error, 2)
+	go func() { _, err := root.UpdateACPAgentProfile(context.Background(), "config", first); results <- err }()
+	awaitMutationSignal(t, document.entered)
+	var once sync.Once
+	release := func() { once.Do(func() { close(document.release) }) }
+	defer release()
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_, err := root.UpdateACPAgentProfile(context.Background(), "config", second)
+		results <- err
+	}()
+	awaitMutationSignal(t, started)
+	release()
+	awaitMutationResult(t, results)
+	awaitMutationResult(t, results)
+	loaded, err := root.ResolveACPAgentProfile("config")
+	if err != nil || !reflect.DeepEqual(loaded, second) {
+		t.Fatalf("final profile = %#v, %v, want entire second candidate %#v", loaded, err, second)
 	}
 }
