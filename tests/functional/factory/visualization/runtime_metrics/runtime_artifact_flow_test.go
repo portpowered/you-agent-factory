@@ -429,6 +429,92 @@ func TestRuntimeMetricsStartupSizeRetentionThroughSharedProcess(t *testing.T) {
 	}
 }
 
+// Retention cannot order an artifact whose calendar path or clock is invalid.
+// Even above the size budget it must preserve those bytes, prune a valid peer,
+// and remain able to prune the artifact after the customer repairs its path.
+func TestRuntimeMetricsStartupProtectsUnorderableHistoryAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		name, date, clock string
+	}{
+		{name: "invalid calendar date", date: "2020/02/30", clock: "010000.000000000"},
+		{name: "invalid clock", date: "2020/01/01", clock: "250000.000000000"},
+		{name: "extra directory level", date: "2020/01/01/archive", clock: "010000.000000000"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			assertUnorderableHistoryRecovery(t, scenario.date, scenario.clock)
+		})
+	}
+}
+
+func assertUnorderableHistoryRecovery(t *testing.T, date, clock string) {
+	t.Helper()
+	home := t.TempDir()
+	root := platformmetrics.RuntimeMetricsRoot(home)
+	name := clock + "-runtime-metrics-unorderable.log"
+	selected := filepath.Join(root, filepath.FromSlash(date), name)
+	contents := strings.Repeat("x", 1024*1024+1)
+	writeFunctionalFile(t, selected, contents)
+	peer := writeFunctionalMetricsFixture(t, root, "2020/01/02", "010000.000000000-runtime-metrics-peer.log", "peer")
+	unknown := filepath.Join(filepath.Dir(selected), "customer-note.txt")
+	writeFunctionalFile(t, unknown, "preserve customer content")
+	runHistoryRetentionWork(t, home, root)
+	assertFunctionalFileContents(t, selected, contents)
+	assertFunctionalFileContents(t, unknown, "preserve customer content")
+	if _, err := os.Stat(peer); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("valid expired peer stat = %v, want pruned", err)
+	}
+	paths := functionalMetricArtifactPaths(t, root)
+	if len(paths) != 2 {
+		t.Fatalf("protected history artifacts = %v, want selected and completed Work", paths)
+	}
+	var completedPath, completedContents string
+	for _, path := range paths {
+		if path != selected {
+			assertFunctionalRuntimeMetricsRecords(t, path)
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			completedPath, completedContents = path, string(contents)
+		}
+	}
+	repaired := filepath.Join(root, "2020", "01", "03", "010000.000000000-runtime-metrics-repaired.log")
+	if err := os.MkdirAll(filepath.Dir(repaired), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(selected, repaired); err != nil {
+		t.Fatal(err)
+	}
+	runHistoryRetentionWork(t, home, root)
+	if _, err := os.Stat(repaired); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("repaired expired history stat = %v, want pruned", err)
+	}
+	assertFunctionalFileContents(t, unknown, "preserve customer content")
+	assertFunctionalFileContents(t, completedPath, completedContents)
+	paths = functionalMetricArtifactPaths(t, root)
+	if len(paths) != 2 {
+		t.Fatalf("recovered history artifacts = %v, want both completed Works", paths)
+	}
+	for _, path := range paths {
+		assertFunctionalRuntimeMetricsRecords(t, path)
+	}
+}
+
+func runHistoryRetentionWork(t *testing.T, home, root string) {
+	t.Helper()
+	inputs, _ := runtimeMetricsRunInputs(t, home, root,
+		"--runtime-metrics-max-size-mb", "1", "--runtime-metrics-max-age-days", "1")
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home,
+		"APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"),
+		"XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"),
+		"XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
+	if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
+		t.Fatalf("history retention Work: %v; stderr=%s", err, inputs.Stderr())
+	}
+}
+
 func runtimeMetricsRunInputs(t *testing.T, home, root string, flags ...string) (*support.CapturedInputs, string) {
 	t.Helper()
 	factory := support.ScaffoldSingleStepFactory(t, "retention-work")
