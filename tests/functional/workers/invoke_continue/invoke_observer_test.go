@@ -81,6 +81,9 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 			output = "T7 Factory sibling COMPLETE"
 		}
 		terminal := directCodexOutputWithoutSession(output)
+		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-factory-lane") || strings.HasPrefix(filepath.Base(request.WorkDir), "requester-batch-lane") {
+			terminal = directCodexSessionOutput("requester-lineage-thread", "Requester lane COMPLETE")
+		}
 		if observer != nil {
 			observer(platformprocess.OutputStreamStdout, terminal)
 		}

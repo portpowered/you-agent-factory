@@ -646,6 +646,14 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
         },
@@ -701,6 +709,14 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
           "boundary": "cli"
         },
         {
@@ -830,6 +846,14 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
           "boundary": "cli"
         },
         {

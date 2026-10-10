@@ -674,13 +674,13 @@ func assertActiveHeadRefusal(t *testing.T, started invokeContinueStartedProcess,
 // controlled command edge, independently of the producer's terminal lifetime.
 func TestRequesterFactoryProducingDispatch(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.show", "cli/you.worker-sessions.list")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show")
 	runRequesterFactoryProducingDispatch(t, false)
 }
 
 func TestRequesterFactoryGeneratedBatch(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.show", "cli/you.worker-sessions.list")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show")
 	runRequesterFactoryProducingDispatch(t, true)
 }
 
@@ -726,6 +726,75 @@ func runRequesterFactoryProducingDispatch(t *testing.T, batch bool) {
 	t19AwaitSignal(t, ctx, runner.started, "produced lane started")
 
 	assertRequesterProducedLineage(t, fixture, lead, lane, ctx, opened.Session.Id, *submitted.WorkId)
+	assertRequesterProducedContinuation(t, fixture, lead, lane, ctx, opened.Session.Id)
+}
+
+// Factory-origin continuation is a direct execution. It keeps the original
+// producing requester and Factory correlation without returning a Work result.
+func assertRequesterProducedContinuation(t *testing.T, fixture *invokeContinuePackageFixture, lead, lane *invokeContinueScenario, ctx context.Context, sessionID string) {
+	t.Helper()
+	runner := lane.providerRunner.(*t7GatedProviderRunner)
+	environment := requesterEnvironment(runner.Requests()[0].Env)
+	sourceID := environment["YOU_WORKER_SESSION_ID"]
+	t7ReleaseAndJoin(t, ctx, runner)()
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, lane.homeDirectory, lane.workingDirectory, sourceID, "requester-lineage-thread")
+	source := requesterObservation(t, fixture, lane, ctx, sourceID)
+	producer := requesterObservation(t, fixture, lead, ctx, environment["YOU_MESSAGE_TARGET"])
+	if source.State != "COMPLETED" || source.Revivable == nil || !*source.Revivable {
+		t.Fatal("produced Factory source did not retain continuation authority")
+	}
+	workURL := support.SessionWorkURL(fixture.baseURL, sessionID, "/work/"+*source.Correlation.WorkId)
+	workBefore, err := support.WaitForObservation(30*time.Second, func() (api.Work, error) {
+		return support.GetJSON[api.Work](t, workURL), nil
+	}, func(item api.Work) bool { return support.WorkItemCustomerLocation(item) == "task:done" })
+	if err != nil {
+		t.Fatalf("produced Work did not complete: %v", err)
+	}
+	eventsBefore := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
+	assertRequesterRefusal(t, fixture, lane, ctx, "produced-ended", sourceID, environment["YOU_WORKER_SESSION_TOKEN"])
+	runner.reset() // The joined source no longer uses the scenario's command gates.
+	successorID := scenarioScopedID(lane, "produced-successor")
+	request := t7RemoteCLIInputs(lane, ctx, fixture.baseURL, "continue", sourceID, "--head", "--request-id", successorID+"-request", "--successor-worker-session-id", successorID, "--user-message", "produced lane follow-up", "--async")
+	if err := fixture.process.Execute(request.Input); err != nil {
+		t.Fatalf("produced continuation: %v: %s", err, request.Stderr())
+	}
+	t19AwaitSignal(t, ctx, runner.started, "produced direct successor running")
+	successor := requesterObservation(t, fixture, lane, ctx, successorID)
+	assertRequesterCopiedMetadata(t, source, successor)
+	assertRequesterFactoryListed(t, fixture, lane, ctx, *source.Correlation.WorkId, sessionID, successor)
+	successorEnv := requesterEnvironment(runner.Requests()[0].Env)
+	assertRequesterSuccessorEnvironment(t, successorEnv, successorID, producer.WorkerSessionId, environment["YOU_WORKER_SESSION_TOKEN"])
+	assertRequesterEndpoint(t, successorEnv, fixture.baseURL)
+	for _, key := range []string{"YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID"} {
+		if successorEnv[key] != environment[key] {
+			t.Fatalf("produced continuation changed %s", key)
+		}
+	}
+	t7ReleaseAndJoin(t, ctx, runner)()
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, lane.homeDirectory, lane.workingDirectory, successorID, "requester-lineage-thread")
+	after := requesterObservation(t, fixture, lane, ctx, sourceID)
+	assertRequesterCopiedMetadata(t, source, after)
+	assertRequesterProducedIndependence(t, source, after, successorID, producer, requesterObservation(t, fixture, lead, ctx, producer.WorkerSessionId), lead.providerRunner.CallCount(), runner.CallCount())
+	if !reflect.DeepEqual(workBefore, support.GetJSON[api.Work](t, workURL)) || !reflect.DeepEqual(eventsBefore, support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)) {
+		t.Fatal("direct continuation changed canonical Work or ordered Factory Events")
+	}
+}
+
+func assertRequesterProducedIndependence(t *testing.T, source, after api.WorkerSessionObservation, successorID string, producer, producerAfter api.WorkerSessionObservation, producerCalls, successorCalls int) {
+	t.Helper()
+	if after.State != source.State || after.ContinuationHeadWorkerSessionId == nil || *after.ContinuationHeadWorkerSessionId != successorID {
+		t.Fatal("direct continuation changed its source state or lost the exact head")
+	}
+	if !reflect.DeepEqual(producer, producerAfter) || producerCalls != 1 || successorCalls != 1 {
+		t.Fatal("direct continuation changed its producer or admitted duplicate execution")
+	}
+}
+
+func assertRequesterCopiedMetadata(t *testing.T, source, successor api.WorkerSessionObservation) {
+	t.Helper()
+	if !reflect.DeepEqual(source.Requester, successor.Requester) || !reflect.DeepEqual(source.Correlation, successor.Correlation) || !reflect.DeepEqual(source.Labels, successor.Labels) {
+		t.Fatal("produced continuation lost retained requester/correlation/labels")
+	}
 }
 
 func assertRequesterProducedLineage(t *testing.T, fixture *invokeContinuePackageFixture, lead, lane *invokeContinueScenario, ctx context.Context, sessionID, projectWorkID string) {
