@@ -750,3 +750,65 @@ func requesterInterruptObservation(t *testing.T, scenario s8InterruptScenario, i
 	}
 	return observation
 }
+
+// Public live activation retains host-owned packaged resolution and its lifecycle.
+func TestRequesterPackagedLiveOpen(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "requester-packaged-live")
+	defer scenario.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	document := map[string]any{"folderPath": scenario.workingDirectory, "factoryId": "@you/subagent", "requestId": scenarioScopedID(scenario, "packaged-open")}
+	assertRequesterPackagedSelectionRefusals(t, fixture, scenario, ctx, document)
+	opened := requesterPackagedOpen(t, fixture, ctx, document)
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	repeated := requesterPackagedOpen(t, fixture, ctx, document)
+	if repeated.Session.Id != opened.Session.Id || scenario.providerRunner.CallCount() != 0 {
+		t.Fatal("duplicate activation changed identity or dispatched before invocation")
+	}
+	args := map[string]any{"input": "packaged live request", "workingRoot": scenario.workingDirectory, "workerProvider": "codex", "workerModel": "gpt-5-codex"}
+	status, body := t7HTTP(t, ctx, http.MethodPost, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/invocations", map[string]any{"requestId": scenarioScopedID(scenario, "packaged-invoke"), "args": args})
+	if status != http.StatusOK || !strings.Contains(body, "packaged live output COMPLETE") {
+		t.Fatalf("packaged invocation = %d %s", status, body)
+	}
+	var result api.InvocationResponse
+	if err := json.Unmarshal([]byte(body), &result); err != nil || result.Status != api.InvocationTerminalStatusCompleted {
+		t.Fatalf("packaged invocation did not complete: %s", body)
+	}
+	requests := scenario.providerRunner.Requests()
+	if len(requests) != 1 || requests[0].WorkDir != scenario.workingDirectory || !strings.Contains(string(requests[0].Stdin), "packaged live request") {
+		t.Fatal("packaged invocation lost working root/input or duplicated provider launch")
+	}
+	functionalevidence.Covers(t, "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/closeFactorySession")
+}
+
+func requesterPackagedOpen(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, document map[string]any) api.OpenFactorySessionResponse {
+	t.Helper()
+	status, body := t7HTTP(t, ctx, http.MethodPost, fixture.baseURL+"/factory-sessions", document)
+	var opened api.OpenFactorySessionResponse
+	if status != http.StatusOK || json.Unmarshal([]byte(body), &opened) != nil || opened.Session == nil {
+		t.Fatalf("packaged open = %d %s", status, body)
+	}
+	return opened
+}
+
+func assertRequesterPackagedSelectionRefusals(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, document map[string]any) {
+	t.Helper()
+	for _, selection := range []map[string]any{
+		{"factoryId": " "}, {"factoryId": "@you/../subagent"}, {"factoryId": "@you/missing-retained-t4"},
+		{"target": map[string]any{"kind": "default"}}, {"initNewFactory": true}, {"requestId": " "},
+	} {
+		candidate := make(map[string]any, len(document)+1)
+		for key, value := range document {
+			candidate[key] = value
+		}
+		for key, value := range selection {
+			candidate[key] = value
+		}
+		status, body := t7HTTP(t, ctx, http.MethodPost, fixture.baseURL+"/factory-sessions", candidate)
+		if status != http.StatusBadRequest || !strings.Contains(body, `"code":"BAD_REQUEST"`) || scenario.providerRunner.CallCount() != 0 {
+			t.Fatalf("invalid packaged selection was not refused before launch: %d %s", status, body)
+		}
+	}
+}

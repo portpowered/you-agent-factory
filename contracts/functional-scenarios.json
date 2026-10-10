@@ -1223,10 +1223,15 @@
       "name": "closeFactorySession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/continueWorkerSession",
@@ -1561,6 +1566,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+          "boundary": "rest"
         }
       ]
     },
@@ -1728,6 +1737,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
           "boundary": "rest"
         }
       ]

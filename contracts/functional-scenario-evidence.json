@@ -391,6 +391,14 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+      "stableIds": [
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
       "stableIds": [
         "cli/you.worker-sessions.continue",

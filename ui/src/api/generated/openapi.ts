@@ -3962,6 +3962,10 @@ export interface components {
     FactorySessionResultStatus: FactorySessionResultStatus;
     OpenFactorySessionRequest: {
       folderPath: string;
+      /** @description Packaged Factory name, such as @you/subagent, resolved by the host. Cannot be combined with target or initNewFactory. folderPath remains the working root. */
+      factoryId?: string;
+      /** @description Idempotency key for live activation. Repeating the key returns the existing live session. */
+      requestId?: string;
       target?: components["schemas"]["FactorySessionTargetRef"];
       /** @description When true, validate the folder and optional target selection without creating a live session. */
       validateOnly?: boolean;

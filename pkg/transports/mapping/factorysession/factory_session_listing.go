@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -14,7 +15,10 @@ import (
 
 // SessionStartRequestFromAPI maps the public open command to canonical live
 // activation. Both HTTP entry points use the same value-only selection.
-func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.SessionStartRequest {
+func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) (factorysessions.SessionStartRequest, error) {
+	if err := validateOpenSelection(request); err != nil {
+		return factorysessions.SessionStartRequest{}, err
+	}
 	var target *factorysessions.TargetRef
 	if request.Target != nil {
 		targetName := ""
@@ -26,7 +30,7 @@ func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) fa
 			Name: targetName,
 		}
 	}
-	return factorysessions.SessionStartRequest{
+	selected := factorysessions.SessionStartRequest{
 		Mode:             factorysessions.SessionOperationModeLive,
 		FolderPath:       request.FolderPath,
 		Target:           target,
@@ -35,6 +39,34 @@ func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) fa
 		ActivationOnly:   true,
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService},
 	}
+	if request.RequestId != nil {
+		selected.Correlation.RequestID = strings.TrimSpace(*request.RequestId)
+	}
+	if request.FactoryId != nil {
+		name := strings.TrimSpace(*request.FactoryId)
+		selected.Definition.FactoryID = name
+		selected.Source = factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: name}
+		selected.Args = map[string]any{"workingRoot": request.FolderPath}
+		selected.RuntimeSelection.ExecutionBaseDir = request.FolderPath
+	}
+	return selected, nil
+}
+
+func validateOpenSelection(request factoryapi.OpenFactorySessionRequest) error {
+	if request.RequestId != nil && strings.TrimSpace(*request.RequestId) == "" {
+		return &factorysessions.DetachedRequestError{Field: "requestId", Message: "must not be empty"}
+	}
+	if request.FactoryId == nil {
+		return nil
+	}
+	name := strings.TrimSpace(*request.FactoryId)
+	if !strings.HasPrefix(name, "@") {
+		return &factorysessions.DetachedRequestError{Field: "factoryId", Message: "must be a packaged Factory name in @scope/name form"}
+	}
+	if request.Target != nil || (request.InitNewFactory != nil && *request.InitNewFactory) {
+		return &factorysessions.DetachedRequestError{Field: "factoryId", Message: "cannot be combined with target or initNewFactory"}
+	}
+	return nil
 }
 
 // SessionOpenResultToAPI maps the canonical live Start outcome to the public

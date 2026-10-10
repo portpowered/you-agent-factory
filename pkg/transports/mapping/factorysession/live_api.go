@@ -149,7 +149,11 @@ func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.Ope
 	if a == nil || a.sessions == nil {
 		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("Factory Session service is required")
 	}
-	result, err := a.sessions.Start(ctx, SessionStartRequestFromAPI(request))
+	mapped, err := SessionStartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, err
+	}
+	result, err := a.sessions.Start(ctx, mapped)
 	if err != nil {
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}

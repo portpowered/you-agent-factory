@@ -105,6 +105,10 @@ func TestStartRejectsInvalidLiveRequestsBeforeOpening(t *testing.T) {
 	}{
 		{"negative wait", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Wait: factorysessions.SessionOperationWait{TimeoutMillis: -1}}, "wait.timeoutMillis"},
 		{"validate and initialize", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, ValidateOnly: true, InitNewFactory: true}, "initNewFactory"},
+		{"invalid packaged name", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/../subagent"}}, "factoryId"},
+		{"conflicting packaged target", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"}, Target: &factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}}, "factoryId"},
+		{"conflicting packaged definition", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"}, Definition: factorysessions.SessionDefinitionSelection{FactoryID: "@you/another"}}, "factoryId"},
+		{"conflicting packaged scaffold", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"}, InitNewFactory: true}, "factoryId"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := root.Start(context.Background(), test.request)

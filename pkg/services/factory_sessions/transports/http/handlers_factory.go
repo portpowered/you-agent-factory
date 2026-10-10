@@ -253,7 +253,11 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	mapped := factorysession.SessionStartRequestFromAPI(req)
+	mapped, err := factorysession.SessionStartRequestFromAPI(req)
+	if err != nil {
+		s.writeOpenFactorySessionRejected(w, err)
+		return
+	}
 	mapped.Caller = caller
 	start, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {

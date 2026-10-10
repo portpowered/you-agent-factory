@@ -6822,11 +6822,16 @@ type NameValueType string
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {
-	FolderPath string `json:"folderPath"`
+	// FactoryId Packaged Factory name, such as @you/subagent, resolved by the host. Cannot be combined with target or initNewFactory. folderPath remains the working root.
+	FactoryId  *string `json:"factoryId,omitempty"`
+	FolderPath string  `json:"folderPath"`
 
 	// InitNewFactory When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly.
-	InitNewFactory *bool                    `json:"initNewFactory,omitempty"`
-	Target         *FactorySessionTargetRef `json:"target,omitempty"`
+	InitNewFactory *bool `json:"initNewFactory,omitempty"`
+
+	// RequestId Idempotency key for live activation. Repeating the key returns the existing live session.
+	RequestId *string                  `json:"requestId,omitempty"`
+	Target    *FactorySessionTargetRef `json:"target,omitempty"`
 
 	// ValidateOnly When true, validate the folder and optional target selection without creating a live session.
 	ValidateOnly *bool `json:"validateOnly,omitempty"`

@@ -201,6 +201,12 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t19-generated-file", generatedRunner, generatedRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
+	packagedRunner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("packaged-live-thread", "packaged live output COMPLETE"),
+	})
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-packaged-live", packagedRunner, packagedRunner, nil, nil, nil, packagedRunner.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	streamingRunner := newWSRFT015StreamingProviderRunner()
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "recorded-provider-session", streamingRunner, nil, streamingRunner, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
