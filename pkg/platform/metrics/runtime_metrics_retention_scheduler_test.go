@@ -489,6 +489,64 @@ func TestRuntimeMetricsRetentionSchedulerHandlesNilLifecycleValues(t *testing.T)
 	zeroTicker.Stop()
 }
 
+func TestRuntimeMetricsRetentionSchedulerRejectsDotRootAndRecovers(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC))
+	harness := newRuntimeMetricsRetentionSchedulerHarness(t, retention, 2)
+	t.Cleanup(func() {
+		if err := harness.scheduler.Close(t.Context()); err != nil {
+			t.Error(err)
+		}
+	})
+	lease, err := harness.scheduler.Start(t.Context(), RuntimeMetricsRetentionRequest{RootDirectory: " . "})
+	if lease != nil || err == nil || err.Error() != "start runtime metrics retention: root is required" {
+		t.Fatalf("dot root = %v, %v", lease, err)
+	}
+	if len(harness.intervals) != 0 {
+		t.Fatalf("rejected root started tickers: %v", harness.intervals)
+	}
+	assertNoRetentionReport(t, harness.reports)
+	lease = harness.start(t, root)
+	assertEmptyRetentionReport(t, harness.next(t))
+	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !harness.ticker.Stopped() {
+		t.Fatal("recovered root retained its ticker after lease close")
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerCloseStopsActiveLeaseAndRejectsRestart(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC))
+	harness := newRuntimeMetricsRetentionSchedulerHarness(t, retention, 2)
+	t.Cleanup(func() {
+		if err := harness.scheduler.Close(t.Context()); err != nil {
+			t.Error(err)
+		}
+	})
+	lease := harness.start(t, root)
+	assertEmptyRetentionReport(t, harness.next(t))
+	if harness.ticker.Stopped() {
+		t.Fatal("live lease started with a stopped ticker")
+	}
+	if err := harness.scheduler.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if !harness.ticker.Stopped() {
+		t.Fatal("process close left the active lease ticker running")
+	}
+	if next, err := harness.scheduler.Start(t.Context(), RuntimeMetricsRetentionRequest{RootDirectory: root}); next != nil || err == nil || err.Error() != "start runtime metrics retention: scheduler is closed" {
+		t.Fatalf("restart after close = %v, %v", next, err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("old lease close after process close: %v", err)
+	}
+	assertNoRetentionReport(t, harness.reports)
+}
+
 type nilChannelRetentionTicker struct{}
 
 func (nilChannelRetentionTicker) C() <-chan time.Time { return nil }

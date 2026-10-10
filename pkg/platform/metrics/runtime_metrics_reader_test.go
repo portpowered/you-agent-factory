@@ -486,6 +486,37 @@ func TestRuntimeMetricsReaderReportsOpenAndVisitorFailures(t *testing.T) {
 	assertRuntimeMetricsReaderClosesArtifactsAfterSuccessAndVisitorFailure(t)
 }
 
+func TestRuntimeMetricsReaderPreservesTypedVisitorFailureAndRecovers(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, readerActiveName)
+	content := []byte(`{"record_id":"selected"}` + "\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := newRuntimeMetricsReader(t)
+	cause := errors.New("selected consumer stopped")
+	want := &RuntimeMetricsReadError{Operation: "consume selected record", Path: path, Cause: cause}
+	err := reader.Stream(t.Context(), root, func(RuntimeMetricRecord) error { return want })
+	var got *RuntimeMetricsReadError
+	if !errors.As(err, &got) || got != want || !errors.Is(err, cause) || err.Error() != want.Error() {
+		t.Fatalf("visitor failure = %v, want original typed error %v", err, want)
+	}
+	var records []RuntimeMetricRecord
+	if err := reader.Stream(t.Context(), root, func(record RuntimeMetricRecord) error {
+		records = append(records, record)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0]["record_id"] != "selected" {
+		t.Fatalf("recovered records = %#v", records)
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("retained history = %q, %v", got, err)
+	}
+}
+
 func TestRuntimeMetricsReaderReportsCloseFailure(t *testing.T) {
 	root := t.TempDir()
 	artifactPath := filepath.Join(root, readerActiveName)
