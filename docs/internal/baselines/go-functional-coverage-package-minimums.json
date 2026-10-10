@@ -1591,7 +1591,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 72.44
+      "minimum": 75.13
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend",
