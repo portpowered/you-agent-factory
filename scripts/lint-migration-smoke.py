@@ -260,6 +260,8 @@ class BoundaryFixtures(SizeFixtures):
         root = self.module(name)
         write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
         write(root, "pkg/wire/wire.go", "package wire\n")
+        # Valid root compiler input deliberately selects no effect leaf.
+        write(root, "pkg/root/process.go", "package root\n")
         write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
         service = next((path.split("/")[2] for path in sources
                         if path.startswith("pkg/services/")), None)
@@ -441,6 +443,7 @@ def packaged_source(fixtures: SizeFixtures) -> None:
         fixtures.config = (ROOT / config).read_text(encoding="utf-8")
         root = fixtures.module(f"packaged-source-{mode}")
         write(root, "pkg/wire/wire.go", "package wire\n")
+        write(root, "pkg/root/process.go", "package root\n")
         write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
         write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
         write(root, "internal/lint/analyzers/baseline.txt", "")
@@ -486,6 +489,7 @@ def consumption(fixtures: SizeFixtures) -> None:
     fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
     root = fixtures.module("consumption")
     write(root, "go.mod", "module " + prefix.rstrip("/") + "\n\ngo 1.25.0\n")
+    write(root, "pkg/root/process.go", "package root\n")
     write(root, "packages/packaged-factories/publication.go", "package packagedfactories\nconst Bytes = 1\n")
     write(root, "internal/packagedfactorycatalog/catalog.go",
           'package packagedfactorycatalog\nimport _ "' + prefix + 'packages/packaged-factories"\n'
@@ -908,6 +912,7 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
     clean_manifest = "package cli\nfunc executeWork(inputID string) string { return inputID }\n"
     clean_consumer = "package consumer\n"
     write(root, "pkg/wire/wire.go", "package wire\n")
+    write(root, "pkg/root/process.go", "package root\n")
     write(root, manifest, clean_manifest)
     write(root, consumer, clean_consumer)
     write(root, "packages/packaged-factories/publication.go", "package packagedfactories\nconst Bytes = 1\n")
@@ -1111,6 +1116,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("provider-catalog")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/root/process.go", "package root\n")
             write(root, "internal/providercatalog/source.go", "package providercatalog\n")
             write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "pkg/transports/fixture/source.go", "package fixture\n")
@@ -1171,6 +1177,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository.yml").read_text(encoding="utf-8")
             root = fixtures.module("catalog-publication")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/root/process.go", "package root\n")
             write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "pkg/transports/fixture/source.go", "package fixture\n")
             write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
@@ -1245,6 +1252,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("compiler-owners")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/root/process.go", "package root\n")
             write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "pkg/transports/fixture/source.go", "package fixture\n")
             write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
@@ -1283,6 +1291,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("service-cycle")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/root/process.go", "package root\n")
             write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
             baseline = "internal/lint/analyzers/baseline.txt"
@@ -1331,6 +1340,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("baseline-growth")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/root/process.go", "package root\n")
             write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "internal/lint/analyzers/source.go", "package analyzers\n")
             write(root, "internal/lint/analyzers/baseline.txt", "old|a|b\n")
@@ -1355,6 +1365,7 @@ def main() -> None:
             fixtures.config = (ROOT / ".golangci-repository-default.yml").read_text(encoding="utf-8")
             root = fixtures.module("manifest-authority")
             write(root, "go.mod", "module github.com/portpowered/infinite-you\n\ngo 1.25.0\n")
+            write(root, "pkg/root/process.go", "package root\n")
             write(root, "pkg/wire/wire.go", "package wire\n")
             write(root, "pkg/transports/cli/root_work.go", "package cli\nfunc executeWork(inputID string) string { return inputID }\n")
             fixtures.lint(root, "manifest-permitted", [])
