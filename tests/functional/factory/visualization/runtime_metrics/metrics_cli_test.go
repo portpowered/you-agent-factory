@@ -448,10 +448,11 @@ func TestMetricsRetainedHistoryFailuresThroughRootProcess(t *testing.T) {
 }
 
 type damagedMetricsHistoryCase struct {
-	name       string
-	compressed bool
-	tornTail   string
-	damage     func([]byte) []byte
+	name        string
+	compressed  bool
+	multistream bool
+	tornTail    string
+	damage      func([]byte) []byte
 }
 
 // Damaged backups and complete non-object records must fail the customer read
@@ -465,6 +466,17 @@ func TestMetricsDamagedHistoryFailsClosedAndRecoversThroughRootProcess(t *testin
 			return data
 		}},
 		{name: "gzip truncated trailer", compressed: true, damage: func(data []byte) []byte {
+			return data[:len(data)-4]
+		}},
+		{name: "second gzip member header", compressed: true, multistream: true, damage: func(data []byte) []byte {
+			data[len(data)/2] ^= 1
+			return data
+		}},
+		{name: "second gzip member checksum", compressed: true, multistream: true, damage: func(data []byte) []byte {
+			data[len(data)-8] ^= 1
+			return data
+		}},
+		{name: "second gzip member truncated trailer", compressed: true, multistream: true, damage: func(data []byte) []byte {
 			return data[:len(data)-4]
 		}},
 		{name: "complete null record", damage: func(data []byte) []byte {
@@ -514,10 +526,20 @@ func assertDamagedMetricsHistoryRecovers(t *testing.T, test damagedMetricsHistor
 	if err != nil {
 		t.Fatal(err)
 	}
+	want := 10
+	if test.multistream {
+		// Concatenated gzip members are one readable artifact. The second
+		// member repeats selected and peer records, so only selected tokens
+		// contribute twice. Later-member damage must discard both members.
+		healthy = append(healthy, healthy...)
+		writeFunctionalFile(t, path, string(healthy))
+		want = 17
+		assertRetainedMetricsTokens(t, home, server, session, want)
+	}
 	if test.tornTail != "" {
 		torn := string(healthy) + test.tornTail
 		writeFunctionalFile(t, path, torn)
-		assertRetainedMetricsTokens(t, home, server, session, 10)
+		assertRetainedMetricsTokens(t, home, server, session, want)
 		assertFunctionalFileContents(t, path, torn)
 		assertFunctionalFileContents(t, unknown, "customer content")
 	}
@@ -533,7 +555,7 @@ func assertDamagedMetricsHistoryRecovers(t *testing.T, test damagedMetricsHistor
 	assertFunctionalFileContents(t, path, string(damaged))
 	assertFunctionalFileContents(t, unknown, "customer content")
 	writeFunctionalFile(t, path, string(healthy))
-	assertRetainedMetricsTokens(t, home, server, session, 10)
+	assertRetainedMetricsTokens(t, home, server, session, want)
 	assertFunctionalFileContents(t, path, string(healthy))
 	assertFunctionalFileContents(t, unknown, "customer content")
 }
