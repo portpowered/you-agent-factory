@@ -239,3 +239,86 @@ func TestCurrentSessionReadRetainsFailuresWithoutFabricatingSnapshot(t *testing.
 		})
 	}
 }
+
+func TestMissingPointerUsesOnlyRuntimeAtThePersistRoot(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"same root", "different root", "no runtime"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			host := newReadHost()
+			host.pointerError = fs.ErrNotExist
+			switch stage {
+			case "same root":
+				host.source = readSource{versionSource: versionSource{config: &definitions.FactoryConfig{}}, dir: host.root}
+			case "no runtime":
+				host.source = nil
+			}
+			got, err := injectedLifecycle(host, nil).GetCurrentNamedFactory(t.Context())
+			if stage != "same root" {
+				if got != nil || !errors.Is(err, definitions.ErrCurrentFactoryNotFound) {
+					t.Fatalf("missing pointer read = %#v, %v", got, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertReadSnapshot(t, got, definitions.DefaultCurrentFactoryName)
+		})
+	}
+}
+
+func TestNamedReadAndActivationPreserveMissingDefinitionClassification(t *testing.T) {
+	t.Parallel()
+	host := newReadHost()
+	host.resolveError = definitions.ErrNamedFactoryNotFound
+	if got, err := injectedLifecycle(host, nil).GetCurrentNamedFactory(t.Context()); got != nil || !errors.Is(err, definitions.ErrNamedFactoryNotFound) {
+		t.Fatalf("missing named read = %#v, %v", got, err)
+	}
+	gateway := &activationGateway{t: t, session: &definitions.DefinitionSession{ID: "selected"}}
+	activation := &activationHost{t: t, lookupError: definitions.ErrNamedFactoryNotFound}
+	disabled := definitions.UnimplementedService{}
+	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(activation, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories, disabled)
+	if err := service.ActivateNamedFactory(t.Context(), "alpha"); !errors.Is(err, definitions.ErrNamedFactoryNotFound) || gateway.swapCalls != 0 {
+		t.Fatalf("missing named activation = %v, swaps %d", err, gateway.swapCalls)
+	}
+}
+
+func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
+	t.Parallel()
+
+	var svc *lifecycle.Service
+	if _, err := svc.GetCurrentNamedFactory(context.Background()); err == nil {
+		t.Fatal("GetCurrentNamedFactory: expected error for nil service")
+	}
+	if _, err := svc.GetCurrentFactoryForSession(context.Background(), "session"); err == nil {
+		t.Fatal("GetCurrentFactoryForSession: expected error for nil service")
+	}
+	if _, err := svc.CurrentFactoryDefinitionVersionAtRoot("root", "alpha"); err == nil {
+		t.Fatal("CurrentFactoryDefinitionVersionAtRoot: expected error for nil service")
+	}
+	if _, err := svc.SerializeNamedFactory("alpha", nil, true); err == nil {
+		t.Fatal("SerializeNamedFactory: expected error for nil service")
+	}
+	if _, err := svc.PrepareEditableFactoryPersistView("alpha", nil); err == nil {
+		t.Fatal("PrepareEditableFactoryPersistView: expected error for nil service")
+	}
+	if _, err := svc.PersistPayloadFromView(nil, definitions.FactoryVersion{}); err == nil {
+		t.Fatal("PersistPayloadFromView: expected error for nil service")
+	}
+	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, definitions.FactoryVersion{}); err == nil {
+		t.Fatal("PreparePersistedFactoryPayload: expected error for nil service")
+	}
+	if err := svc.ValidateEditableFactoryTopology(context.Background(), nil); err == nil {
+		t.Fatal("ValidateEditableFactoryTopology: expected error for nil service")
+	}
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), "session", definitions.EditableFactory{}); err == nil {
+		t.Fatal("SaveReplaceCurrentForSession: expected error for nil service")
+	}
+	if _, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session", definitions.EditableFactory{}); err == nil {
+		t.Fatal("SaveUpsertNamedAndActivateForSession: expected error for nil service")
+	}
+	if err := svc.ActivateNamedFactory(context.Background(), "alpha"); err == nil {
+		t.Fatal("ActivateNamedFactory: expected error for nil service")
+	}
+}

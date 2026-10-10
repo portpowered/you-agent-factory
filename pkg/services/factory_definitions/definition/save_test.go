@@ -337,45 +337,6 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 	}
 }
 
-func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
-	t.Parallel()
-
-	var svc *Service
-	if _, err := svc.GetCurrentNamedFactory(context.Background()); err == nil {
-		t.Fatal("GetCurrentNamedFactory: expected error for nil service")
-	}
-	if _, err := svc.GetCurrentFactoryForSession(context.Background(), "session"); err == nil {
-		t.Fatal("GetCurrentFactoryForSession: expected error for nil service")
-	}
-	if _, err := svc.CurrentFactoryDefinitionVersionAtRoot(t.TempDir(), "alpha"); err == nil {
-		t.Fatal("CurrentFactoryDefinitionVersionAtRoot: expected error for nil service")
-	}
-	if _, err := svc.SerializeNamedFactory("alpha", nil, true); err == nil {
-		t.Fatal("SerializeNamedFactory: expected error for nil service")
-	}
-	if _, err := svc.PrepareEditableFactoryPersistView("alpha", nil); err == nil {
-		t.Fatal("PrepareEditableFactoryPersistView: expected error for nil service")
-	}
-	if _, err := svc.PersistPayloadFromView(nil, factorydefinitions.FactoryVersion{}); err == nil {
-		t.Fatal("PersistPayloadFromView: expected error for nil service")
-	}
-	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, factorydefinitions.FactoryVersion{}); err == nil {
-		t.Fatal("PreparePersistedFactoryPayload: expected error for nil service")
-	}
-	if err := svc.ValidateEditableFactoryTopology(context.Background(), nil); err == nil {
-		t.Fatal("ValidateEditableFactoryTopology: expected error for nil service")
-	}
-	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), "session", EditableFactory{}); err == nil {
-		t.Fatal("SaveReplaceCurrentForSession: expected error for nil service")
-	}
-	if _, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session", EditableFactory{}); err == nil {
-		t.Fatal("SaveUpsertNamedAndActivateForSession: expected error for nil service")
-	}
-	if err := svc.ActivateNamedFactory(context.Background(), "alpha"); err == nil {
-		t.Fatal("ActivateNamedFactory: expected error for nil service")
-	}
-}
-
 func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.T) {
 	t.Parallel()
 
