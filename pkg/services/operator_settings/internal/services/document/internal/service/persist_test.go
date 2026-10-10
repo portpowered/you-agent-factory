@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -470,5 +471,58 @@ func TestPersistDocument_ProfileAndPriceTableSurviveFreshOwnerReload(t *testing.
 	loaded, err = reader.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path, RequireExisting: true})
 	if err != nil || !reflect.DeepEqual(loaded.Document, document) {
 		t.Fatalf("unrelated update reload = %#v, %v; want %#v", loaded.Document, err, document)
+	}
+}
+
+func TestPersistDocument_OptionalPreserverKeepsUnknownFields(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.json")
+	original := []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"before"},"future":{"token":"retained"}}`)
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := internalservice.NewWithPreserver(testLocalFilesystem, testCreateTemp, globalconfigmapping.Decode, globalconfigmapping.Encode, controlledProviderCatalog, globalconfigmapping.PreserveUnknownFields, nil)
+	model := "after"
+	if _, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{Path: path, ProviderModel: operatorsettings.DocumentProviderModelUpdate{Model: &model}}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	var future map[string]string
+	if err := json.Unmarshal(decoded["future"], &future); err != nil || future["token"] != "retained" {
+		t.Fatalf("future fields = %s, %v", decoded["future"], err)
+	}
+	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil || loaded.Document.Defaults.WorkerModel != model {
+		t.Fatalf("reload = %#v, %v", loaded, err)
+	}
+}
+
+func TestPersistDocument_CompatibilityFailuresPreserveOriginalBytes(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"read", "preserve"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			path, original, candidate := persistedDocumentFixture(t)
+			failure := errors.New("controlled compatibility failure")
+			var files operatorsettings.FileSystem = testLocalFilesystem
+			if phase == "read" {
+				files = readFailureFileSystem{FileSystem: files, err: failure}
+			}
+			preserver := func([]byte, []byte) ([]byte, error) { return nil, failure }
+			service := internalservice.NewWithPreserver(files, testCreateTemp, globalconfigmapping.Decode, globalconfigmapping.Encode, controlledProviderCatalog, preserver, nil)
+			err := service.PersistDocument(context.Background(), operatorsettings.PersistDocumentRequest{Path: path, Document: candidate})
+			if !errors.Is(err, failure) {
+				t.Fatalf("persist = %v, want compatibility failure", err)
+			}
+			assertDocumentBytesUnchanged(t, path, original)
+			assertNoTemporaryArtifacts(t, filepath.Dir(path))
+		})
 	}
 }

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -22,9 +21,6 @@ type providersRootQuery struct {
 }
 
 func newProvidersRootQuery(root providers.Service) (providerQuery, error) {
-	if root == nil {
-		return nil, fmt.Errorf("providers root is required")
-	}
 	return providersRootQuery{providers: root}, nil
 }
 

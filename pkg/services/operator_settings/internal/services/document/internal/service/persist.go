@@ -19,12 +19,6 @@ func (service *Service) persistDocument(
 	if ctx == nil {
 		return fmt.Errorf("operator document context is required")
 	}
-	if service.files == nil {
-		return fmt.Errorf("operator document filesystem is required")
-	}
-	if service.createTemp == nil {
-		return fmt.Errorf("operator document temporary-file creator is required")
-	}
 
 	path := strings.TrimSpace(request.Path)
 	if path == "" {
@@ -65,9 +59,6 @@ func (service *Service) persistDocument(
 }
 
 func (service *Service) marshalDocument(document operatorsettings.Document) ([]byte, error) {
-	if service.encoder == nil {
-		return nil, fmt.Errorf("operator document encoder is required")
-	}
 	config, err := configFromDocument(document).Normalize()
 	if err != nil {
 		return nil, err

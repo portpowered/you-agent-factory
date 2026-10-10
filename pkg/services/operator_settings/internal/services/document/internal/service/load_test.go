@@ -253,3 +253,42 @@ func TestLoadDocument_MalformedFixtureFromInventoryFailsClosed(t *testing.T) {
 		t.Fatalf("LoadDocument() = %v, want malformed failure naming path", err)
 	}
 }
+
+func TestLoadDocument_UsesPlainDecoderWhenDiagnosticsAreAbsent(t *testing.T) {
+	t.Parallel()
+	path := "config.json"
+	calls := 0
+	decoder := func(data []byte) (operatorsettings.Config, error) {
+		calls++
+		if string(data) != "controlled document" {
+			t.Fatalf("decoder input = %q", data)
+		}
+		return operatorsettings.Config{Defaults: operatorsettings.Defaults{WorkerModelProvider: "codex", WorkerModel: "plain-model"}}, nil
+	}
+	service := internalservice.NewWithPreserver(&mapFileSystem{files: map[string][]byte{path: []byte("controlled document")}}, testCreateTemp, decoder, globalconfigmapping.Encode, controlledProviderCatalog, nil, nil)
+	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil || !loaded.Found || calls != 1 || loaded.Document.Defaults.WorkerModel != "plain-model" || len(loaded.IgnoredJSONPaths) != 0 {
+		t.Fatalf("plain load = %#v, %v; decoder calls = %d", loaded, err, calls)
+	}
+}
+
+func TestLoadDocument_ReadFailureReturnsTypedFailureWithoutDecoding(t *testing.T) {
+	t.Parallel()
+	decoder := func([]byte) (operatorsettings.Config, error) {
+		t.Fatal("decode after failed read")
+		return operatorsettings.Config{}, nil
+	}
+	service := internalservice.NewWithPreserver(readFailureFileSystem{FileSystem: &mapFileSystem{}, err: fs.ErrPermission}, testCreateTemp, decoder, globalconfigmapping.Encode, controlledProviderCatalog, nil, nil)
+	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: "config.json"})
+	var failure operatorsettings.DocumentFailure
+	if !errors.Is(err, operatorsettings.ErrDocumentMalformed) || !errors.As(err, &failure) || failure.Path != "config.json" || loaded.Found {
+		t.Fatalf("failed read = %#v, %v", loaded, err)
+	}
+}
+
+type readFailureFileSystem struct {
+	operatorsettings.FileSystem
+	err error
+}
+
+func (files readFailureFileSystem) ReadFile(string) ([]byte, error) { return nil, files.err }

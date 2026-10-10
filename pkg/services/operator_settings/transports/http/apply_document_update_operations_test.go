@@ -45,7 +45,7 @@ func TestAdapter_ApplyDocumentUpdateInvokesFakeRootAndEncodesSuccess(t *testing.
 			}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	response, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{
 		Path:                 configPath,
@@ -82,7 +82,7 @@ func TestAdapter_ApplyDocumentUpdateRejectsInvalidInputBeforeFakeRoot(t *testing
 			return operatorsettings.ApplyDocumentUpdateResult{}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	_, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{Model: stringPointer("gpt-5")})
 	if err == nil || !IsApplyDocumentUpdateBadRequest(err) {
@@ -113,7 +113,7 @@ func TestAdapter_ApplyDocumentUpdatePropagatesTypedRootFailures(t *testing.T) {
 					return operatorsettings.ApplyDocumentUpdateResult{}, test.err
 				},
 			}
-			adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+			adapter := NewAdapter(fake)
 			model := "gpt-5"
 
 			_, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{

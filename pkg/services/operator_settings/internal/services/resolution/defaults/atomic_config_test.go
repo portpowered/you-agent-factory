@@ -505,13 +505,6 @@ func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
 		{name: "filesystem", invoke: func() error {
 			return (operatorsettings.ConfigDocumentService{}).Persist(context.Background(), path, document)
 		}, wantErr: "filesystem is required"},
-		{name: "completed owner filesystem", invoke: func() error {
-			return persistedConfigService(nil, testCreateTemp).Persist(context.Background(), path, document)
-		}, wantErr: "operator document filesystem is required"},
-		{name: "temporary file creator", invoke: func() error {
-			service := persistedConfigService(testFiles, nil)
-			return service.Persist(context.Background(), path, document)
-		}, wantErr: "temporary-file creator is required"},
 		{name: "persistence lock", invoke: func() error {
 			service := valid
 			service.PersistenceLock = nil
