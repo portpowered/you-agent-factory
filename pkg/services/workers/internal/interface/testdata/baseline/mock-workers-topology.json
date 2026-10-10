@@ -215,6 +215,17 @@
       "validationOwner": "validate"
     },
     {
+      "id": "mockWorkers[].resultBody",
+      "jsonPath": "mockWorkers[].resultBody",
+      "jsonName": "resultBody",
+      "valueType": "object",
+      "parentField": "mockWorkers[]",
+      "required": "optional; accept only",
+      "defaultEmptyBehavior": "omitted resultBody preserves the synthesized accepted result",
+      "validationOwner": "validate",
+      "notes": "non-null JSON object; opaque payload returned unchanged; Factory Runtime owns business validation"
+    },
+    {
       "id": "mockWorkers[].usage",
       "jsonPath": "mockWorkers[].usage",
       "jsonName": "usage",

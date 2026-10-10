@@ -71,6 +71,7 @@ func TestMockWorkersSchema_ExpressesB03TopologyFields(t *testing.T) {
 		"workstationName",
 		"workInputs",
 		"runType",
+		"resultBody",
 		"scriptConfig",
 		"rejectConfig",
 		"gateConfig",
@@ -995,5 +996,25 @@ func loaderErrorMentionsSemanticField(message string, field string) bool {
 		return strings.Contains(message, field)
 	default:
 		return strings.Contains(message, field)
+	}
+}
+
+func TestMockWorkersSchema_ResultBodyMatchesCodec(t *testing.T) {
+	t.Parallel()
+	schema := compileAuthoredMockWorkersSchema(t)
+	for _, tc := range []struct {
+		body, runType string
+		valid         bool
+	}{
+		{`{}`, "accept", true}, {`{"nested":[1,null,{"future":true}]}`, "accept", true},
+		{`null`, "accept", false}, {`[]`, "accept", false}, {`1`, "accept", false},
+		{`{}`, "reject", false}, {`{}`, "script", false},
+	} {
+		data := []byte(`{"mockWorkers":[{"runType":"` + tc.runType + `","scriptConfig":{"command":"unused"},"resultBody":` + tc.body + `}]}`)
+		schemaErr := validateAuthoredMockWorkersDocument(schema, data)
+		_, codecErr := mockworkers.ParseMockWorkersConfig(data)
+		if (schemaErr == nil) != tc.valid || (codecErr == nil) != tc.valid {
+			t.Fatalf("%s/%s: schema=%v codec=%v", tc.runType, tc.body, schemaErr, codecErr)
+		}
 	}
 }

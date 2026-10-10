@@ -61,6 +61,20 @@
               "scriptConfig"
             ]
           }
+        },
+        {
+          "if": {
+            "required": [
+              "resultBody"
+            ]
+          },
+          "then": {
+            "properties": {
+              "runType": {
+                "const": "accept"
+              }
+            }
+          }
         }
       ],
       "description": "Selects a worker dispatch and declares the deterministic behavior to apply at the execution boundary.",
@@ -104,6 +118,11 @@
         },
         "workstationName": {
           "type": "string"
+        },
+        "resultBody": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Optional declared result object for accept mocks. Factory Runtime validates business output."
         }
       },
       "required": [
@@ -1468,6 +1487,41 @@
         },
         "notes": "accepted values are \"accept\" and \"passthrough\"",
         "validationOwner": "validate"
+      },
+      "mockWorkers[].resultBody": {
+        "defaultEmptyBehavior": "omitted resultBody preserves the synthesized accepted result",
+        "documentation": {
+          "documentation": {
+            "title": {
+              "id": "config.mock-workers.result-body.title",
+              "canonicalEnglish": "Declared result body"
+            },
+            "description": {
+              "id": "config.mock-workers.result-body.description",
+              "canonicalEnglish": "Optional non-null JSON object for accept mocks. Returned unchanged through provider framing. Factory Runtime validates business output; omission preserves the default accepted result."
+            }
+          },
+          "examples": [
+            {
+              "decision": "ACCEPTED",
+              "output": "declared mock output"
+            }
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.result-body",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000001",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].resultBody",
+        "jsonPath": "mockWorkers[].resultBody",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.result-body",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate",
+        "notes": "non-null JSON object; opaque payload returned unchanged; Factory Runtime owns business validation"
       }
     },
     "formatVersion": "1.0.0",

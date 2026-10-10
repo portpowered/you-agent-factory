@@ -97,6 +97,7 @@ type RuntimeActivationMockWorker struct {
 	RejectConfig    *RuntimeActivationMockReject
 	GateConfig      *RuntimeActivationMockGate
 	Usage           *RuntimeActivationMockUsage
+	ResultBody      json.RawMessage
 }
 
 type RuntimeActivationMockGate struct {
@@ -175,6 +176,7 @@ func (inputs RuntimeActivationInputs) Clone() (RuntimeActivationInputs, error) {
 	}
 	for index, worker := range inputs.Workers.MockWorkers.MockWorkers {
 		clonedWorker := worker
+		clonedWorker.ResultBody = append(json.RawMessage(nil), worker.ResultBody...)
 		clonedWorker.WorkInputs = append([]RuntimeActivationMockWorkInput(nil), worker.WorkInputs...)
 		if worker.ScriptConfig != nil {
 			script := *worker.ScriptConfig

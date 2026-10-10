@@ -540,3 +540,63 @@ func assertMockWorkerRejectEntry(t *testing.T, worker MockWorkerConfig) {
 		t.Fatalf("reject config = %#v, want stdout, stderr, and exit code preserved", worker.RejectConfig)
 	}
 }
+
+func TestParseMockWorkersConfig_ResultBody(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		body, runType string
+		valid         bool
+	}{
+		{`{}`, "accept", true}, {`{"decision":"ACCEPTED","output":{"nested":[1,null,true]}}`, "accept", true},
+		{`null`, "accept", false}, {`[]`, "accept", false}, {`"text"`, "accept", false},
+		{`42`, "accept", false}, {`true`, "accept", false}, {`{"broken":`, "accept", false},
+		{`{}`, "reject", false}, {`{}`, "script", false},
+	} {
+		t.Run(tc.runType+tc.body, func(t *testing.T) {
+			data := []byte(`{"mockWorkers":[{"runType":"` + tc.runType + `","scriptConfig":{"command":"unused"},"resultBody":` + tc.body + `}]}`)
+			cfg, err := ParseMockWorkersConfig(data)
+			if (err == nil) != tc.valid {
+				t.Fatalf("Parse = %#v, %v", cfg, err)
+			}
+			if tc.valid && string(cfg.MockWorkers[0].ResultBody) != tc.body {
+				t.Fatalf("body changed: %s", cfg.MockWorkers[0].ResultBody)
+			}
+			if !tc.valid && err != nil && tc.body != `{"broken":` && !strings.Contains(err.Error(), "mockWorkers[0]: resultBody") {
+				t.Fatalf("missing field path: %v", err)
+			}
+		})
+	}
+}
+
+func TestMockWorkersConfig_ResultBodyCloneAndRoundtrip(t *testing.T) {
+	t.Parallel()
+	raw := []byte(`{"future":"secret","mockWorkers":[{"runType":"accept","future":"secret","resultBody":{"future":{"secret":1}}}]}`)
+	cfg, diagnostics, err := ParseMockWorkersConfigWithDiagnostics(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(diagnostics.Paths(), ","); got != "$.future,$.mockWorkers[0].future" {
+		t.Fatalf("paths = %s", got)
+	}
+	clone := cfg.Clone()
+	clone.MockWorkers[0].ResultBody[1] = ' '
+	if string(cfg.MockWorkers[0].ResultBody) != `{"future":{"secret":1}}` {
+		t.Fatal("clone shares payload bytes")
+	}
+	encoded, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	load, err := NewMockWorkersConfigLoader(mockWorkersConfigReader(func(string) ([]byte, error) { return encoded, nil }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := load("declared.json")
+	if err != nil || string(loaded.MockWorkers[0].ResultBody) != string(cfg.MockWorkers[0].ResultBody) {
+		t.Fatalf("roundtrip = %#v, %v", loaded, err)
+	}
+	cfg.MockWorkers[0].ResultBody = json.RawMessage(`{} {}`)
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("malformed raw payload accepted")
+	}
+}

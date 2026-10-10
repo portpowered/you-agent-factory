@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -71,6 +72,7 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 	}
 	for index, worker := range input.MockWorkers {
 		converted := workers.MockWorkerConfig{
+			ResultBody:      append(json.RawMessage(nil), worker.ResultBody...),
 			ID:              worker.ID,
 			WorkerName:      worker.WorkerName,
 			WorkstationName: worker.WorkstationName,
