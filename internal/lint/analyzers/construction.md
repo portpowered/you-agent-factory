@@ -7,7 +7,7 @@ baseline growth. The temporary `make repolint` dependency retains compiler
 ownership checking until its analyzer migration. T20/T29 consumers use these analyzers. The former
 `internal/contractguard` construction Scan APIs and durable command are removed.
 
-## Metadata and staged policy
+## Metadata and composition
 
 `RepositoryConstructionRegistry()` supplies immutable metadata from
 `construction_registry.go`. Each compilation unit validates the declarations
@@ -26,25 +26,29 @@ constructor metadata takes precedence. A multi-result constructor inherits
 enforcement if any classified result is enforced. This does not classify a new
 owner or turn domain/state/resource results into services.
 
-Allowances name one caller, callee, and repository-relative file, plus a
-semantic kind, owner, and reason. Malformed, duplicate, stale, and mismatched
-metadata fails as `construction-metadata`. A focused-provider allowance permits
-only synchronous construction in the approved body. Constructors invoked by
-`defer`, `go`, or closures remain prohibited. Arguments evaluated before a
-deferred or asynchronous operation retain synchronous ownership.
+Composition uses compiler-resolved free-function identities in `pkg/wire` or
+an exact owning service's `wire` package, with a constructor/provider name.
+Methods, ordinary operations and package initializers remain prohibited.
+Only synchronous, acyclic construction with resolved dispatch is lawful;
+`defer`, `go`, closures and unresolved callable dispatch still fail. Arguments
+evaluated before a deferred or asynchronous operation retain synchronous
+ownership. Exact `github.com/google/wire.NewSet` and `Build` declarations may
+retain direct provider references at those composition boundaries; shadowed
+or unrelated callables receive no such treatment. No caller/callee/file
+migration allowance schema remains.
 
-The `chat-target-catalog` capability set remains report-only. The analyzer
-returns `[]ConstructionFinding` with mode, set, caller, callee, file, line, and
-rule. Report observations do not emit blocking diagnostics or enter the
-baseline. Enforced findings and conservative unresolved debt use the shared
+The `chat-target-catalog` capability set enforces. The analyzer returns
+`[]ConstructionFinding` with mode, set, caller, callee, file, line and rule.
+Report mode remains available to controlled analyzer fixtures, without enabling
+an owner or entering the baseline. Enforced findings and conservative unresolved debt use the shared
 exact `baseline.txt`; stale entries fail and the `baselinegrowth` analyzer rejects
-growth. No owner is enabled by this migration.
+growth. Other owner classifications remain current-slice work; this one set does not prove repository coverage.
 
 ## Bounded typed rules
 
 | Rule | Observation |
 | --- | --- |
-| `registered-construction` | Classified behavior/effect construction outside an exact allowance, indirect provider construction, or a proved provider recursion path. |
+| `registered-construction` | Classified behavior/effect construction outside typed composition, indirect provider construction, or a proved provider recursion path. |
 | `unresolved-construction-reference` | Escaped, unused, stored, or mutated constructor references. |
 | `required-dependency-bag` | Required records or containers that contain classified collaborators, including nested/embedded fields and map keys. Explicit domain/state/resource classifications remain allowed. |
 | `required-dependency-guard` | Nil comparisons of required constructor parameters or their traced storage/helper origins. |
@@ -96,8 +100,10 @@ structural/erased results, distinct defined-type ancestry, callable variables,
 and opaque cross-package factories are not proved by this inference. Parameter
 requiredness is inferred only for exact classified named collaborators, not
 unclassified callbacks or containers. These limits remain inventory obligations;
-they authorize no new baseline or exemption. Repository coverage and allowance
-retirement remain incomplete while the registry has only a report-only owner.
+they authorize no new baseline or exemption. Repository coverage remains incomplete while only the Chat catalog is
+classified. Composition identity does not prove upstream graph reachability,
+unused-provider absence, or imported helper bodies. Those properties retain
+their existing Wire, deadcode and independent review gates.
 
 Compiler-invalid historical examples are rejected before lint analysis:
 initialization cycles, ambiguous selectors, recursive aliases, and undefined

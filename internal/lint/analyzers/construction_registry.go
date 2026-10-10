@@ -57,32 +57,21 @@ type ConstructionType struct {
 	Kind          ConstructionKind
 }
 
-type ConstructionAllowance struct {
-	Caller      ConstructionSymbol
-	Callee      ConstructionSymbol
-	FilePath    string
-	Kind        string
-	OwnerTask   string
-	Reason      string
-	RemovalTask string
-}
-
 // ConstructionRegistry is checker metadata; it never constructs runtime values.
 type ConstructionRegistry struct {
 	CapabilitySets []ConstructionCapabilitySet
 	Constructors   []ConstructionConstructor
 	Types          []ConstructionType
-	Allowances     []ConstructionAllowance
 }
 
-// RepositoryConstructionRegistry starts with a report-only, source-audited
-// owner. Further owners and enforcement are separate rollout increments.
+// RepositoryConstructionRegistry supplies source-audited typed classifications.
+// Classification coverage is distinct from constructor discovery.
 func RepositoryConstructionRegistry() ConstructionRegistry {
 	const module = "github.com/portpowered/infinite-you"
 	const owner = module + "/pkg/services/chat_sessions/internal/service"
 	constructor := ConstructionSymbol{ImportPath: owner, Name: "New"}
 	return ConstructionRegistry{
-		CapabilitySets: []ConstructionCapabilitySet{{Name: "chat-target-catalog", OwnerTask: "T21", Mode: ConstructionReport}},
+		CapabilitySets: []ConstructionCapabilitySet{{Name: "chat-target-catalog", OwnerTask: "T21", Mode: ConstructionEnforce}},
 		Constructors: []ConstructionConstructor{{
 			Symbol: constructor, CapabilitySet: "chat-target-catalog",
 			RequiredParameters: []ConstructionParameter{
@@ -93,10 +82,5 @@ func RepositoryConstructionRegistry() ConstructionRegistry {
 			Results: []ConstructionSymbol{{ImportPath: owner, Name: "Service"}},
 		}},
 		Types: []ConstructionType{{Symbol: ConstructionSymbol{ImportPath: owner, Name: "Service"}, CapabilitySet: "chat-target-catalog", Kind: ConstructionBehavior}},
-		Allowances: []ConstructionAllowance{{
-			Caller: ConstructionSymbol{ImportPath: module + "/pkg/services/chat_sessions/wire", Name: "NewFactoryTargetCatalogService"},
-			Callee: constructor, FilePath: "pkg/services/chat_sessions/wire/wire.go", Kind: "focused-provider",
-			OwnerTask: "T21", Reason: "Focused owner provider constructs the catalog implementation directly.",
-		}},
 	}
 }

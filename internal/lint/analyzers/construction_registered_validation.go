@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"go/types"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -24,43 +23,11 @@ func validateRegisteredConstruction(pass *analysis.Pass, registry ConstructionRe
 	if err != nil {
 		return err
 	}
-	constructors, err := validateRegisteredConstructors(pass, registry, sets, classified)
+	_, err = validateRegisteredConstructors(pass, registry, sets, classified)
 	if err != nil {
 		return err
 	}
-	return validateRegisteredAllowances(pass, registry, constructors)
-}
-
-func validateRegisteredAllowance(pass *analysis.Pass, allowance ConstructionAllowance) error {
-	values := registeredConstructionValues(pass)
-	for _, file := range pass.Files {
-		filename := pass.Fset.Position(file.Pos()).Filename
-		if ast.IsGenerated(file) || strings.HasSuffix(filename, "_test.go") {
-			continue
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || registeredConstructionSymbol(pass.TypesInfo.Defs[fn.Name]) != allowance.Caller {
-				continue
-			}
-			unit, _ := unitKey(pass)
-			if fn.Body == nil || unit+"/"+filepath.Base(filename) != allowance.FilePath {
-				break
-			}
-			found := false
-			ast.Inspect(fn.Body, func(node ast.Node) bool {
-				if call, ok := node.(*ast.CallExpr); ok {
-					found = found || values.resolve(pass, call.Fun, map[types.Object]bool{}) == allowance.Callee
-				}
-				return true
-			})
-			if !found {
-				return fmt.Errorf("stale allowance callee %s", allowance.Callee)
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("stale allowance caller/path %s", allowance.Caller)
+	return nil
 }
 
 func registeredConstructorDeclaration(pkg *types.Package, symbol ConstructionSymbol) *types.Func {
@@ -184,38 +151,6 @@ func validateRegisteredConstructors(pass *analysis.Pass, registry ConstructionRe
 		}
 	}
 	return constructors, nil
-}
-
-func validateRegisteredAllowances(pass *analysis.Pass, registry ConstructionRegistry, constructors map[ConstructionSymbol]bool) error {
-	seen := map[string]bool{}
-	for _, a := range registry.Allowances {
-		key := a.FilePath + "|" + a.Caller.String() + "|" + a.Callee.String()
-		if seen[key] {
-			return fmt.Errorf("duplicate allowance %s", key)
-		}
-		seen[key] = true
-		if invalidRegisteredAllowance(a, constructors) {
-			return fmt.Errorf("invalid exact allowance %s", key)
-		}
-		switch a.Kind {
-		case "focused-provider", "boundary-normalization", "leaf-effect", "scoped-view":
-		default:
-			return fmt.Errorf("invalid allowance kind %s", key)
-		}
-		if a.Caller.ImportPath == pass.Pkg.Path() {
-			if err := validateRegisteredAllowance(pass, a); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func invalidRegisteredAllowance(a ConstructionAllowance, constructors map[ConstructionSymbol]bool) bool {
-	return !validRegisteredSymbol(a.Caller) || !validRegisteredSymbol(a.Callee) || !constructors[a.Callee] ||
-		a.FilePath == "." || path.IsAbs(a.FilePath) || path.Clean(a.FilePath) != a.FilePath ||
-		strings.ContainsAny(a.FilePath, "*?\\:") || strings.HasPrefix(a.FilePath, "../") ||
-		strings.TrimSpace(a.OwnerTask) == "" || strings.TrimSpace(a.Reason) == ""
 }
 
 // A classified result stays governed when an owner adds another constructor.
