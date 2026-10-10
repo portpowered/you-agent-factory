@@ -400,15 +400,7 @@ func TestTerminationCheck_ForwardsIndependentScopesToCompletedEnablement(t *test
 	}
 	for _, i := range []int{0, 1, 0} {
 		result, err := checks[i].Execute(ctx, snapshots[i])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 && (result == nil || result.Termination.Classification != interfaces.TerminationClassificationIncomplete) {
-			t.Fatalf("scope 0 result = %+v", result)
-		}
-		if i == 1 && result != nil {
-			t.Fatalf("scope 1 runnable result = %+v", result)
-		}
+		assertTerminationScopeResult(t, i, result, err)
 	}
 	clocks[0] = time.Unix(200, 0)
 	if result, err := checks[0].Execute(ctx, snapshots[0]); err != nil || result != nil {
@@ -416,6 +408,19 @@ func TestTerminationCheck_ForwardsIndependentScopesToCompletedEnablement(t *test
 	}
 	if calls != [2]int{3, 1} {
 		t.Fatalf("evaluation calls = %v", calls)
+	}
+}
+
+func assertTerminationScopeResult(t *testing.T, scope int, result *interfaces.TickResult, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope == 0 && (result == nil || result.Termination.Classification != interfaces.TerminationClassificationIncomplete) {
+		t.Fatalf("scope 0 result = %+v", result)
+	}
+	if scope == 1 && result != nil {
+		t.Fatalf("scope 1 runnable result = %+v", result)
 	}
 }
 
