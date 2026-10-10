@@ -11,7 +11,8 @@ import (
 )
 
 // Completed durable attempts use the same host capture clock as archives.
-// A live terminal may precede durable admission; that interval proves no end.
+// A live terminal may precede durable admission; retain its owned lifecycle
+// timing until the committed capture can supply the complete timing tuple.
 func (r *registry) withCapturedTerminalObservation(ctx context.Context, observation workersessions.Observation) workersessions.Observation {
 	if observation.State != workersessions.StateCompleted && observation.State != workersessions.StateFailed {
 		return observation
@@ -26,14 +27,14 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 	if recordingID == "" {
 		return observation
 	}
-	observation.EndedAt, observation.Duration = nil, nil
-	observation.DurationBasis = workersessions.DurationBasisUnavailable
 	captured, err := r.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: observation.FactorySessionID})
 	if err != nil || captured.AttemptID != observation.AttemptID || captured.State != observation.State {
 		return observation
 	}
-	observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
-	observation.DurationBasis = captured.DurationBasis
+	if captured.StartedAt != nil && captured.EndedAt != nil && captured.Duration != nil {
+		observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
+		observation.DurationBasis = captured.DurationBasis
+	}
 	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable
 	observation.Transcript, observation.TokenUsage = captured.Transcript, captured.TokenUsage
 	if captured.Failure != nil {

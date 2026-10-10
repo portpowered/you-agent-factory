@@ -1037,3 +1037,22 @@ func TestRuntimeAttemptAdmissionCapturesResolvedAgentProvider(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeAttemptAdmissionCapturesCanonicalModelProvider(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"CODEX", "CLAUDE", "ANTIGRAVITY"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			for _, runner := range []string{"", "inference"} {
+				execution := workers.ExecuteRequest{}
+				execution.Target.RunnerID = runner
+				execution.Target.Provider.ID = provider
+				execution.Target.Model.Provider = provider
+				admitted := runtimeAttemptAdmissionRequest(workers.WorkstationDispatchRequest{}, execution)
+				if admitted.Execution.ModelProvider != strings.ToLower(provider) || (runner == "" && admitted.Execution.RunnerID != strings.ToLower(provider)) {
+					t.Fatalf("model provider attribution = %+v, want %q", admitted.Execution, strings.ToLower(provider))
+				}
+			}
+		})
+	}
+}

@@ -154,11 +154,11 @@ func runtimeAttemptAdmissionRequest(
 	request.Execution = workstationDispatchRequestFromExecute(executeRequest).Execution
 	// Generic execution providers (for example a script runner) do not imply
 	// inference attribution. Only the resolved model selection supplies it.
-	request.Execution.ModelProvider = executeRequest.Target.Model.Provider
+	request.Execution.ModelProvider = providers.ID(strings.ToLower(strings.TrimSpace(executeRequest.Target.Model.Provider))).CanonicalSessionProvider()
 	// Agent execution selects the resolved provider ahead of a default runner.
 	// Capture that same identity so its streamed facts and restart recipe agree.
 	if runner := workers.NormalizeRunnerID(executeRequest.Target.RunnerID); runner != "script" && runner != "inference" {
-		request.Execution.RunnerID = firstRuntimeValue(executeRequest.Target.Provider.ID, executeRequest.Target.Provider.Alias, request.Execution.RunnerID)
+		request.Execution.RunnerID = workers.NormalizeRunnerID(firstRuntimeValue(executeRequest.Target.Provider.ID, executeRequest.Target.Provider.Alias, request.Execution.RunnerID))
 	}
 	if executeRequest.Target.RunnerID == "script" {
 		request.Execution.RunnerID = planned.RunnerID
