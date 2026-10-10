@@ -7,6 +7,8 @@ func TestCLIWorkerModeJourneys(t *testing.T) {
 	t.Parallel()
 	resetworkerstransportsclirunmodes3State()
 	initializeWorkerstransportsclirunmodesFixture(t)
+	t.Run("TestTypedWorkersPreserveNativeStructuredResult", testTypedWorkersPreserveNativeStructuredResult)
+	t.Run("TestTypedWorkerCancellationPreservesPeer", testTypedWorkerCancellationPreservesPeer)
 	t.Run("TestCLIRunPartialResponseStreamHasOneFailedTerminal", testWorkerstransportsclirunmodesCLIRunPartialResponseStreamHasOneFailedTerminal)
 	t.Run("TestCLIRunEventPresentationsCorrelateWorkDispatchWorkerAndPrimary", testWorkerstransportsclirunmodesCLIRunEventPresentationsCorrelateWorkDispatchWorkerAndPrimary)
 	t.Run("TestCLIRunTimeoutRecoversOnSameProcess", testWorkerstransportsclirunmodesCLIRunTimeoutRecoversOnSameProcess)

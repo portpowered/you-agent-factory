@@ -3,11 +3,108 @@ package customer_lifecycles_test
 import (
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+const typedWorkersResultSchema = `{"type":"object","properties":{"label":{"type":"string"},"nested":{"type":"object","properties":{"count":{"type":"integer"}},"required":["count"]},"items":{"type":"array"}},"required":["label","nested","items"],"additionalProperties":false}`
+
+// M1/M2 exercise the normal Workers paths with a controlled native Codex
+// response. The existing process supplies each parallel row an explicit
+// session and private command route; no MockWorkers feature is selected.
+func testTypedWorkersPreserveNativeStructuredResult(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			body := `{"label":"` + mode + `","nested":{"count":7},"items":[true,"complete"]}`
+			result := modesFixture(t).execute(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt: "preserve native structured " + mode + " result",
+				result: body, workerMode: mode, behavior: modesRouteSuccess,
+			})
+			if result.err != nil || strings.TrimSpace(result.stderr) != "" {
+				t.Fatalf("typed %s invocation: %v stdout=%s stderr=%s", mode, result.err, result.stdout, result.stderr)
+			}
+			terminal := decodeTerminalNDJSONInvocationResult(t, result.stdout).Response
+			if terminal.Status != factoryapi.InvocationTerminalStatusCompleted || terminal.TraceId == "" {
+				t.Fatalf("terminal response = %+v", terminal)
+			}
+			assertInvocationPrimaryResultText(t, terminal, body)
+			correlation := collectModesCorrelationEvents(t, decodeModesFactoryEvents(t, result.stdout))
+			workID, requestID := assertModesWorkCorrelation(t, correlation.workRequest)
+			dispatchID := assertModesDispatchCorrelation(t, correlation.dispatchRequest, workID)
+			assertModesWorkerCorrelation(t, correlation.workerAssociation, dispatchID)
+			assertModesResponseCorrelation(t, correlation.dispatchResponse, dispatchID, workID)
+			if terminal.RequestId != requestID {
+				t.Fatalf("terminal request ID = %q, want %q", terminal.RequestId, requestID)
+			}
+			payload, err := correlation.dispatchResponse.Payload.AsDispatchResponseEventPayload()
+			var want any
+			if decodeErr := json.Unmarshal([]byte(body), &want); decodeErr != nil {
+				t.Fatal(decodeErr)
+			}
+			if err != nil || payload.Outcome != factoryapi.WorkOutcomeAccepted || !reflect.DeepEqual(payload.StructuredResult, want) {
+				t.Fatalf("native dispatch result = %+v, decode=%v, want structured=%+v", payload, err, want)
+			}
+			if result.providerCalls != 1 || len(result.requests) != 1 {
+				t.Fatalf("native command calls=%d requests=%d, want one", result.providerCalls, len(result.requests))
+			}
+			request := result.requests[0]
+			if request.Command != "codex" || request.ExecutionScopeID != result.resources.sessionID || request.WorkDir != filepath.Dir(result.resources.factoryPath) {
+				t.Fatalf("native command/correlation = %+v", request)
+			}
+		})
+	}
+}
+
+func configureModesTypedWorker(t testing.TB, factoryPath, mode string) {
+	t.Helper()
+	data, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var factory map[string]any
+	if err := json.Unmarshal(data, &factory); err != nil {
+		t.Fatal(err)
+	}
+	workerType, workstationType := "INFERENCE_WORKER", "INFERENCE_RUN"
+	if mode == "agent" {
+		workerType, workstationType = "AGENT_WORKER", "AGENT_RUN"
+	}
+	worker := factory["workers"].([]any)[0].(map[string]any)
+	worker["type"], worker["modelProvider"], worker["model"], worker["executorProvider"] = workerType, "CODEX", "gpt-5-codex", "SCRIPT_WRAP"
+	station := factory["workstations"].([]any)[0].(map[string]any)
+	station["type"], station["outputSchema"] = workstationType, typedWorkersResultSchema
+	if mode == "inference" {
+		worker["operations"] = []any{map[string]any{"name": "OMNI",
+			"inputs":  []any{map[string]any{"name": "prompt", "contentTypes": []string{"TEXT"}, "required": true}},
+			"outputs": []any{map[string]any{"name": "completion", "contentTypes": []string{"TEXT"}}},
+		}}
+		station["operation"] = "OMNI"
+		station["operationBindings"] = []any{map[string]any{"slot": "prompt", "defaultContent": []any{map[string]any{"type": "TEXT", "text": "Preserve the requested structured result."}}}}
+	}
+	data, err = json.Marshal(factory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(factoryPath)
+	files := map[string][]byte{
+		factoryPath: data,
+		filepath.Join(dir, "workers", "worker-a", "AGENTS.md"):     []byte("---\ntype: " + workerType + "\nmodelProvider: CODEX\nmodel: gpt-5-codex\nexecutorProvider: SCRIPT_WRAP\n---\nPreserve the structured result.\n"),
+		filepath.Join(dir, "workstations", "process", "AGENTS.md"): []byte("---\ntype: " + workstationType + "\n---\nProcess the requested Work.\n"),
+	}
+	for path, contents := range files {
+		if err := os.WriteFile(path, contents, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 const (
 	wantPrimaryResult                                              = "deterministic workers primary COMPLETE"

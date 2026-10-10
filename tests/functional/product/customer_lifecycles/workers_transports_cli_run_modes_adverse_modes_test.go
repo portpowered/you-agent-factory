@@ -8,6 +8,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func testWorkerstransportsclirunmodesCLIRunPartialResponseStreamHasOneFailedTerminal(t *testing.T) {
@@ -257,6 +258,68 @@ func testWorkerstransportsclirunmodesCLIRunTimeoutRecoversOnSameProcess(t *testi
 	})
 	assertMachineSuccess(t, recovery, "timeout recovery COMPLETE")
 	assertFreshInvocation(t, timeoutResult, recovery)
+}
+
+// M9 keeps a second typed Worker command live while the caller cancels the
+// first. Arrival/stopped signals, terminal output and session-scoped command
+// observations prove cancellation and peer isolation without timing sleeps.
+func testTypedWorkerCancellationPreservesPeer(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			fixture := modesFixture(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			canceledHandle := fixture.start(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt: "cancel only this typed Worker", workerMode: mode,
+				behavior: modesRouteBlock, context: ctx,
+			})
+			body := `{"label":"peer-` + mode + `","nested":{"count":7},"items":[true,"complete"]}`
+			peerHandle := fixture.start(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt: "preserve the live peer", result: body, workerMode: mode,
+				behavior: modesRouteBlock,
+			})
+			canceledHandle.route.WaitStarted(t)
+			peerHandle.route.WaitStarted(t)
+			cancel()
+			// Remote caller cancellation ends the invocation stream; the
+			// public session control owns stopping its active Worker attempt.
+			support.TerminateFactorySessionAt(t, fixture.serverURL, canceledHandle.resources.sessionID)
+			canceled := canceledHandle.wait(t)
+			canceledHandle.route.WaitStopped(t)
+			if canceled.err == nil || !strings.Contains(canceled.err.Error(), "INVOCATION_CANCELED") {
+				t.Fatalf("typed cancellation error = %v, stderr=%s", canceled.err, canceled.stderr)
+			}
+			terminal := decodeTerminalNDJSONInvocationResult(t, canceled.stdout).Response
+			assertInvocationOutcome(t, terminal, "CANCELED", "INVOCATION_CANCELED")
+			if invocationPrimaryResultPresent(terminal) {
+				t.Fatalf("cancellation emitted a successful result: %+v", terminal)
+			}
+			select {
+			case result := <-peerHandle.done:
+				t.Fatalf("peer completed before its release: %+v", result)
+			default:
+			}
+			peerHandle.route.Release()
+			peer := peerHandle.wait(t)
+			peerHandle.route.WaitStopped(t)
+			assertMachineSuccess(t, peer, body)
+			assertFreshInvocation(t, canceled, peer)
+			correlation := collectModesCorrelationEvents(t, decodeModesFactoryEvents(t, peer.stdout))
+			workID, _ := assertModesWorkCorrelation(t, correlation.workRequest)
+			dispatchID := assertModesDispatchCorrelation(t, correlation.dispatchRequest, workID)
+			assertModesWorkerCorrelation(t, correlation.workerAssociation, dispatchID)
+			assertModesResponseCorrelation(t, correlation.dispatchResponse, dispatchID, workID)
+			for _, result := range []modesInvocationResult{canceled, peer} {
+				if result.providerCalls != 1 || len(result.requests) != 1 || result.requests[0].ExecutionScopeID != result.resources.sessionID {
+					t.Fatalf("typed command scope/calls = %+v", result)
+				}
+			}
+		})
+	}
 }
 
 func testWorkerstransportsclirunmodesCLIRunCancellationRecoversOnSameProcess(t *testing.T) {
