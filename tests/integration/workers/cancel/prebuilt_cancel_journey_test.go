@@ -1,18 +1,235 @@
 package cancel_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// A real host death and joined restart prove the delivered transport repair.
+// Default CLI control remains excluded at LEAD-CLI-BLOCKER; no synthetic
+// capture or provider files stand in for this read/restart witness.
+func TestPrebuiltRecordedReadControlParity(t *testing.T) {
+	binary := resolveCancelArtifact(t)
+	artifact, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("artifact sha256=%x", sha256.Sum256(artifact))
+	f := writeRecordedParityFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	initialize := exec.CommandContext(ctx, binary, "init", "--provider", "codex")
+	initialize.Dir, initialize.Env = f.factoryDir, f.environment
+	if output, err := initialize.CombinedOutput(); err != nil {
+		t.Fatalf("init: %v %s", err, output)
+	}
+	first := startCancelDaemon(t, ctx, binary, f)
+	waitForCancelFactorySession(t, ctx, f.serverURL, first)
+	admitRecordedParityWorker(t, ctx, f, "completed")
+	waitRecordedParityState(t, ctx, f, "completed", "COMPLETED")
+	transcript := readRecordedParityTranscript(t, ctx, f, "completed", http.StatusOK)
+	if !bytes.Contains(transcript, []byte("recorded parity completed marker")) {
+		t.Fatalf("completed output missing: %s", transcript)
+	}
+	admitRecordedParityWorker(t, ctx, f, "lost")
+	waitRecordedParityState(t, ctx, f, "lost", "RUNNING")
+	prefix, err := getJSON[factoryapi.WorkerSessionLogPage](ctx, http.DefaultClient, f.serverURL+"/worker-sessions/lost/logs")
+	if err != nil || len(prefix.Events) == 0 {
+		t.Fatalf("committed opening: %+v %v", prefix, err)
+	}
+	if err := first.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-first.done:
+	case <-ctx.Done():
+		t.Fatal("killed owner was not joined")
+	}
+	second := startCancelDaemon(t, ctx, binary, f)
+	waitForCancelFactorySession(t, ctx, f.serverURL, second)
+	row := waitRecordedParityState(t, ctx, f, "lost", "FAILED")
+	if row.RecordingHealth == nil || *row.RecordingHealth != "INCOMPLETE" {
+		t.Fatalf("owner loss health: %+v", row)
+	}
+	recoveredLogs, err := getJSON[factoryapi.WorkerSessionLogPage](ctx, http.DefaultClient, f.serverURL+"/worker-sessions/lost/logs")
+	if err != nil || recoveredLogs.Health != "INCOMPLETE" || !reflect.DeepEqual(prefix.Events, recoveredLogs.Events) {
+		t.Fatalf("lost capture prefix changed: before=%+v after=%+v err=%v", prefix, recoveredLogs, err)
+	}
+	lostBody := readRecordedParityTranscript(t, ctx, f, "lost", http.StatusInternalServerError)
+	if errorResponseCode(lostBody) != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("HTTP error: %s", lostBody)
+	}
+	cli := runCancelCLI(ctx, binary, f, "worker-sessions", "read", "--worker-session-id", "lost", "--view", "transcript")
+	if cli.err == nil || firstErrorCode(cli.stdout, cli.stderr) != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("CLI unavailable: %+v", cli)
+	}
+	after := readRecordedParityTranscript(t, ctx, f, "completed", http.StatusOK)
+	assertRecordedParityJSON(t, transcript, after)
+	cli = runCancelCLI(ctx, binary, f, "worker-sessions", "read", "--worker-session-id", "completed", "--view", "transcript")
+	if cli.err != nil {
+		t.Fatalf("completed CLI: %+v", cli)
+	}
+	assertRecordedParityJSON(t, after, []byte(cli.stdout))
+	assertRecordedParityMCP(t, ctx, binary, f, after)
+	cleanupCancelDaemon(second)
+	select {
+	case <-second.done:
+	case <-ctx.Done():
+		t.Fatal("recovered host was not joined")
+	}
+}
+
+func admitRecordedParityWorker(t *testing.T, ctx context.Context, f cancelFixture, id string) {
+	t.Helper()
+	payload := map[string]any{"requestId": "request-" + id, "workerSessionId": id, "execution": map[string]any{
+		"workstationName": "process", "workerType": id, "runnerId": "codex", "modelProvider": "codex", "model": "test-model", "userMessage": "safe recorded parity prompt",
+		"dispatch": map[string]any{"dispatchId": "attempt-" + id, "workstationName": "process", "workerType": id},
+	}}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.serverURL+"/worker-sessions", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("admit %s: %d %s", id, response.StatusCode, body)
+	}
+}
+
+func waitRecordedParityState(t *testing.T, ctx context.Context, f cancelFixture, id, state string) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	// The compiled host has no injected readiness channel. Poll its public
+	// observation; this timer is cadence only and the context bounds failure.
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		row, err := getJSON[factoryapi.WorkerSessionObservation](ctx, http.DefaultClient, f.serverURL+"/worker-sessions/"+id)
+		ready := state != "COMPLETED" || (row.RecordingHealth != nil && *row.RecordingHealth == "COMPLETE" && row.Transcript == "AVAILABLE")
+		if err == nil && ready && row.State == factoryapi.WorkerSessionObservationState(state) {
+			return row
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("%s state %s: %+v %v", id, state, row, err)
+		}
+	}
+}
+
+func readRecordedParityTranscript(t *testing.T, ctx context.Context, f cancelFixture, id string, status int) []byte {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.serverURL+"/worker-sessions/"+id+"/transcript", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != status {
+		t.Fatalf("transcript %s: %d %s %v", id, response.StatusCode, body, err)
+	}
+	return body
+}
+
+func assertRecordedParityJSON(t *testing.T, want, got []byte) {
+	t.Helper()
+	// Generated optional members serialize as null through CLI/MCP and may be
+	// absent from HTTP. Compare the complete public transcript contract.
+	var a, b factoryapi.WorkerSessionTranscriptResponse
+	if json.Unmarshal(want, &a) != nil || json.Unmarshal(got, &b) != nil || !reflect.DeepEqual(a, b) {
+		t.Fatalf("JSON mismatch: %s / %s", want, got)
+	}
+}
+
+func assertRecordedParityMCP(t *testing.T, ctx context.Context, binary string, f cancelFixture, transcript []byte) {
+	t.Helper()
+	command := exec.CommandContext(ctx, binary, "--server", f.serverURL, "server", "mcp")
+	command.Dir, command.Env = f.factoryDir, f.environment
+	client := mcp.NewClient(&mcp.Implementation{Name: "recorded-parity", Version: "test"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := session.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	for _, id := range []string{"lost", "completed"} {
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": id, "view": "transcript"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id == "completed" {
+			if len(result.Content) != 1 {
+				t.Fatalf("MCP completed content: %+v", result)
+			}
+			content, ok := result.Content[0].(*mcp.TextContent)
+			if !ok {
+				t.Fatalf("MCP completed content type: %T", result.Content[0])
+			}
+			encoded = []byte(content.Text)
+		}
+		var envelope struct {
+			Error struct {
+				Code            string
+				Retryable       bool
+				WorkerSessionID string `json:"workerSessionId"`
+				Details         struct {
+					Status       int
+					UpstreamCode string `json:"upstreamCode"`
+				}
+			}
+			Result struct{ Transcript json.RawMessage }
+		}
+		if err := json.Unmarshal(encoded, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if id == "lost" {
+			if !result.IsError || envelope.Error.Code != "worker_session.unavailable" || envelope.Error.Retryable || envelope.Error.WorkerSessionID != id || envelope.Error.Details.Status != 500 || envelope.Error.Details.UpstreamCode != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+				t.Fatalf("MCP unavailable: %s", encoded)
+			}
+		} else {
+			if result.IsError {
+				t.Fatalf("MCP completed: %s", encoded)
+			}
+			if len(envelope.Result.Transcript) == 0 {
+				t.Fatalf("MCP transcript envelope missing: %s", encoded)
+			}
+			assertRecordedParityJSON(t, transcript, envelope.Result.Transcript)
+		}
+	}
+}
 
 type cancelJourney struct {
 	ctx                  context.Context

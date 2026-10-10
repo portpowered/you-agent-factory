@@ -106,6 +106,10 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runRealHostHistoryRecovery(t, process)
 	})
+	t.Run("recorded unavailable parity", func(t *testing.T) {
+		t.Parallel()
+		runAdmittedCaptureRecovery(t, process)
+	})
 	t.Run("recorded unavailable error envelope", func(t *testing.T) {
 		t.Parallel()
 		runRecordedUnavailableEnvelope(t, process)
