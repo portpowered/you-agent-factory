@@ -310,6 +310,77 @@ func TestWorkerSessionErrorsAreTypedAndSafe(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionTranscriptUnavailableErrors(t *testing.T) {
+	t.Parallel()
+	const unavailable = `{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE","message":"secret-token","workerSessionId":"foreign-secret"}`
+	for _, test := range []struct {
+		name, body, code, upstream string
+		status                     int
+		retryable                  bool
+	}{
+		{"owner lost", unavailable, "unavailable", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 500, false},
+		{"projection unavailable", `{"code":"WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE"}`, "unavailable", "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE", 500, false},
+		{"invalid", unavailable, "invalid_request", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 400, false},
+		{"unauthorized", unavailable, "permission_denied", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 401, false},
+		{"forbidden", unavailable, "permission_denied", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 403, false},
+		{"unknown ID", unavailable, "not_found", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 404, false},
+		{"conflict", unavailable, "conflict", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 409, false},
+		{"transient", unavailable, "unavailable", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 503, true},
+		{"other server status", unavailable, "internal_error", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", 502, false},
+		{"unknown code", `{"code":"secret-token","message":"secret-token"}`, "internal_error", "", 500, false},
+		{"other safe code", `{"code":"WORKER_SESSION_NOT_FOUND"}`, "internal_error", "WORKER_SESSION_NOT_FOUND", 500, false},
+		{"truncated", `{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"`, "internal_error", "", 500, false},
+		{"trailing object", unavailable + `{}`, "internal_error", "", 500, false},
+		{"trailing garbage", unavailable + `secret-token`, "internal_error", "", 500, false},
+		{"duplicate code", `{"code":"secret-token","code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"}`, "internal_error", "", 500, false},
+		{"escaped duplicate", `{"code":"secret-token","\u0063ode":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"}`, "internal_error", "", 500, false},
+		{"case alias", `{"Code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE"}`, "internal_error", "", 500, false},
+		{"invalid code type", `{"code":123}`, "internal_error", "", 500, false},
+		{"null body", `null`, "internal_error", "", 500, false},
+		{"array body", `[]`, "internal_error", "", 500, false},
+		{"empty body", ``, "internal_error", "", 500, false},
+		{"oversized prefix", unavailable + strings.Repeat(" ", 1<<20), "internal_error", "", 500, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			body := &trackedBody{Reader: strings.NewReader(test.body)}
+			failure := responseFailure(&http.Response{StatusCode: test.status, Body: body}, nil, "requested-worker")
+			if failure.Code != "worker_session."+test.code || failure.Retryable != test.retryable || failure.WorkerSessionID != "requested-worker" || failure.Details["status"] != test.status {
+				t.Fatalf("failure=%+v", failure)
+			}
+			if got, _ := failure.Details["upstreamCode"].(string); got != test.upstream {
+				t.Fatalf("upstream=%q want=%q", got, test.upstream)
+			}
+			raw, _ := json.Marshal(failure)
+			if strings.Contains(string(raw), "secret") || failure.Message != "Selected host rejected the Worker Session request" {
+				t.Fatalf("unsafe failure=%s", raw)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionTranscriptUnavailableClosesBodies(t *testing.T) {
+	t.Parallel()
+	summary := &trackedBody{Reader: strings.NewReader(`{"workerSessionId":"target","state":"FAILED"}`)}
+	transcript := &trackedBody{Reader: strings.NewReader(`{"code":"WORKER_SESSION_TRANSCRIPT_UNAVAILABLE","message":"secret-token"}`)}
+	calls := 0
+	adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.URL.Path == "/worker-sessions/target" {
+			return &http.Response{StatusCode: 200, Body: summary}, nil
+		}
+		if request.URL.Path != "/worker-sessions/target/transcript" {
+			t.Fatalf("unexpected request=%s", request.URL)
+		}
+		return &http.Response{StatusCode: 500, Body: transcript}, nil
+	})
+	value := workerCall(t, adapter, ActionRead, `{"workerSessionId":"target","view":"transcript"}`)
+	failure := value["error"].(map[string]any)
+	if value["result"] != nil || failure["code"] != "worker_session.unavailable" || failure["retryable"] != false || failure["workerSessionId"] != "target" || calls != 2 || !summary.closed || !transcript.closed {
+		t.Fatalf("result=%v calls=%d summary closed=%v transcript closed=%v", value, calls, summary.closed, transcript.closed)
+	}
+}
+
 func TestWorkerSessionCancellationReachesSelectedHost(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())

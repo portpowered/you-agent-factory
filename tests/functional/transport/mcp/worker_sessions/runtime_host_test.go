@@ -553,6 +553,9 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	assertFactoryCLIParity(t, reopened, "lost-worker", selected)
 	assertJSONEqual(t, prefix, getHost(t, reopened.URL()+"/worker-sessions/lost-worker/logs"))
 	assertIncompleteLogsPolling(t, recoveredCtx, recoveredSession, reopened)
+	// The incomplete fixture is seeded at the recording edge, not an OS-death
+	// witness. Its public transcript must still retain typed unavailable meaning.
+	assertUnavailableTranscriptParity(t, recoveredCtx, recoveredSession, reopened, "lost-worker")
 	// This epoch-only opening has no affirmative OS death witness. It cannot
 	// acquire stop authority or the witnessed OWNER_LOST refusal semantics.
 	for _, action := range []string{"cancel", "terminate"} {
@@ -573,6 +576,39 @@ func runRealHostHistoryRecovery(t *testing.T, process support.Process) {
 	page := callWorker(t, recoveredCtx, recoveredSession, "list", map[string]any{"history": "archived", "limit": 1})["result"].(map[string]any)
 	token := page["paginationContext"].(map[string]any)["nextToken"].(string)
 	assertToolError(t, callAction(t, foreignCtx, foreignSession, "LIST", map[string]any{"history": "archived", "nextToken": token}), "worker_session.invalid_request", false)
+}
+
+func assertUnavailableTranscriptParity(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host.URL()+"/worker-sessions/"+id+"/transcript", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || response.StatusCode != http.StatusInternalServerError || body["code"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("HTTP transcript=%d %v err=%v", response.StatusCode, body, err)
+	}
+	inputs := support.FakeInputs(ctx, []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "transcript", "--server", host.URL(), "--json"})
+	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(inputs.Stderr(), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") {
+		t.Fatalf("CLI transcript=%v stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	result := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id, "view": "transcript"})
+	assertToolError(t, result, "worker_session.unavailable", false)
+	encoded, _ := json.Marshal(result.StructuredContent)
+	var envelope struct {
+		Error struct {
+			WorkerSessionID string         `json:"workerSessionId"`
+			Details         map[string]any `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(encoded, &envelope); err != nil || envelope.Error.WorkerSessionID != id || envelope.Error.Details["status"] != float64(500) || envelope.Error.Details["upstreamCode"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("MCP transcript=%s err=%v", encoded, err)
+	}
 }
 
 func assertArchivedProviderRecovery(t *testing.T, host *support.FunctionalAPIServer, ctx context.Context, session *mcp.ClientSession, page map[string]any) {

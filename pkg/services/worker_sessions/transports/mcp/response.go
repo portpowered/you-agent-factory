@@ -2,6 +2,7 @@ package workersessionmcp
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,13 @@ func responseFailure(response *http.Response, err error, id string) *toolError {
 	}
 	failure.Message = "Selected host rejected the Worker Session request"
 	readSafeFailureDetails(response, failure, id)
+	// A lost capture is permanently unavailable, even though the HTTP contract
+	// reports it as 500. Denials and transient failures retain status semantics.
+	upstreamCode := failure.Details["upstreamCode"]
+	if response.StatusCode == http.StatusInternalServerError &&
+		(upstreamCode == "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" || upstreamCode == "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE") {
+		failure.Code = "worker_session.unavailable"
+	}
 	return failure
 }
 
@@ -59,7 +67,7 @@ func readSafeFailureDetails(response *http.Response, failure *toolError, id stri
 			SourceWorkerSessionID    string `json:"sourceWorkerSessionId"`
 			SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
 		}
-		if json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&upstream) == nil {
+		if raw := safeFailureBody(response.Body); raw != nil && json.Unmarshal(raw, &upstream) == nil {
 			// Preserve known public codes and phases, never arbitrary error text.
 			if slices.Contains(safeUpstreamCodes, upstream.Code) {
 				failure.Details["upstreamCode"] = upstream.Code
@@ -73,6 +81,41 @@ func readSafeFailureDetails(response *http.Response, failure *toolError, id stri
 			}
 		}
 	}
+}
+
+// Only a complete, bounded object with unambiguous fields can classify a
+// server failure. A valid prefix followed by junk or truncation is not proof.
+func safeFailureBody(body io.Reader) []byte {
+	const limit = 1 << 20
+	raw, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil || len(raw) > limit {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return nil
+	}
+	seen := make(map[string]bool)
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		canonical := strings.ToLower(key)
+		if err != nil || !ok || seen[canonical] || (canonical == "code" && key != "code") {
+			return nil
+		}
+		seen[canonical] = true
+		if err := decoder.Decode(new(json.RawMessage)); err != nil {
+			return nil
+		}
+	}
+	if closing, err := decoder.Token(); err != nil || closing != json.Delim('}') {
+		return nil
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return nil
+	}
+	return raw
 }
 
 var safeUpstreamCodes = []string{
