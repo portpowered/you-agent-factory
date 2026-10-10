@@ -3,6 +3,7 @@ package execution_test
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -39,6 +41,21 @@ type selectedOperationScheduler struct {
 // Legacy callers expose time and timers, without opting into Runtime's replay
 // tick ownership. The test controller alone advances this operation source.
 type selectedLegacyClock struct{ platformclock.TimerSource }
+
+type selectedNowOnlyClock struct{ platformclock.Source }
+
+// The canonical command effect takes precedence over the legacy PTY effect.
+// A supplied host must stay unused; attempting to activate it is a failure.
+type selectedUnusedPTYHost struct{ allocations atomic.Int32 }
+
+func (host *selectedUnusedPTYHost) Allocate(context.Context) (platformpty.Allocation, error) {
+	host.allocations.Add(1)
+	return nil, errors.New("canonical command unexpectedly allocated legacy PTY")
+}
+
+func (*selectedUnusedPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
+	return nil, nil, errors.New("canonical command unexpectedly started legacy PTY")
+}
 
 func (scheduler *selectedOperationScheduler) NewTimer(delay time.Duration) platformclock.Timer {
 	// Readiness is outside the held provider/retry operation being observed.
@@ -288,6 +305,42 @@ func TestSelectedEffectsOmittedDefaults(t *testing.T) {
 		t.Fatalf("default effects result = %#v", response)
 	}
 	t.Log("S10 default: omitted fact clock and scheduler preserve public provider success")
+}
+
+func TestSelectedCommandPreservesLegacyPTYPrecedence(t *testing.T) {
+	t.Parallel()
+	for _, timers := range []bool{false, true} {
+		name := "Now-only PTY specialization"
+		if timers {
+			name = "timer-capable PTY specialization"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
+			facts := platformclock.NewDeterministic(base, time.Second)
+			specialized := platformclock.NewDeterministic(base.Add(2*time.Hour), time.Millisecond)
+			scheduler := &selectedOperationScheduler{Deterministic: platformclock.NewDeterministic(base.Add(time.Hour), time.Millisecond), timers: make(chan *selectedOperationTimer, 32), polls: make(chan *selectedOperationTimer, 256)}
+			runner := &selectedCommandRunner{calls: make(chan selectedCommandCall, 16)}
+			host := &selectedUnusedPTYHost{}
+			var ptyClock platformclock.Source = selectedNowOnlyClock{specialized}
+			if timers {
+				ptyClock = specialized
+			}
+			process := support.BuildProcess(t, serviceedges.Edges{
+				Clock: facts, ProcessScheduler: scheduler, ProviderCommandRunner: runner,
+				AgyPTYHost: host, AgyPTYClock: ptyClock,
+			})
+			// Specialized time cannot release the canonical command deadline.
+			specialized.SetTick(3600000)
+			tick := 0
+			advance := func(delay time.Duration) { tick += int(delay / time.Millisecond); scheduler.SetTick(tick) }
+			runSelectedProviderDeadline(t, process, facts, scheduler, runner, advance)
+			if host.allocations.Load() != 0 {
+				t.Fatal("canonical provider command activated the dormant legacy PTY host")
+			}
+			t.Log("S11 reachability observation: command precedence preserves selected deadlines with either dormant PTY override; active legacy PTY selection remains unproved")
+		})
+	}
 }
 
 func selectedRetryFailure() platformprocess.CommandResult {
