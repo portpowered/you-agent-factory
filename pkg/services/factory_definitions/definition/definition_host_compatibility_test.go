@@ -170,17 +170,6 @@ func preparePersistedFactoryPayload(
 	return testDefinitionService.PreparePersistedFactoryPayload(segment, snapshot, *testFactoryVersionFromAPI(&version))
 }
 
-func prepareEditableFactoryPersistView(
-	segment string,
-	factory factoryapi.Factory,
-) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
-	if err != nil {
-		return nil, err
-	}
-	return testDefinitionService.PrepareEditableFactoryPersistView(segment, snapshot)
-}
-
 func testFactoryVersionFromAPI(version *factoryapi.HybridLogicalTimestamp) *factorydefinitions.FactoryVersion {
 	if version == nil {
 		return nil
