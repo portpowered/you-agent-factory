@@ -560,16 +560,17 @@ func assertPullToReadyMissingInspect(t *testing.T, capture pullToReadyCapture) {
 }
 
 type pullToReadyAssetClient struct {
-	repository string
-	manifest   []byte
-	model      []byte
-	backend    []byte
-	backendURL string
-	calls      atomic.Int64
-	transfers  atomic.Int64
-	offline    atomic.Bool
-	failModel  atomic.Bool
-	requests   []string
+	repository  string
+	manifest    []byte
+	model       []byte
+	backend     []byte
+	backendURL  string
+	calls       atomic.Int64
+	transfers   atomic.Int64
+	offline     atomic.Bool
+	failModel   atomic.Bool
+	failBackend atomic.Bool
+	requests    []string
 }
 
 func newPullToReadyAssetClient(modelBody, backendBody []byte, backendURL string) *pullToReadyAssetClient {
@@ -618,6 +619,9 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 		body = client.model
 	default:
 		if request.URL.String() == client.backendURL {
+			if client.failBackend.Load() && request.Method == http.MethodGet {
+				return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(strings.NewReader("private backend response")), Request: request}, nil
+			}
 			body = client.backend
 			break
 		}
