@@ -105,7 +105,7 @@ func galleryPullRecovery(t *testing.T, fault, override, located string) {
 		// This cell proves replacement on the first successful pull, not a failure.
 		fixture.failed.Store(false)
 	}
-	edges := galleryPullEdges(fixture, home, override, located)
+	edges := galleryInferenceEdges(t, galleryPullEdges(fixture, home, override, located))
 	process := buildPullToReadyProcess(t, edges)
 	if fixture.failed.Load() {
 		galleryAssertPullFailure(t, process, home)
@@ -134,6 +134,7 @@ func galleryPullRecovery(t *testing.T, fault, override, located string) {
 			t.Fatalf("verified executable bytes = %q, %v", installed, err)
 		}
 	}
+	assertGalleryLifecycleInference(t, process, home)
 }
 func galleryAssertPullFailure(t *testing.T, process rootProcess, home string) {
 	t.Helper()

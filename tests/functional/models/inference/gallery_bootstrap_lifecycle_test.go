@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
@@ -22,7 +23,7 @@ func TestModelsGalleryBootstrapCancellation(t *testing.T) {
 	home, fixture := newGalleryLifecycleFixture(t, "cancellation")
 	fixture.failed.Store(true)
 	fixture.downloadStarted = make(chan struct{})
-	process := buildPullToReadyProcess(t, galleryPullEdges(fixture, home, "", ""))
+	process := buildPullToReadyProcess(t, galleryLifecycleInferenceEdges(t, fixture, home))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	inputs := support.FakeInputs(ctx, []string{"you", "--json", "models", "pull", pullToReadyModelName})
@@ -46,6 +47,89 @@ func TestModelsGalleryBootstrapCancellation(t *testing.T) {
 	galleryAssertNoUnverifiedInstallation(t, fixture)
 	fixture.failed.Store(false)
 	assertGalleryLifecyclePull(t, process, home, fixture)
+	assertGalleryLifecycleInference(t, process, home)
+}
+
+func galleryLifecycleInferenceEdges(t *testing.T, fixture *galleryPullFixture, home string) serviceedges.Edges {
+	return galleryInferenceEdges(t, galleryPullEdges(fixture, home, "", ""))
+}
+
+func galleryInferenceEdges(t *testing.T, edges serviceedges.Edges) serviceedges.Edges {
+	t.Helper()
+	host := story004HostServer(t)
+	edges.ModelHostProcessLauncher = &recordingModelHostLauncher{endpoint: host.URL}
+	edges.ModelHostHTTPClient = host.Client()
+	edges.ModelHostProtocolNegotiator = &joinedProtocolNegotiator{}
+	edges.ModelHostCompatibilityChecker = &joinedCompatibilityChecker{}
+	edges.ModelASRBackend = func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		if !bytes.Equal(request.Audio, localai.AudioBytes()) {
+			return models.ASRBackendResponse{}, errors.New("incorrect gallery audio")
+		}
+		return models.ASRBackendResponse{Text: "asset ready", Segments: []models.ASRBackendSegment{{ID: 0, Start: 0, End: 1, Text: "asset ready"}}}, nil
+	}
+	return edges
+}
+
+func assertGalleryLifecycleInference(t *testing.T, process rootProcess, home string) {
+	t.Helper()
+	directory := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	audio := filepath.Join(t.TempDir(), "audio.wav")
+	if err := os.WriteFile(audio, localai.AudioBytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertAssetReadinessInvocation(t, process, directory, home, audio, true)
+}
+
+// Publication is atomic: an unsuccessful replacement leaves the customer's
+// existing executable intact, even when it differs from the new release hash.
+func TestModelsGalleryBootstrapPublicationPreservesExistingExecutable(t *testing.T) {
+	requireGalleryPlatform(t)
+	t.Parallel()
+	home, fixture := newGalleryLifecycleFixture(t, "publication")
+	previous := []byte("previous customer executable")
+	if err := os.MkdirAll(filepath.Dir(fixture.wantedCommand), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixture.wantedCommand, previous, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fixture.failed.Store(true)
+	process := buildPullToReadyProcess(t, galleryLifecycleInferenceEdges(t, fixture, home))
+	galleryAssertPullFailure(t, process, home)
+	contents, err := os.ReadFile(fixture.wantedCommand)
+	if err != nil || !bytes.Equal(contents, previous) {
+		t.Fatalf("publication failure changed existing executable: %q, %v", contents, err)
+	}
+	staged, err := filepath.Glob(filepath.Join(filepath.Dir(fixture.wantedCommand), ".local-ai-*"))
+	if err != nil || len(staged) != 0 || fixture.commands.Load() != 0 {
+		t.Fatalf("failed publication left staging or ran installer: %v, %v, commands=%d", staged, err, fixture.commands.Load())
+	}
+	fixture.failed.Store(false)
+	assertGalleryLifecyclePull(t, process, home, fixture)
+	contents, err = os.ReadFile(fixture.wantedCommand)
+	if err != nil || !bytes.Equal(contents, galleryBinary) {
+		t.Fatalf("repaired publication = %q, %v", contents, err)
+	}
+	assertGalleryLifecycleInference(t, process, home)
+}
+
+// Reconstruction is the customer persistence boundary: the new process has
+// no memoized executable, so reuse must validate the on-disk release checksum.
+func TestModelsGalleryBootstrapVerifiedCacheAfterReconstruction(t *testing.T) {
+	requireGalleryPlatform(t)
+	t.Parallel()
+	home, fixture := newGalleryLifecycleFixture(t, "checksum")
+	first := buildPullToReadyProcess(t, galleryLifecycleInferenceEdges(t, fixture, home))
+	assertGalleryLifecyclePull(t, first, home, fixture)
+	closePullToReadyProcess(t, first)
+	before := fixture.downloads.Load()
+	fixture.failed.Store(true) // A transfer would now return corrupt bytes.
+	second := buildPullToReadyProcess(t, galleryLifecycleInferenceEdges(t, fixture, home))
+	assertPullToReadyAlreadyPresent(t, executePullToReadyCommand(t, second, home, "models", "pull", pullToReadyModelName), fixture.model.model, filepath.Join(home, "managed-cache"))
+	if fixture.downloads.Load() != before {
+		t.Fatal("verified persisted executable was downloaded again")
+	}
+	assertGalleryLifecycleInference(t, second, home)
 }
 
 func newGalleryLifecycleFixture(t *testing.T, fault string) (string, *galleryPullFixture) {
