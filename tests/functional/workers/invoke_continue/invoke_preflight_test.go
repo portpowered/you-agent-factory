@@ -449,6 +449,7 @@ func TestRequesterFactoryCLICaller(t *testing.T) {
 		t.Fatalf("CLI result not completed: %s", invoke.Stdout())
 	}
 	assertRequesterFactoryHTTPChild(t, fixture, child, ctx, result, parentID, token)
+	assertRequesterMCPStartupRefused(t, fixture, child, ctx, parentID)
 	assertRequesterFactoryCLIRefused(t, fixture, child, ctx, opened.Session.Id, parentID, strings.Repeat("A", 43))
 	stop := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "cancel", parentID)
 	if err := fixture.process.Execute(stop.Input); err != nil {
@@ -456,7 +457,23 @@ func TestRequesterFactoryCLICaller(t *testing.T) {
 	}
 	t19AwaitSignal(t, ctx, runner.stopped, "Factory CLI caller ended")
 	assertRequesterFactoryCLIRefused(t, fixture, child, ctx, opened.Session.Id, parentID, token)
-	functionalevidence.Covers(t, "cli/you.run")
+	functionalevidence.Covers(t, "cli/you.run", "cli/you.server.mcp")
+}
+
+func assertRequesterMCPStartupRefused(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, callerID string) {
+	t.Helper()
+	const token = "planted-malformed-mcp-token"
+	before := scenario.providerRunner.CallCount()
+	input := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "server", "mcp"})
+	input.Input.Env = append(scenario.environment(), "YOU_WORKER_SESSION_ID="+callerID, "YOU_WORKER_SESSION_TOKEN="+token)
+	input.Input.WorkingDirectory = scenario.workingDirectory
+	err := fixture.process.Execute(input.Input)
+	if err == nil || !strings.Contains(input.Stderr(), "WORKER_SESSION_CALLER_INVALID") || scenario.providerRunner.CallCount() != before {
+		t.Fatalf("malformed MCP caller: error=%v stderr=%s calls=%d before=%d", err, strings.ReplaceAll(input.Stderr(), token, "[REDACTED]"), scenario.providerRunner.CallCount(), before)
+	}
+	if strings.Contains(input.Stdout()+input.Stderr()+err.Error(), token) {
+		t.Fatal("MCP startup refusal exposed execution credential")
+	}
 }
 
 func requesterFactoryCLIInputs(child *invokeContinueScenario, ctx context.Context, server, sessionID, callerID, token string) *support.CapturedInputs {

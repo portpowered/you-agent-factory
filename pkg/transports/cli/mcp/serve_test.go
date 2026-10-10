@@ -3,11 +3,14 @@ package mcpcli
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
@@ -68,6 +71,49 @@ func TestResolvedServeHandlerReportsMissingServerInput(t *testing.T) {
 	err := handler(&cobra.Command{Use: "serve"}, resolvedServeInputs(t, ""), resolvedinput.Inputs{})
 	if err == nil || !strings.Contains(err.Error(), "read MCP server input") {
 		t.Fatalf("handler error = %v, want missing inherited server", err)
+	}
+}
+
+func TestResolvedServeHandlerForwardsPrivateCallerAndRefusesMalformedPairs(t *testing.T) {
+	t.Parallel()
+	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{47}, 32))
+	for _, test := range []struct {
+		name  string
+		env   map[string]string
+		valid bool
+	}{
+		{"running-shaped pair", map[string]string{"YOU_WORKER_SESSION_ID": "exact-caller", "YOU_WORKER_SESSION_TOKEN": token}, true},
+		{"absent", nil, true},
+		{"id only", map[string]string{"YOU_WORKER_SESSION_ID": "exact-caller"}, false},
+		{"token only", map[string]string{"YOU_WORKER_SESSION_TOKEN": token}, false},
+		{"empty pair", map[string]string{"YOU_WORKER_SESSION_ID": "", "YOU_WORKER_SESSION_TOKEN": ""}, false},
+		{"invalid token", map[string]string{"YOU_WORKER_SESSION_ID": "exact-caller", "YOU_WORKER_SESSION_TOKEN": "planted-invalid-token"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			started := false
+			handler := ResolvedServeHandler(ServeBinding{
+				LookupEnv: func(key string) (string, bool) { value, present := test.env[key]; return value, present },
+				InitializeStdio: func(_ context.Context, intent MCPIntent) error {
+					started = true
+					if intent.WorkerSessionID != test.env["YOU_WORKER_SESSION_ID"] || intent.WorkerSessionToken != test.env["YOU_WORKER_SESSION_TOKEN"] {
+						t.Fatal("execution boundary changed caller credentials")
+					}
+					encoded, err := json.Marshal(intent)
+					if err != nil || strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "exact-caller") {
+						t.Fatal("serialized lifecycle intent exposes credentials")
+					}
+					return nil
+				},
+			})
+			err := handler(&cobra.Command{Use: "serve"}, resolvedServeInputs(t, ""), resolvedServerInputs(t))
+			if started != test.valid || (err == nil) != test.valid {
+				t.Fatalf("startup = %v, error = %v", started, err)
+			}
+			if err != nil && (!errors.Is(err, workersessions.ErrCallerInvalid) || !strings.Contains(err.Error(), "WORKER_SESSION_CALLER_INVALID") || strings.Contains(err.Error(), "planted-invalid-token") || strings.Contains(err.Error(), token)) {
+				t.Fatal("malformed pair refusal is untyped or exposes credentials")
+			}
+		})
 	}
 }
 

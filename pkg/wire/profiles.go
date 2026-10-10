@@ -559,8 +559,7 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 }
 
 type mcpServerBuilder func(
-	string,
-	string,
+	processcontract.MCPIntent,
 	recordings.Service,
 	factorysessionwire.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
@@ -579,14 +578,13 @@ func provideMCPServerBuilder(
 	homeDirectory factorysessions.HomeDirectoryResolver,
 ) mcpServerBuilder {
 	return func(
-		projectRoot string,
-		serverURL string,
+		intent processcontract.MCPIntent,
 		recordingsService recordings.Service,
 		prepare factorysessionwire.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
 		sessions factorysessions.Service,
 	) (*mcpserver.Server, error) {
-		hostClient, err := httpclient.NewClient(serverURL, httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
+		hostClient, err := httpclient.NewClient(intent.ServerURL, httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
 		if err != nil {
 			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
 		}
@@ -594,7 +592,7 @@ func provideMCPServerBuilder(
 		if err != nil {
 			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
 		}
-		workingRoot := strings.TrimSpace(projectRoot)
+		workingRoot := strings.TrimSpace(intent.ProjectRoot)
 		if workingRoot == "" {
 			var err error
 			workingRoot, err = workingDirectory.Getwd()
@@ -612,6 +610,9 @@ func provideMCPServerBuilder(
 			factorysessions.SessionIDGenerator(uuid.NewString),
 			subagentProviderIdentityResolver(providerService),
 		)
+		runSubagent := factorysessionmcp.BindSubagentOperation(func(ctx context.Context, input factorysessionmcp.SubagentInput) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
+			return factorysessionmcp.Subagent(ctx, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString), subagentProviderIdentityResolver(providerService), input)
+		}, intent.WorkerSessionID, intent.WorkerSessionToken)
 		return mcpserver.New(mcpserver.Options{
 			Skills:    skills,
 			Resources: resources,
@@ -624,7 +625,7 @@ func provideMCPServerBuilder(
 						if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
 							return nil, err
 						}
-						return toolOperation(ctx, name, input)
+						return runSubagent(ctx, input)
 					})
 				}
 				return toolOperation(ctx, name, raw)
@@ -680,7 +681,7 @@ func provideStdioHandler(
 		if intent.Stdin == nil || intent.Stdout == nil {
 			return errors.New("MCP stdio input and output are required")
 		}
-		server, err := buildServer(intent.ProjectRoot, intent.ServerURL, recordingsRoot, prepare, workflowPreview, sessions)
+		server, err := buildServer(intent, recordingsRoot, prepare, workflowPreview, sessions)
 		if err != nil {
 			return err
 		}

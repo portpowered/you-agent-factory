@@ -1,7 +1,9 @@
 package factorysession_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -864,5 +866,64 @@ func TestSubagentArgumentsCannotSupplyCallerAuthority(t *testing.T) {
 				t.Fatalf("authority argument response = %s, %v", response, err)
 			}
 		})
+	}
+}
+
+func TestBoundSubagentSuppliesDetachedPrivateCallerOnEveryRun(t *testing.T) {
+	t.Parallel()
+	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{71}, 32))
+	want := workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: token}
+	calls := 0
+	operation := mcpfactorysession.BindSubagentOperation(func(ctx context.Context, input mcpfactorysession.SubagentInput) mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult] {
+		calls++
+		if ctx != t.Context() || input.Caller == nil || *input.Caller != want || input.Prompt != "Explain" || input.Provider != "controlled" {
+			t.Fatal("bound RUN changed caller, request or context")
+		}
+		assertSubagentCallerPrivate(t, want, input)
+		input.Caller.Token = "changed-by-run"
+		return mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]{Result: &mcpfactorysession.SubagentResult{Text: "answer"}}
+	}, want.WorkerSessionID, want.Token)
+	for range 2 {
+		response, err := operation(t.Context(), json.RawMessage(`{"prompt":"Explain","provider":"controlled"}`))
+		if err != nil || !strings.Contains(string(response), `"text":"answer"`) || strings.Contains(string(response), token) {
+			t.Fatalf("RUN = %s, %v", response, err)
+		}
+	}
+	if calls != 2 {
+		t.Fatal("bound RUN did not delegate each request")
+	}
+}
+
+func TestBoundSubagentMalformedCallerNeverDelegatesRun(t *testing.T) {
+	t.Parallel()
+	for _, pair := range [][2]string{{"exact-caller", ""}, {"", "planted-token"}, {"exact-caller", "planted-token"}} {
+		operation := mcpfactorysession.BindSubagentOperation(func(context.Context, mcpfactorysession.SubagentInput) mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult] {
+			t.Fatal("invalid caller delegated RUN")
+			return mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]{}
+		}, pair[0], pair[1])
+		response, err := operation(t.Context(), json.RawMessage(`{"prompt":"Explain","provider":"controlled"}`))
+		if err != nil || !strings.Contains(string(response), `"code":"WORKER_SESSION_CALLER_INVALID"`) || strings.Contains(string(response), "planted-token") {
+			t.Fatalf("malformed execution caller RUN = %s, %v", response, err)
+		}
+	}
+}
+
+func TestBoundSubagentAbsentCallerKeepsDefaultsAndRejectsArgumentAuthority(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	operation := mcpfactorysession.BindSubagentOperation(func(_ context.Context, input mcpfactorysession.SubagentInput) mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult] {
+		calls++
+		if input.Caller != nil || input.Provider != "" || input.Model != "" || input.TimeoutMillis != nil {
+			t.Fatal("unattributed RUN invented authority or selection defaults")
+		}
+		return mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]{Result: &mcpfactorysession.SubagentResult{Text: "answer"}}
+	}, "", "")
+	response, err := operation(t.Context(), json.RawMessage(`{"prompt":"Explain"}`))
+	if err != nil || !strings.Contains(string(response), `"text":"answer"`) || calls != 1 {
+		t.Fatalf("unattributed RUN = %s, %v", response, err)
+	}
+	response, err = operation(t.Context(), json.RawMessage(`{"prompt":"Explain","Caller":"planted-token"}`))
+	if err != nil || !strings.Contains(string(response), `"code":"BAD_REQUEST"`) || calls != 1 || strings.Contains(string(response), "planted-token") {
+		t.Fatalf("argument authority RUN = %s, %v", response, err)
 	}
 }

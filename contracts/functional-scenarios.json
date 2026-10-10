@@ -330,10 +330,15 @@
       "name": "you server mcp",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.server.stop",

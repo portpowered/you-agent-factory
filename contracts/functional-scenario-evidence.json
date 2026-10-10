@@ -301,7 +301,8 @@
     {
       "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
       "stableIds": [
-        "cli/you.run"
+        "cli/you.run",
+        "cli/you.server.mcp"
       ]
     },
     {

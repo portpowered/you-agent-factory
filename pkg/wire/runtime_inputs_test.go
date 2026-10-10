@@ -277,9 +277,9 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 			selectedInput, selectedOutput = in, out
 			return testStdioApplication{}, nil
 		},
-		func(projectRoot, serverURL string, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
-			selectedRoot = projectRoot
-			selectedHost = serverURL
+		func(intent processcontract.MCPIntent, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
+			selectedRoot = intent.ProjectRoot
+			selectedHost = intent.ServerURL
 			if bound != sessions {
 				t.Fatalf("MCP root = %T, want process root", bound)
 			}
