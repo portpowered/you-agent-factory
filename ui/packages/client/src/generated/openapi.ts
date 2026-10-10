@@ -11661,6 +11661,8 @@ export const WorkStateChangeSource = {
   WorkStateChangeSourceCLI: "cli",
   // Automatic cascade propagation after a dependency failure.
   WorkStateChangeSourceCascadingFailure: "cascading-failure",
+  // Automatic Work relocation after a dispatch result is applied.
+  WorkStateChangeSourceDispatch: "dispatch",
 } as const;
 export type WorkStateChangeSource =
   (typeof WorkStateChangeSource)[keyof typeof WorkStateChangeSource];

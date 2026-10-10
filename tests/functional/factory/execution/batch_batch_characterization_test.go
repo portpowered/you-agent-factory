@@ -38,12 +38,14 @@ var btrcBatchEventOrder = []interfaces.FactoryEventType{
 	interfaces.FactoryEventTypeModelResponse,
 	interfaces.FactoryEventTypeAgentRunResponse,
 	interfaces.FactoryEventTypeDispatchResponse,
+	interfaces.FactoryEventTypeWorkStateChange,
 	interfaces.FactoryEventTypeDispatchRequest,
 	interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
 	interfaces.FactoryEventTypeModelRequest,
 	interfaces.FactoryEventTypeModelResponse,
 	interfaces.FactoryEventTypeAgentRunResponse,
 	interfaces.FactoryEventTypeDispatchResponse,
+	interfaces.FactoryEventTypeWorkStateChange,
 	interfaces.FactoryEventTypeFactoryStateResponse,
 	interfaces.FactoryEventTypeRunResponse,
 	interfaces.FactoryEventTypeSessionResultUpdated,
@@ -148,6 +150,7 @@ func runBTRCBatch(
 
 func assertBTRCBatchEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 	t.Helper()
+	assertBTRCDispatchRelocations(t, events, 2)
 	got := make([]interfaces.FactoryEventType, len(events))
 	for index, event := range events {
 		got[index] = event.Type
@@ -168,6 +171,54 @@ func assertBTRCBatchEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 				t.Fatalf("%s session id = %q, want ~default", event.Type, got)
 			}
 		}
+	}
+}
+
+// A result and a relocation are distinct canonical facts: the result owns
+// output/correlation, and the following relocation owns the accepted state.
+func assertBTRCDispatchRelocations(t *testing.T, events []interfaces.FactoryEvent, want int) {
+	t.Helper()
+	count := 0
+	for index, event := range events {
+		if event.Type != interfaces.FactoryEventTypeWorkStateChange {
+			continue
+		}
+		var change interfaces.WorkStateChangeEventPayload
+		if err := event.DecodePayload(&change); err != nil {
+			t.Fatal(err)
+		}
+		assertBTRCDispatchRelocationPayload(t, event, change)
+		assertBTRCDispatchRelocationResult(t, events, index, change)
+		count++
+	}
+	if count != want {
+		t.Fatalf("dispatch relocations=%d, want %d", count, want)
+	}
+}
+
+func assertBTRCDispatchRelocationPayload(t *testing.T, event interfaces.FactoryEvent, change interfaces.WorkStateChangeEventPayload) {
+	t.Helper()
+	if change.Source != work.WorkStateChangeSourceDispatch || change.FromState != "init" ||
+		change.WorkTypeName != "task" || change.FromPlaceID != "task:init" ||
+		change.ToPlaceID != "task:"+change.ToState || change.TriggerWorkID != nil ||
+		!reflect.DeepEqual(btrcStringSliceValue(event.Context.WorkIDs), []string{change.WorkID}) {
+		t.Fatalf("unexpected dispatch relocation: %#v context=%#v", change, event.Context)
+	}
+}
+
+func assertBTRCDispatchRelocationResult(t *testing.T, events []interfaces.FactoryEvent, index int, change interfaces.WorkStateChangeEventPayload) {
+	t.Helper()
+	if index == 0 || events[index-1].Type != interfaces.FactoryEventTypeDispatchResponse {
+		t.Fatal("dispatch relocation must follow its result")
+	}
+	var result workerexecution.DispatchResponseEventPayload
+	if err := events[index-1].DecodePayload(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.OutputWork == nil || len(*result.OutputWork) != 1 ||
+		(*result.OutputWork)[0].WorkID != change.WorkID || (*result.OutputWork)[0].State == nil ||
+		(*result.OutputWork)[0].State.Name != change.ToState {
+		t.Fatalf("relocation does not match dispatch output: change=%#v result=%#v", change, result)
 	}
 }
 

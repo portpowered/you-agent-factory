@@ -228,20 +228,43 @@ func readBoardRestoreStates(t *testing.T, url string) map[string]boardRestoreWor
 func assertBoardRestoreFailureFacts(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	responses, cascades := 0, 0
+	relocations := map[string]string{}
+	results := map[string]string{}
 	for _, event := range events {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeDispatchResponse:
 			responses++
 			assertBoardRestoreStartFailedFact(t, event)
+			payload, _ := event.Payload.AsDispatchResponseEventPayload()
+			for _, item := range *payload.OutputWork {
+				results[*item.WorkId] = item.State.Name
+			}
 		case factoryapi.FactoryEventTypeDispatchInterrupted:
 			t.Fatal("terminal start failure was left open for restart reconciliation")
 		case factoryapi.FactoryEventTypeWorkStateChange:
+			payload, err := event.Payload.AsWorkStateChangeEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if payload.Source == factoryapi.WorkStateChangeSourceDispatch {
+				if results[payload.WorkId] != payload.ToState || relocations[payload.WorkId] != "" ||
+					payload.FromState == payload.ToState || payload.FromPlaceId == payload.ToPlaceId ||
+					payload.TriggerWorkId != nil || event.Context.WorkIds == nil ||
+					!reflect.DeepEqual(*event.Context.WorkIds, []string{payload.WorkId}) {
+					t.Fatalf("dispatch relocation lost identity/state/result order: %#v", payload)
+				}
+				relocations[payload.WorkId] = payload.ToState
+				continue
+			}
 			assertBoardRestoreCascadeFact(t, event)
 			cascades++
 		}
 	}
 	if responses != 2 || cascades != 1 {
 		t.Fatalf("responses/cascades=%d/%d, want 2/1", responses, cascades)
+	}
+	if !reflect.DeepEqual(relocations, map[string]string{"idea-1": "failed", "task-1": "escalated", "review-1": "fin"}) {
+		t.Fatalf("dispatch relocations=%v, want all three failed outputs", relocations)
 	}
 }
 

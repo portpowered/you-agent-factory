@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,47 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestDispatchRelocationsUseAcceptedWorkIdentityAndTopology(t *testing.T) {
+	net := &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init": {TypeID: "task", State: "init"}, "task:done": {TypeID: "task", State: "done"},
+			"resource:free": {TypeID: "resource", State: "free"},
+		},
+		WorkTypes: map[string]*state.WorkType{"task": {Name: "Task"}},
+	}
+	input := factorytoken.Token{ID: "input", PlaceID: "task:init", Color: factorytoken.Color{
+		WorkID: "owned", WorkTypeID: "task", DataType: factorytoken.DataTypeWork,
+	}}
+	tr := &TransitionerSubsystem{netDefinition: net}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{"input": &input}}}
+	for _, test := range []struct {
+		name     string
+		mutation interfaces.MarkingMutation
+		want     bool
+	}{
+		{"replacement", interfaces.MarkingMutation{Type: interfaces.MutationCreate, ToPlace: "task:done", NewToken: workerTokenPointer(&input)}, true},
+		{"move", interfaces.MarkingMutation{Type: interfaces.MutationMove, TokenID: "input", ToPlace: "task:done"}, true},
+		{"same state requeue", interfaces.MarkingMutation{Type: interfaces.MutationCreate, ToPlace: "task:init", NewToken: workerTokenPointer(&input)}, false},
+		{"new Work", interfaces.MarkingMutation{Type: interfaces.MutationCreate, ToPlace: "task:done", NewToken: &workerexecution.Token{Color: workerexecution.Color{WorkID: "new", WorkTypeID: "task"}}}, false},
+		{"resource", interfaces.MarkingMutation{Type: interfaces.MutationCreate, ToPlace: "resource:free", NewToken: workerTokenPointer(&input)}, false},
+		{"consume", interfaces.MarkingMutation{Type: interfaces.MutationConsume, TokenID: "input"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			changes := tr.dispatchStateChanges(snapshot, []factorytoken.Token{input}, []interfaces.MarkingMutation{test.mutation})
+			if !test.want {
+				if len(changes) != 0 {
+					t.Fatalf("invented relocation: %+v", changes)
+				}
+				return
+			}
+			want := []work.WorkStateChangeRecord{{WorkID: "owned", WorkTypeID: "task", WorkTypeName: "Task", FromState: "init", ToState: "done", Source: work.WorkStateChangeSourceDispatch}}
+			if !reflect.DeepEqual(changes, want) {
+				t.Fatalf("relocations=%+v want=%+v", changes, want)
+			}
+		})
+	}
+}
 
 func TestCalculateArcs(t *testing.T) {
 	transition := &petri.Transition{

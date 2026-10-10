@@ -349,7 +349,10 @@ func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factory
 			effectiveEventHistory.RecordWorkstationResponse(tick, result, completed)
 		},
 		func(tick int, change work.WorkStateChangeRecord) {
-			if cfg.skipRestoredDispatchReconciliation {
+			// Replay reconstructs dispatch routing from recorded results. Its
+			// accepted relocations still need their canonical observation; only
+			// regenerated cascade/operator facts are suppressed during replay.
+			if cfg.skipRestoredDispatchReconciliation && change.Source != work.WorkStateChangeSourceDispatch {
 				return
 			}
 			change.SessionID = sessionIDFromFactoryConfig(cfg)

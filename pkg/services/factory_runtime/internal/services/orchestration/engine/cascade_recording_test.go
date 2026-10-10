@@ -31,6 +31,11 @@ func TestCascadeRecordsOnlyAppliedMove(t *testing.T) {
 				if tick != 1 || e.runtimeState.Marking.Tokens["tok-task-1"].PlaceID != destination {
 					t.Fatal("recording preceded applied mutation")
 				}
+				// Readers must still see the preceding complete boundary until
+				// the canonical event for this relocation has been recorded.
+				if publishedTick := e.GetRuntimeStateSnapshot().TickCount; publishedTick != 0 {
+					t.Fatalf("published tick during recording = %d, want preceding tick 0", publishedTick)
+				}
 				records = append(records, change)
 			}
 			if _, err := submitWorkRequests(t.Context(), e, []work.SubmitRequest{{WorkID: "child", WorkTypeID: "task"}}); err != nil {
@@ -45,6 +50,9 @@ func TestCascadeRecordsOnlyAppliedMove(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatal(err)
+			}
+			if place := e.GetRuntimeStateSnapshot().Marking.Tokens["tok-task-1"].PlaceID; place != destination {
+				t.Fatalf("published place after recording = %q, want %q", place, destination)
 			}
 			if err := e.Tick(t.Context()); err != nil {
 				t.Fatal(err)

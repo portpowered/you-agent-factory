@@ -10252,14 +10252,17 @@ components:
         - WorkStateChangeSourceAPI
         - WorkStateChangeSourceCLI
         - WorkStateChangeSourceCascadingFailure
+        - WorkStateChangeSourceDispatch
       enum:
         - api
         - cli
         - cascading-failure
+        - dispatch
       x-enum-descriptions:
         - Operator move through the HTTP API.
         - Operator move through the CLI.
         - Automatic cascade propagation after a dependency failure.
+        - Automatic Work relocation after a dispatch result is applied.
     DispatchConsumedWorkRef:
       type: object
       additionalProperties: false
