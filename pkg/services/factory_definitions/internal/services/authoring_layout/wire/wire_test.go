@@ -13,9 +13,9 @@ import (
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
-func completeDependencies() authoringlayout.Dependencies {
+func completeDependencies() testPorts {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	return authoringlayout.Dependencies{
+	return testPorts{
 		Validator: factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, nil
 		}),
@@ -58,67 +58,67 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 	complete := completeDependencies()
 	requiredFields := []struct {
 		name   string
-		mutate func(*authoringlayout.Dependencies)
+		mutate func(*testPorts)
 		want   string
 	}{
 		{
 			name:   "validator",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Validator = nil },
+			mutate: func(deps *testPorts) { deps.Validator = nil },
 			want:   "validator is required",
 		},
 		{
 			name:   "payload mapper",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.MapInput = nil },
+			mutate: func(deps *testPorts) { deps.MapInput = nil },
 			want:   "payload mapper is required",
 		},
 		{
 			name:   "factory decoder",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.DecodeFactory = nil },
+			mutate: func(deps *testPorts) { deps.DecodeFactory = nil },
 			want:   "factory decoder is required",
 		},
 		{
 			name:   "authored normalizer",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.NormalizeAuthored = nil },
+			mutate: func(deps *testPorts) { deps.NormalizeAuthored = nil },
 			want:   "authored normalizer is required",
 		},
 		{
 			name:   "factory encoder",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.EncodeFactory = nil },
+			mutate: func(deps *testPorts) { deps.EncodeFactory = nil },
 			want:   "factory encoder is required",
 		},
 		{
 			name:   "layout writer",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Write = nil },
+			mutate: func(deps *testPorts) { deps.Write = nil },
 			want:   "layout writer is required",
 		},
 		{
 			name:   "layout validator",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Validate = nil },
+			mutate: func(deps *testPorts) { deps.Validate = nil },
 			want:   "layout validator is required",
 		},
 		{
 			name:   "layout flattener",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Flatten = nil },
+			mutate: func(deps *testPorts) { deps.Flatten = nil },
 			want:   "layout flattener is required",
 		},
 		{
 			name:   "layout expander",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Expand = nil },
+			mutate: func(deps *testPorts) { deps.Expand = nil },
 			want:   "layout expander is required",
 		},
 		{
 			name:   "persistence filesystem",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.FileSystem = nil },
+			mutate: func(deps *testPorts) { deps.FileSystem = nil },
 			want:   "persistence filesystem is required",
 		},
 		{
 			name:   "definition directory validator",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.RequireDefinitionDir = nil },
+			mutate: func(deps *testPorts) { deps.RequireDefinitionDir = nil },
 			want:   "definition directory validator is required",
 		},
 		{
 			name:   "directory replacement store",
-			mutate: func(deps *authoringlayout.Dependencies) { deps.Directories = nil },
+			mutate: func(deps *testPorts) { deps.Directories = nil },
 			want:   "directory replacement store is required",
 		},
 	}
@@ -129,14 +129,14 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 			t.Parallel()
 			deps := complete
 			tc.mutate(&deps)
-			svc, err := authoringlayoutwire.NewService(deps)
+			svc, err := authoringlayoutwire.NewService(deps.Validator, deps.MapInput, deps.DecodeFactory, deps.NormalizeAuthored, deps.EncodeFactory, deps.Write, deps.Validate, deps.Flatten, deps.Expand, deps.FileSystem, deps.RequireDefinitionDir, deps.Directories)
 			if err == nil || svc != nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("NewService(%s) = %#v, %v; want error containing %q", tc.name, svc, err, tc.want)
 			}
 		})
 	}
 
-	svc, err := authoringlayoutwire.NewService(complete)
+	svc, err := authoringlayoutwire.NewService(complete.Validator, complete.MapInput, complete.DecodeFactory, complete.NormalizeAuthored, complete.EncodeFactory, complete.Write, complete.Validate, complete.Flatten, complete.Expand, complete.FileSystem, complete.RequireDefinitionDir, complete.Directories)
 	if err != nil {
 		t.Fatalf("NewService with exact injected ports: %v", err)
 	}
@@ -144,4 +144,19 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 		t.Fatal("NewService returned nil service")
 	}
 	var _ authoringlayout.Service = svc
+}
+
+type testPorts struct {
+	Validator            factorydefinitions.Validator
+	MapInput             factorydefinitions.FactoryLayoutPayloadMapper
+	DecodeFactory        factorydefinitions.FactoryConfigJSONDecoder
+	NormalizeAuthored    func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
+	EncodeFactory        func(*factorydefinitions.FactoryConfig) ([]byte, error)
+	Write                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error
+	Validate             func(string) error
+	Flatten              factorydefinitions.FactoryLayoutFlattener
+	Expand               factorydefinitions.FactoryLayoutExpander
+	FileSystem           factorydefinitions.PersistenceFileSystem
+	RequireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
+	Directories          factorydefinitions.DirectoryReplacementStore
 }

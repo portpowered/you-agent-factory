@@ -259,12 +259,12 @@ func ComposeDistributionService(
 			},
 		}
 	}
-	service, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:             packagedCatalog,
-		PackagedInstaller:           packagedInstaller,
-		ScaffoldInitializer:         scaffoldInitializer,
-		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
-	})
+	service, err := distributionwire.NewService(
+		packagedCatalog,
+		packagedInstaller,
+		scaffoldInitializer,
+		scaffoldFactoryNameResolver,
+	)
 	if err != nil {
 		return nil
 	}

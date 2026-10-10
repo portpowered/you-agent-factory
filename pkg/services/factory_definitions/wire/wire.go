@@ -183,14 +183,14 @@ func composeFactoryDefinitionSupport(
 ) {
 	preparePortableFactoryConfig := PortableFactoryConfigPreparer(applySupportedFiles, applyStarterWork)
 	captureFactorySnapshot := FactorySnapshotCapturer()
-	snapshotsPortability, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             loader.LoadSourceFromCanonicalJSON,
-		CaptureLoaded:             LoadedFactorySnapshotCapturer(),
-		PreparePortable:           preparePortableFactoryConfig,
-		DecodeSnapshot:            FactorySnapshotJSONDecoder(),
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(portableFileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
-	})
+	snapshotsPortability, err := snapshotsportabilitywire.NewService(
+		loader.LoadSourceFromCanonicalJSON,
+		LoadedFactorySnapshotCapturer(),
+		preparePortableFactoryConfig,
+		FactorySnapshotJSONDecoder(),
+		snapshotsportabilitymaterialize.NewMaterializer(portableFileSystem),
+		snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
+	)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

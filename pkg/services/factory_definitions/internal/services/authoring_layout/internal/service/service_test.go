@@ -18,7 +18,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
-	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
+	authoringlayoutservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/service"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
@@ -48,26 +48,26 @@ func newAuthoringLayoutService(t *testing.T) authoringlayout.Service {
 	t.Helper()
 
 	mapper := factorymapping.NewFactoryConfigMapper()
-	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator: factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON),
-		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
+	svc := authoringlayoutservice.New(
+		factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON),
+		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
-		DecodeFactory:     mapper.Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     mapper.Flatten,
-		Write:             func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
-		Validate:          func(string) error { return nil },
-		Flatten:           func(path string) ([]byte, error) { return []byte("flattened:" + path), nil },
-		Expand: func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
+		mapper.Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		mapper.Flatten,
+		func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
+		func(string) error { return nil },
+		func(path string) ([]byte, error) { return []byte("flattened:" + path), nil },
+		func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
 			return path + "-expanded", factorydefinitions.LayoutExpansionReport{FactoryConfigPaths: 1}, nil
 		},
-		FileSystem:           stubPersistenceFileSystem{},
-		RequireDefinitionDir: func(string) error { return nil },
-		Directories:          stubDirectoryReplacementStore{},
-	})
-	if err != nil {
-		t.Fatalf("construct authoring_layout: %v", err)
+		stubPersistenceFileSystem{},
+		func(string) error { return nil },
+		stubDirectoryReplacementStore{},
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }
@@ -335,26 +335,26 @@ func newAuthoringLayoutServiceFromComposition(
 	validateWrites := func(targetDir string, config *factorydefinitions.FactoryConfig) error {
 		return internalportableconfig.ValidateWrites(fileSystem, targetDir, config)
 	}
-	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:         validator,
-		MapInput:          composition.MapFactoryJSONForPersistence,
-		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
-		Write: func(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload, sourcePath string) error {
+	svc := authoringlayoutservice.New(
+		validator,
+		composition.MapFactoryJSONForPersistence,
+		factorymapping.NewFactoryConfigMapper().Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		factorymapping.MarshalCanonicalFactoryConfig,
+		func(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload, sourcePath string) error {
 			return writer.WritePrepared(targetDir, prepared, sourcePath, materializeFiles, pruneRemovedDocs)
 		},
-		Validate: func(targetDir string) error {
+		func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},
-		Flatten:              composition.FactoryLayoutFlattener(),
-		Expand:               persistence.ExpandFactoryLayout,
-		FileSystem:           fileSystem,
-		RequireDefinitionDir: composition.NamedPaths().RequireDefinitionDir,
-		Directories:          directoryreplace.Local{},
-	})
-	if err != nil {
-		t.Fatalf("construct authoring_layout from composition: %v", err)
+		composition.FactoryLayoutFlattener(),
+		persistence.ExpandFactoryLayout,
+		fileSystem,
+		composition.NamedPaths().RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }
@@ -596,24 +596,24 @@ func newAuthoringLayoutServiceWithCorruptingWrite(
 		}
 		return os.WriteFile(brokenAgentsPath, []byte("---\ntype: [\n"), 0o644)
 	}
-	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:         validator,
-		MapInput:          composition.MapFactoryJSONForPersistence,
-		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
-		Write:             writePrepared,
-		Validate: func(targetDir string) error {
+	svc := authoringlayoutservice.New(
+		validator,
+		composition.MapFactoryJSONForPersistence,
+		factorymapping.NewFactoryConfigMapper().Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		factorymapping.MarshalCanonicalFactoryConfig,
+		writePrepared,
+		func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},
-		Flatten:              composition.FactoryLayoutFlattener(),
-		Expand:               persistence.ExpandFactoryLayout,
-		FileSystem:           fileSystem,
-		RequireDefinitionDir: composition.NamedPaths().RequireDefinitionDir,
-		Directories:          directoryreplace.Local{},
-	})
-	if err != nil {
-		t.Fatalf("construct corrupting authoring_layout: %v", err)
+		composition.FactoryLayoutFlattener(),
+		persistence.ExpandFactoryLayout,
+		fileSystem,
+		composition.NamedPaths().RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }

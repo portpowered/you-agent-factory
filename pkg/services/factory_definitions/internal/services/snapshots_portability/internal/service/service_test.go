@@ -12,8 +12,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotsportabilityservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
-	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
@@ -66,16 +66,16 @@ func newSnapshotService(
 ) snapshotsportability.Service {
 	t.Helper()
 	fileSystem := platformfilesystem.Local{}
-	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             stubLoadCanonical,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(snapshotObjectMapper),
-		PreparePortable:           stubPreparePortable,
-		DecodeSnapshot:            decode,
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
-	})
-	if err != nil {
-		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
+	svc := snapshotsportabilityservice.New(
+		stubLoadCanonical,
+		snapshotsportabilitycapture.NewLoaded(snapshotObjectMapper),
+		stubPreparePortable,
+		decode,
+		snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
+		snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }
@@ -111,16 +111,16 @@ func fullSnapshotObjectMapper(factory *factorydefinitions.FactoryConfig) (map[st
 func newRoundTripService(t *testing.T) snapshotsportability.Service {
 	t.Helper()
 	fileSystem := platformfilesystem.Local{}
-	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             stubLoadCanonical,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(fullSnapshotObjectMapper),
-		PreparePortable:           stubPreparePortable,
-		DecodeSnapshot:            stubDecodeSnapshot,
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
-	})
-	if err != nil {
-		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
+	svc := snapshotsportabilityservice.New(
+		stubLoadCanonical,
+		snapshotsportabilitycapture.NewLoaded(fullSnapshotObjectMapper),
+		stubPreparePortable,
+		stubDecodeSnapshot,
+		snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
+		snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }

@@ -18,10 +18,10 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	distributionserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/service"
 	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
-	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
@@ -49,9 +49,9 @@ func TestDistributionListsAndResolvesBuiltInPackagedFactories(t *testing.T) {
 		t.Fatalf("New catalog: %v", err)
 	}
 
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog: catalog,
-		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := distributionserviceimpl.New(
+		catalog,
+		factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -59,11 +59,11 @@ func TestDistributionListsAndResolvesBuiltInPackagedFactories(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
-		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
+		func(factorydefinitions.ScaffoldConfig) error { return nil },
+		scaffoldNameResolver("factory"),
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 
 	listed, err := svc.ListBuiltInPackagedFactories(
@@ -110,9 +110,9 @@ func TestDistributionResolveUnknownOrBlankNameFailsClosed(t *testing.T) {
 		t.Fatalf("New catalog: %v", err)
 	}
 
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog: catalog,
-		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
+	svc := distributionserviceimpl.New(
+		catalog,
+		factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(
 				context.Context,
 				factorydefinitions.PackagedFactoryInstallParams,
@@ -120,11 +120,11 @@ func TestDistributionResolveUnknownOrBlankNameFailsClosed(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
-		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
+		func(factorydefinitions.ScaffoldConfig) error { return nil },
+		scaffoldNameResolver("factory"),
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 
 	_, unknownErr := svc.ResolveBuiltInPackagedFactory(
@@ -634,14 +634,14 @@ func newDistributionServiceWithScaffold(
 	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
 	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
 ) distributionservice.Service {
-	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:             catalog,
-		PackagedInstaller:           installer,
-		ScaffoldInitializer:         scaffoldInitializer,
-		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
+	svc := distributionserviceimpl.New(
+		catalog,
+		installer,
+		scaffoldInitializer,
+		scaffoldFactoryNameResolver,
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }

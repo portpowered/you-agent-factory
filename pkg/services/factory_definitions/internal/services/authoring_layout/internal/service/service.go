@@ -35,37 +35,50 @@ type Service struct {
 var _ authoringlayout.Service = (*Service)(nil)
 
 // New constructs the authoring_layout implementation from exact injected ports.
-func New(deps authoringlayout.Dependencies) *Service {
-	if deps.FileSystem == nil || deps.RequireDefinitionDir == nil {
+func New(
+	validator factorydefinitions.Validator,
+	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
+	decodeFactory factorydefinitions.FactoryConfigJSONDecoder,
+	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
+	encodeFactory func(*factorydefinitions.FactoryConfig) ([]byte, error),
+	write func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error,
+	validate func(string) error,
+	flatten factorydefinitions.FactoryLayoutFlattener,
+	expand factorydefinitions.FactoryLayoutExpander,
+	fileSystem factorydefinitions.PersistenceFileSystem,
+	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
+	directories factorydefinitions.DirectoryReplacementStore,
+) *Service {
+	if fileSystem == nil || requireDefinitionDir == nil {
 		return nil
 	}
-	if deps.Validator == nil ||
-		deps.MapInput == nil ||
-		deps.DecodeFactory == nil ||
-		deps.NormalizeAuthored == nil ||
-		deps.EncodeFactory == nil ||
-		deps.Write == nil ||
-		deps.Validate == nil ||
-		deps.Flatten == nil ||
-		deps.Expand == nil ||
-		deps.Directories == nil {
+	if validator == nil ||
+		mapInput == nil ||
+		decodeFactory == nil ||
+		normalizeAuthored == nil ||
+		encodeFactory == nil ||
+		write == nil ||
+		validate == nil ||
+		flatten == nil ||
+		expand == nil ||
+		directories == nil {
 		return nil
 	}
-	validateDefinition, _ := any(deps.Validator).(factorydefinitions.DefinitionValidationOperation)
+	validateDefinition, _ := any(validator).(factorydefinitions.DefinitionValidationOperation)
 	return &Service{
-		validator:            deps.Validator,
+		validator:            validator,
 		validateDefinition:   validateDefinition,
-		mapInput:             deps.MapInput,
-		decodeFactory:        deps.DecodeFactory,
-		normalizeAuthored:    deps.NormalizeAuthored,
-		encodeFactory:        deps.EncodeFactory,
-		write:                deps.Write,
-		validate:             deps.Validate,
-		flatten:              deps.Flatten,
-		expand:               deps.Expand,
-		fileSystem:           deps.FileSystem,
-		requireDefinitionDir: deps.RequireDefinitionDir,
-		directories:          deps.Directories,
+		mapInput:             mapInput,
+		decodeFactory:        decodeFactory,
+		normalizeAuthored:    normalizeAuthored,
+		encodeFactory:        encodeFactory,
+		write:                write,
+		validate:             validate,
+		flatten:              flatten,
+		expand:               expand,
+		fileSystem:           fileSystem,
+		requireDefinitionDir: requireDefinitionDir,
+		directories:          directories,
 	}
 }
 

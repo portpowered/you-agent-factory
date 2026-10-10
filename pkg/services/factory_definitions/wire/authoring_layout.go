@@ -44,13 +44,13 @@ func NewAuthoringLayoutService(
 		deps.AuthoredWriterFS,
 		deps.EnsureInbox,
 	)
-	return authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:         deps.Validator,
-		MapInput:          deps.MapInput,
-		DecodeFactory:     mapper.Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     mapper.Flatten,
-		Write: func(
+	return authoringlayoutwire.NewService(
+		deps.Validator,
+		deps.MapInput,
+		mapper.Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		mapper.Flatten,
+		func(
 			targetDir string,
 			prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 			sourcePath string,
@@ -63,15 +63,15 @@ func NewAuthoringLayoutService(
 				deps.PruneRemovedDocs,
 			)
 		},
-		Validate: func(targetDir string) error {
+		func(targetDir string) error {
 			return deps.Loader.ValidateFactoryDirReadOnly(
 				targetDir,
 				nil,
 				deps.ValidateWrites,
 			)
 		},
-		Flatten: deps.Loader.FlattenFactoryConfig,
-		Expand: func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
+		deps.Loader.FlattenFactoryConfig,
+		func(path string) (string, factorydefinitions.LayoutExpansionReport, error) {
 			targetDir, sourceDir, sourcePath, factoryConfig, canonical, err :=
 				deps.Loader.PrepareFactoryLayoutExpansion(path)
 			if err != nil {
@@ -89,10 +89,10 @@ func NewAuthoringLayoutService(
 			)
 			return targetDir, report, err
 		},
-		FileSystem:           deps.PersistenceFS,
-		RequireDefinitionDir: deps.NamedPaths.RequireDefinitionDir,
-		Directories:          deps.Directories,
-	})
+		deps.PersistenceFS,
+		deps.NamedPaths.RequireDefinitionDir,
+		deps.Directories,
+	)
 }
 
 // AuthoredFactorySourceLoader supplies the Factory Definitions-owned authored

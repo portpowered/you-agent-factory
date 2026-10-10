@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
-	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
@@ -514,22 +513,22 @@ func newRootAuthoringServiceWithCorruptingWriteForPeer(t *testing.T) factoryroot
 		}
 		return os.WriteFile(brokenAgentsPath, []byte("---\ntype: [\n"), 0o644)
 	}
-	authoringLayout, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:         validator,
-		MapInput:          composition.MapFactoryJSONForPersistence,
-		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
-		Write:             writePrepared,
-		Validate: func(targetDir string) error {
+	authoringLayout, err := authoringlayoutwire.NewService(
+		validator,
+		composition.MapFactoryJSONForPersistence,
+		factorymapping.NewFactoryConfigMapper().Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		factorymapping.MarshalCanonicalFactoryConfig,
+		writePrepared,
+		func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},
-		Flatten:              composition.FactoryLayoutFlattener(),
-		Expand:               persistence.ExpandFactoryLayout,
-		FileSystem:           fileSystem,
-		RequireDefinitionDir: paths.RequireDefinitionDir,
-		Directories:          directoryreplace.Local{},
-	})
+		composition.FactoryLayoutFlattener(),
+		persistence.ExpandFactoryLayout,
+		fileSystem,
+		paths.RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
 	if err != nil {
 		t.Fatalf("authoringlayoutwire.NewService: %v", err)
 	}
