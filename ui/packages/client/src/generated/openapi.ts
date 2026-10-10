@@ -4431,6 +4431,11 @@ export interface components {
       encryptedContent?: string;
     };
     ProviderSessionTokenUsage: {
+      /**
+       * @description Configured mock counters. Absence makes no origin claim.
+       * @enum {string}
+       */
+      origin?: ProviderSessionTokenUsageOrigin;
       inputTokens?: number;
       cachedInputTokens?: number;
       cacheWriteTokens?: number;
@@ -5712,6 +5717,11 @@ export interface components {
     };
     /** @description Token or model usage accounting payload. */
     FactoryResponseEventUsagePayload: {
+      /**
+       * @description Configured mock counters. Absence makes no origin claim.
+       * @enum {string}
+       */
+      origin?: FactoryResponseEventUsagePayloadOrigin;
       /**
        * Format: int64
        * @description Reported input token count when available.
@@ -11496,6 +11506,11 @@ export const LoadableProviderSessionKind = {
 } as const;
 export type LoadableProviderSessionKind =
   (typeof LoadableProviderSessionKind)[keyof typeof LoadableProviderSessionKind];
+export const ProviderSessionTokenUsageOrigin = {
+  SYNTHETIC: "SYNTHETIC",
+} as const;
+export type ProviderSessionTokenUsageOrigin =
+  (typeof ProviderSessionTokenUsageOrigin)[keyof typeof ProviderSessionTokenUsageOrigin];
 export const ProviderSessionTranscriptEntryType = {
   user_message: "user_message",
   assistant_message: "assistant_message",
@@ -11910,6 +11925,11 @@ export const FactoryResponseEventSessionPayloadAttemptReason = {
 } as const;
 export type FactoryResponseEventSessionPayloadAttemptReason =
   (typeof FactoryResponseEventSessionPayloadAttemptReason)[keyof typeof FactoryResponseEventSessionPayloadAttemptReason];
+export const FactoryResponseEventUsagePayloadOrigin = {
+  SYNTHETIC: "SYNTHETIC",
+} as const;
+export type FactoryResponseEventUsagePayloadOrigin =
+  (typeof FactoryResponseEventUsagePayloadOrigin)[keyof typeof FactoryResponseEventUsagePayloadOrigin];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",

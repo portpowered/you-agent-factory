@@ -149,7 +149,8 @@ func (s *service) executeWithTerminalPublication(
 	identity := progressIdentityForRequest(request)
 	provider := providerIDForRequest(request).String()
 	resumeReference := continuationSessionRef(request)
-	result, attemptErr := s.executeProviderAttempt(ctx, request, identity)
+	var captured providers.ExecuteDiagnostics
+	result, attemptErr := s.executeProviderAttempt(ctx, request, identity, &captured)
 	result = result.Clone()
 	response := runnerResult(result, providerIDForRequest(request))
 	response = preserveContinuation(response, request, resumeReference)
@@ -164,7 +165,7 @@ func (s *service) executeWithTerminalPublication(
 	if resultErr == nil && hasAgentCandidate(result) &&
 		(attemptErr == nil || usableAgentResult(response, request)) {
 		response.Diagnostics = mergeSuppressedAttemptDiagnostics(response.Diagnostics, attemptErr)
-		s.publishProgress(identity, result, response.Continuation, provider)
+		s.publishProgress(identity, result, response.Continuation, provider, &captured)
 		if hasTerminalRunProgress(result.Diagnostics) {
 			// Native provider lifecycle progress is already the authoritative
 			// terminal observation. Close the callback edge without adding a
@@ -777,7 +778,14 @@ func (s *service) publishProgress(
 	result providers.ExecuteResult,
 	continuation *workers.ProviderContinuationRef,
 	provider string,
+	captured ...*providers.ExecuteDiagnostics,
 ) {
+	// Live capture was sanitized for declared secrets, whereas diagnostics
+	// deliberately also hide prompts. Use the captured facts for publication
+	// without changing the diagnostics returned to the caller.
+	if len(captured) > 0 && captured[0] != nil && len(captured[0].Progress) > 0 {
+		result.Diagnostics = captured[0]
+	}
 	var terminalMessages []providers.ExecuteProgress
 	// Live progress has already crossed the observer, while terminal facts
 	// were buffered there until the runner can publish its final outcome.
@@ -881,17 +889,26 @@ func (s *service) executeProviderAttempt(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
 	identity progressIdentity,
+	captured *providers.ExecuteDiagnostics,
 ) (providers.ExecuteResult, error) {
 	attempt := providerRequest(request)
 	// Both observers share one holder so live progress can be attributed to
 	// the same provider-authored session the association fragment committed.
 	live := &liveProviderSession{}
 	attempt.SessionObserver = s.observeProviderSession(identity, live)
-	attempt.ProgressObserver = s.observeProviderProgress(
+	observer := s.observeProviderProgress(
 		identity,
 		live,
 		providerIDForRequest(request).String(),
 	)
+	var captureMu sync.Mutex
+	attempt.ProgressObserver = func(progress providers.ExecuteProgress) {
+		captureMu.Lock()
+		captured.Progress = append(captured.Progress, progress)
+		captured.ProgressAlreadyObserved = true
+		captureMu.Unlock()
+		observer(progress)
+	}
 	if request.Continuation != nil {
 		reference, err := request.Continuation.ToSessionRef()
 		if err != nil {

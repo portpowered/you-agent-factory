@@ -342,7 +342,7 @@ func TestFileWriterCapturedUsageKeepsFrozenHeadAcrossRestart(t *testing.T) {
 		t.Fatalf("freeze prefix: %+v, %v", frozen, err)
 	}
 	persistUsageHeadRecords(t, writer, record, 4, []string{
-		`{"inputTokens":0,"totalTokens":0}`, `{"model":"latest"}`, `{"label":"working"}`,
+		`{"origin":"SYNTHETIC","inputTokens":0,"totalTokens":0}`, `{"model":"latest"}`, `{"label":"working"}`,
 	})
 	record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, record.WorkerSessionID), 7)
 	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
@@ -383,14 +383,14 @@ func assertCapturedUsageHead(t *testing.T, writer recordings.WorkerRecordingStor
 		if err != nil || page.Catalog.CommittedPosition != 3 || len(page.Records) != 1 || uint64(page.Records[0].Record.ID.Position) != position || page.TokenUsage == nil {
 			t.Fatalf("frozen page %d: %+v, %v", position, page, err)
 		}
-		if page.TokenUsage.TotalTokens != 12 || page.TokenUsage.Model != "first" || page.Terminal != nil {
+		if page.TokenUsage.TotalTokens != 12 || page.TokenUsage.Model != "first" || page.TokenUsage.Origin != "" || page.Terminal != nil {
 			t.Fatalf("later commit leaked into frozen usage: %+v", page)
 		}
 		page.TokenUsage.TotalTokens = 999
 		request.NextToken = page.NextToken
 	}
 	page, err := writer.ReadWorkerCapturedActivity(t.Context(), request)
-	if err != nil || page.Catalog.CommittedPosition != 7 || page.TokenUsage == nil || page.TokenUsage.Model != "latest" || page.TokenUsage.TotalTokens != 0 {
+	if err != nil || page.Catalog.CommittedPosition != 7 || page.TokenUsage == nil || page.TokenUsage.Origin != "SYNTHETIC" || page.TokenUsage.Model != "latest" || page.TokenUsage.TotalTokens != 0 {
 		t.Fatalf("refreshed usage lost model-only/zero update: %+v, %v", page, err)
 	}
 }

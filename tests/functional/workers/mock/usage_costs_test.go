@@ -51,6 +51,14 @@ func testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess(
 	assertMockUsageListOutput(t, listOutput, workerSessionID)
 	assertMockUsageObservation(t, observation, workerSessionID, session.id, workItem)
 	assertMockUsageCostOutput(t, costOutput)
+	logs := executeMockUsageCLI(t, fixture, factoryDir, "--json", "--server", fixture.server.URL(), "worker-sessions", "read", "--worker-session-id", workerSessionID, "--view", "logs")
+	if !strings.Contains(logs, `"origin":"SYNTHETIC"`) || !strings.Contains(logs, `"delivery":"SYNTHESIZED"`) {
+		t.Fatalf("captured mock usage lost public origin/delivery: %s", logs)
+	}
+	summary := executeMockUsageCLI(t, fixture, factoryDir, "--json", "--server", fixture.server.URL(), "worker-sessions", "show", "--worker-session-id", workerSessionID)
+	if !strings.Contains(summary, `"origin":"SYNTHETIC"`) {
+		t.Fatalf("CLI mock summary lost origin: %s", summary)
+	}
 
 	costJSON := executeMockUsageCLI(t, fixture, factoryDir,
 		"--json", "--server", fixture.server.URL(), "metrics", "costs", "--session", session.id)
@@ -149,6 +157,9 @@ func assertMockUsageObservation(
 		t.Fatalf("Worker Session observation = %#v, want correlated session/work/model/usage", observation)
 	}
 	usage := observation.TokenUsage
+	if usage.Origin == nil || *usage.Origin != factoryapi.ProviderSessionTokenUsageOriginSYNTHETIC {
+		t.Fatalf("mock usage origin = %+v", usage)
+	}
 	assertMockUsageObservationToken(t, usage.InputTokens, 1_000_000, "input")
 	assertMockUsageObservationToken(t, usage.CachedInputTokens, 400_000, "cached input")
 	assertMockUsageObservationToken(t, usage.OutputTokens, 500_000, "output")

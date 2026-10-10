@@ -508,6 +508,11 @@ const (
 	RETRY   FactoryResponseEventSessionPayloadAttemptReason = "RETRY"
 )
 
+// Defines values for FactoryResponseEventUsagePayloadOrigin.
+const (
+	FactoryResponseEventUsagePayloadOriginSYNTHETIC FactoryResponseEventUsagePayloadOrigin = "SYNTHETIC"
+)
+
 // Defines values for FactorySaveMode.
 const (
 	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
@@ -1199,6 +1204,11 @@ const (
 	ProviderModelCatalogPostureOperatorSelected  ProviderModelCatalogPosture = "operator_selected"
 	ProviderModelCatalogPostureRuntimeDiscovered ProviderModelCatalogPosture = "runtime_discovered"
 	ProviderModelCatalogPostureUnknown           ProviderModelCatalogPosture = "unknown"
+)
+
+// Defines values for ProviderSessionTokenUsageOrigin.
+const (
+	ProviderSessionTokenUsageOriginSYNTHETIC ProviderSessionTokenUsageOrigin = "SYNTHETIC"
 )
 
 // Defines values for ProviderSessionTranscriptEntryType.
@@ -3790,12 +3800,18 @@ type FactoryResponseEventUsagePayload struct {
 	// Model Model identifier associated with the usage report.
 	Model *string `json:"model,omitempty"`
 
+	// Origin Configured mock counters. Absence makes no origin claim.
+	Origin *FactoryResponseEventUsagePayloadOrigin `json:"origin,omitempty"`
+
 	// OutputTokens Reported output token count when available.
 	OutputTokens *int64 `json:"outputTokens,omitempty"`
 
 	// TotalTokens Reported total token count when available.
 	TotalTokens *int64 `json:"totalTokens,omitempty"`
 }
+
+// FactoryResponseEventUsagePayloadOrigin Configured mock counters. Absence makes no origin claim.
+type FactoryResponseEventUsagePayloadOrigin string
 
 // FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
 type FactorySaveMode string
@@ -7543,13 +7559,19 @@ type ProviderSessionSourceMetadata struct {
 
 // ProviderSessionTokenUsage defines model for ProviderSessionTokenUsage.
 type ProviderSessionTokenUsage struct {
-	CacheWriteTokens      *int `json:"cacheWriteTokens,omitempty"`
-	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
-	InputTokens           *int `json:"inputTokens,omitempty"`
-	OutputTokens          *int `json:"outputTokens,omitempty"`
-	ReasoningOutputTokens *int `json:"reasoningOutputTokens,omitempty"`
-	TotalTokens           *int `json:"totalTokens,omitempty"`
+	CacheWriteTokens  *int `json:"cacheWriteTokens,omitempty"`
+	CachedInputTokens *int `json:"cachedInputTokens,omitempty"`
+	InputTokens       *int `json:"inputTokens,omitempty"`
+
+	// Origin Configured mock counters. Absence makes no origin claim.
+	Origin                *ProviderSessionTokenUsageOrigin `json:"origin,omitempty"`
+	OutputTokens          *int                             `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens *int                             `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           *int                             `json:"totalTokens,omitempty"`
 }
+
+// ProviderSessionTokenUsageOrigin Configured mock counters. Absence makes no origin claim.
+type ProviderSessionTokenUsageOrigin string
 
 // ProviderSessionTranscriptEntry defines model for ProviderSessionTranscriptEntry.
 type ProviderSessionTranscriptEntry struct {

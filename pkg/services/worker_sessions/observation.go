@@ -546,6 +546,7 @@ func (a TranscriptAvailability) Valid() bool {
 // TokenUsage is the provider-neutral token projection used by Worker Session
 // observations. A nil field means the source did not report that component.
 type TokenUsage struct {
+	Origin                string
 	CacheWriteTokens      *int
 	CachedInputTokens     *int
 	InputTokens           *int

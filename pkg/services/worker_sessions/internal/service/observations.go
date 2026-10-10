@@ -665,6 +665,7 @@ func nonNegativeDuration(duration time.Duration) *time.Duration {
 }
 
 type usageProjectionPayload struct {
+	Origin                string `json:"origin"`
 	InputTokens           *int64 `json:"inputTokens"`
 	CachedInputTokens     *int64 `json:"cachedInputTokens"`
 	OutputTokens          *int64 `json:"outputTokens"`
@@ -704,6 +705,7 @@ func usageProjectionFromDraft(draft workers.Draft) (*workersessions.TokenUsage, 
 		return nil, "", false
 	}
 	return &workersessions.TokenUsage{
+		Origin:                payload.Origin,
 		InputTokens:           int64PointerToInt(payload.InputTokens),
 		CachedInputTokens:     int64PointerToInt(payload.CachedInputTokens),
 		OutputTokens:          int64PointerToInt(payload.OutputTokens),
