@@ -2721,7 +2721,6 @@
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig::TestMergeNilFactoryReturnsNoEffectiveDefinition",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig::TestMergeRequiresRuntimeDefinitions",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig::TestNormalizeCanonicalWorkstationRuntimeAppliesPublicDefaults",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire::TestNewService_HostEffectsComeOnlyFromInjectedPorts",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire::TestNewService_RequiresExactInjectedPorts",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation::TestCompilationOwner_AuthoredDirectoryAndCanonicalBytesProduceIdenticalEffectiveOutcome",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation::TestCompilationOwner_ByteIdenticalCanonicalPayloadsProduceIdenticalEffectiveOutcome",

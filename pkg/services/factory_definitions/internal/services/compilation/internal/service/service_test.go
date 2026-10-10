@@ -343,3 +343,30 @@ type canonicalWorkstationLoader struct{}
 func (*canonicalWorkstationLoader) Load(string) (*factorydefinitions.FactoryWorkstationConfig, error) {
 	panic("canonical delegation must pass the workstation loader without invoking it")
 }
+
+func TestCompileEffectiveFactorySource_UsesOnlyInjectedCanonicalLoader(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	loadCanonical := factorydefinitions.CanonicalFactoryJSONLoader(func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		calls++
+		return stubLoadCanonical(payload, loader)
+	})
+	loadDirectory := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		t.Fatal("directory loader must not be used for canonical compile")
+		return nil, nil
+	})
+	encodeCalls := 0
+	svc := compilationimpl.New(loadCanonical, loadDirectory, func(config *factorydefinitions.FactoryConfig) ([]byte, error) {
+		encodeCalls++
+		return stubEncodeFactory(config)
+	})
+	if calls != 0 || encodeCalls != 0 {
+		t.Fatal("construction invoked a collaborator")
+	}
+	_, err := svc.CompileEffectiveFactorySource(t.Context(), factoryroot.CompileEffectiveFactorySourceRequest{
+		Canonical: []byte(`{"name":"alpha"}`), FactoryDir: "/factories/alpha",
+	})
+	if err != nil || calls != 1 {
+		t.Fatalf("canonical compile = %v, loader calls = %d, want 1", err, calls)
+	}
+}
