@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimehttpobservation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -33,7 +34,7 @@ func TestGetStatus_MapsRootObservationToStatusResponse(t *testing.T) {
 			}}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpobservation.NewHandler(fake, nil)
 
 	rec := httptest.NewRecorder()
 	adapter.GetStatus(rec, httptest.NewRequest(http.MethodGet, "/status", nil))
@@ -80,8 +81,7 @@ func TestGetStatusBySessionId_UsesBoundRuntimeObservation(t *testing.T) {
 			}, nil
 		},
 	}
-	adapter := NewAdapter(runtime)
-	adapter.BindSessionObserver(observer)
+	adapter := runtimehttpobservation.NewHandler(runtime, observer)
 
 	rec := httptest.NewRecorder()
 	adapter.GetStatusBySessionId(rec, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/status", nil), "session-beta")
@@ -146,7 +146,7 @@ func TestGetStatus_MapsTypedObservationFailures(t *testing.T) {
 					return factoryruntime.ObserveResult{}, tc.programmed
 				},
 			}
-			adapter := NewAdapter(fake)
+			adapter := runtimehttpobservation.NewHandler(fake, nil)
 			rec := httptest.NewRecorder()
 			adapter.GetStatus(rec, httptest.NewRequest(http.MethodGet, "/status", nil))
 			assertErrorResponse(t, rec, tc.wantStatus, tc.wantCode, tc.wantMsg)
@@ -168,8 +168,7 @@ func TestGetStatusBySessionId_MapsSessionNotFound(t *testing.T) {
 			return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 		},
 	}
-	adapter := NewAdapter(runtime)
-	adapter.BindSessionObserver(observer)
+	adapter := runtimehttpobservation.NewHandler(runtime, observer)
 
 	rec := httptest.NewRecorder()
 	adapter.GetStatusBySessionId(rec, httptest.NewRequest(http.MethodGet, "/factory-sessions/missing/status", nil), "missing")
@@ -179,7 +178,7 @@ func TestGetStatusBySessionId_MapsSessionNotFound(t *testing.T) {
 func TestGetStatusBySessionId_RequiresSessionObserver(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapter(&runtimeRootFake{})
+	adapter := runtimehttpobservation.NewHandler(&runtimeRootFake{}, nil)
 	rec := httptest.NewRecorder()
 	adapter.GetStatusBySessionId(rec, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/status", nil), "session-beta")
 	assertErrorResponse(t, rec, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "factory status is unavailable")

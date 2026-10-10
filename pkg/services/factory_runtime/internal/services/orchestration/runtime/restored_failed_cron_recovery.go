@@ -4,7 +4,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -124,7 +123,7 @@ func logRestoredWorkRecovery(cfg *runtimeConfig, recovery restoredWorkRecovery) 
 	if cfg == nil {
 		return
 	}
-	logger := logging.EnsureLogger(cfg.logger)
+	logger := cfg.logger
 	for _, workID := range sortedRestoredKeys(recovery.failedCronDispatchIDs) {
 		logger.Warn("restore Work board: retained consumed automation Work in history",
 			"event", "run.restore.disposition",

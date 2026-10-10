@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimehttpcontrol "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -27,7 +28,7 @@ func TestMoveWorkBySessionId_ForwardsDecodedFieldsToRoot(t *testing.T) {
 			}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpcontrol.NewHandler(fake)
 
 	body := strings.NewReader(`{"stateName":"complete","requestId":"move-req-1"}`)
 	rec := httptest.NewRecorder()
@@ -109,7 +110,7 @@ func TestMoveWorkBySessionId_MapsTypedMoveFailures(t *testing.T) {
 					return factoryruntime.MoveWorkResult{}, tc.programmed
 				},
 			}
-			adapter := NewAdapter(fake)
+			adapter := runtimehttpcontrol.NewHandler(fake)
 			rec := httptest.NewRecorder()
 			adapter.MoveWorkBySessionId(
 				rec,
@@ -125,7 +126,7 @@ func TestMoveWorkBySessionId_MapsTypedMoveFailures(t *testing.T) {
 func TestMoveWorkBySessionId_RequiresStateName(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapter(&runtimeRootFake{})
+	adapter := runtimehttpcontrol.NewHandler(&runtimeRootFake{})
 	rec := httptest.NewRecorder()
 	adapter.MoveWorkBySessionId(
 		rec,
