@@ -100,7 +100,9 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 	decodeDirectWorkerSessionResult(t, summaryRestartCLI(t, host, home, dir, "show", "--worker-session-id", id), &snapshot.observation)
 	http := support.GetJSON[api.WorkerSessionObservation](t, host.baseURL+"/worker-sessions/"+id)
 	if !reflect.DeepEqual(snapshot.observation, http) {
-		t.Fatalf("CLI/HTTP summary differs: %+v %+v", snapshot.observation, http)
+		cliJSON, _ := json.Marshal(snapshot.observation)
+		httpJSON, _ := json.Marshal(http)
+		t.Fatalf("CLI/HTTP summary differs: cli=%s http=%s", cliJSON, httpJSON)
 	}
 	for _, history := range []string{"archived", "all"} {
 		var list api.ListWorkerSessionsResponse
@@ -282,6 +284,11 @@ func runControlledRestartLive(t *testing.T, first invokeContinueStartedProcess, 
 		t.Fatalf("control mutated peer: %+v %+v", peer, afterPeer)
 	}
 	if c.action != "ownerlost" {
+		// The provider cancellation signal observes the command edge, not the
+		// capture consumer. Join the source's durable terminal through the public
+		// log follower before comparing successive CLI/HTTP snapshots, just as
+		// for the completed peer and successor below.
+		awaitContinuationRestartLogs(t, first, home, c.a.path, c.id, s8InterruptProviderSessionA)
 		c.before[c.id] = readSummaryRestartSnapshot(t, first, home, c.a.path, c.id)
 		assertControlledRestartFacts(t, c.action, c.before[c.id].observation)
 	}
