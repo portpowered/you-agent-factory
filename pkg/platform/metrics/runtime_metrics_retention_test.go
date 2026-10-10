@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -868,20 +869,112 @@ func TestRuntimeMetricsRetentionPreservesFailureReportsDuringInventoryAndRemoval
 
 type retentionFailureFileSystem struct {
 	platformfilesystem.Local
-	removeErr  error
-	failPath   string
-	lstatErr   error
-	readDirErr error
-	walkErr    error
+	removeErr     error
+	failPath      string
+	lstatErr      error
+	readDirErr    error
+	walkErr       error
+	walkReturnErr error
+	failWalkCall  int
+	walkCalls     int
 }
 
 func (filesystem *retentionFailureFileSystem) WalkDir(root string, visit fs.WalkDirFunc) error {
+	filesystem.walkCalls++
+	if filesystem.walkCalls == filesystem.failWalkCall {
+		return filesystem.walkReturnErr
+	}
 	return filesystem.Local.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if path == filesystem.failPath && filesystem.walkErr != nil {
 			return visit(path, entry, filesystem.walkErr)
 		}
 		return visit(path, entry, walkErr)
 	})
+}
+
+// A failed initial inventory must leave artifacts intact. A failed final
+// inventory cannot undo safe pruning, but must retain its cause alongside root
+// release failure and leave orphan claims for a later complete sweep.
+func TestRuntimeMetricsRetentionInventoryFailureReleasesRootAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []struct {
+		name string
+		walk int
+	}{
+		{name: "before pruning", walk: 1},
+		{name: "after pruning", walk: 2},
+	} {
+		for _, failure := range []struct {
+			name  string
+			cause error
+		}{
+			{name: "filesystem rejected", cause: fs.ErrPermission},
+			{name: "filesystem canceled", cause: context.Canceled},
+		} {
+			t.Run(stage.name+"/"+failure.name, func(t *testing.T) {
+				t.Parallel()
+				assertRetentionInventoryFailureRecovery(t, stage.walk, failure.cause)
+			})
+		}
+	}
+}
+
+func assertRetentionInventoryFailureRecovery(t *testing.T, failedWalk int, cause error) {
+	t.Helper()
+	root, healthy, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+	expired := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "expired-runtime-expired", 11)
+	closeCause := errors.New("release root rejected")
+	rootLock, claim, markerLock := &metricsTestCloser{err: closeCause}, &metricsTestCloser{}, &metricsTestCloser{}
+	coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaim: claim, tryClaimMarker: markerLock}
+	filesystem := &retentionFailureFileSystem{
+		Local: platformfilesystem.Local{}, failWalkCall: failedWalk, walkReturnErr: cause,
+	}
+	retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	}, coordination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
+	report, err := retention.Sweep(t.Context(), request)
+	if !errors.Is(err, cause) || !errors.Is(err, closeCause) || !strings.Contains(err.Error(), strconv.Quote(root)) {
+		t.Fatalf("failed inventory = %#v, %v, want root and both causes", report, err)
+	}
+	assertFailedInventoryReleases(t, report, failedWalk-1, rootLock, claim, markerLock)
+	if failedWalk == 1 {
+		assertRetentionPreservedContent(t, expired, "mmmmmmmmmmm")
+	} else {
+		assertRetentionPathAbsent(t, expired, "safely pruned before inventory failure")
+	}
+	assertRetentionPathExists(t, marker, "orphan marker after failed inventory")
+	assertRetentionPreservedContent(t, healthy, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+	filesystem.failWalkCall = 0
+	rootLock.err = nil
+	report, err = retention.Sweep(t.Context(), request)
+	if err != nil || len(report.Failures) != 0 || report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) {
+		t.Fatalf("recovered inventory = %#v, %v", report, err)
+	}
+	if rootLock.closed != 2 || claim.closed != 1 || markerLock.closed != 1 {
+		t.Fatalf("recovery releases root=%d claim=%d marker=%d, want 2/1/1", rootLock.closed, claim.closed, markerLock.closed)
+	}
+	assertRetentionPathAbsent(t, expired, "expired artifact after recovery")
+	assertRetentionPathAbsent(t, marker, "orphan marker after complete inventory")
+	assertRetentionPreservedContent(t, healthy, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+}
+
+func assertFailedInventoryReleases(
+	t *testing.T, report RuntimeMetricsRetentionReport, wantClaims int,
+	rootLock, claim, markerLock *metricsTestCloser,
+) {
+	t.Helper()
+	if rootLock.closed != 1 || claim.closed != wantClaims || markerLock.closed != 0 {
+		t.Fatalf("failure releases root=%d claim=%d marker=%d, want 1/%d/0", rootLock.closed, claim.closed, markerLock.closed, wantClaims)
+	}
+	if report.Removed != (RuntimeMetricsRetentionTotals{Files: wantClaims, Bytes: int64(wantClaims * 11)}) {
+		t.Fatalf("failed inventory removal = %#v", report.Removed)
+	}
 }
 
 // An incomplete inventory must preserve orphan claims, while independently
