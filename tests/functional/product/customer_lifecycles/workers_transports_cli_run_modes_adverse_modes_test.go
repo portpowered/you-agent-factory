@@ -8,6 +8,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func testWorkerstransportsclirunmodesCLIRunPartialResponseStreamHasOneFailedTerminal(t *testing.T) {
@@ -218,6 +219,118 @@ func containsModesID(values []string, want string) bool {
 	return false
 }
 
+// M7 requests structured output from a provider that lacks that capability.
+// The public failure and zero command effects prove the denial; an authorized
+// peer held at arrival proves the denial does not stop another session.
+func testWorkerCapabilityDenialPreservesAuthorizedPeer(t *testing.T) {
+	t.Parallel()
+	fixture := modesFixture(t)
+	body := `{"label":"authorized-peer","nested":{"count":7},"items":[true,"complete"]}`
+	peer := fixture.start(t, modesInvocationSpec{
+		globalArgs: []string{"--json"}, includePrompt: true,
+		prompt:     "preserve authorized peer while another Worker is denied",
+		workerMode: "agent", behavior: modesRouteBlock, result: body,
+	})
+	peer.route.WaitStarted(t)
+	denied := fixture.execute(t, modesInvocationSpec{
+		globalArgs: []string{"--json"}, includePrompt: true,
+		prompt:     "deny unsupported structured-output capability",
+		workerMode: "denied", behavior: modesRouteSuccess,
+	})
+	if denied.err == nil || denied.providerCalls != 0 {
+		t.Fatalf("capability denial err=%v calls=%d stdout=%s stderr=%s", denied.err, denied.providerCalls, denied.stdout, denied.stderr)
+	}
+	terminal := decodeTerminalNDJSONInvocationResult(t, denied.stdout).Response
+	assertFailedInvocationResponse(t, terminal)
+	if invocationPrimaryResultPresent(terminal) {
+		t.Fatalf("capability denial emitted a successful result: %+v", terminal)
+	}
+	var responses int
+	for _, event := range decodeModesFactoryEvents(t, denied.stdout) {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		responses++
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil || payload.Outcome != factoryapi.WorkOutcomeFailed || payload.ProviderFailure == nil || payload.ProviderFailure.Family == nil || *payload.ProviderFailure.Family != factoryapi.WorkFailureFamilyTerminal || payload.FailureDetail == nil || payload.FailureDetail.Message != "provider error: permanent_bad_request" {
+			t.Fatalf("capability denial dispatch=%+v detail=%+v, decode=%v", payload, payload.FailureDetail, err)
+		}
+	}
+	if responses != 1 {
+		t.Fatalf("capability denial dispatch responses=%d, want one", responses)
+	}
+	select {
+	case result := <-peer.done:
+		t.Fatalf("authorized peer completed before release: %+v", result)
+	default:
+	}
+	peer.route.Release()
+	result := peer.wait(t)
+	peer.route.WaitStopped(t)
+	assertMachineSuccess(t, result, body)
+	assertFreshInvocation(t, denied, result)
+}
+
+// M8 observes the Worker's selected execution limit, independently of the
+// remote caller's deadline. Workers currently uses context.WithTimeout rather
+// than the process scheduler, so this cell waits for that real deadline after
+// observing command arrival. No elapsed-time assertion or sleep is involved.
+func testTypedWorkerTimeoutRecoversOnSameProcess(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			fixture := modesFixture(t)
+			handle := fixture.start(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt:     "hold until the selected Worker execution limit",
+				workerMode: mode, workerTimeout: "5s", behavior: modesRouteBlock,
+			})
+			handle.route.WaitStarted(t)
+			timedOut := handle.wait(t)
+			handle.route.WaitStopped(t)
+			if timedOut.err == nil || timedOut.providerCalls != 1 || handle.route.active.Load() != 0 {
+				t.Fatalf("Worker timeout err=%v calls=%d active=%d", timedOut.err, timedOut.providerCalls, handle.route.active.Load())
+			}
+			terminal := decodeTerminalNDJSONInvocationResult(t, timedOut.stdout).Response
+			assertFailedInvocationResponse(t, terminal)
+			if invocationPrimaryResultPresent(terminal) {
+				t.Fatalf("Worker timeout produced a successful result: %+v", terminal)
+			}
+			assertTypedWorkerTimeoutDispatch(t, timedOut)
+			body := `{"label":"recovered-` + mode + `","nested":{"count":7},"items":[true,"complete"]}`
+			recovered := fixture.execute(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt: "reuse the process after Worker timeout", result: body,
+				workerMode: mode, behavior: modesRouteSuccess,
+			})
+			assertMachineSuccess(t, recovered, body)
+			assertFreshInvocation(t, timedOut, recovered)
+		})
+	}
+}
+
+func assertTypedWorkerTimeoutDispatch(t *testing.T, result modesInvocationResult) {
+	t.Helper()
+	var terminals int
+	for _, event := range decodeModesFactoryEvents(t, result.stdout) {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		terminals++
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil || payload.Outcome != factoryapi.WorkOutcomeFailed || payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+			t.Fatalf("Worker timeout dispatch = %+v, decode=%v", payload, err)
+		}
+		if payload.StructuredResult != nil || (payload.Output != nil && *payload.Output != "") {
+			t.Fatalf("Worker timeout dispatch emitted successful content: %+v", payload)
+		}
+	}
+	if terminals != 1 {
+		t.Fatalf("Worker timeout terminal dispatches=%d, want one", terminals)
+	}
+}
+
 func testWorkerstransportsclirunmodesCLIRunTimeoutRecoversOnSameProcess(t *testing.T) {
 	t.Parallel()
 	fixture := modesFixture(t)
@@ -257,6 +370,68 @@ func testWorkerstransportsclirunmodesCLIRunTimeoutRecoversOnSameProcess(t *testi
 	})
 	assertMachineSuccess(t, recovery, "timeout recovery COMPLETE")
 	assertFreshInvocation(t, timeoutResult, recovery)
+}
+
+// M9 keeps a second typed Worker command live while the caller cancels the
+// first. Arrival/stopped signals, terminal output and session-scoped command
+// observations prove cancellation and peer isolation without timing sleeps.
+func testTypedWorkerCancellationPreservesPeer(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			fixture := modesFixture(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			canceledHandle := fixture.start(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt: "cancel only this typed Worker", workerMode: mode,
+				behavior: modesRouteBlock, context: ctx,
+			})
+			body := `{"label":"peer-` + mode + `","nested":{"count":7},"items":[true,"complete"]}`
+			peerHandle := fixture.start(t, modesInvocationSpec{
+				globalArgs: []string{"--json"}, includePrompt: true,
+				prompt: "preserve the live peer", result: body, workerMode: mode,
+				behavior: modesRouteBlock,
+			})
+			canceledHandle.route.WaitStarted(t)
+			peerHandle.route.WaitStarted(t)
+			cancel()
+			// Remote caller cancellation ends the invocation stream; the
+			// public session control owns stopping its active Worker attempt.
+			support.TerminateFactorySessionAt(t, fixture.serverURL, canceledHandle.resources.sessionID)
+			canceled := canceledHandle.wait(t)
+			canceledHandle.route.WaitStopped(t)
+			if canceled.err == nil || !strings.Contains(canceled.err.Error(), "INVOCATION_CANCELED") {
+				t.Fatalf("typed cancellation error = %v, stderr=%s", canceled.err, canceled.stderr)
+			}
+			terminal := decodeTerminalNDJSONInvocationResult(t, canceled.stdout).Response
+			assertInvocationOutcome(t, terminal, "CANCELED", "INVOCATION_CANCELED")
+			if invocationPrimaryResultPresent(terminal) {
+				t.Fatalf("cancellation emitted a successful result: %+v", terminal)
+			}
+			select {
+			case result := <-peerHandle.done:
+				t.Fatalf("peer completed before its release: %+v", result)
+			default:
+			}
+			peerHandle.route.Release()
+			peer := peerHandle.wait(t)
+			peerHandle.route.WaitStopped(t)
+			assertMachineSuccess(t, peer, body)
+			assertFreshInvocation(t, canceled, peer)
+			correlation := collectModesCorrelationEvents(t, decodeModesFactoryEvents(t, peer.stdout))
+			workID, _ := assertModesWorkCorrelation(t, correlation.workRequest)
+			dispatchID := assertModesDispatchCorrelation(t, correlation.dispatchRequest, workID)
+			assertModesWorkerCorrelation(t, correlation.workerAssociation, dispatchID)
+			assertModesResponseCorrelation(t, correlation.dispatchResponse, dispatchID, workID)
+			for _, result := range []modesInvocationResult{canceled, peer} {
+				if result.providerCalls != 1 || len(result.requests) != 1 || result.requests[0].ExecutionScopeID != result.resources.sessionID {
+					t.Fatalf("typed command scope/calls = %+v", result)
+				}
+			}
+		})
+	}
 }
 
 func testWorkerstransportsclirunmodesCLIRunCancellationRecoversOnSameProcess(t *testing.T) {

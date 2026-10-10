@@ -89,13 +89,8 @@ func (s *service) Execute(
 	if err != nil {
 		return runners.ExecuteResult{}, err
 	}
-	if nilRunner(binding.Runner) {
-		return runners.ExecuteResult{}, fmt.Errorf(
-			"%w: runner %q has no implementation",
-			workers.ErrInvalidRunnerRegistration,
-			binding.Identity,
-		)
-	}
+	// Registration validates the implementation before publishing the immutable
+	// binding; dispatch only validates request selection and capabilities.
 	attempt := workers.CloneProviderInferenceRequest(request.Attempt)
 	return binding.Runner.Execute(ctx, attempt)
 }
@@ -154,7 +149,7 @@ func validateIdentity(identity string) error {
 	return nil
 }
 
-func nilRunner(runner workers.Runner) bool {
+func nilRunner(runner runners.Strategy) bool {
 	if runner == nil {
 		return true
 	}
@@ -192,4 +187,142 @@ func supportedOptionalCapabilities(
 			capability.Status == workers.RunnerOptionalCapabilityStatusSupported
 	}
 	return supported
+}
+
+// NewProduction publishes completed production strategies. Construction
+// validates and snapshots registrations without invoking any strategy.
+func NewProduction(agent, script, inference runners.Strategy) (runners.Service, error) {
+	return New(productionRegistrations(agent, script, inference))
+}
+
+// NewMockProduction adds the completed opt-in Mock strategy.
+func NewMockProduction(agent, script, inference, mock runners.Strategy) (runners.Service, error) {
+	registrations := productionRegistrations(agent, script, inference)
+	return New(append(registrations, runners.Registration{
+		Identity: runners.MockIdentity, Metadata: mockMetadata(), Runner: mock,
+	}))
+}
+
+func productionRegistrations(agent, script, inference runners.Strategy) []runners.Registration {
+	return []runners.Registration{
+		{Identity: runners.AgentIdentity, Metadata: agentMetadata(), Runner: agent},
+		{Identity: runners.ScriptIdentity, Metadata: scriptMetadata(), Runner: script},
+		{Identity: runners.InferenceIdentity, Metadata: inferenceMetadata(), Runner: inference},
+	}
+}
+
+func scriptMetadata() workers.RunnerMetadata {
+	return workers.RunnerMetadata{
+		ID:          runners.ScriptIdentity,
+		DisplayName: "Script",
+		Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityImageInput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilitySessionResume,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorktree,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+		),
+	}
+}
+
+func inferenceMetadata() workers.RunnerMetadata {
+	return workers.RunnerMetadata{
+		ID:          runners.InferenceIdentity,
+		DisplayName: "Inference",
+		Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityImageInput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilitySessionResume,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorktree,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+		),
+	}
+}
+
+func agentMetadata() workers.RunnerMetadata {
+	return workers.RunnerMetadata{
+		ID:          runners.AgentIdentity,
+		DisplayName: "Agent",
+		Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityImageInput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilitySessionResume,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorktree,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+		),
+	}
+}
+
+func mockMetadata() workers.RunnerMetadata {
+	return workers.RunnerMetadata{
+		ID:          runners.MockIdentity,
+		DisplayName: "Mock",
+		Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityImageInput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilitySessionResume,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorktree,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+		),
+	}
 }

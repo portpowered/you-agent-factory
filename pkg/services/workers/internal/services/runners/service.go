@@ -4,16 +4,8 @@ package runners
 
 import (
 	"context"
-	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const (
@@ -71,65 +63,6 @@ type ExecuteRequest struct {
 
 // ExecuteResult is the detached outcome of one private strategy attempt.
 type ExecuteResult = AttemptResult
-
-// ScriptConfig is the private registry construction input for one configured
-// Script Runner. The implementation translates it into its own immutable state.
-type ScriptConfig struct {
-	Command          string
-	Args             []string
-	Stdin            string
-	FactoryDirectory string
-	RequestSelected  bool
-}
-
-// ScriptDependencies are the exact effects projected into one Script Runner.
-type ScriptDependencies struct {
-	CommandRunner workerprocess.CommandRunner
-	FactoryDocs   workers.FactoryDocsLoader
-	Now           func() time.Time
-	Publish       workers.ProgressPublisher
-	Record        workers.ScriptEventRecorder
-}
-
-// InferenceConfig is the private registry construction input for one configured
-// Inference Runner. The implementation translates it into its own immutable state.
-type InferenceConfig struct {
-	Worker    models.LocalWorker
-	Resources []models.LocalResource
-	Scope     models.RuntimeScopeRef
-}
-
-// InferenceDependencies are the exact effects projected into one Inference Runner.
-type InferenceDependencies struct {
-	Models              inference.ModelInvoker
-	Delegate            workers.Runner
-	ContentMaterializer work.ContentMaterializer
-	MediaFiles          platformfilesystem.ReadOpener
-}
-
-// AgentDependencies are the exact peer-service and observation capabilities
-// projected into one Agent Runner.
-type AgentDependencies struct {
-	Providers providers.Service
-	Publish   workers.ProgressPublisher
-	// DecisionEnvelopes is the Factory Definitions owner of decision-envelope
-	// interpretation. An Agent Runner that receives decision-envelope output
-	// without it fails the attempt rather than parsing the envelope itself.
-	DecisionEnvelopes interfaces.DecisionEnvelopeService
-}
-
-// MockConfig is the private registry construction input for one configured
-// mock Runner. Production Workers wire must not register this strategy.
-type MockConfig struct {
-	WorkersConfig *workers.MockWorkersConfig
-}
-
-// MockDependencies are optional effects for mock script execution. Omitting
-// Next confines mock accept/reject behavior to the Workers testing feature path.
-type MockDependencies struct {
-	Next  workerprocess.CommandRunner
-	Files workers.AgentToolFileSystem
-}
 
 // Service owns the immutable process-scoped runner registry and request-scoped
 // strategy dispatch. Resolve performs selection only; Execute runs one attempt.

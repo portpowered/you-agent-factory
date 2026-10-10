@@ -341,7 +341,7 @@ func TestExecuteTimeoutReleasesRequestWorktreeBeforeTerminalObservation(t *testi
 func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
 	t.Parallel()
 
-	service, err := executeservice.New(
+	service, err := executeservice.NewWithProviderOverride(
 		&staticRunners{runner: &stubRunner{}},
 		nil,
 		nil,
@@ -350,10 +350,10 @@ func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		func(string) (map[string]string, error) { return nil, nil },
+		nil, nil, nil, nil,
 	)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewWithProviderOverride() error = %v", err)
 	}
 	rendered, err := service.RenderPrompt(
 		"{{ .Context.Project }} / {{ .Context.SessionID }}",
@@ -708,7 +708,7 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 			return workers.RunnerExecutionResult{}, nil
 		},
 	}
-	_, err := executeservice.New(
+	_, err := executeservice.NewWithProviderOverride(
 		&staticRunners{runner: runner},
 		nil,
 		func(context.Context, workers.ExecutionObservation) error {
@@ -720,15 +720,13 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 		workspace,
 		workspace.Release,
 		nil,
+		nil, nil, nil, func(string) (map[string]string, error) {
+			t.Fatal("construction loaded Factory docs")
+			return nil, nil
+		},
 	)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	_, overrideErr := executeservice.NewWithProviderOverride(&staticRunners{runner: runner}, nil,
-		func(context.Context, workers.ExecutionObservation) error { observationCalls.Add(1); return nil },
-		capture, func() time.Time { return time.Unix(10, 0) }, workspace, workspace.Release, nil, nil, nil, nil)
-	if overrideErr != nil {
-		t.Fatal(overrideErr)
+		t.Fatalf("NewWithProviderOverride() error = %v", err)
 	}
 	if workspace.prepares.Load() != 0 {
 		t.Fatal("construction prepared workspace")

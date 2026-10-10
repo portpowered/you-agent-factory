@@ -41,7 +41,7 @@ func mustExecuteServiceWithEdges(
 	if len(selectedLogger) > 0 {
 		logger = selectedLogger[0]
 	}
-	service, err := executeservice.New(
+	service, err := executeservice.NewWithProviderOverride(
 		&staticRunners{runner: runner},
 		nil,
 		observe,
@@ -50,9 +50,10 @@ func mustExecuteServiceWithEdges(
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
+		nil, nil, nil, nil,
 	)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewWithProviderOverride() error = %v", err)
 	}
 	return service
 }

@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -456,7 +459,7 @@ func TestResolveRejectsUnsupportedCapabilityWithSafeContext(t *testing.T) {
 func registration(
 	identity string,
 	displayName string,
-	runner workers.Runner,
+	runner runners.Strategy,
 ) runners.Registration {
 	return runners.Registration{
 		Identity: identity,
@@ -476,5 +479,97 @@ func validMetadata(identity string, displayName string) workers.RunnerMetadata {
 				Status:     workers.RunnerOptionalCapabilityStatusSupported,
 			}},
 		},
+	}
+}
+
+type completedStrategy struct {
+	calls   atomic.Int32
+	content string
+	failure error
+}
+
+func (r *completedStrategy) Execute(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+	r.calls.Add(1)
+	return workers.RunnerExecutionResult{Content: r.content}, r.failure
+}
+
+func TestCompletedStrategiesPreserveSelectionResultsAndFailure(t *testing.T) {
+	t.Parallel()
+	for _, explicitMock := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicitMock), func(t *testing.T) {
+			t.Parallel()
+			rejection := errors.New("selected strategy rejection")
+			agent := &completedStrategy{content: "agent"}
+			script := &completedStrategy{content: "script"}
+			inference := &completedStrategy{content: "inference"}
+			mock := &completedStrategy{failure: rejection}
+			registry, err := NewProduction(agent, script, inference)
+			if explicitMock {
+				registry, err = NewMockProduction(agent, script, inference, mock)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			strategies := map[string]*completedStrategy{runners.AgentIdentity: agent, runners.ScriptIdentity: script, runners.InferenceIdentity: inference}
+			if explicitMock {
+				strategies[runners.MockIdentity] = mock
+			} else {
+				if _, err := registry.Resolve(runners.ResolutionRequest{Identity: runners.MockIdentity}); !errors.Is(err, workers.ErrUnknownRunnerSelection) {
+					t.Fatalf("normal mock selection: %v", err)
+				}
+			}
+			assertCompletedStrategiesRemainInert(t, registry, strategies)
+			assertScriptCapabilityDenialWithoutExecution(t, registry, script)
+			var joined sync.WaitGroup
+			for identity, strategy := range strategies {
+				joined.Add(1)
+				go func() {
+					defer joined.Done()
+					result, err := registry.Execute(t.Context(), runners.ExecuteRequest{Identity: identity})
+					if !errors.Is(err, strategy.failure) || result.Content != strategy.content {
+						t.Errorf("%s: result=%#v error=%v", identity, result, err)
+					}
+				}()
+			}
+			joined.Wait()
+			for identity, strategy := range strategies {
+				if strategy.calls.Load() != 1 {
+					t.Errorf("%s calls=%d", identity, strategy.calls.Load())
+				}
+			}
+		})
+	}
+}
+
+func assertCompletedStrategiesRemainInert(t *testing.T, registry runners.Service, strategies map[string]*completedStrategy) {
+	t.Helper()
+	for identity, strategy := range strategies {
+		if _, err := registry.Resolve(runners.ResolutionRequest{Identity: identity}); err != nil {
+			t.Fatal(err)
+		}
+		if strategy.calls.Load() != 0 {
+			t.Fatal("construction/resolution executed strategy")
+		}
+	}
+}
+
+func assertScriptCapabilityDenialWithoutExecution(t *testing.T, registry runners.Service, script *completedStrategy) {
+	t.Helper()
+	// A rejected request cannot execute its strategy or poison the
+	// completed registry used by the successful peers.
+	_, denied := registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: runners.ScriptIdentity,
+		RequiredCapabilities: []workers.RunnerOptionalCapability{
+			workers.RunnerOptionalCapabilityStructuredOutput,
+		},
+	})
+	var capabilityError *workers.UnsupportedRunnerCapabilityError
+	if !errors.As(denied, &capabilityError) ||
+		capabilityError.RunnerID != runners.ScriptIdentity ||
+		capabilityError.Capability != workers.RunnerOptionalCapabilityStructuredOutput {
+		t.Fatalf("denied request error = %v, want typed Script structured-output denial", denied)
+	}
+	if script.calls.Load() != 0 {
+		t.Fatal("denied request executed the Script strategy")
 	}
 }

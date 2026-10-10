@@ -57,6 +57,7 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "NamedAgy", run: testNamedAgyMockPreservesDispatchMetadataAndCompletionLog},
 		{name: "ScriptClassifier", run: testScriptWorkerClassifierRoutesWithoutModelCalls},
 		{name: "MockWorkersReplace", run: testMockWorkersReplaceOnlyNamedChildren},
+		{name: "TypedPassthrough", run: testTypedMockPassthroughPreservesNativeResult},
 		{name: "UnknownWorker", run: testUnknownWorkerOverrideFailsActionably},
 		{name: "FutureFields", run: testFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved},
 		{name: "MockWorkerFailure", run: testMockWorkerFailureReturnsStablePublicFailure},
@@ -403,6 +404,10 @@ func sharedMockWorkersPayload(gate *support.MockWorkerGate) map[string]any {
 	return map[string]any{
 		"unmatchedDispatchPolicy": "passthrough",
 		"mockWorkers": []map[string]any{
+			{
+				"id": "typed-selected-accept", "workerName": "processor", "workstationName": "process-task",
+				"runType": "accept", "workInputs": []map[string]string{{"workId": "target"}},
+			},
 			{
 				"id":              "shared-agy-reject",
 				"workerName":      "worker",
