@@ -5,19 +5,308 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+type continuationInspectionFake struct {
+	inspect func(providersessions.InspectRequest) (providersessions.InspectResult, error)
+}
+
+func (f continuationInspectionFake) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
+	if f.inspect != nil {
+		return f.inspect(req)
+	}
+	return providersessions.InspectResult{Session: req.Session}, nil
+}
+
+func (continuationInspectionFake) Details(string, string, string) (providersessions.Detail, error) {
+	panic("continuation admission must not read transcript details")
+}
+
+func (continuationInspectionFake) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	panic("continuation admission must not project transcripts")
+}
+
+func TestContinuationInspectionRefusesUnavailableExactReferenceBeforeReservation(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"available", "missing", "ambiguous", "storage", "mismatch", "not-injected", "typed-nil"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			r.supervisions[req.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+			reference := r.sessions[req.SourceWorkerSessionID].ProviderSessionAssociation.Reference
+			r.inspection = continuationInspectionFake{inspect: func(got providersessions.InspectRequest) (providersessions.InspectResult, error) {
+				if got.Session != reference || got.Context == nil || got.WorkerSessionID != req.SourceWorkerSessionID || got.FactorySessionID != "" {
+					t.Errorf("inspection lost the exact reference/context: %+v", got)
+				}
+				// A peer read may call back into Get; admission must release its lock.
+				if _, err := r.Get(got.Context, workersessions.GetRequest{ID: req.SourceWorkerSessionID}); err != nil {
+					t.Errorf("source read during inspection: %v", err)
+				}
+				return continuationInspectionCellResult(cell, got)
+			}}
+			if cell == "not-injected" {
+				r.inspection = nil
+			}
+			if cell == "typed-nil" {
+				r.inspection = (*continuationInspectionFake)(nil)
+			}
+			replay, owner, err := r.reserveContinuation(req)
+			assertContinuationInspectionOutcome(t, cell, r, req, replay, owner, err)
+		})
+	}
+}
+
+func continuationInspectionCellResult(cell string, req providersessions.InspectRequest) (providersessions.InspectResult, error) {
+	switch cell {
+	case "missing":
+		return providersessions.InspectResult{}, providersessions.ErrSessionNotFound
+	case "ambiguous":
+		return providersessions.InspectResult{}, providersessions.ErrAmbiguousSessionFile
+	case "storage":
+		return providersessions.InspectResult{}, providersessions.ErrSessionStorageUnavailable
+	case "mismatch":
+		req.Session.ID = "another-provider-session"
+	}
+	return providersessions.InspectResult{Session: req.Session}, nil
+}
+
+func assertContinuationInspectionOutcome(t *testing.T, cell string, r *registry, req workersessions.ContinueRequest, replay *continueReplay, owner bool, err error) {
+	t.Helper()
+	if cell == "available" {
+		if err != nil || !owner || replay == nil {
+			t.Fatalf("available reference was refused: owner=%v err=%v", owner, err)
+		}
+		r.inspection = nil
+		again, retryOwner, retryErr := r.reserveContinuation(req)
+		if retryErr != nil || retryOwner || again != replay {
+			t.Fatalf("accepted request retry was re-inspected: owner=%v err=%v", retryOwner, retryErr)
+		}
+		r.finishStart()
+		return
+	}
+	if !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) || replay != nil || owner ||
+		len(r.continueReplays) != 0 || len(r.continuationSources) != 0 || len(r.sessions) != 1 || r.activeStarts != 0 {
+		t.Fatalf("unavailable reference acquired admission: replay=%v owner=%v err=%v", replay, owner, err)
+	}
+}
+
+func TestContinuationConcurrentInspectionRechecksAdmission(t *testing.T) {
+	t.Parallel()
+	for _, sameRequest := range []bool{true, false} {
+		t.Run(strconv.FormatBool(sameRequest), func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			r.supervisions[req.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+			entered, release := make(chan struct{}, 2), make(chan struct{})
+			r.inspection = continuationInspectionFake{inspect: func(got providersessions.InspectRequest) (providersessions.InspectResult, error) {
+				entered <- struct{}{}
+				<-release
+				return providersessions.InspectResult{Session: got.Session}, nil
+			}}
+			type result struct {
+				replay *continueReplay
+				owner  bool
+				err    error
+			}
+			results := make(chan result, 2)
+			for i := range 2 {
+				request := req
+				if i == 1 && !sameRequest {
+					request.RequestID, request.SuccessorWorkerSessionID = "other-request", "other-successor"
+				}
+				go func() {
+					replay, owner, err := r.reserveContinuation(request)
+					results <- result{replay, owner, err}
+				}()
+			}
+			<-entered
+			<-entered
+			close(release)
+			first, second := <-results, <-results
+			if first.owner == second.owner || len(r.continueReplays) != 1 || len(r.continuationSources) != 1 || r.activeStarts != 1 {
+				t.Fatalf("concurrent inspection acquired duplicate admission: %+v %+v", first, second)
+			}
+			if sameRequest {
+				if first.err != nil || second.err != nil || first.replay != second.replay {
+					t.Fatalf("identical requests did not share their reservation: %+v %+v", first, second)
+				}
+			} else if !errors.Is(first.err, workersessions.ErrContinuationSourceConflict) && !errors.Is(second.err, workersessions.ErrContinuationSourceConflict) {
+				t.Fatalf("competing request bypassed exact-source fencing: %+v %+v", first, second)
+			}
+			r.finishStart()
+		})
+	}
+}
+
+func TestContinuationInspectionRechecksChangedSource(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"active", "reference", "successor", "stopping"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			r.supervisions[req.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+			want := workersessions.ErrContinuationExecutionUnavailable
+			r.inspection = continuationInspectionFake{inspect: func(got providersessions.InspectRequest) (providersessions.InspectResult, error) {
+				r.mu.Lock()
+				defer r.mu.Unlock()
+				source := r.sessions[req.SourceWorkerSessionID]
+				switch cell {
+				case "active":
+					source.State = workersessions.StateRunning
+					want = workersessions.ErrContinuationSourceActive
+				case "reference":
+					source.ProviderSessionAssociation.Reference.ID = "changed-provider-session"
+				case "successor":
+					source.SuccessorWorkerSessionID = "already-admitted"
+					want = workersessions.ErrContinuationSourceConflict
+				case "stopping":
+					r.stopping = true
+					want = workersessions.ErrContinuationServerStopping
+				}
+				r.sessions[source.ID] = source
+				return providersessions.InspectResult{Session: got.Session}, nil
+			}}
+			_, owner, err := r.reserveContinuation(req)
+			if !errors.Is(err, want) || owner || len(r.continueReplays) != 0 || r.activeStarts != 0 {
+				t.Fatalf("changed source admitted: owner=%v err=%v want=%v", owner, err, want)
+			}
+		})
+	}
+}
+
 type retainedContinuationStore struct {
 	restartRecipeStore
 	payload json.RawMessage
 	readErr error
+}
+
+func TestContinuationHeadReservationPreservesAddressedTuple(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	root := r.sessions[req.SourceWorkerSessionID]
+	root.SuccessorWorkerSessionID = "head"
+	r.sessions[root.ID] = root
+	head := root.Clone()
+	head.ID, head.PredecessorWorkerSessionID, head.SuccessorWorkerSessionID = "head", root.ID, ""
+	head.ProviderSessionAssociation.WorkerSessionID = head.ID
+	r.sessions[head.ID] = head
+	r.supervisions[head.ID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+	if _, _, err := r.reserveContinuation(req); !errors.Is(err, workersessions.ErrContinuationSourceConflict) {
+		t.Fatalf("default continuation bypassed source conflict: %v", err)
+	}
+	req.ResolveHead = true
+	replay, owner, err := r.reserveContinuation(req)
+	if err != nil || !owner || replay.plan.request.SourceWorkerSessionID != head.ID || replay.plan.lineage.PredecessorWorkerSessionID != head.ID || replay.plan.addressedSourceID != root.ID {
+		t.Fatalf("head reservation: owner=%v err=%v replay=%+v", owner, err, replay)
+	}
+	// Advancement after admission cannot retarget the original request ID.
+	head.SuccessorWorkerSessionID = req.SuccessorWorkerSessionID
+	r.sessions[head.ID] = head
+	again, owner, err := r.reserveContinuation(req)
+	if err != nil || owner || again != replay {
+		t.Fatalf("retry retargeted the request: owner=%v err=%v", owner, err)
+	}
+	req.ResolveHead = false
+	if _, _, err := r.reserveContinuation(req); !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+		t.Fatalf("changed head flag reused request identity: %v", err)
+	}
+}
+
+func TestContinuationHeadResolutionRejectsInvalidChains(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"terminal", "active", "reverse", "cycle", "foreign"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			root := r.sessions[req.SourceWorkerSessionID]
+			root.SuccessorWorkerSessionID = "head"
+			r.sessions[root.ID] = root
+			head := workersessions.Session{ID: "head", State: workersessions.StateCompleted, PredecessorWorkerSessionID: root.ID}
+			switch cell {
+			case "active":
+				head.State = workersessions.StateRunning
+			case "reverse":
+				head.PredecessorWorkerSessionID = "foreign"
+			case "cycle":
+				head.SuccessorWorkerSessionID = root.ID
+			}
+			r.sessions[head.ID] = head
+			r.observations[root.ID] = &observation{factorySessionID: "scope"}
+			r.observations[head.ID] = &observation{factorySessionID: "scope"}
+			if cell == "foreign" {
+				r.observations[head.ID].factorySessionID = "other"
+			}
+			resolved, _, err := r.resolveContinuationHead(req)
+			if cell == "terminal" {
+				if err != nil || resolved.SourceWorkerSessionID != head.ID {
+					t.Fatalf("head resolution: %+v %v", resolved, err)
+				}
+			} else if err == nil {
+				t.Fatal("invalid chain resolved")
+			}
+			if len(r.continueReplays) != 0 || len(r.supervisions) != 0 {
+				t.Fatal("head read created execution authority")
+			}
+		})
+	}
+}
+
+func TestContinuationInputAddressAndHeadFlagAreImmutable(t *testing.T) {
+	t.Parallel()
+	_, plan, target := retainedContinuationFixture(t)
+	plan.addressedSourceID, plan.request.ResolveHead = "original", true
+	payload, err := encodeContinuationInput(plan, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := decodeContinuationInput(payload, plan.addressedRequest(), target)
+	if err != nil || input.AddressedSourceWorkerSessionID != "original" || !input.ResolveHead {
+		t.Fatalf("addressed tuple: %+v %v", input, err)
+	}
+	for _, cell := range []string{"flag", "address"} {
+		req := plan.addressedRequest()
+		if cell == "flag" {
+			req.ResolveHead = false
+		} else {
+			req.SourceWorkerSessionID = "other"
+		}
+		if _, err := decodeContinuationInput(payload, req, target); !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+			t.Fatalf("changed %s accepted: %v", cell, err)
+		}
+	}
+	// Missing additive keys retain the old exact-target/false tuple.
+	_, legacy, target := retainedContinuationFixture(t)
+	payload, err = encodeContinuationInput(legacy, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatal(err)
+	}
+	delete(fields, "addressedSourceWorkerSessionId")
+	delete(fields, "resolveHead")
+	payload, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeContinuationInput(payload, legacy.request, target); err != nil {
+		t.Fatalf("legacy tuple rejected: %v", err)
+	}
 }
 
 // The storage collaborator has committed the bytes but lost its response.
@@ -125,6 +414,60 @@ func archivedContinuationSupport(cell string) *interruptContinuationSupportFake 
 		support.err = providers.ErrUnknownProvider
 	}
 	return support
+}
+
+// A terminal Runtime-owned source has a control handle, not a direct
+// supervision. Captured facts must agree with it before direct reservation.
+func TestContinuationLiveFactoryCaptureFencesAdmission(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "reference", "terminal", "control-pending", "journal-pending", "persistence-lost"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			delete(r.supervisions, req.SourceWorkerSessionID)
+			source := r.sessions[req.SourceWorkerSessionID]
+			captured := &archivedContinuationSource{snapshot: continuationSourceSnapshot{
+				session: cloneSession(source), execution: continuationValidExecution("dispatch-1"),
+				dispatchID: "dispatch-1", direct: true, archived: true,
+			}}
+			attempt := &runtimeAttempt{}
+			r.runtimeAttemptControls = map[string]*runtimeAttempt{req.SourceWorkerSessionID: attempt}
+			configureLiveFactoryCaptureRefusal(cell, captured, attempt)
+			snapshot, err := r.continuationSnapshotLocked(req, captured)
+			if cell == "exact" {
+				if err != nil || !snapshot.direct || snapshot.executor == nil || snapshot.address != req.SourceWorkerSessionID {
+					t.Fatalf("live Factory source lost direct admission: %+v %v", snapshot, err)
+				}
+			} else {
+				want := workersessions.ErrContinuationSourceConflict
+				if cell == "reference" || cell == "terminal" {
+					want = workersessions.ErrContinuationProviderSessionInvalid
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("unsafe Factory capture: got %v want %v", err, want)
+				}
+			}
+			if len(r.sessions) != 1 || len(r.supervisions) != 0 {
+				t.Fatal("snapshot created a successor or restored source supervision")
+			}
+		})
+	}
+}
+
+func configureLiveFactoryCaptureRefusal(cell string, captured *archivedContinuationSource, attempt *runtimeAttempt) {
+	switch cell {
+	case "reference":
+		captured.snapshot.session.ProviderSessionAssociation.Reference.ID = "foreign"
+	case "terminal":
+		captured.snapshot.session.State = workersessions.StateCanceled
+	case "control-pending":
+		attempt.controlPending = true
+	case "journal-pending":
+		attempt.forceJournalPending = 1
+	case "persistence-lost":
+		attempt.controlPersistenceLost = true
+	}
 }
 
 func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
@@ -490,4 +833,133 @@ func TestContinuationLineageRetainsOwnerWhenPeerAppearsAfterReservation(t *testi
 		t.Fatalf("late peer received lineage: %+v, %v", peer, err)
 	}
 	r.finishStart()
+}
+
+// Head traversal is a registry component: detached session facts are enough
+// to prove that unsafe chains never reach reservation or acquire supervision.
+func TestContinuationHeadRejectsUnsafeChainsBeforeReservation(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"cycle", "reverse-link", "missing-head", "reserved", "starting", "running", "paused", "wrong-scope", "used-source"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			req.ResolveHead = true
+			r := newContinuationSource(t, req)
+			source := r.sessions[req.SourceWorkerSessionID]
+			source.SuccessorWorkerSessionID = "head"
+			head := source.Clone()
+			head.ID = "head"
+			head.PredecessorWorkerSessionID = source.ID
+			head.SuccessorWorkerSessionID = ""
+			want := workersessions.ErrContinuationExecutionUnavailable
+			switch cell {
+			case "cycle":
+				head.SuccessorWorkerSessionID = source.ID
+			case "reverse-link":
+				head.PredecessorWorkerSessionID = "foreign"
+			case "missing-head":
+				want = workersessions.ErrContinuationSourceNotFound
+			case "reserved", "starting", "running", "paused":
+				head.State = workersessions.State(strings.ToUpper(cell))
+				want = workersessions.ErrContinuationSourceActive
+			case "wrong-scope":
+				req.FactorySessionID = "foreign"
+				want = workersessions.ErrContinuationSourceNotFound
+			case "used-source":
+				req.ResolveHead = false
+				want = workersessions.ErrContinuationSourceConflict
+			}
+			r.sessions[source.ID] = source
+			if cell != "missing-head" {
+				r.sessions[head.ID] = head
+			}
+			_, err := r.Continue(t.Context(), req)
+			if !errors.Is(err, want) {
+				t.Fatalf("unsafe %s chain: got %v, want %v", cell, err, want)
+			}
+			if len(r.continueReplays) != 0 || len(r.continuationSources) != 0 || len(r.supervisions) != 0 ||
+				r.sessions[source.ID].SuccessorWorkerSessionID != "head" {
+				t.Fatal("rejected chain reserved execution or mutated its source")
+			}
+		})
+	}
+}
+
+// The registry owns capability policy; provider availability remains a controlled
+// peer. These reads must not reserve, launch, or restore supervision.
+func TestContinuationObservationCapabilityUsesValidatedHeadAndCurrentReference(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"available", "missing", "mismatch", "not-injected", "active", "cycle", "reverse", "missing-head", "reserved", "stopping", "stale-reference", "advanced-head"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			source := r.sessions[req.SourceWorkerSessionID]
+			source.SuccessorWorkerSessionID = "head"
+			head := source.Clone()
+			head.ID = "head"
+			head.PredecessorWorkerSessionID = source.ID
+			head.SuccessorWorkerSessionID = ""
+			head.ProviderSessionAssociation.WorkerSessionID = head.ID
+			r.sessions[source.ID], r.sessions[head.ID] = source, head
+			r.supervisions[head.ID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+			var wantHead string
+			wantRevivable := cell == "available"
+			r.inspection = continuationInspectionFake{inspect: func(got providersessions.InspectRequest) (providersessions.InspectResult, error) {
+				if _, err := r.Get(got.Context, workersessions.GetRequest{ID: head.ID}); err != nil {
+					t.Error(err)
+				}
+				if cell == "stale-reference" || cell == "advanced-head" {
+					r.mu.Lock()
+					changed := r.sessions[head.ID].Clone()
+					if cell == "stale-reference" {
+						changed.ProviderSessionAssociation.Reference.ID = "changed"
+					} else {
+						changed.SuccessorWorkerSessionID = "new-head"
+					}
+					r.sessions[head.ID] = changed
+					r.mu.Unlock()
+				}
+				return continuationInspectionCellResult(cell, got)
+			}}
+			wantHead = configureContinuationObservationCell(cell, r, source, head)
+			observed := r.withContinuationCapability(t.Context(), workersessions.Observation{WorkerSessionID: source.ID, State: source.State})
+			if observed.Revivable != wantRevivable || observed.ContinuationHeadWorkerSessionID != wantHead {
+				t.Fatalf("capability = revivable %v, head %q; want %v, %q", observed.Revivable, observed.ContinuationHeadWorkerSessionID, wantRevivable, wantHead)
+			}
+			if len(r.continueReplays) != 0 || r.activeStarts != 0 || len(r.sessions) != 2 && cell != "missing-head" {
+				t.Fatal("capability read acquired execution authority")
+			}
+		})
+	}
+}
+
+func configureContinuationObservationCell(cell string, r *registry, source, head workersessions.Session) string {
+	wantHead := head.ID
+	switch cell {
+	case "not-injected":
+		r.inspection = nil
+	case "active":
+		head.State = workersessions.StateRunning
+		r.sessions[head.ID] = head
+	case "cycle":
+		head.SuccessorWorkerSessionID = source.ID
+		r.sessions[head.ID] = head
+		wantHead = ""
+	case "reverse":
+		head.PredecessorWorkerSessionID = "foreign"
+		r.sessions[head.ID] = head
+		wantHead = ""
+	case "missing-head":
+		delete(r.sessions, head.ID)
+		wantHead = ""
+	case "reserved":
+		r.continuationSources[head.ID] = "competing"
+	case "stopping":
+		r.stopping = true
+	case "stale-reference", "advanced-head":
+		wantHead = ""
+	}
+
+	return wantHead
 }

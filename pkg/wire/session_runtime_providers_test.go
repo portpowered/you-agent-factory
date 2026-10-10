@@ -804,7 +804,7 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 		t.Fatalf("events service = %v", err)
 	}
 	execution := wireTestWorkersService{}
-	service, err := provideWorkerSessionsService(execution, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil)
+	service, err := provideWorkerSessionsService(execution, eventsService, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil, nil)
 	if err != nil {
 		t.Fatalf("worker sessions factory() error = %v", err)
 	}
@@ -878,7 +878,7 @@ func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, re
 	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingPersistence
 }
 
-func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (unavailableWorkerControlStore) LookupPreparedWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingPersistence
 }
 
@@ -888,4 +888,8 @@ func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context
 
 func (wireTestWorkersService) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
 	return request.Validate()
+}
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
 }

@@ -15,19 +15,24 @@ const fleetHistorySourcePageSize = 1000
 
 // FleetHistory samples admitted owners before projecting the shared durable
 // catalog. It owns one bounded snapshot cache for the process-wide query.
-type FleetHistory struct {
-	catalog   func(context.Context) ([]workersessions.Service, error)
-	logs      *LogReader
-	clock     platformclock.Source
-	logger    logging.Logger
-	snapshots observationSnapshots
+type capturedObservationReader interface {
+	GetCapturedObservation(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error)
 }
 
-func NewFleetHistory(catalog func(context.Context) ([]workersessions.Service, error), captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget) *FleetHistory {
+type FleetHistory struct {
+	continuation capturedObservationReader
+	catalog      func(context.Context) ([]workersessions.Service, error)
+	logs         *LogReader
+	clock        platformclock.Source
+	logger       logging.Logger
+	snapshots    observationSnapshots
+}
+
+func NewFleetHistory(catalog func(context.Context) ([]workersessions.Service, error), captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget, continuation capturedObservationReader) *FleetHistory {
 	if catalog == nil || clock == nil || snapshots == nil {
 		return nil
 	}
-	query := &FleetHistory{catalog: catalog, clock: clock, logger: logging.EnsureLogger(logger), snapshots: newObservationSnapshots(snapshots)}
+	query := &FleetHistory{continuation: continuation, catalog: catalog, clock: clock, logger: logging.EnsureLogger(logger), snapshots: newObservationSnapshots(snapshots)}
 	// Older injected writers can lack captured-read support. Active queries
 	// remain available; durable queries explicitly report unavailable.
 	if captured != nil {
@@ -112,6 +117,7 @@ func (s *FleetHistory) observations(ctx context.Context, req workersessions.List
 		if err != nil {
 			return nil, err
 		}
+		s.completeArchivedCapabilities(ctx, archived)
 		result = append(result, archived...)
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -182,4 +188,21 @@ func readFleetHistoryOwnerPages(ctx context.Context, source workersessions.Servi
 func validFleetHistoryOwner(row workersessions.Observation, req workersessions.ListWorkerSessionObservationsRequest) bool {
 	return row.Validate() == nil && !row.State.Terminal() && observationScopeMatches(row.Direct, req.Scope) &&
 		(req.FactorySessionID == "" || row.FactorySessionID == strings.TrimSpace(req.FactorySessionID))
+}
+
+// Reuse the injected admission owner for current capability. Fleet history
+// continues to own its selected historical identity and health projection.
+func (s *FleetHistory) completeArchivedCapabilities(ctx context.Context, rows []workersessions.Observation) {
+	if s.continuation == nil {
+		return
+	}
+	for i := range rows {
+		row, err := s.continuation.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: rows[i].WorkerSessionID, FactorySessionID: rows[i].FactorySessionID,
+		})
+		if err == nil && identityOfHistory(row) == identityOfHistory(rows[i]) {
+			rows[i].Revivable = row.Revivable
+			rows[i].ContinuationHeadWorkerSessionID = row.ContinuationHeadWorkerSessionID
+		}
+	}
 }

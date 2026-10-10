@@ -213,6 +213,7 @@ func (writer *FileWriter) rebuildRecordingIndex(ctx context.Context, id string) 
 			continue
 		}
 		indexed := writer.catalogEntry(session)
+		writer.prepareRestartRecipe(ctx, entry, session, indexed)
 		writer.catalogMu.Lock()
 		writer.acceptCatalogEntry(indexed)
 		writer.indexSuccessorOpening(session, indexed)

@@ -53,6 +53,17 @@ func (writer *FileWriter) acceptCatalogEntry(entry recordings.WorkerSessionCatal
 // No journal is scanned on subsequent pages. Like lookup, this read operation
 // intentionally avoids per-request logging on the high-volume capture path.
 func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return writer.listWorkerSessionCaptures(ctx, request)
+}
+
+// ListPreparedWorkerSessionCaptures shares catalog membership and paging with
+// explicit recording reads, but cannot rebuild or hydrate missing summaries.
+func (writer *FileWriter) ListPreparedWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	request.PreparedSummariesOnly = true
+	return writer.listWorkerSessionCaptures(ctx, request)
+}
+
+func (writer *FileWriter) listWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	limit := request.Limit
 	if limit == 0 {
 		limit = defaultCatalogPageLimit
@@ -63,7 +74,7 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	if err := ctx.Err(); err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
-	if err := writer.rebuildCatalog(ctx); err != nil {
+	if err := writer.prepareCatalogRead(ctx, request.PreparedSummariesOnly); err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
 	// Association queries need the complete membership set to prove absence or
@@ -74,21 +85,17 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	if request.RequireCompleteMembership && unproven {
 		return recordings.WorkerCapturedCatalogPage{}, recordings.ErrWorkerRecordingReplay
 	}
-	entries, generation := writer.catalogMembership()
+	entries, generation := writer.scopedCatalogMembership(request.FactorySessionID)
 	after, err := decodeCatalogCursor(request.NextToken, generation)
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
-	start := 0
-	if after != "" {
-		start = sort.Search(len(entries), func(i int) bool { return entries[i].WorkerSessionID >= after })
-		if start == len(entries) || entries[start].WorkerSessionID != after {
-			return recordings.WorkerCapturedCatalogPage{}, recordings.ErrInvalidWorkerRecordingRequest
-		}
-		start++
+	start, err := catalogPageStart(entries, after)
+	if err != nil {
+		return recordings.WorkerCapturedCatalogPage{}, err
 	}
 	end := min(start+limit, len(entries))
-	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation)
+	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation, request.PreparedSummariesOnly, request.FactorySessionID)
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
@@ -104,6 +111,32 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 		page.NextToken = base64.RawURLEncoding.EncodeToString(data)
 	}
 	return page, ctx.Err()
+}
+
+func catalogPageStart(entries []recordings.WorkerSessionCatalogEntry, after string) (int, error) {
+	if after == "" {
+		return 0, nil
+	}
+	start := sort.Search(len(entries), func(i int) bool { return entries[i].WorkerSessionID >= after })
+	if start == len(entries) || entries[start].WorkerSessionID != after {
+		return 0, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	return start + 1, nil
+}
+
+func (writer *FileWriter) prepareCatalogRead(ctx context.Context, preparedOnly bool) error {
+	if !preparedOnly {
+		return writer.rebuildCatalog(ctx)
+	}
+	if err := writer.lockCatalogRebuild(ctx); err != nil {
+		return err
+	}
+	prepared := writer.catalogLoaded
+	writer.unlockCatalogRebuild()
+	if !prepared {
+		return recordings.ErrWorkerRecordingReplay
+	}
+	return ctx.Err()
 }
 
 // catalogMembership returns an immutable identity snapshot. Existing-session
@@ -154,4 +187,20 @@ func decodeCatalogCursor(token, generation string) (string, error) {
 		return "", recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return cursor.After, nil
+}
+
+// Unrelated scopes cannot invalidate a scoped association snapshot. Damage and
+// ambiguity still fence complete membership before selecting this subset.
+func (writer *FileWriter) scopedCatalogMembership(factorySessionID string) ([]recordings.WorkerSessionCatalogEntry, string) {
+	entries, generation := writer.catalogMembership()
+	if factorySessionID == "" {
+		return entries, generation
+	}
+	scoped := make([]recordings.WorkerSessionCatalogEntry, 0)
+	for _, entry := range entries {
+		if entry.FactorySessionID == factorySessionID {
+			scoped = append(scoped, entry)
+		}
+	}
+	return scoped, writer.catalogGeneration(scoped)
 }

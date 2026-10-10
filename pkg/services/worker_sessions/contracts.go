@@ -465,6 +465,8 @@ type ContinueRequest struct {
 	SourceWorkerSessionID    string
 	SuccessorWorkerSessionID string
 	FollowUpInput            string
+	// ResolveHead explicitly selects the newest validated continuation source.
+	ResolveHead bool
 }
 
 // Normalize returns the immutable request tuple used for validation and

@@ -46,6 +46,9 @@ func (r *registry) historyObservations(ctx context.Context, req workersessions.L
 	if err != nil {
 		return nil, err
 	}
+	for i := range archived {
+		archived[i] = r.withContinuationCapability(ctx, archived[i])
+	}
 	result = append(result, archived...)
 	sort.Slice(result, func(i, j int) bool {
 		left, right := identityOfHistory(result[i]), identityOfHistory(result[j])

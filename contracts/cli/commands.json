@@ -11343,6 +11343,30 @@
             "since": "1.0.0"
           }
         },
+        "you.worker-sessions.continue.flag.head": {
+          "id": "you.worker-sessions.continue.flag.head",
+          "long": "head",
+          "usage": "resolve the newest terminal continuation head",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.continue.flag.head",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.worker-sessions.continue.flag.successor-worker-session-id": {
           "id": "you.worker-sessions.continue.flag.successor-worker-session-id",
           "long": "successor-worker-session-id",

@@ -457,7 +457,8 @@ func executeGeneratedWorkerSessionsContinueWithValues(
 		Context:                  cmd.Context(), Server: globals.server, Remote: remotePlacementSelected(globals),
 		FactorySessionID: inputs.factorySessionID, RequestID: inputs.requestID, SourceWorkerSessionID: inputs.sourceWorkerSessionID,
 		SuccessorWorkerSessionID: inputs.successorWorkerSessionID, FollowUpInput: inputs.userMessage,
-		Prompt: inputs.followUpInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
+		ResolveHead: inputs.resolveHead,
+		Prompt:      inputs.followUpInput, Stdin: cmd.InOrStdin(), StdinIsTTY: startupcli.StdinIsTTY(cmd.Context()),
 		Async: inputs.async, OutputFormat: inputs.outputFormat,
 		JSON:  globals.json || strings.EqualFold(strings.TrimSpace(inputs.outputFormat), "json"),
 		Local: local, Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
@@ -469,7 +470,7 @@ type generatedWorkerSessionsContinueInputs struct {
 	factorySessionID, sourceWorkerSessionID, requestID, successorWorkerSessionID string
 	userMessage, outputFormat                                                    string
 	followUpInput                                                                []string
-	async                                                                        bool
+	async, resolveHead                                                           bool
 }
 
 func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generatedWorkerSessionsContinueInputs, error) {
@@ -503,6 +504,10 @@ func readGeneratedWorkerSessionsContinueInputs(values map[string]any) (generated
 		return generatedWorkerSessionsContinueInputs{}, err
 	}
 	inputs.async, err = commandInputValue[bool](values, "you.worker-sessions.continue.flag.async")
+	if err != nil {
+		return generatedWorkerSessionsContinueInputs{}, err
+	}
+	inputs.resolveHead, err = optionalCommandInputValue[bool](values, "you.worker-sessions.continue.flag.head")
 	if err != nil {
 		return generatedWorkerSessionsContinueInputs{}, err
 	}

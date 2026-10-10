@@ -13,6 +13,7 @@ package wire
 import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
@@ -52,6 +53,7 @@ func NewService(
 	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
 	continuationSupport providers.Service,
+	inspection providersessions.Service,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
 		execution,
@@ -65,5 +67,6 @@ func NewService(
 		restart,
 		snapshots,
 		continuationSupport,
+		inspection,
 	)
 }

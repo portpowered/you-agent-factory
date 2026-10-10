@@ -147,10 +147,32 @@ func runtimeAttemptAdmissionRequest(
 	request workers.WorkstationDispatchRequest,
 	executeRequest workers.ExecuteRequest,
 ) workers.WorkstationDispatchRequest {
-	request.Execution = workers.CloneWorkstationExecutionRequest(request.Execution)
-	request.Execution.Model = strings.TrimSpace(executeRequest.Target.Model.Name)
-	request.Execution.ModelProvider = strings.TrimSpace(executeRequest.Target.Model.Provider)
-	request.Execution.ReasoningEffort = strings.TrimSpace(executeRequest.Target.Model.ReasoningEffort)
+	// The planned dispatch is not an executable restart recipe: model operation,
+	// provider, prompt and working root are selected by the execution resolver.
+	// Capture those resolved facts while preserving the original admission scope.
+	planned := workers.CloneWorkstationExecutionRequest(request.Execution)
+	request.Execution = workstationDispatchRequestFromExecute(executeRequest).Execution
+	// Generic execution providers (for example a script runner) do not imply
+	// inference attribution. Only the resolved model selection supplies it.
+	request.Execution.ModelProvider = providers.ID(strings.ToLower(strings.TrimSpace(executeRequest.Target.Model.Provider))).CanonicalSessionProvider()
+	// Agent execution selects the resolved provider ahead of a default runner.
+	// Capture that same identity so its streamed facts and restart recipe agree.
+	if runner := workers.NormalizeRunnerID(executeRequest.Target.RunnerID); runner != "script" && runner != "inference" {
+		request.Execution.RunnerID = workers.NormalizeRunnerID(firstRuntimeValue(executeRequest.Target.Provider.ID, executeRequest.Target.Provider.Alias, request.Execution.RunnerID))
+	}
+	if executeRequest.Target.RunnerID == "script" {
+		request.Execution.RunnerID = planned.RunnerID
+		request.Execution.ExecutorProvider = planned.ExecutorProvider
+		request.Execution.ModelProvider = planned.ModelProvider
+		request.Execution.Model = planned.Model
+		request.Execution.ReasoningEffort = planned.ReasoningEffort
+	}
+	request.Execution.Dispatch = planned.Dispatch
+	request.Execution.FactorySessionID = firstRuntimeValue(planned.FactorySessionID, request.Execution.FactorySessionID)
+	request.Execution.RuntimeID = firstRuntimeValue(planned.RuntimeID, request.Execution.RuntimeID)
+	request.Execution.RecordingID = firstRuntimeValue(planned.RecordingID, request.Execution.RecordingID)
+	request.Execution.GenerationID = firstRuntimeValue(planned.GenerationID, request.Execution.GenerationID)
+	request.Execution.OriginatingArtifact = planned.OriginatingArtifact
 	return request
 }
 

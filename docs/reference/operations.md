@@ -825,7 +825,13 @@ execution settings. A terminal direct source can continue after a server restart
 when its complete capture and saved execution input remain available in the
 same profile. Portos does not read native provider logs for this operation.
 
-Retry with the same request ID, source, successor, and follow-up input. A
+Add `--head` to continue the newest terminal session in the source's continuation
+chain. The HTTP request accepts the same option as `resolveHead: true`.
+The response names the resolved source as the successor's predecessor.
+Without this option, an already-used source returns a conflict.
+An active head or invalid chain fails before provider execution.
+
+Retry with the same request ID, addressed source, head option, successor, and follow-up input. A
 completed, durably admitted successor returns its recorded outcome and output
 after restart, without another provider execution. Changing the successor or
 follow-up input conflicts. A saved input or opening alone cannot prove admission;

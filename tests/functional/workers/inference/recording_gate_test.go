@@ -621,10 +621,14 @@ func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, re
 	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
 }
 
-func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (unavailableWorkerControlStore) LookupPreparedWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
 }
 
 func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingReplay
+}
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
 }

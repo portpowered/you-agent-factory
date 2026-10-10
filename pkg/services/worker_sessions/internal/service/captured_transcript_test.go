@@ -217,3 +217,7 @@ func TestCapturedTranscriptKeepsRetryAttemptsSeparate(t *testing.T) {
 		})
 	}
 }
+
+func (*transcriptCaptureFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}

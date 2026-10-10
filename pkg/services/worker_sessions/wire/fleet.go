@@ -32,11 +32,11 @@ type FleetObservationService struct {
 // NewFleetObservationService constructs a process-wide top-level observation
 // view from a dynamic service catalog. Construction stays in the owning
 // service's wire package so the service root remains a single contract.
-func NewFleetObservationService(catalog ObservationServiceCatalog, captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget) *FleetObservationService {
+func NewFleetObservationService(catalog ObservationServiceCatalog, captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget, continuation workersessions.Service) *FleetObservationService {
 	if catalog == nil || clock == nil || snapshots == nil {
 		return nil
 	}
-	return &FleetObservationService{catalog: catalog, history: internalservice.NewFleetHistory(catalog, captured, clock, logger, snapshots)}
+	return &FleetObservationService{catalog: catalog, history: internalservice.NewFleetHistory(catalog, captured, clock, logger, snapshots, continuation)}
 }
 
 // GetObservationByWorkerSessionID resolves one top-level Worker Session

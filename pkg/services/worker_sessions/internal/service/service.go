@@ -18,6 +18,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -106,6 +107,7 @@ type registry struct {
 	recording      recordings.WorkerSessionRecordingService
 	operations     recordings.WorkerControlOperationStore
 	restart        recordings.WorkerRestartInputStore
+	inspection     providersessions.Service
 	stopOperations sync.Map // request key -> *sync.Mutex; no registry lock spans a join
 	clock          platformclock.Source
 	scheduler      platformclock.TimerSource
@@ -167,6 +169,8 @@ func prepareRuntimeAttemptExecution(req workersessions.RuntimeAttemptRequest) (w
 // validated at admission, before reservation or publication.
 // The control-operation store is required at construction and is injected
 // directly from the Recordings writer capability.
+// inspection is the public Provider Sessions peer; missing inspection leaves
+// continuation unavailable without granting execution from historical identity.
 func New(
 	execution workers.Service,
 	eventsAppender EventsAppender,
@@ -176,6 +180,7 @@ func New(
 	recording recordings.WorkerSessionRecordingService,
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
+	inspection providersessions.Service,
 ) (workersessions.Service, error) {
 	if missingControlOperationStore(operations) {
 		return nil, recordings.ErrMissingWorkerControlOperationStore
@@ -208,6 +213,7 @@ func New(
 		recording:                   recording,
 		operations:                  operations,
 		restart:                     restart,
+		inspection:                  inspection,
 		logger:                      logger,
 		lifecycleCtx:                lifecycleCtx,
 		lifecycleCancel:             lifecycleCancel,

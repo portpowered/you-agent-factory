@@ -45,7 +45,7 @@ func TestCapturedLogsRetainCommittedIdentityAndDetachedTime(t *testing.T) {
 			ID: events.RecordID{Position: 2}, Payload: []byte(`{"kind":"MESSAGE"}`),
 		}, CapturedAt: &stamp}},
 	}}
-	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, fake, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil)
+	service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, fake, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil, continuationInspectionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestCapturedLogsReturnSafeTypedStorageOutcomes(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, &capturedActivityFake{err: cell.source}, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil)
+			service, err := NewWithCapturedActivity(nil, nil, logging.NoopLogger{}, nil, nil, nil, &capturedActivityFake{err: cell.source}, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, newTestHistoryBudget(), nil, continuationInspectionFake{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -145,10 +145,18 @@ func (unavailableWorkerControlStore) ReadWorkerRestartRecipe(context.Context, re
 	return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingPersistence
 }
 
-func (unavailableWorkerControlStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (unavailableWorkerControlStore) LookupPreparedWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingPersistence
 }
 
 func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
+}
+
+func (*capturedActivityFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
 }

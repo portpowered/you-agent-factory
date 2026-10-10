@@ -90,16 +90,23 @@ func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, targ
 // under test decides whether one direct execution has reconstructible input.
 func TestDirectRestartRecipePreservesInputOrSkipsUnsafeInput(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"safe", "store-failure", "owner-refused", "factory", "env-override", "workflow-context", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-key", "non-json-token"} {
+	for _, cell := range []string{"safe", "store-failure", "owner-refused", "factory", "factory-context", "factory-context-env", "env-override", "workflow-context", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-key", "non-json-token"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			r, plan, _ := newDurableInterruptFixture(t)
 			store := &restartRecipeStore{}
 			r.restart = store
-			r.observations["worker"] = &observation{direct: cell != "factory"}
+			r.observations["worker"] = &observation{direct: !strings.HasPrefix(cell, "factory")}
 			plan.execution.Execution.Model = "captured-model"
 			plan.execution.Execution.ReasoningEffort = "high"
-			if cell != "safe" && cell != "store-failure" && cell != "factory" {
+			if strings.HasPrefix(cell, "factory-context") {
+				plan.execution.Execution.RuntimeID = "ended-runtime"
+				plan.execution.Execution.WorkflowContext = &workers.Context{SessionID: "factory"}
+				if cell == "factory-context-env" {
+					plan.execution.Execution.WorkflowContext.EnvVars = map[string]string{"API_KEY": "private"}
+				}
+			}
+			if cell != "safe" && cell != "store-failure" && !strings.HasPrefix(cell, "factory") {
 				configureUnsafeInterruptRecipe(&plan, cell)
 			}
 			if cell == "store-failure" {
@@ -108,9 +115,12 @@ func TestDirectRestartRecipePreservesInputOrSkipsUnsafeInput(t *testing.T) {
 			if cell == "owner-refused" {
 				store.err = recordings.ErrInvalidRecordingRedactionRequest
 			}
-			err := r.saveDirectRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{ID: "worker", Execution: plan.execution})
-			if cell == "safe" || cell == "store-failure" {
+			err := r.saveRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{ID: "worker", Execution: plan.execution})
+			if cell == "safe" || cell == "store-failure" || cell == "factory" || cell == "factory-context" {
 				assertDirectRestartRecipeStored(t, store, plan.dispatchID, err)
+				if cell == "factory-context" && (store.execution.Execution.RuntimeID != "" || store.execution.Execution.WorkflowContext != nil || plan.execution.Execution.WorkflowContext == nil) {
+					t.Fatal("Factory restart restored Runtime ownership or changed the source input")
+				}
 			} else if cell == "owner-refused" {
 				if store.calls != 1 || err != nil {
 					t.Fatalf("owner refusal blocked ordinary invocation: calls=%d error=%v", store.calls, err)
@@ -142,6 +152,11 @@ func (*controlCaptureReader) ListWorkerSessionCaptures(context.Context, recordin
 func (f *controlCaptureReader) LookupWorkerSessionCapture(_ context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
 	f.id = id
 	return f.entry, f.err
+}
+
+func (f *controlCaptureReader) LookupWorkerSessionSummary(_ context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	f.id = id
+	return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{Catalog: f.entry}}, f.err
 }
 
 func (*controlCaptureReader) ReadWorkerCapturedActivity(context.Context, recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
@@ -442,7 +457,7 @@ func (store *restartRecipeStore) ReadWorkerRestartRecipe(context.Context, record
 	return store.execution, store.err
 }
 
-func (store *restartRecipeStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (store *restartRecipeStore) LookupPreparedWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return recordings.WorkerContinuationSource{Execution: store.execution, Reference: store.reference, Terminal: recordings.WorkerRecordingTerminal{Status: "COMPLETED"}}, store.err
 }
 
@@ -450,7 +465,7 @@ func (store *restartRecipeStore) ReadWorkerContinuationSource(context.Context, r
 // capture lookup collaborators, without opening a provider execution.
 func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"captured", "captured-scoped", "missing", "wrong-attempt", "wrong-scope", "recipe-scope", "wrong-reference"} {
+	for _, cell := range []string{"captured", "captured-scoped", "factory", "factory-missing", "missing", "wrong-attempt", "wrong-scope", "recipe-scope", "wrong-reference"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -468,6 +483,15 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 			}}
 			r.logs = &LogReader{reader: reader}
 			r.restart = store
+			if strings.HasPrefix(cell, "factory") {
+				r.observations[req.SourceWorkerSessionID].direct = false
+				live := &r.supervisions[req.SourceWorkerSessionID].execution.Execution
+				live.RuntimeID = "source-runtime"
+				live.WorkflowContext = &workers.Context{SessionID: "source-factory"}
+				if cell == "factory-missing" {
+					store.err = os.ErrNotExist
+				}
+			}
 			switch cell {
 			case "captured-scoped":
 				store.execution.Execution.FactorySessionID = "factory"
@@ -485,7 +509,7 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 				store.reference.ID = "foreign-provider-session"
 			}
 			replay, owner, err := r.reserveContinuation(req)
-			if cell != "captured" && cell != "captured-scoped" {
+			if cell != "captured" && cell != "captured-scoped" && cell != "factory" {
 				expected := workersessions.ErrContinuationExecutionUnavailable
 				if cell == "wrong-reference" {
 					expected = workersessions.ErrContinuationProviderSessionInvalid
@@ -496,6 +520,9 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 				return
 			}
 			assertCapturedContinuationPlan(t, replay, owner, err, req, reader.entry.FactorySessionID)
+			if cell == "factory" && (!replay.plan.direct || replay.plan.execution.Execution.RuntimeID != "" || replay.plan.execution.Execution.WorkflowContext != nil) {
+				t.Fatal("Factory continuation inherited Runtime ownership or workflow context")
+			}
 		})
 	}
 }
@@ -961,6 +988,24 @@ func TestContinuationTerminalPublicationWaitHonorsCallerCancellation(t *testing.
 	}
 }
 
+func TestContinuationObservationDoesNotWaitForTerminalPublication(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	supervision := newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	supervision.accepted = true
+	r.supervisions[req.SourceWorkerSessionID] = supervision
+	r.observations[req.SourceWorkerSessionID] = &observation{direct: true}
+	r.logs = &LogReader{reader: &controlCaptureReader{}}
+	_, err := r.readContinuationRecipeContext(t.Context(), req, true)
+	if !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) {
+		t.Fatalf("pending terminal capability = %v, want unavailable", err)
+	}
+	if len(r.continueReplays) != 0 || len(r.sessions) != 1 {
+		t.Fatal("observation reserved a successor")
+	}
+}
+
 func TestWorkNameCaptureUsesPrimaryDispatchedWork(t *testing.T) {
 	t.Parallel()
 	for _, scenario := range []string{"named", "missing-primary", "nameless", "resource"} {
@@ -995,4 +1040,12 @@ func TestWorkNameCaptureUsesPrimaryDispatchedWork(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (*controlCaptureReader) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}
+
+func (store *restartRecipeStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
 }

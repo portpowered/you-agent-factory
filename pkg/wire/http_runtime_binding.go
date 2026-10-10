@@ -242,7 +242,7 @@ func newHTTPWorkerSessionsHandler(
 		controller, logs, workService, attribution, resolver,
 	)
 	captured, _ := writer.(recordings.WorkerCapturedActivityReader)
-	fleet := workersessionswire.NewFleetObservationService(sources, captured, clock, logging.NewZapLogger(logger, false), snapshots)
+	fleet := workersessionswire.NewFleetObservationService(sources, captured, clock, logging.NewZapLogger(logger, false), snapshots, logs)
 	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), logger)
 }
 

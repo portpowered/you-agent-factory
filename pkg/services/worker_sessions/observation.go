@@ -332,10 +332,14 @@ type Observation struct {
 	FactorySessionID         string
 	ProviderSession          providers.SessionRef
 	ProviderSessionAvailable bool
-	WorkIDs                  []string
-	TurnID                   string
-	AttemptID                string
-	State                    State
+	// Revivable describes current admission capability at the validated head,
+	// independently of historical provider identity and source control authority.
+	Revivable                       bool
+	ContinuationHeadWorkerSessionID string
+	WorkIDs                         []string
+	TurnID                          string
+	AttemptID                       string
+	State                           State
 	// ConfirmationState reports whether the canonical event responsible for
 	// State or the terminal outcome is covered by the completed Recordings
 	// flush watermark. Process-local observations and reads without a known

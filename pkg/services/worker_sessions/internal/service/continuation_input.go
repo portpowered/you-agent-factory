@@ -18,13 +18,15 @@ import (
 // The immutable tuple precedes successor opening and provider admission.
 // Its existence alone never proves admission or authorizes a retry.
 type durableContinuationInput struct {
-	Version                  int                                `json:"version"`
-	Target                   recordings.WorkerControlTarget     `json:"target"`
-	RequestID                string                             `json:"requestId"`
-	SuccessorWorkerSessionID string                             `json:"successorWorkerSessionId"`
-	FollowUpInput            string                             `json:"followUpInput"`
-	ProviderReference        interruptInputReference            `json:"providerReference"`
-	Execution                workers.WorkstationDispatchRequest `json:"execution"`
+	AddressedSourceWorkerSessionID string                             `json:"addressedSourceWorkerSessionId"`
+	ResolveHead                    bool                               `json:"resolveHead"`
+	Version                        int                                `json:"version"`
+	Target                         recordings.WorkerControlTarget     `json:"target"`
+	RequestID                      string                             `json:"requestId"`
+	SuccessorWorkerSessionID       string                             `json:"successorWorkerSessionId"`
+	FollowUpInput                  string                             `json:"followUpInput"`
+	ProviderReference              interruptInputReference            `json:"providerReference"`
+	Execution                      workers.WorkstationDispatchRequest `json:"execution"`
 }
 
 func (r *registry) persistContinuationInput(plan continuePlan) error {
@@ -61,10 +63,10 @@ func (r *registry) persistContinuationInput(plan continuePlan) error {
 		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
 		FactorySessionID: target.FactorySessionID, RequestID: "continue/" + plan.request.RequestID,
 	}
-	if err := r.requireNewContinuationInput(ctx, key, plan.request, target); err != nil {
+	if err := r.requireNewContinuationInput(ctx, key, plan.addressedRequest(), target); err != nil {
 		return err
 	}
-	return r.syncContinuationInput(ctx, key, plan.request, target, input)
+	return r.syncContinuationInput(ctx, key, plan.addressedRequest(), target, input)
 }
 
 func (r *registry) syncContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey, req workersessions.ContinueRequest, target recordings.WorkerControlTarget, input []byte) error {
@@ -122,6 +124,7 @@ func encodeContinuationInput(plan continuePlan, target recordings.WorkerControlT
 		execution.Execution.Dispatch.InputTokens = []any{}
 	}
 	input := durableContinuationInput{
+		AddressedSourceWorkerSessionID: plan.addressedRequest().SourceWorkerSessionID, ResolveHead: plan.request.ResolveHead,
 		Version: 1, Target: target, RequestID: plan.request.RequestID,
 		SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID, FollowUpInput: plan.request.FollowUpInput,
 		ProviderReference: interruptInputReference{Provider: providers.ID(reference.Provider), Kind: reference.Kind, ID: reference.ProviderSessionID},
@@ -131,7 +134,7 @@ func encodeContinuationInput(plan continuePlan, target recordings.WorkerControlT
 	if err != nil || !interruptRecipeSafe(payload, execution.Execution.ProcessEnvironment) {
 		return nil, recordings.ErrInvalidRecordingRedactionRequest
 	}
-	if _, err := decodeContinuationInput(payload, plan.request, target); err != nil {
+	if _, err := decodeContinuationInput(payload, plan.addressedRequest(), target); err != nil {
 		return nil, err
 	}
 	return payload, nil
@@ -156,7 +159,8 @@ func decodeContinuationInput(payload []byte, req workersessions.ContinueRequest,
 	}
 	accepted := workersessions.ContinueRequest{
 		FactorySessionID: req.Normalize().FactorySessionID,
-		RequestID:        input.RequestID, SourceWorkerSessionID: input.Target.WorkerSessionID,
+		RequestID:        input.RequestID, SourceWorkerSessionID: firstNonEmpty(input.AddressedSourceWorkerSessionID, input.Target.WorkerSessionID),
+		ResolveHead:              input.ResolveHead,
 		SuccessorWorkerSessionID: input.SuccessorWorkerSessionID, FollowUpInput: input.FollowUpInput,
 	}
 	if req.Validate() != nil || accepted != req.Normalize() {
@@ -172,19 +176,30 @@ func decodeContinuationInput(payload []byte, req workersessions.ContinueRequest,
 
 func validContinuationInput(input durableContinuationInput) bool {
 	req := workersessions.ContinueRequest{
-		RequestID: input.RequestID, SourceWorkerSessionID: input.Target.WorkerSessionID,
+		RequestID: input.RequestID, SourceWorkerSessionID: firstNonEmpty(input.AddressedSourceWorkerSessionID, input.Target.WorkerSessionID),
+		ResolveHead:              input.ResolveHead,
 		SuccessorWorkerSessionID: input.SuccessorWorkerSessionID, FollowUpInput: input.FollowUpInput,
 	}
 	target := input.Target
+	resolved := req
+	resolved.SourceWorkerSessionID = target.WorkerSessionID
 	reference := providers.SessionRef{Provider: input.ProviderReference.Provider, Kind: input.ProviderReference.Kind, ID: input.ProviderReference.ID}
 	execution := input.Execution.Execution
-	if input.Version != 1 || req.Validate() != nil || req != req.Normalize() || reference.Validate() != nil ||
+	if input.Version != 1 || req.Validate() != nil || req != req.Normalize() || resolved.Validate() != nil || resolved != resolved.Normalize() || reference.Validate() != nil ||
+		(!input.ResolveHead && req.SourceWorkerSessionID != target.WorkerSessionID) ||
+		(input.ResolveHead && input.AddressedSourceWorkerSessionID == "") ||
 		strings.TrimSpace(target.RecordingID) == "" || strings.TrimSpace(target.RecordingGenerationID) == "" ||
 		strings.TrimSpace(target.OwnerEpoch) == "" || strings.TrimSpace(target.ExpectedAttemptID) == "" {
 		return false
 	}
 	return continuationInputExecutionMatches(input, execution) && directRestartRecipeSafe(input.Execution) &&
 		(workersessions.InvokeSessionRequest{ID: input.SuccessorWorkerSessionID, Execution: input.Execution}).Validate() == nil
+}
+
+func (plan continuePlan) addressedRequest() workersessions.ContinueRequest {
+	req := plan.request
+	req.SourceWorkerSessionID = firstNonEmpty(plan.addressedSourceID, req.SourceWorkerSessionID)
+	return req
 }
 
 func continuationInputExecutionMatches(input durableContinuationInput, execution workers.WorkstationExecutionRequest) bool {

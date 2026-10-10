@@ -27,6 +27,9 @@ func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, re
 	if strings.HasPrefix(record.WorkerSessionID, "t7-degraded-") && record.Record.ID.Position >= 3 {
 		return errors.New("private-t7-capture-failure")
 	}
+	if record.WorkerSessionID == "revival-incomplete-capture" && record.Record.ID.Position >= 3 {
+		return errors.New("private-revival-capture-failure")
+	}
 	if strings.HasPrefix(record.WorkerSessionID, "interrupt-admission-failure-") {
 		return errors.New("private-successor-opening-detail")
 	}
@@ -233,6 +236,17 @@ func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context
 	return execution, err
 }
 
+func (store *interruptPhaseAckStore) LookupPreparedWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	if target.WorkerSessionID == "revival-missing-recipe" {
+		return recordings.WorkerContinuationSource{}, errors.New("private-revival-missing-recipe")
+	}
+	source, err := store.WorkerRecordingStore.LookupPreparedWorkerContinuationSource(ctx, target)
+	if target.WorkerSessionID == "revival-stale-recipe" {
+		source.Execution.Execution.Dispatch.DispatchID = "stale-physical-attempt"
+	}
+	return source, err
+}
+
 // Preserve the real store's bounded read and activation capabilities while
 // keeping this decorator's controlled write/activity faults.
 func (store *interruptPhaseAckStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
@@ -241,4 +255,12 @@ func (store *interruptPhaseAckStore) LookupWorkerSessionSummary(ctx context.Cont
 
 func (store *interruptPhaseAckStore) RecoverWorkerOwners(ctx context.Context) error {
 	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}
+
+func (store *interruptPhaseAckStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	source, err := store.LookupPreparedWorkerContinuationSource(ctx, target)
+	if err != nil || source.Execution.Execution.Dispatch.DispatchID != target.ExpectedAttemptID {
+		return source, err
+	}
+	return store.WorkerRecordingStore.ValidateWorkerContinuationSource(ctx, target)
 }

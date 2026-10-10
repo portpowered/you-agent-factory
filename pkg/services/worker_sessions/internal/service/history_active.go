@@ -115,7 +115,7 @@ func (r *registry) activeHistoryObservations(ctx context.Context, req workersess
 		if err := projected.Validate(); err != nil {
 			return nil, err
 		}
-		observations = append(observations, projected)
+		observations = append(observations, r.withContinuationCapability(ctx, projected))
 	}
 	sort.Slice(observations, func(i, j int) bool {
 		left, right := observations[i], observations[j]

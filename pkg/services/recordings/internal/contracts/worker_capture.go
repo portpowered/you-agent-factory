@@ -19,6 +19,9 @@ type WorkerCaptureClock interface{ Now() time.Time }
 type WorkerCapturePreparationOperation func(context.Context) error
 
 type WorkerCapturedActivityReader interface {
+	// ListPreparedWorkerSessionCaptures reads only activation-prepared metadata;
+	// it refuses unavailable summaries without hydrating recording history.
+	ListPreparedWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	ListWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)
 	ReadWorkerCapturedActivity(context.Context, workerrecording.WorkerCapturedActivityRequest) (workerrecording.WorkerCapturedActivityPage, error)
@@ -44,7 +47,12 @@ type WorkerRestartInputStore interface {
 	ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error
 	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
 	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
-	ReadWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
+	// LookupPreparedWorkerContinuationSource selects activated metadata and the
+	// bounded immutable recipe. It never hydrates recording history.
+	LookupPreparedWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
+	// ValidateWorkerContinuationSource revalidates the exact immutable input
+	// against prepared facts for admission, without replaying history.
+	ValidateWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
 	ReadWorkerContinuationInput(context.Context, workerrecording.WorkerControlOperationKey) (json.RawMessage, error)
 }
 

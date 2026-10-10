@@ -831,6 +831,33 @@ func TestRuntimeAttemptPreparationPreservesResolvedRouting(t *testing.T) {
 	}
 }
 
+func TestRuntimeAttemptAdmissionCapturesResolvedExecutionFacts(t *testing.T) {
+	t.Parallel()
+	planned := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+	planned.Execution.FactorySessionID = "factory"
+	planned.Execution.RecordingID = "recording"
+	planned.Execution.Dispatch.DispatchID = "dispatch"
+	execution := workers.ExecuteRequest{}
+	execution.Target.RunnerID = "codex"
+	execution.Target.ExecutorProvider = "CODEX"
+	execution.Target.Model = workers.ModelReference{Name: "resolved-model", Provider: "codex", ReasoningEffort: "high"}
+	execution.Target.Workspace.WorkingDirectory = "/source-root"
+	execution.Target.Prompt.SystemPrompt = "resolved instruction"
+	execution.Input.ModelOperation = "inference"
+	admitted := runtimeAttemptAdmissionRequest(planned, execution)
+	if admitted.Execution.ModelOperation != "inference" || admitted.Execution.WorkingDirectory != "/source-root" ||
+		admitted.Execution.RunnerID != "codex" || admitted.Execution.ExecutorProvider != "CODEX" ||
+		admitted.Execution.Model != "resolved-model" || admitted.Execution.ReasoningEffort != "high" ||
+		admitted.Execution.SystemPrompt != "resolved instruction" {
+		t.Fatalf("admission lost resolved execution: %#v", admitted)
+	}
+	if admitted.Execution.FactorySessionID != "factory" || admitted.Execution.RecordingID != "recording" ||
+		admitted.Execution.Dispatch.DispatchID != "dispatch" || planned.Execution.ModelOperation != "" ||
+		planned.Execution.WorkingDirectory != "" {
+		t.Fatal("admission changed the original scope or caller request")
+	}
+}
+
 func TestRuntimeAttemptPreparationInstallsExecutingControlObserver(t *testing.T) {
 	t.Parallel()
 	for _, withObserver := range []bool{false, true} {

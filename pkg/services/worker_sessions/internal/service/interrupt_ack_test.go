@@ -482,3 +482,7 @@ func disputeInterruptPhase(field string, record *recordings.WorkerControlOperati
 		record.FailureCode = "different-failure"
 	}
 }
+
+func (*interruptPendingCaptureReader) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}

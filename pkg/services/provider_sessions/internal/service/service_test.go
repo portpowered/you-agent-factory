@@ -54,6 +54,10 @@ func TestCapturedProviderNativeOnlyNotFound(t *testing.T) {
 
 type emptyCapturedReader struct{}
 
+func (emptyCapturedReader) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return recordings.WorkerCapturedCatalogPage{}, nil
+}
+
 func (emptyCapturedReader) ListWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	return recordings.WorkerCapturedCatalogPage{}, nil
 }

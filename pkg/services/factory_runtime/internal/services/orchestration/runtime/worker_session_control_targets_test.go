@@ -1005,3 +1005,54 @@ func TestBeginWorkerAttemptRejectsNilRequest(t *testing.T) {
 		t.Fatalf("terminal present = %v, error = %v; want invalid request", terminal != nil, err)
 	}
 }
+
+func TestRuntimeAttemptAdmissionDoesNotInventScriptInference(t *testing.T) {
+	t.Parallel()
+	planned := workers.WorkstationDispatchRequest{WorkstationName: "script"}
+	planned.Execution.WorkerType = "script"
+	execution := workers.ExecuteRequest{}
+	execution.Target.WorkerType = "script"
+	execution.Target.RunnerID = "script"
+	execution.Target.Provider.ID = "script"
+	execution.Target.Provider.Alias = "generic-runner"
+	execution.Target.Model.Provider = "codex"
+	execution.Target.ExecutorProvider = "SCRIPT_WRAP"
+	admitted := runtimeAttemptAdmissionRequest(planned, execution)
+	if admitted.Execution.ModelProvider != "" || admitted.Execution.Model != "" || admitted.Execution.RunnerID != "" || admitted.Execution.ExecutorProvider != "" {
+		t.Fatalf("script admission invented inference: %+v", admitted.Execution)
+	}
+}
+
+func TestRuntimeAttemptAdmissionCapturesResolvedAgentProvider(t *testing.T) {
+	t.Parallel()
+	for _, reference := range []workers.ProviderReference{{ID: "cursor"}, {Alias: "cursor"}} {
+		execution := workers.ExecuteRequest{}
+		execution.Target.RunnerID = "codex"
+		execution.Target.Provider = reference
+		execution.Target.ExecutorProvider = workers.ExecutorProviderACP
+		execution.Target.Model.Provider = "cursor"
+		admitted := runtimeAttemptAdmissionRequest(workers.WorkstationDispatchRequest{}, execution)
+		if admitted.Execution.RunnerID != "cursor" || admitted.Execution.ModelProvider != "cursor" {
+			t.Fatalf("resolved provider lost from admission: %+v", admitted.Execution)
+		}
+	}
+}
+
+func TestRuntimeAttemptAdmissionCapturesCanonicalModelProvider(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"CODEX", "CLAUDE", "ANTIGRAVITY"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			for _, runner := range []string{"", "inference"} {
+				execution := workers.ExecuteRequest{}
+				execution.Target.RunnerID = runner
+				execution.Target.Provider.ID = provider
+				execution.Target.Model.Provider = provider
+				admitted := runtimeAttemptAdmissionRequest(workers.WorkstationDispatchRequest{}, execution)
+				if admitted.Execution.ModelProvider != strings.ToLower(provider) || (runner == "" && admitted.Execution.RunnerID != strings.ToLower(provider)) {
+					t.Fatalf("model provider attribution = %+v, want %q", admitted.Execution, strings.ToLower(provider))
+				}
+			}
+		})
+	}
+}

@@ -186,3 +186,36 @@ func TestCapturedTerminalEnrichmentPreservesUnrecordedAndControlledTiming(t *tes
 		})
 	}
 }
+
+func TestCapturedTerminalEnrichmentPreservesLiveTimingUntilCaptureComplete(t *testing.T) {
+	t.Parallel()
+	for _, state := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			for _, name := range []string{"pending-terminal", "missing-capture-clock", "foreign-attempt"} {
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
+					item := completedSummaryFixture(t, state == workersessions.StateFailed)
+					switch name {
+					case "pending-terminal":
+						item.Terminal = nil
+					case "missing-capture-clock":
+						item.CapturedAt = nil
+					case "foreign-attempt":
+						observationAttempt := workers.SessionPayload{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "foreign"}
+						payload, _ := json.Marshal(observationAttempt)
+						item.Opening.Payload, _ = json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload})
+					}
+					start := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
+					end, duration := start.Add(2*time.Second), 2*time.Second
+					observation := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: state, StartedAt: &start, EndedAt: &end, Duration: &duration, DurationBasis: workersessions.DurationBasisRecordedTimestamps}
+					r := &registry{logs: &LogReader{reader: &terminalSummaryReader{item: item}}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+					got := r.withCapturedTerminalObservation(t.Context(), observation)
+					if !reflect.DeepEqual(got.StartedAt, observation.StartedAt) || !reflect.DeepEqual(got.EndedAt, observation.EndedAt) || !reflect.DeepEqual(got.Duration, observation.Duration) || got.DurationBasis != observation.DurationBasis {
+						t.Fatalf("lost owned terminal timing before complete capture: %+v", got)
+					}
+				})
+			}
+		})
+	}
+}

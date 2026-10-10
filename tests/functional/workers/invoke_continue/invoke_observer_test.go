@@ -73,7 +73,7 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-r.release:
 		output := "T7 detached attempt completed"
-		if filepath.Base(request.WorkDir) == "t7-factory" {
+		if filepath.Base(request.WorkDir) == "t7-factory" || strings.Contains(string(request.Stdin), "durable occupied peer input") {
 			output = "T7 Factory sibling COMPLETE"
 		}
 		terminal := directCodexOutputWithoutSession(output)

@@ -9,6 +9,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -119,7 +120,11 @@ func (r *registry) GetCapturedObservation(ctx context.Context, req workersession
 	if r.logs == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}
-	return r.logs.GetObservationByWorkerSessionID(ctx, req)
+	projected, err := r.logs.GetObservationByWorkerSessionID(ctx, req)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return r.withContinuationCapability(ctx, projected), observationContextError(ctx)
 }
 
 // NewWithCapturedActivity constructs supervision and durable reads as one service.
@@ -131,11 +136,12 @@ func NewWithCapturedActivity(
 	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
 	continuationSupport providers.Service,
+	inspection providersessions.Service,
 ) (workersessions.Service, error) {
 	if snapshots == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable
 	}
-	service, err := New(execution, eventsAppender, logger, clock, scheduler, recording, operations, restart)
+	service, err := New(execution, eventsAppender, logger, clock, scheduler, recording, operations, restart, inspection)
 	if err != nil {
 		return nil, err
 	}

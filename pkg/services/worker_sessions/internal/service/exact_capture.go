@@ -24,9 +24,21 @@ func (r *registry) bindDirectRecording(req *workersessions.StartRequest) {
 
 // Unreconstructible requests remain invocable. Only an actual artifact-store
 // failure rejects admission; unsafe settings never become a changed recipe.
-func (r *registry) saveDirectRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
-	if _, metadata, ok := r.loadObservationState(req.ID); !ok || !metadata.direct {
+func (r *registry) saveRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
+	_, metadata, ok := r.loadObservationState(req.ID)
+	if !ok {
 		return nil
+	}
+	if !metadata.direct {
+		// Factory revival resumes the provider independently. A context containing
+		// explicit environment overrides cannot be reconstructed safely; retain
+		// normal invocation but do not grant restart eligibility for that case.
+		if workflow := req.Execution.Execution.WorkflowContext; workflow != nil && len(workflow.EnvVars) != 0 {
+			return nil
+		}
+		req.Execution = cloneWorkstationDispatchRequest(req.Execution)
+		req.Execution.Execution.WorkflowContext = nil
+		req.Execution.Execution.RuntimeID = ""
 	}
 	pub := r.publicationFor(req.ID)
 	if pub == nil {
@@ -96,12 +108,23 @@ func (r *registry) capturedInterruptPlan(ctx context.Context, plan interruptPlan
 // Read outside the registry lock; reservation later rechecks the immutable
 // source attempt. A replay already reserved in this host needs no storage read.
 func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, callers ...context.Context) (*workers.WorkstationDispatchRequest, error) {
+	ctx := r.serverOwnedContext()
+	if len(callers) != 0 && callers[0] != nil {
+		ctx = callers[0]
+	}
+	return r.readContinuationRecipeContext(ctx, req)
+}
+
+func (r *registry) readContinuationRecipeContext(ctx context.Context, req workersessions.ContinueRequest, observationOnly ...bool) (*workers.WorkstationDispatchRequest, error) {
 	r.mu.RLock()
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	source, exists := r.sessions[address]
 	metadata := r.observations[address]
 	_, replay := r.continueReplays[req.RequestID]
-	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
+	// Live Factory attempts use the same detached recipe as archived attempts.
+	// Their supervision still carries Runtime ownership and workflow context;
+	// neither may be inherited by an independent direct continuation.
+	read := !replay && exists && source.Terminal() && metadata != nil && r.supervisions[address] != nil && r.logs != nil
 	factorySessionID, terminalPublished := r.continuationPublicationLocked(address)
 	source = cloneSession(source)
 	r.mu.RUnlock()
@@ -111,15 +134,15 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 	if err := validateContinuationSourceAssociation(source); err != nil {
 		return nil, err
 	}
-	ctx := r.serverOwnedContext()
-	waitCtx := ctx
-	if len(callers) != 0 && callers[0] != nil {
-		waitCtx = callers[0]
-	}
-	if err := waitContinuationPublication(waitCtx, terminalPublished); err != nil {
+	if err := waitContinuationPublication(ctx, terminalPublished, observationOnly...); err != nil {
 		return nil, err
 	}
-	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
+	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
+	if !supported {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, source.ID)
+	catalog := summary.Capture.Catalog
 	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
@@ -128,7 +151,7 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
 		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
 	}
-	return r.readCapturedContinuationRecipe(ctx, target, source)
+	return r.readCapturedContinuationRecipe(ctx, target, source, observationOnly...)
 }
 
 // The caller holds r.mu while selecting the exact attempt's publication.
@@ -143,10 +166,23 @@ func (r *registry) continuationPublicationLocked(address string) (string, <-chan
 		}
 		supervision.mu.Unlock()
 	}
+	if attempt := r.runtimeAttemptControls[address]; attempt != nil {
+		terminalPublished = attempt.completed
+	}
 	return factorySessionID, terminalPublished
 }
 
-func waitContinuationPublication(ctx context.Context, terminalPublished <-chan struct{}) error {
+func waitContinuationPublication(ctx context.Context, terminalPublished <-chan struct{}, observationOnly ...bool) error {
+	// Observation must not join an in-progress publication: its consumer may
+	// be the one releasing that publication. Only completed facts grant capability.
+	if len(observationOnly) != 0 && observationOnly[0] && terminalPublished != nil {
+		select {
+		case <-terminalPublished:
+			return nil
+		default:
+			return workersessions.ErrContinuationExecutionUnavailable
+		}
+	}
 	// Terminal state is visible before capture finalization. Join the exact
 	// admitted attempt's publication, outside the registry lock, before reading
 	// the durable recipe. A peer's completion cannot release this barrier.
@@ -160,8 +196,8 @@ func waitContinuationPublication(ctx context.Context, terminalPublished <-chan s
 	return nil
 }
 
-func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {
-	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
+func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session, observationOnly ...bool) (*workers.WorkstationDispatchRequest, error) {
+	captured, err := r.lookupContinuationSource(ctx, target, observationOnly...)
 	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
 		captured.Execution.Execution.FactorySessionID != target.FactorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
@@ -212,4 +248,13 @@ func (r *registry) lockFrozenCapture(id string, target frozenControlTarget) (fun
 		return nil, staleControlTargetError()
 	}
 	return pub.mu.Unlock, nil
+}
+
+// Observation consumes activation-prepared facts. Admission also checks that
+// the immutable artifact still agrees before granting execution authority.
+func (r *registry) lookupContinuationSource(ctx context.Context, target recordings.WorkerControlTarget, observationOnly ...bool) (recordings.WorkerContinuationSource, error) {
+	if len(observationOnly) != 0 && observationOnly[0] {
+		return r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
+	}
+	return r.restart.ValidateWorkerContinuationSource(ctx, target)
 }

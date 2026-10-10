@@ -10,6 +10,10 @@ description: >-
   select the source Factory Session, successor identity and follow-up input.
   Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS.
 properties:
+  resolveHead:
+    type: boolean
+    default: false
+    description: Resolve the newest validated terminal continuation head before reserving a successor.
   factorySessionId:
     type: string
     minLength: 1

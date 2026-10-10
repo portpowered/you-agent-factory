@@ -219,6 +219,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		}
 	}
 	return listJSONObservation{
+		Revivable: session.Revivable, ContinuationHeadWorkerSessionID: session.ContinuationHeadWorkerSessionId,
 		Provider: session.Provider, PredecessorWorkerSessionID: session.PredecessorWorkerSessionId, SuccessorWorkerSessionID: session.SuccessorWorkerSessionId,
 		AttemptID: session.AttemptId, Direct: session.Direct, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
 		EndedAt: session.EndedAt, FactorySessionID: session.FactorySessionId, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
@@ -265,6 +266,7 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		{"Worker Session ID", session.WorkerSessionId}, {"Direct", fmt.Sprintf("%t", session.Direct)}, {"Provider", provider}, {"Kind", kind}, {"Provider Session ID", id},
 		{"Model", stringOrDash(session.Model)}, {"Reasoning Effort", stringOrDash(session.ReasoningEffort)},
 		{"Predecessor Worker Session ID", stringOrDash(session.PredecessorWorkerSessionId)}, {"Successor Worker Session ID", stringOrDash(session.SuccessorWorkerSessionId)},
+		{"Revivable", optionalRevivable(session.Revivable)}, {"Continuation head Worker Session ID", stringOrDash(session.ContinuationHeadWorkerSessionId)},
 		{"Work IDs", joinOrDash(session.WorkIds)}, {"Turn ID", stringOrDash(session.TurnId)}, {"Attempt ID", session.AttemptId},
 		{"State", stringOrDashPtr(string(session.State))}, {"Confirmation state", string(workerSessionConfirmationState(session))}, {"Started", formatTime(session.StartedAt)}, {"Ended", formatTime(session.EndedAt)},
 		{"Duration", formatDuration(session.DurationMillis)}, {"Duration basis", stringOrDashPtr(string(session.DurationBasis))},
@@ -374,4 +376,11 @@ func cliErrorCodeWithFallback(err error, fallback string) string {
 		return fallback
 	}
 	return code
+}
+
+func optionalRevivable(revivable *bool) string {
+	if revivable == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%t", *revivable)
 }

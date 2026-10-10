@@ -24,7 +24,8 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			local := platformreplay.NewLocal(runtime.GOOS)
-			writer := journalWriter(t, local)
+			probe := &journalProbe{Local: local}
+			writer := journalWriter(t, probe)
 			target := controlIntent(t, writer, "recording", "worker", "request").Target
 			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
 			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
@@ -37,14 +38,21 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			if cell != "active" {
 				persistContinuationSourceTerminal(t, writer, target, cell)
 			}
-			reopened, err := newTestFileWriter(local, writer.root)
+			reopened, err := newTestFileWriter(probe, writer.root)
 			if err != nil {
+				t.Fatal(err)
+			}
+			if source, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target); err == nil || source.Reference.ID != "" {
+				t.Fatalf("cold lookup hydrated execution authority: %+v, %v", source, err)
+			}
+			if err := reopened.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			if cell == "wrong-generation" {
 				target.RecordingGenerationID = "foreign-generation"
 			}
-			source, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			reads := probe.reads
+			source, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
 			if cell != "captured" {
 				if err == nil || source.Reference.ID != "" {
 					t.Fatalf("unproved source returned continuation data: %+v, %v", source, err)
@@ -53,9 +61,15 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			}
 			assertCapturedContinuationSource(t, source, err)
 			source.Execution.Execution.Model = "mutated"
-			again, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			again, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
 			if err != nil || again.Execution.Execution.Model != "captured-model" {
 				t.Fatalf("read mutated persisted source: %+v, %v", again, err)
+			}
+			if probe.reads != reads {
+				t.Fatalf("prepared continuation read storage: %d -> %d", reads, probe.reads)
+			}
+			if _, err := reopened.ValidateWorkerContinuationSource(t.Context(), target); err != nil || probe.reads <= reads {
+				t.Fatalf("admission did not revalidate recipe: reads=%d err=%v", probe.reads, err)
 			}
 		})
 	}
@@ -136,6 +150,37 @@ func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
 	execution.Execution.Model = "changed-model"
 	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); !errors.Is(err, recordings.ErrWorkerControlConflict) {
 		t.Fatalf("changed recipe = %v, want conflict", err)
+	}
+}
+
+func TestRestartRecipePreservesStructuredFactoryInputsAcrossReopen(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	target := controlIntent(t, writer, "recording", "worker", "request").Target
+	execution := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+	execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+	execution.Execution.Dispatch.WorkstationName = execution.WorkstationName
+	// Struct order differs from JSON map order; the integer also exceeds the
+	// exact range of float64. Neither may make a saved recipe unrecoverable.
+	token := struct {
+		Z string `json:"z"`
+		A int64  `json:"a"`
+	}{Z: "source input", A: 9007199254740993}
+	execution.Execution.Dispatch.InputTokens = []any{&token}
+	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(platformreplay.NewLocal(runtime.GOOS), writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := reopened.ReadWorkerRestartRecipe(t.Context(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := json.Marshal(decoded.Execution.Dispatch.InputTokens)
+	if err != nil || string(input) != `[{"a":9007199254740993,"z":"source input"}]` {
+		t.Fatalf("Factory input lost during recipe recovery: %s, %v", input, err)
 	}
 }
 
@@ -661,5 +706,54 @@ func TestRestartRecipePreflightBoundsSuccessorArtifact(t *testing.T) {
 	execution.Execution.Dispatch.DispatchID = "source/continue/" + id
 	if err := writer.ValidateWorkerRestartRecipe(t.Context(), id, execution); !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
 		t.Fatalf("oversized successor artifact accepted: %v", err)
+	}
+}
+
+func TestContinuationAdmissionRefusesChangedImmutableArtifact(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"missing", "canonical-replacement"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = "direct"
+			execution.Execution.Model = "captured-model"
+			execution.Execution.WorkingDirectory = "captured-workspace"
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+				t.Fatal(err)
+			}
+			persistContinuationSourceTerminal(t, writer, target, "captured")
+			identity := controlInputArtifact{Key: recordings.WorkerControlOperationKey{
+				RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
+				FactorySessionID: target.FactorySessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID,
+			}, Generation: target.RecordingGenerationID}
+			path := writer.controlInputPath(controlInputRef(identity))
+			if cell == "missing" {
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				execution.Execution.Model = "replacement-model"
+				input, err := encodeWorkerRestartRecipe(target, execution)
+				if err != nil {
+					t.Fatal(err)
+				}
+				identity.Input = input
+				data, err := json.Marshal(identity)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			source, err := writer.LookupPreparedWorkerContinuationSource(t.Context(), target)
+			assertCapturedContinuationSource(t, source, err)
+			if admitted, err := writer.ValidateWorkerContinuationSource(t.Context(), target); err == nil || admitted.Reference.ID != "" {
+				t.Fatalf("changed artifact authorized admission: %+v, %v", admitted, err)
+			}
+		})
 	}
 }

@@ -12,12 +12,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionservice "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type continuationInspectionFake struct{}
+
+func (continuationInspectionFake) Inspect(req providersessions.InspectRequest) (providersessions.InspectResult, error) {
+	return providersessions.InspectResult{Session: req.Session}, nil
+}
+
+func (continuationInspectionFake) Details(string, string, string) (providersessions.Detail, error) {
+	panic("continuation admission must not read transcript details")
+}
+
+func (continuationInspectionFake) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	panic("continuation admission must not project transcripts")
+}
 
 func continuationFromProviderMetadata(metadata *providers.SessionMetadata) *providers.ContinuationRef {
 	return (metadata).ContinuationRef()
@@ -37,7 +52,7 @@ func newServiceWithClock(
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 }
 
 // fakeExecution is a controlled legacy-shaped test double. The

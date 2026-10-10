@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -78,19 +80,22 @@ type continueTuple struct {
 	sourceID    string
 	successorID string
 	input       string
+	resolveHead bool
 }
 
 type continuePlan struct {
-	sourceAddress string
-	executor      workers.Service
-	clock         platformclock.Source
-	scheduler     platformclock.TimerSource
-	request       workersessions.ContinueRequest
-	execution     workers.WorkstationDispatchRequest
-	direct        bool
-	lineage       *workers.SessionLineage
-	archived      bool
-	interrupt     bool
+	sourceAddress        string
+	addressedSourceID    string
+	executor             workers.Service
+	clock                platformclock.Source
+	scheduler            platformclock.TimerSource
+	request              workersessions.ContinueRequest
+	execution            workers.WorkstationDispatchRequest
+	direct               bool
+	observationRuntimeID string
+	lineage              *workers.SessionLineage
+	archived             bool
+	interrupt            bool
 }
 
 type continuationSourceSnapshot struct {
@@ -194,6 +199,40 @@ func (r *registry) reserveContinuation(
 	req workersessions.ContinueRequest,
 	callers ...context.Context,
 ) (*continueReplay, bool, error) {
+	r.mu.RLock()
+	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	existing := r.continueReplays[req.RequestID]
+	r.mu.RUnlock()
+	if err != nil {
+		return nil, false, err
+	}
+	tuple := continueTuple{sourceID: firstNonEmpty(address, req.SourceWorkerSessionID), successorID: req.SuccessorWorkerSessionID,
+		input: req.FollowUpInput, resolveHead: req.ResolveHead}
+	if existing != nil {
+		if existing.tuple != tuple {
+			return nil, false, workersessions.ErrContinuationRequestIDConflict
+		}
+		return existing, false, nil
+	}
+	addressed := req
+	// A durable request accepted with head resolution can be recorded on a
+	// descendant. Find its tuple even when a retry changes the head flag, so
+	// restart preserves the request-id conflict rather than losing that fact
+	// behind the original source's used-state conflict. Default requests still
+	// execute only their addressed source and retain its ordinary refusal.
+	head, replay, err := r.resolveContinuationHead(req)
+	if replay != nil || (err != nil && (req.ResolveHead || errors.Is(err, workersessions.ErrContinuationRequestIDConflict))) {
+		return replay, false, err
+	}
+	if req.ResolveHead {
+		req = head
+	}
+	return r.reserveResolvedContinuation(req, addressed, tuple, callers...)
+}
+
+func (r *registry) reserveResolvedContinuation(
+	req, addressed workersessions.ContinueRequest, tuple continueTuple, callers ...context.Context,
+) (*continueReplay, bool, error) {
 	captured, err := r.readContinuationRecipe(req, callers...)
 	if err != nil {
 		return nil, false, err
@@ -203,7 +242,7 @@ func (r *registry) reserveContinuation(
 		return nil, false, err
 	}
 	if archived != nil {
-		if replay, err := r.readTerminalContinuationReplay(req, archived); replay != nil || err != nil {
+		if replay, err := r.readTerminalContinuationReplay(addressed, archived); replay != nil || err != nil {
 			return replay, false, err
 		}
 	}
@@ -216,19 +255,9 @@ func (r *registry) reserveContinuation(
 	if address == "" {
 		address = req.SourceWorkerSessionID
 	}
-	tuple := continueTuple{sourceID: address, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}
 
-	if r.continueReplays == nil {
-		r.continueReplays = make(map[string]*continueReplay)
-	}
-	if existing, ok := r.continueReplays[req.RequestID]; ok {
-		if existing.tuple != tuple {
-			return nil, false, workersessions.ErrContinuationRequestIDConflict
-		}
-		return existing, false, nil
-	}
-	if r.stopping {
-		return nil, false, workersessions.ErrContinuationServerStopping
+	if replay, err := r.existingContinuationReservationLocked(req.RequestID, tuple); replay != nil || err != nil {
+		return replay, false, err
 	}
 	snapshot, err := r.continuationSnapshotLocked(req, archived)
 	if err != nil {
@@ -250,21 +279,88 @@ func (r *registry) reserveContinuation(
 	if err := r.validateContinuationSupportLocked(snapshot.session.ProviderSessionAssociation.Reference); err != nil {
 		return nil, false, err
 	}
+	return r.reserveAvailableContinuationLocked(req, addressed, tuple, snapshot, continuation, archived)
+}
+
+// Inspection is a peer read, never a registry-lock or admission owner. Recheck
+// the exact source and request after it returns before acquiring a reservation.
+// The caller holds r.mu and retains responsibility for its final unlock.
+func (r *registry) reserveAvailableContinuationLocked(
+	req, addressed workersessions.ContinueRequest, tuple continueTuple,
+	snapshot continuationSourceSnapshot, continuation workers.WorkstationDispatchRequest,
+	archived *archivedContinuationSource,
+) (*continueReplay, bool, error) {
+	snapshot.session = snapshot.session.Clone()
+	reference := snapshot.session.ProviderSessionAssociation.Reference
+	r.mu.Unlock()
+	err := r.inspectContinuationReference(r.serverOwnedContext(), reference, snapshot.session.ID, snapshot.execution.Execution.FactorySessionID)
+	r.mu.Lock()
+	if replay, replayErr := r.existingContinuationReservationLocked(req.RequestID, tuple); replay != nil || replayErr != nil {
+		return replay, false, replayErr
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	current, err := r.continuationSnapshotLocked(req, archived)
+	if err != nil {
+		return nil, false, err
+	}
+	if current.dispatchID != snapshot.dispatchID || *current.session.ProviderSessionAssociation != *snapshot.session.ProviderSessionAssociation {
+		return nil, false, workersessions.ErrContinuationExecutionUnavailable
+	}
+	if _, err := r.buildContinuationExecutionLocked(req, current); err != nil {
+		return nil, false, err
+	}
 	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
+	replay.plan.addressedSourceID = addressed.SourceWorkerSessionID
+	if metadata := r.observations[snapshot.address]; metadata != nil {
+		replay.plan.observationRuntimeID = metadata.runtimeID
+	}
 	if archived != nil {
 		r.publications[snapshot.address] = &publication{capture: archived.target}
 	}
 	return replay, true, nil
 }
 
+func (r *registry) existingContinuationReservationLocked(requestID string, tuple continueTuple) (*continueReplay, error) {
+	if existing := r.continueReplays[requestID]; existing != nil {
+		if existing.tuple != tuple {
+			return nil, workersessions.ErrContinuationRequestIDConflict
+		}
+		return existing, nil
+	}
+	if r.stopping {
+		return nil, workersessions.ErrContinuationServerStopping
+	}
+	return nil, nil
+}
+
+func (r *registry) inspectContinuationReference(ctx context.Context, reference providers.SessionRef, workerID, factoryID string) error {
+	if r.inspection == nil || (reflect.ValueOf(r.inspection).Kind() == reflect.Pointer && reflect.ValueOf(r.inspection).IsNil()) {
+		return workersessions.ErrContinuationExecutionUnavailable
+	}
+	inspected, err := r.inspection.Inspect(providersessions.InspectRequest{Context: ctx, Session: reference.Clone(), WorkerSessionID: workerID, FactorySessionID: factoryID})
+	if err != nil {
+		return fmt.Errorf("%w: %w", workersessions.ErrContinuationExecutionUnavailable, err)
+	}
+	if inspected.Session != reference {
+		return workersessions.ErrContinuationExecutionUnavailable
+	}
+	return nil
+}
+
 // Replays return their original result before this query. A new reservation
 // must use current policy and already negotiated facts before recording input
 // or opening a successor, including when the source came from durable capture.
 func (r *registry) validateContinuationSupportLocked(reference providers.SessionRef) error {
+	return r.validateContinuationSupport(controlContext(r.lifecycleCtx), reference)
+}
+
+func (r *registry) validateContinuationSupport(ctx context.Context, reference providers.SessionRef) error {
 	if r.continuationSupport == nil {
 		return nil
 	}
-	supported, err := r.continuationSupport.SupportsContinuation(controlContext(r.lifecycleCtx), reference)
+	supported, err := r.continuationSupport.SupportsContinuation(ctx, reference)
 	if err != nil {
 		return fmt.Errorf("%w: %w", workersessions.ErrContinuationProviderSessionInvalid, err)
 	}
@@ -348,6 +444,9 @@ func (r *registry) buildContinuationExecutionLocked(
 		req.FollowUpInput,
 		snapshot.session.ProviderSessionAssociation.Reference,
 	)
+	// A continuation is an independent direct attempt. Retain Factory Session
+	// scope for addressing, while dropping live Runtime dispatch ownership.
+	continuation.Execution.RuntimeID = ""
 	if _, exists := r.dispatchOwners[continuation.Execution.Dispatch.DispatchID]; exists {
 		return workers.WorkstationDispatchRequest{}, workersessions.ErrContinuationSuccessorConflict
 	}
@@ -379,6 +478,9 @@ func (r *registry) storeContinuationReservationLocked(
 	if r.continuationSources == nil {
 		r.continuationSources = make(map[string]string)
 	}
+	if r.continueReplays == nil {
+		r.continueReplays = make(map[string]*continueReplay)
+	}
 	r.continuationSources[address] = req.RequestID
 	r.publications[req.SuccessorWorkerSessionID] = &publication{}
 	if r.startsDone == nil {
@@ -393,10 +495,11 @@ func (r *registry) storeContinuationReservationLocked(
 		tuple: tuple,
 		plan: continuePlan{
 			sourceAddress: address, executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
-			request:   req,
-			execution: continuation,
-			direct:    snapshot.direct,
-			archived:  snapshot.archived,
+			request:              req,
+			execution:            continuation,
+			direct:               true,
+			observationRuntimeID: snapshot.execution.Execution.RuntimeID,
+			archived:             snapshot.archived,
 			lineage: &workers.SessionLineage{
 				PredecessorWorkerSessionID: req.SourceWorkerSessionID,
 				PreviousDispatchID:         snapshot.dispatchID,
@@ -408,6 +511,8 @@ func (r *registry) storeContinuationReservationLocked(
 	r.continueReplays[req.RequestID] = replay
 	r.logger.Info(
 		"worker session continuation",
+		"addressedSourceWorkerSessionID", publicWorkerID(tuple.sourceID),
+		"resolveHead", tuple.resolveHead,
 		"sourceWorkerSessionID", req.SourceWorkerSessionID,
 		"successorWorkerSessionID", req.SuccessorWorkerSessionID,
 		"attemptID", continuation.Execution.Dispatch.DispatchID,
@@ -488,12 +593,13 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 		serverCtx,
 		invoke,
 		invocationPreparationOptions{
-			serverOwned:      true,
-			direct:           plan.direct,
-			continuation:     plan.execution.Execution.Continuation != nil,
-			requestID:        plan.request.RequestID,
-			verifyTopicReady: true,
-			lineage:          plan.lineage,
+			serverOwned:          true,
+			observationRuntimeID: plan.observationRuntimeID,
+			direct:               plan.direct,
+			continuation:         plan.execution.Execution.Continuation != nil,
+			requestID:            plan.request.RequestID,
+			verifyTopicReady:     true,
+			lineage:              plan.lineage,
 		},
 		plan.executor,
 		plan.clock,

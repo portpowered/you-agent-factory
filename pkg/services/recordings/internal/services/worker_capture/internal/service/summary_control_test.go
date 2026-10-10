@@ -114,3 +114,114 @@ func assertSelectedControls(t *testing.T, reader *FileWriter, want []recordings.
 		t.Fatalf("committed selected controls=%+v err=%v want=%+v", got.ControlOperations, err, want)
 	}
 }
+
+func TestPreparedCatalogRefusesHydrationAndReturnsDetachedSummaries(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	record := journalRecord(t, "prepared", "worker")
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	record.Record = mustRecord(t, terminalAppend(record.Record.ID.Topic, "worker"), 2)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(probe, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := reopened.(*FileWriter)
+	request := recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true}
+	probe.mu.Lock()
+	before := probe.reads
+	probe.mu.Unlock()
+	if _, err := reader.ListPreparedWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unprepared catalog=%v", err)
+	}
+	probe.mu.Lock()
+	if probe.reads != before {
+		t.Error("unprepared query read recording files")
+	}
+	probe.mu.Unlock()
+	if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	probe.mu.Lock()
+	before = probe.reads
+	probe.mu.Unlock()
+	page, err := reader.ListPreparedWorkerSessionCaptures(t.Context(), request)
+	if err != nil || len(page.Items) != 1 || page.Items[0].Health != recordings.WorkerRecordingStatusComplete {
+		t.Fatalf("prepared catalog=%+v err=%v", page, err)
+	}
+	want := page.Items[0].Opening.Detached()
+	page.Items[0].Opening.Payload[0] = '!'
+	page, err = reader.ListPreparedWorkerSessionCaptures(t.Context(), request)
+	if err != nil || !reflect.DeepEqual(page.Items[0].Opening, want) {
+		t.Fatalf("summary aliases caller=%+v err=%v", page, err)
+	}
+	entry := reader.entry("prepared")
+	entry.mu.Lock()
+	entry.loaded = false
+	entry.mu.Unlock()
+	if _, err := reader.ListPreparedWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("unavailable prepared summary=%v", err)
+	}
+	probe.mu.Lock()
+	if probe.reads != before {
+		t.Error("prepared query hydrated activity")
+	}
+	probe.mu.Unlock()
+}
+
+func TestPreparedScopedCatalogSurvivesUnrelatedScopeOpening(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+
+	persistScopedCatalogOpening(t, writer, "a", "selected")
+	persistScopedCatalogOpening(t, writer, "b", "selected")
+	if err := writer.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerCapturedCatalogRequest{FactorySessionID: "selected", Limit: 1, RequireCompleteMembership: true}
+	first, err := writer.ListPreparedWorkerSessionCaptures(t.Context(), request)
+	if err != nil || len(first.Items) != 1 || first.Items[0].Catalog.WorkerSessionID != "a" || first.NextToken == "" {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	persistScopedCatalogOpening(t, writer, "unrelated", "other")
+	// An unavailable unrelated summary must not turn the selected capability off.
+	writer.entry("unrelated").loaded = false
+	reads := probe.reads
+	request.NextToken = first.NextToken
+	second, err := writer.ListPreparedWorkerSessionCaptures(t.Context(), request)
+	if err != nil || second.GenerationID != first.GenerationID || len(second.Items) != 1 || second.Items[0].Catalog.WorkerSessionID != "b" || second.NextToken != "" {
+		t.Fatalf("scoped continuation=%+v err=%v", second, err)
+	}
+	if probe.reads != reads {
+		t.Fatal("scoped prepared query read storage")
+	}
+	persistScopedCatalogOpening(t, writer, "c", "selected")
+	if _, err := writer.ListPreparedWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+		t.Fatalf("changed selected membership accepted old cursor: %v", err)
+	}
+}
+
+func persistScopedCatalogOpening(t *testing.T, writer *FileWriter, id, scope string) {
+	t.Helper()
+	record := journalRecord(t, id, id)
+	var draft workers.Draft
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(record.Record.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.FactorySessionID = scope
+	draft.Payload, _ = json.Marshal(payload)
+	record.Record.Payload, _ = json.Marshal(draft)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+}

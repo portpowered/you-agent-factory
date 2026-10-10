@@ -88,6 +88,33 @@ func TestLegacyWorkerAddressing(t *testing.T) {
 		t.Parallel()
 		assertUnknownLegacyAddresses(t, f)
 	})
+	t.Run("AM-T3 explicit head keeps exact scope refusal", func(t *testing.T) {
+		t.Parallel()
+		for _, cell := range []struct{ id, scope string }{
+			{f.worker, ""}, {uuid.NewString(), ""}, {f.worker, uuid.NewString()},
+		} {
+			body, flags := controlInput("continue")
+			body["resolveHead"] = true
+			flags = append(flags, "--head")
+			if cell.scope != "" {
+				body["factorySessionId"] = cell.scope
+				flags = append(flags, "--session", cell.scope)
+			}
+			status, raw := f.http(t, "POST", "/worker-sessions/"+cell.id+"/continue", body)
+			cli := f.cli(t, true, append([]string{"continue", cell.id}, flags...)...)
+			if cell.id == f.worker && cell.scope == "" {
+				if status != http.StatusConflict {
+					t.Fatalf("ambiguous head status = %d: %s", status, raw)
+				}
+				assertAmbiguity(t, f, raw, false)
+				assertAmbiguity(t, f, cli, false)
+			} else {
+				assertNotFound(t, status, raw)
+				assertErrorCode(t, cli, "NOT_FOUND")
+			}
+			assertNoEffects(t, f, body["successorWorkerSessionId"].(string))
+		}
+	})
 }
 
 func assertEmptyLegacyOwner(t *testing.T, f *replayFixture) {
