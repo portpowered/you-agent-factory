@@ -44,6 +44,7 @@ func (r *registry) callerMetadataLocked(caller *workersessions.CallerIdentity, m
 		derived = &workersessions.SessionMetadata{}
 	}
 	derived.Requester = &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: caller.WorkerSessionID}
+	derived.Labels = []string{"parent:" + caller.WorkerSessionID}
 	if derived.Correlation != nil {
 		derived.Requester.WorkID = derived.Correlation.WorkID
 	}

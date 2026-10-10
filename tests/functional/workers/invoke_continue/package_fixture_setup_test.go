@@ -129,7 +129,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
-	for _, name := range []string{"published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race"} {
+	for _, name := range []string{"requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race"} {
 		gated := &t7GatedProviderRunner{}
 		gated.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {
@@ -140,7 +140,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	for _, name := range []string{"t7-ready-local", "t7-ready-remote", "t7-ready-http", "t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-local-document-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
+	for _, name := range []string{"requester-child", "t7-ready-local", "t7-ready-remote", "t7-ready-http", "t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-local-document-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
 		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-"+name, t7ObservationReport)})
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
 			return invokeContinueScenarioSetup{}, err

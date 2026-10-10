@@ -7,12 +7,54 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func invokeCaller(config InvokeConfig) (*workersessions.CallerIdentity, error) {
+	headers := make(http.Header)
+	if config.Caller != nil {
+		headers.Set("X-You-Worker-Session-Id", config.Caller.WorkerSessionID)
+		headers.Set("Authorization", "Bearer "+config.Caller.Token)
+	} else if config.LookupEnv != nil {
+		if id, present := config.LookupEnv("YOU_WORKER_SESSION_ID"); present {
+			headers.Set("X-You-Worker-Session-Id", id)
+		}
+		if token, present := config.LookupEnv("YOU_WORKER_SESSION_TOKEN"); present {
+			headers.Set("Authorization", "Bearer "+token)
+		}
+	}
+	return workersessionshttp.WorkerSessionCallerFromHeaders(headers)
+}
+
+// Transport failures can quote credentials supplied to the HTTP effect. Keep
+// the typed diagnostic while dropping any secret-bearing cause before rendering.
+func sanitizeInvokeCallerError(caller *workersessions.CallerIdentity, err error) error {
+	if caller == nil || caller.Token == "" || err == nil {
+		return err
+	}
+	redact := func(value string) string { return strings.ReplaceAll(value, caller.Token, "[REDACTED]") }
+	var typed *CLIError
+	if errors.As(err, &typed) {
+		safe := *typed
+		safe.Code = redact(typed.Code)
+		safe.Message = redact(typed.Message)
+		if typed.Cause != nil && strings.Contains(typed.Cause.Error(), caller.Token) {
+			safe.Cause = errors.New(redact(typed.Cause.Error()))
+		}
+		return &safe
+	}
+	if strings.Contains(err.Error(), caller.Token) {
+		return errors.New(redact(err.Error()))
+	}
+	return err
+}
 
 // IDGenerator supplies caller-owned identities for CLI requests. Production
 // composition selects the implementation in pkg/wire so the transport does

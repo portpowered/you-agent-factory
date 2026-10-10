@@ -714,6 +714,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+          "boundary": "cli"
         }
       ]
     },
@@ -808,6 +812,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
           "boundary": "cli"
         }
       ]
@@ -1821,6 +1829,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
           "boundary": "rest"
         }
       ]

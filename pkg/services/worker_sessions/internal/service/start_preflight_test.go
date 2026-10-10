@@ -22,7 +22,7 @@ func callerSourceMetadata() *workersessions.SessionMetadata {
 	return &workersessions.SessionMetadata{
 		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
 		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory"},
-		Labels:      []string{"project:example"},
+		Labels:      []string{"tag:project=example"},
 	}
 }
 
@@ -94,6 +94,7 @@ func TestCallerReservationUsesDetachedVerifiedFacts(t *testing.T) {
 	}
 	want := callerSourceMetadata()
 	want.Requester = &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "source", WorkID: want.Correlation.WorkID}
+	want.Labels = []string{"parent:source"}
 	child := r.sessions["child"]
 	if !reflect.DeepEqual(child.Metadata, want) {
 		t.Fatalf("reserved facts = %+v, want %+v", child.Metadata, want)

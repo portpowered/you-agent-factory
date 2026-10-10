@@ -17,6 +17,47 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestWorkerSessionsInvokeForwardsInjectedCallerEnvironment(t *testing.T) {
+	t.Parallel()
+	token := strings.Repeat("A", 43)
+	called := false
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		InvokeWorkerSession: func(config workersessionscli.InvokeConfig) error {
+			called = true
+			if config.LookupEnv == nil {
+				t.Fatal("invoke lost the injected process environment edge")
+			}
+			id, idPresent := config.LookupEnv("YOU_WORKER_SESSION_ID")
+			secret, tokenPresent := config.LookupEnv("YOU_WORKER_SESSION_TOKEN")
+			if !idPresent || !tokenPresent || id != "exact/caller" || secret != token {
+				t.Fatal("invoke changed the execution-only caller credentials")
+			}
+			return nil
+		},
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
+	root := factory.NewCommand(context.Background(), nil, func(key string) (string, bool) {
+		switch key {
+		case "YOU_WORKER_SESSION_ID":
+			return "exact/caller", true
+		case "YOU_WORKER_SESSION_TOKEN":
+			return token, true
+		default:
+			return "", false
+		}
+	}, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--server", "http://selected.test:7437", "worker-sessions", "invoke", "--async", "work"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("invoke operation was not called")
+	}
+}
+
 func TestProductionProvidersCommandWiresGeneratedHandlersAndHelp(t *testing.T) {
 	providerService := providerscli.New(&providerServiceStub{})
 	command, err := newProductionProvidersCommand(
