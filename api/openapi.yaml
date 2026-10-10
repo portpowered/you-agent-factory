@@ -152,6 +152,17 @@ paths:
       tags:
         - Worker Sessions
       operationId: startWorkerSession
+      security:
+        - {}
+        - WorkerSessionCaller: []
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       summary: Start one directly resolved Worker Session
       description: Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
       requestBody:
@@ -169,6 +180,12 @@ paths:
                 $ref: '#/components/schemas/WorkerSessionStartResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Worker Session caller credentials are invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
@@ -2213,6 +2230,11 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 components:
+  securitySchemes:
+    WorkerSessionCaller:
+      type: http
+      scheme: bearer
+      bearerFormat: base64url-32-bytes-unpadded
   parameters:
     SessionID:
       name: session_id
@@ -5939,6 +5961,7 @@ components:
             - REQUEST_CONFLICT
             - WORKER_SESSION_START_REQUEST_ID_CONFLICT
             - WORKER_SESSION_NOT_STARTABLE
+            - WORKER_SESSION_CALLER_INVALID
             - WORKER_SESSION_START_OPENING_FAILED
             - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
             - WORKER_SESSION_EVENT_CURSOR_INVALID
@@ -6007,6 +6030,7 @@ components:
             - A live-change requestId was reused with a different normalized request body.
             - Worker Session start requestId was reused with different normalized inputs.
             - The requested Worker Session identity is already reserved or terminal.
+            - Worker Session caller credentials are invalid or no longer belong to a running owner.
             - The Worker Session opening record could not be published.
             - The Worker Session event topic did not reach the required readiness barrier.
             - The Worker Session event cursor is malformed.

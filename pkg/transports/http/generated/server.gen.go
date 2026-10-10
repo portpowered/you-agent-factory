@@ -4,6 +4,7 @@
 package generated
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,10 @@ import (
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
+)
+
+const (
+	WorkerSessionCallerScopes = "WorkerSessionCaller.Scopes"
 )
 
 // Defines values for AgentWorkerToolPolicy.
@@ -171,6 +176,7 @@ const (
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONAMBIGUOUS                         ErrorResponseCode = "WORKER_SESSION_AMBIGUOUS"
+	ErrorResponseCodeWORKERSESSIONCALLERINVALID                     ErrorResponseCode = "WORKER_SESSION_CALLER_INVALID"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT              ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
@@ -10319,6 +10325,12 @@ type ListWorkerSessionsParamsScope string
 // ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsState string
 
+// StartWorkerSessionParams defines parameters for StartWorkerSession.
+type StartWorkerSessionParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // GetWorkerSessionObservationByWorkerSessionIdParams defines parameters for GetWorkerSessionObservationByWorkerSessionId.
 type GetWorkerSessionObservationByWorkerSessionIdParams struct {
 	// FactorySessionId Exact Factory Session owner of the retained Worker Session ID.
@@ -19206,7 +19218,7 @@ type ServerInterface interface {
 	ListWorkerSessions(w http.ResponseWriter, r *http.Request, params ListWorkerSessionsParams)
 	// Start one directly resolved Worker Session
 	// (POST /worker-sessions)
-	StartWorkerSession(w http.ResponseWriter, r *http.Request)
+	StartWorkerSession(w http.ResponseWriter, r *http.Request, params StartWorkerSessionParams)
 	// Show one top-level Worker Session observation
 	// (GET /worker-sessions/{worker_session_id})
 	GetWorkerSessionObservationByWorkerSessionId(w http.ResponseWriter, r *http.Request, workerSessionId WorkerSessionID, params GetWorkerSessionObservationByWorkerSessionIdParams)
@@ -21305,8 +21317,40 @@ func (siw *ServerInterfaceWrapper) ListWorkerSessions(w http.ResponseWriter, r *
 // StartWorkerSession operation middleware
 func (siw *ServerInterfaceWrapper) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartWorkerSessionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StartWorkerSession(w, r)
+		siw.Handler.StartWorkerSession(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

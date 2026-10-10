@@ -175,6 +175,17 @@ paths:
       tags:
         - Worker Sessions
       operationId: startWorkerSession
+      security:
+        - {}
+        - WorkerSessionCaller: []
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       summary: Start one directly resolved Worker Session
       description: >-
         Reserves and starts one already-resolved Worker execution. The server
@@ -197,6 +208,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkerSessionStartResponse'
+        '403':
+          description: Worker Session caller credentials are invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -2557,6 +2574,9 @@ paths:
           $ref: '#/components/responses/InternalError'
 
 components:
+  securitySchemes:
+    WorkerSessionCaller:
+      $ref: './components/securitySchemes/WorkerSessionCaller.yaml'
   parameters:
     SessionID:
       $ref: './components/parameters/SessionID.yaml'

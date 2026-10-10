@@ -8398,7 +8398,10 @@ export interface operations {
   startWorkerSession: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -8418,6 +8421,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Worker Session caller credentials are invalid. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       409: components["responses"]["WorkerSessionStartConflict"];
       503: components["responses"]["WorkerSessionStartUnavailable"];
     };
@@ -11031,6 +11043,8 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_START_REQUEST_ID_CONFLICT",
   // The requested Worker Session identity is already reserved or terminal.
   WORKER_SESSION_NOT_STARTABLE: "WORKER_SESSION_NOT_STARTABLE",
+  // Worker Session caller credentials are invalid or no longer belong to a running owner.
+  WORKER_SESSION_CALLER_INVALID: "WORKER_SESSION_CALLER_INVALID",
   // The Worker Session opening record could not be published.
   WORKER_SESSION_START_OPENING_FAILED: "WORKER_SESSION_START_OPENING_FAILED",
   // The Worker Session event topic did not reach the required readiness barrier.

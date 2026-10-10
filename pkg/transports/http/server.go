@@ -231,7 +231,7 @@ func newServer(
 
 // StartWorkerSession forwards the global asynchronous start operation to the
 // Worker Sessions owner handler.
-func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request, _ factoryapi.StartWorkerSessionParams) {
 	if s.workerSessionsHTTP == nil {
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
@@ -579,7 +579,17 @@ func (s *Server) handleDisallowedMethod(w http.ResponseWriter, _ *http.Request) 
 	s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "METHOD_NOT_ALLOWED")
 }
 
-func (s *Server) handleGeneratedParameterError(w http.ResponseWriter, _ *http.Request, err error) {
+func (s *Server) handleGeneratedParameterError(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Method == http.MethodPost && r.URL.Path == "/worker-sessions" {
+		if _, callerErr := workersessionshttp.WorkerSessionCallerFromHeaders(r.Header); callerErr != nil {
+			s.writeJSON(w, http.StatusForbidden, factoryapi.ErrorResponse{
+				Message: "Worker Session caller credentials are invalid",
+				Family:  factoryapi.ErrorFamilyBadRequest,
+				Code:    factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID,
+			})
+			return
+		}
+	}
 	s.logger.Debug("invalid generated API parameter", zap.Error(err))
 	s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
 }

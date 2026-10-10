@@ -100,7 +100,8 @@ func TestSharedWorkerSessionAdmissionSelectsHostRecording(t *testing.T) {
 			if err := json.Unmarshal([]byte(workerSessionStartMappingJSON), &request); err != nil {
 				t.Fatal(err)
 			}
-			response, err := adapter.StartWorkerSession(WithRuntimeHostSession(t.Context(), id), request)
+			caller := workersessions.CallerIdentity{WorkerSessionID: "exact/caller", Token: strings.Repeat("A", 43)}
+			response, err := adapter.StartWorkerSession(WithRuntimeHostSession(t.Context(), id), request, &caller)
 			if err != nil || response.WorkerSessionId != id+"-worker" || !source.startCalled {
 				t.Fatalf("host admission = %+v, %v", response, err)
 			}
@@ -109,6 +110,10 @@ func TestSharedWorkerSessionAdmissionSelectsHostRecording(t *testing.T) {
 			}
 			if source.startRequest.RequestID != "request-1" || source.startRequest.ID != "worker-1" {
 				t.Fatalf("admission changed request identity: %+v", source.startRequest)
+			}
+			caller.WorkerSessionID, caller.Token = "mutated", "mutated"
+			if source.startRequest.Caller == nil || source.startRequest.Caller.WorkerSessionID != "exact/caller" || source.startRequest.Caller.Token != strings.Repeat("A", 43) {
+				t.Fatal("selected admission lost detached exact caller credentials")
 			}
 		})
 	}
@@ -140,7 +145,7 @@ func TestWorkerSessionHostAdmissionNeverFallsBackAfterSelectionFailure(t *testin
 			if tc.canceled {
 				cancel()
 			}
-			_, err := adapter.StartWorkerSession(WithRuntimeHostSession(ctx, "selected"), request)
+			_, err := adapter.StartWorkerSession(WithRuntimeHostSession(ctx, "selected"), request, nil)
 			if !errors.Is(err, tc.want) || direct.startCalled {
 				t.Fatalf("failed host admission = %v, default called = %t; want %v", err, direct.startCalled, tc.want)
 			}
@@ -818,5 +823,85 @@ func TestWorkerSessionObservationMetadataMappingKeepsLegacyAbsent(t *testing.T) 
 	payload, err := json.Marshal(legacy)
 	if err != nil || !strings.Contains(string(payload), `"requester":null`) || strings.Contains(string(payload), `"correlation":`) || strings.Contains(string(payload), `"labels":`) {
 		t.Fatalf("legacy representation = %s, %v", payload, err)
+	}
+}
+
+func TestWorkerSessionCallerHeaderValidation(t *testing.T) {
+	t.Parallel()
+	token := strings.Repeat("A", 43)
+	for _, tc := range []struct {
+		name          string
+		ids, auth     []string
+		valid, absent bool
+	}{
+		{name: "absent", valid: true, absent: true},
+		{name: "valid", ids: []string{"exact/caller"}, auth: []string{"Bearer " + token}, valid: true},
+		{name: "case insensitive scheme", ids: []string{"caller"}, auth: []string{"bearer " + token}, valid: true},
+		{name: "missing token", ids: []string{"caller"}},
+		{name: "missing identity", auth: []string{"Bearer " + token}},
+		{name: "empty identity", ids: []string{""}, auth: []string{"Bearer " + token}},
+		{name: "empty authorization", ids: []string{"caller"}, auth: []string{""}},
+		{name: "duplicate identity", ids: []string{"caller", "peer"}, auth: []string{"Bearer " + token}},
+		{name: "duplicate token", ids: []string{"caller"}, auth: []string{"Bearer " + token, "Bearer " + token}},
+		{name: "basic", ids: []string{"caller"}, auth: []string{"Basic " + token}},
+		{name: "padded token", ids: []string{"caller"}, auth: []string{"Bearer " + token + "="}},
+		{name: "short token", ids: []string{"caller"}, auth: []string{"Bearer short"}},
+		{name: "noncanonical token", ids: []string{"caller"}, auth: []string{"Bearer " + strings.Repeat("A", 42) + "B"}},
+		{name: "identity whitespace", ids: []string{" caller"}, auth: []string{"Bearer " + token}},
+		{name: "token whitespace", ids: []string{"caller"}, auth: []string{"Bearer  " + token}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			headers := http.Header{}
+			for _, id := range tc.ids {
+				headers.Add("X-You-Worker-Session-Id", id)
+			}
+			for _, auth := range tc.auth {
+				headers.Add("Authorization", auth)
+			}
+			caller, err := WorkerSessionCallerFromHeaders(headers)
+			if tc.valid {
+				if err != nil || (caller == nil) != tc.absent {
+					t.Fatal("valid credentials were refused or changed")
+				}
+				if caller != nil && (caller.WorkerSessionID != tc.ids[0] || caller.Token != token) {
+					t.Fatal("exact credentials changed")
+				}
+			} else if caller != nil || !errors.Is(err, workersessions.ErrCallerInvalid) {
+				t.Fatal("invalid credentials were accepted")
+			}
+		})
+	}
+}
+
+func TestWorkerSessionHTTPCallerRefusalDoesNotReachAdmissionOrExposeToken(t *testing.T) {
+	t.Parallel()
+	token := strings.Repeat("A", 43)
+	for _, malformed := range []bool{true, false} {
+		t.Run(fmt.Sprint(malformed), func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{startErr: workersessions.ErrCallerInvalid}
+			handler := NewHandler(NewAdapterWithStart(service, service, workServiceStub{}), zap.NewNop())
+			request := httptest.NewRequest(http.MethodPost, "/worker-sessions", strings.NewReader(workerSessionStartMappingJSON))
+			request.Header.Set("X-You-Worker-Session-Id", "exact/caller")
+			if !malformed {
+				request.Header.Set("Authorization", "Bearer "+token)
+			}
+			recorder := httptest.NewRecorder()
+			handler.StartWorkerSession(recorder, request)
+			if recorder.Code != http.StatusForbidden || service.startCalled == malformed {
+				t.Fatal("caller refusal did not preserve admission boundary")
+			}
+			if !malformed && (service.startRequest.Caller == nil || service.startRequest.Caller.WorkerSessionID != "exact/caller" || service.startRequest.Caller.Token != token) {
+				t.Fatal("service did not receive exact execution-only credentials")
+			}
+			if strings.Contains(recorder.Body.String(), token) || strings.Contains(recorder.Body.String(), "exact/caller") {
+				t.Fatal("caller refusal disclosed credentials")
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || response.Code != factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID {
+				t.Fatal("caller refusal lost typed error")
+			}
+		})
 	}
 }
