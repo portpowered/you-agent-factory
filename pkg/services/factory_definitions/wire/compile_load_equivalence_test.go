@@ -148,11 +148,14 @@ func newCompileLoadLoader(
 		materializeFiles,
 		fileSystem,
 		namedPaths,
-		fileSystem,
+		factorydefinitionswire.NewAuthoredLayoutReader(fileSystem),
+		factorydefinitionswire.AuthoredFactorySourceLoader(fileSystem),
+		factorydefinitionswire.LoadedFactorySourceFactory(),
 		sourceResolver,
 		fileSystem,
 		stubRequiredToolChecker{},
-		nil,
+		factorydefinitionswire.FactoryConfigDecoder(nil),
+		factorydefinitionswire.CanonicalFactoryNormalizerFromMapper(),
 	)
 }
 

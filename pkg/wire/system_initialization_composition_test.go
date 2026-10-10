@@ -130,11 +130,14 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Packag
 		materializer,
 		loadingFileSystem,
 		namedPaths,
-		authoredReaderFileSystem,
+		provideFactoryDefinitionAuthoredReader(authoredReaderFileSystem),
+		provideAuthoredFactorySourceLoader(authoredReaderFileSystem),
+		provideLoadedFactorySourceFactory(),
 		sourceResolver,
 		inspection,
 		requiredToolChecker,
-		nil,
+		provideFactoryDefinitionConfigDecoder(nil),
+		provideFactoryDefinitionCanonicalNormalizer(),
 	)
 	pruneRemovedDocs, err := factorydefinitionswire.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
@@ -151,13 +154,12 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Packag
 		materializer,
 		providePortableBundledFileWritesValidator(portableFileSystem),
 		providePortableBundledFilesCopier(portableFileSystem),
-		authoredWriterFileSystem,
-		inboxEnsurer,
+		provideFactoryDefinitionPersistenceWriter(authoredWriterFileSystem, inboxEnsurer),
 		persistenceFileSystem,
 		namedPaths,
 		directoryReplacementStore,
-		nil,
-		nil,
+		provideFactoryDefinitionConfigDecoder(nil),
+		provideFactoryDefinitionPersistenceEncoder(nil),
 	)
 	if err != nil {
 		t.Fatalf("provideFactoryDefinitionPersistence() error = %v", err)

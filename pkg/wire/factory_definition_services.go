@@ -330,30 +330,36 @@ func providePortableBundledFileSourceResolver(fileSystem portablefiles.FileSyste
 	return factorydefinitionswire.NewPortableBundledFileSourceResolver(fileSystem)
 }
 
+func provideFactoryDefinitionAuthoredReader(files factorydefinitions.AuthoredLayoutReaderFileSystem) *factorydefinitionswire.AuthoredLayoutReader {
+	return factorydefinitionswire.NewAuthoredLayoutReader(files)
+}
+
+func provideFactoryDefinitionConfigDecoder(source factorydefinitions.SerializedFactoryConfigReader) factorydefinitions.FactoryConfigJSONDecoder {
+	return factorydefinitionswire.FactoryConfigDecoder(source)
+}
+
+func provideFactoryDefinitionCanonicalNormalizer() factorydefinitionswire.CanonicalFactoryNormalizer {
+	return factorydefinitionswire.CanonicalFactoryNormalizerFromMapper()
+}
+
 func provideFactoryDefinitionLoader(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	loadingFileSystem factorydefinitions.LoadingFileSystem,
 	namedPaths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	reader *factorydefinitionswire.AuthoredLayoutReader,
+	loadAuthoredSource factorydefinitions.AuthoredFactorySourceLoader,
+	newSource factorydefinitions.LoadedFactorySourceFactory,
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
-	conversions factorydefinitions.SerializedFactoryConfigReader,
+	decode factorydefinitions.FactoryConfigJSONDecoder,
+	normalize factorydefinitionswire.CanonicalFactoryNormalizer,
 ) *factorydefinitionswire.Loader {
-	return factorydefinitionswire.NewLoader(
-		applySupportedFiles,
-		applyStarterWork,
-		materializeFiles,
-		loadingFileSystem,
-		namedPaths,
-		fileSystem,
-		sourceResolver,
-		inspectSource,
-		requiredToolChecker,
-		conversions,
-	)
+	return factorydefinitionswire.NewLoader(applySupportedFiles, applyStarterWork,
+		materializeFiles, loadingFileSystem, namedPaths, reader, loadAuthoredSource,
+		newSource, sourceResolver, inspectSource, requiredToolChecker, decode, normalize)
 }
 
 func provideAuthoredFactorySourceLoader(
@@ -547,4 +553,19 @@ func provideFactoryDefinitionRuntimeSnapshot(
 		router.Host().WorkstationLoader,
 		factorydefinitions.FileReader(loader.ReadFile),
 	)
+}
+
+// definitionsPersistenceWriter retains persistence's separately selected filesystem.
+type definitionsPersistenceWriter factorydefinitionswire.AuthoredLayoutWriter
+
+func provideFactoryDefinitionPersistenceWriter(
+	files factorydefinitions.AuthoredLayoutWriterFileSystem,
+	inbox factorydefinitions.InputInboxSentinelEnsurer,
+) *definitionsPersistenceWriter {
+	return (*definitionsPersistenceWriter)(factorydefinitionswire.NewAuthoredLayoutWriter(files, inbox,
+		factorydefinitionswire.AuthoredAgentsFileWriter(files)))
+}
+
+func provideFactoryDefinitionPersistenceEncoder(source factorydefinitions.CanonicalFactoryConfigReader) factorydefinitions.FactoryConfigJSONEncoder {
+	return factorydefinitionswire.CanonicalFactoryConfigEncoder(source)
 }
