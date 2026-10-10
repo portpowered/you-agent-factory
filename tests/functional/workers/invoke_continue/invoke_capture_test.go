@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -144,6 +146,7 @@ func TestRequesterExecutionTokenPrivacy(t *testing.T) {
 			assertRequesterTokenAbsent(t, token, start.Stdout()+start.Stderr()+join.Stdout()+join.Stderr())
 			awaitRequesterPrivacyLogs(t, fixture, ctx, id, `"health":"COMPLETE"`, token)
 			assertRequesterPrivacyReads(t, fixture, scenario, ctx, id, token, outcome)
+			assertRequesterDurableTokenPrivacy(t, fixture, ctx, id, token)
 			assertRequesterRefusal(t, fixture, scenario, ctx, "terminal-privacy", id, token)
 			if runner.CallCount() != 1 {
 				t.Fatal("privacy replay or refused retired credential launched another attempt")
@@ -234,6 +237,63 @@ func assertRequesterTokenAbsent(t *testing.T, token, body string) {
 	if token == "" || strings.Contains(body, token) {
 		t.Fatal("public output exposed the admitted execution credential or no credential was tested")
 	}
+}
+
+// Inspect the persisted control-input contract as well as its decoded payload:
+// input is base64 encoded on disk, so checking only raw bytes misses leaks.
+// The exact session key excludes concurrent scenarios on the shared profile.
+func assertRequesterDurableTokenPrivacy(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, id, token string) {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(fixture.hostDir, ".you-agent-factory", "worker-recordings", "worker-payloads", "*.control.json"))
+	if err != nil {
+		t.Fatal("durable control inputs unavailable")
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			t.Fatal("durable control input unreadable")
+		}
+		var artifact struct {
+			Key   recordings.WorkerControlOperationKey `json:"key"`
+			Input []byte                               `json:"input"`
+		}
+		if json.Unmarshal(data, &artifact) != nil {
+			// Other parallel scenarios deliberately corrupt their inputs. The
+			// exact recipe below must still be found and decoded for this session.
+			continue
+		}
+		if artifact.Key.WorkerSessionID != id || !strings.HasPrefix(artifact.Key.RequestID, "restart-recipe/") {
+			continue
+		}
+		assertRequesterTokenAbsent(t, token, string(data))
+		assertRequesterTokenAbsent(t, token, string(artifact.Input))
+		assertRequesterRecordedTokenPrivacy(t, fixture, ctx, artifact.Key.RecordingID, id, token)
+		return
+	}
+	t.Fatal("execution has no persisted continuation recipe")
+}
+
+func assertRequesterRecordedTokenPrivacy(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, recordingID, id, token string) {
+	t.Helper()
+	snapshot, err := fixture.process.WorkerRecordingReader().LoadWorkerRecording(ctx, recordingID)
+	if err != nil {
+		t.Fatal("persisted Worker recording unavailable")
+	}
+	for _, session := range snapshot.Sessions {
+		if session.WorkerSessionID != id {
+			continue
+		}
+		data, err := json.Marshal(session)
+		if err != nil || session.Status != recordings.WorkerRecordingStatusComplete || len(session.Records) < 2 || session.ExecutionTerminal == nil {
+			t.Fatal("persisted Worker recording omitted complete execution evidence")
+		}
+		assertRequesterTokenAbsent(t, token, string(data))
+		return
+	}
+	t.Fatal("persisted Worker recording omitted the exact execution")
 }
 
 const (

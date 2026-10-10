@@ -135,6 +135,7 @@ func assertRequesterRestoredChain(t *testing.T, fixture *invokeContinuePackageFi
 	for index, request := range child.providerRunner.Requests() {
 		environment := requesterEnvironment(request.Env)
 		assertRequesterRefusal(t, fixture, child, t.Context(), "restart-token-"+string(rune('a'+index)), environment["YOU_WORKER_SESSION_ID"], environment["YOU_WORKER_SESSION_TOKEN"])
+		assertRequesterDurableTokenPrivacy(t, fixture, t.Context(), environment["YOU_WORKER_SESSION_ID"], environment["YOU_WORKER_SESSION_TOKEN"])
 	}
 	successorID := scenarioScopedID(child, "requester-rebuilt")
 	input := t7RemoteCLIInputs(child, t.Context(), fixture.baseURL, "continue", sourceID, "--head", "--request-id", successorID+"-request", "--successor-worker-session-id", successorID, "--user-message", "requester rebuilt follow-up")
@@ -148,6 +149,8 @@ func assertRequesterRestoredChain(t *testing.T, fixture *invokeContinuePackageFi
 	}
 	requests := child.providerRunner.Requests()
 	environment := requesterEnvironment(requests[3].Env)
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, child.homeDirectory, child.workingDirectory, successorID, "t7-thread-requester-child")
+	assertRequesterDurableTokenPrivacy(t, fixture, t.Context(), successorID, environment["YOU_WORKER_SESSION_TOKEN"])
 	for _, request := range requests[:3] {
 		assertRequesterSuccessorEnvironment(t, environment, successorID, parentID, requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"])
 	}
@@ -248,6 +251,7 @@ func assertRequesterContinuations(t *testing.T, fixture *invokeContinuePackageFi
 		command := child.providerRunner.Requests()[index+1]
 		environment := requesterEnvironment(command.Env)
 		assertRequesterSuccessorEnvironment(t, environment, successorID, parentID, previousToken)
+		assertRequesterDurableTokenPrivacy(t, fixture, ctx, successorID, environment["YOU_WORKER_SESSION_TOKEN"])
 		if !strings.Contains(strings.Join(command.Args, " "), "resume "+source.ProviderSession.Id) {
 			t.Fatal("successor did not resume the exact captured provider session")
 		}
