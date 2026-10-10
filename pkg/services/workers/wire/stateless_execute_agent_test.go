@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -35,7 +36,7 @@ func TestNewServiceExecuteUsesProcessProviderOverrideForAgentRequests(t *testing
 		input.inferenceDependencies,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -117,7 +118,7 @@ func TestNewServiceExecuteDetachedAgentRunPreservesGoalDecisionEnvelope(t *testi
 		input.inferenceDependencies,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -193,7 +194,7 @@ func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuation
 			return nil
 		},
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,

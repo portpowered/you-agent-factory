@@ -918,7 +918,7 @@ func newStatelessWorkersCompositionFixture(service providers.Service, modelsServ
 		return nil, err
 	}
 	execute, err := provideWorkersExecute(registry, service, provideOperatorSettingsLogger(logger),
-		clock, worktree, release, temporary, override, workerswire.NewLibraryHarnessAdapter(toolFiles), envelopes, docs)
+		clock, platformclock.Real{}, worktree, release, temporary, override, workerswire.NewLibraryHarnessAdapter(toolFiles), envelopes, docs)
 	if err != nil {
 		return nil, err
 	}

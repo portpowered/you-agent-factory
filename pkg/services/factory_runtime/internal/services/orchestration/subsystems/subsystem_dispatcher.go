@@ -78,7 +78,7 @@ func (d *DispatcherSubsystem) TickGroup() TickGroup {
 // Execute finds enabled transitions, selects firings via the scheduler,
 // and produces CONSUME mutations + WorkDispatches for each firing.
 func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
-	d.logger.Debug("dispatcher: dispatching work based on current snapshot", "snapshot", snapshot)
+	d.logger.Debug("dispatcher: dispatching work based on current snapshot")
 	activeThrottlePauses := d.activeThrottlePauses(snapshot)
 	observedThrottlePauses := d.throttlePausesObserved(snapshot, activeThrottlePauses)
 	decisions := d.dispatchDecisions(ctx, snapshot)
@@ -92,8 +92,8 @@ func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.
 		return d.throttlePauseSnapshotResult(activeThrottlePauses, observedThrottlePauses), nil
 	}
 
-	d.logger.Debug("dispatcher: mutations", "mutations", mutations)
-	d.logger.Debug("dispatcher: dispatches", "dispatches", dispatchRecords)
+	d.logger.Debug("dispatcher: mutations", "mutation_count", len(mutations))
+	d.logger.Debug("dispatcher: dispatches", "dispatch_count", len(dispatchRecords))
 	return &interfaces.TickResult{
 		Mutations:              mutations,
 		Dispatches:             dispatchRecords,

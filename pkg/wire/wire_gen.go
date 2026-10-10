@@ -179,7 +179,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	liveChangeCoordinator := wire3.NewLiveChangeCoordinator()
 	v22 := provideFactorySessionRuntimePersistenceFileSystem(edges2)
 	v23 := provideFactorySessionRuntimePersistenceStoreFactory(v22)
-	v24 := provideFactorySessionSyncWaitScheduler()
+	v24 := provideFactorySessionSyncWaitScheduler(edges2)
 	javaScriptCheckpointSummaries := wire4.NewJavaScriptCheckpointSummaries()
 	workflowSourceFileSystem := provideFactoryRuntimeWorkflowSources(edges2)
 	workflowHomeResolver := provideFactoryRuntimeWorkflowHome(edges2)
@@ -341,7 +341,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v74 := provideFactoryRuntimeProviderOverride(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
 	v75 := provideWorkersHarness(agentToolFileSystem)
-	v76, err := provideWorkersExecute(v72, service, loggingLogger, source, factoryWorktreePreparer, v73, temporaryFileSystem, v74, v75, decisionEnvelopeService, factoryDocsLoader)
+	v76, err := provideWorkersExecute(v72, service, loggingLogger, source, timerSource, factoryWorktreePreparer, v73, temporaryFileSystem, v74, v75, decisionEnvelopeService, factoryDocsLoader)
 	if err != nil {
 		return nil, err
 	}

@@ -318,7 +318,7 @@ func (s *Service) executeProviderWithRetry(
 	throttlePolicy := workerexecution.DefaultThrottleRetryPolicy(s.clock)
 	throttlePolicy.JitterSeed = request.Dispatch.DispatchID
 	throttle := workerexecution.NewThrottleRetry(throttlePolicy)
-	sleep := s.providerRetrySleep()
+	sleep := s.sleepForProviderRetry
 	retryCount := 0
 	for {
 		result, err := execute(request)
@@ -371,13 +371,6 @@ func (s *Service) executeProviderWithRetry(
 	}
 }
 
-func (s *Service) providerRetrySleep() func(context.Context, time.Duration) error {
-	if s.retrySleep != nil {
-		return s.retrySleep
-	}
-	return sleepForDetachedProviderRetry
-}
-
 func retryableProviderFailure(providerErr *workers.ProviderError) bool {
 	if providerErr == nil {
 		return false
@@ -398,11 +391,14 @@ func providerContinuationForRetry(
 	return nil
 }
 
-func sleepForDetachedProviderRetry(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
+func (s *Service) sleepForProviderRetry(ctx context.Context, delay time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	timer := s.scheduler.NewTimer(delay)
 	defer timer.Stop()
 	select {
-	case <-timer.C:
+	case <-timer.C():
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

@@ -19,16 +19,13 @@ type SessionLoggerFactory func(
 ) *zap.Logger
 
 // NewSessionLogger annotates runtime logs with Factory Session and directory
-// identity.
+// identity. The caller supplies the required process or opening logger.
 func NewSessionLogger(
 	base *zap.Logger,
 	sessionID string,
 	folderPath string,
 	factoryDir string,
 ) *zap.Logger {
-	if base == nil {
-		base = zap.NewNop()
-	}
 	return base.With(
 		zap.String("session_id", sessionID),
 		zap.String("folder_path", folderPath),

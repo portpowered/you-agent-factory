@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -51,7 +52,7 @@ func TestNewServiceExecuteManagedInferenceUsesModelsDespiteProviderRunner(t *tes
 		input.inferenceDependencies,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -261,7 +262,7 @@ func TestNewMockServiceExecutesMockThroughCanonicalWorkersBehavior(t *testing.T)
 			return nil
 		},
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -320,7 +321,7 @@ func TestNewMockServiceRequiresExplicitMockComposition(t *testing.T) {
 		MockDependencies{},
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -406,7 +407,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		InferenceDependencies{Models: local},
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(1, 0) },
+		func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -451,7 +452,7 @@ func TestNewServiceRejectsInvalidRunnerConfiguration(t *testing.T) {
 				input.inferenceDependencies,
 				nil,
 				logging.NoopLogger{},
-				func() time.Time { return time.Unix(1, 0) },
+				func() time.Time { return time.Unix(1, 0) }, platformclock.Real{},
 				nil,
 				nil,
 				nil,

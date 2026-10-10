@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -162,6 +163,7 @@ func newLegacyStatelessService(
 	observe workers.ObservationSink,
 	logger logging.Logger,
 	clock func() time.Time,
+	scheduler platformclock.TimerSource,
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
@@ -189,6 +191,7 @@ func newLegacyStatelessService(
 		observe,
 		logger,
 		clock,
+		scheduler,
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
@@ -214,6 +217,7 @@ func newLegacyMockStatelessService(
 	observe workers.ObservationSink,
 	logger logging.Logger,
 	clock func() time.Time,
+	scheduler platformclock.TimerSource,
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
@@ -251,6 +255,7 @@ func newLegacyMockStatelessService(
 		observe,
 		logger,
 		clock,
+		scheduler,
 		worktree,
 		worktreeRelease,
 		temporaryFiles,

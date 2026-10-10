@@ -66,7 +66,8 @@ type productionDefaultAllowance struct {
 }
 
 // These are exact policy-free leaf adapters. Each allowance remains valid only
-// while canonical Wire source explicitly selects that adapter. This is not a
+// while canonical Wire source explicitly selects that adapter (clock.Real may
+// also be selected at root.BuildProcess's edge boundary). This is not a
 // package exemption: another function or file using the same standard-library
 // effect is reported normally.
 var productionDefaultAllowances = []productionDefaultAllowance{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -116,14 +117,14 @@ func provideWorkersRegistry(agent workersAgentRunner, script workersScriptRunner
 // provideWorkersExecute captures completed process behavior. Worktree leases,
 // command attempts, observations and cleanup remain owned by each Execute call.
 func provideWorkersExecute(registry workerswire.Registry, service providers.Service,
-	logger logging.Logger, clock factoryruntime.Clock,
+	logger logging.Logger, clock factoryruntime.Clock, scheduler platformclock.TimerSource,
 	worktree workers.FactoryWorktreePreparer,
 	release func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporary platformfilesystem.TemporaryFileSystem, override providerOverrideService,
 	harness workerswire.Harness, envelopes factorydefinitions.DecisionEnvelopeService,
 	docs workers.FactoryDocsLoader,
 ) (workerswire.ExecuteCapability, error) {
-	return workerswire.NewExecute(registry, service, nil, logger, clock.Now,
+	return workerswire.NewExecute(registry, service, nil, logger, clock.Now, scheduler,
 		worktree, release, temporary, override, harness, envelopes, docs)
 }
 

@@ -780,6 +780,51 @@ func TestLoggingCommandRunnerAddsNoRawOutputDiagnostics(t *testing.T) {
 	}
 }
 
+func TestProviderCommandDiagnosticsPreserveOutputAndError(t *testing.T) {
+	t.Parallel()
+	for _, streaming := range []bool{false, true} {
+		t.Run(fmt.Sprint(streaming), func(t *testing.T) {
+			t.Parallel()
+			capture := &recordingLogger{}
+			request := commandTestRequest()
+			request.ProviderDiagnostics = true
+			want := CommandResult{Stdout: []byte("private-stdout"), Stderr: []byte("private-stderr"), ExitCode: 9}
+			wantErr := errors.New("private-error")
+			edge := workerCommandRunnerFunc(func(_ context.Context, got CommandRequest) (CommandResult, error) {
+				commandContextLogger(capture, got).Error("command runner: process start failed", "error", wantErr.Error())
+				return want, wantErr
+			})
+			runner := LoggingCommandRunner{Runner: streamingCommandRunnerFunc{edge}, Logger: capture, Clock: ClockFunc(func() time.Time { return time.Unix(1, 0) })}
+			var got CommandResult
+			var err error
+			var chunks []string
+			if streaming {
+				got, err = runner.RunStreaming(t.Context(), request, func(stream string, chunk []byte) {
+					chunks = append(chunks, stream+":"+string(chunk))
+				})
+				if !reflect.DeepEqual(chunks, []string{"stdout:private-stdout", "stderr:private-stderr"}) {
+					t.Fatalf("streamed output changed: %v", chunks)
+				}
+			} else {
+				got, err = runner.Run(t.Context(), request)
+			}
+			assertCommandErrorIdentity(t, err, wantErr)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("returned output changed: %#v", got)
+			}
+			for _, entry := range capture.entries {
+				if strings.Contains(fmt.Sprint(entry.fields), "private-") {
+					t.Fatalf("provider diagnostic exposed payload: %#v", entry.fields)
+				}
+			}
+			completion := capture.byEvent("command_runner.completed")[0]
+			if completion["failure_reason"] != "execution_error" || completion["stderr_bytes"] != len(want.Stderr) || completion["stdout_bytes"] != len(want.Stdout) {
+				t.Fatalf("safe failure facts missing: %#v", completion)
+			}
+		})
+	}
+}
+
 func TestAdaptPlatformCommandRunnerPreservesSelectedContextLogger(t *testing.T) {
 	t.Parallel()
 	owner, override := &recordingLogger{}, &recordingLogger{}

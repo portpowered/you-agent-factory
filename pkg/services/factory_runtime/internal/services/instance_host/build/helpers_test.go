@@ -184,6 +184,30 @@ func TestNewSessionLogger_AnnotatesSessionFields(t *testing.T) {
 	}
 }
 
+func TestNewSessionLoggerKeepsPeerAndBaseCorrelationIndependent(t *testing.T) {
+	t.Parallel()
+	core, observed := observer.New(zap.InfoLevel)
+	base := zap.New(core).With(zap.String("backend", "selected"))
+	for _, id := range []string{"first", "second"} {
+		NewSessionLogger(base, id, "/folder/"+id, "/factory/"+id).Info("session")
+	}
+	base.Info("base")
+	entries := observed.All()
+	if len(entries) != 3 {
+		t.Fatalf("selected backend entries = %d", len(entries))
+	}
+	for i, id := range []string{"first", "second"} {
+		fields := entries[i].ContextMap()
+		if fields["backend"] != "selected" || fields["session_id"] != id || fields["folder_path"] != "/folder/"+id || fields["factory_dir"] != "/factory/"+id {
+			t.Fatalf("session attribution = %#v", fields)
+		}
+	}
+	fields := entries[2].ContextMap()
+	if len(fields) != 1 || fields["backend"] != "selected" {
+		t.Fatalf("base was changed = %#v", fields)
+	}
+}
+
 func TestWarnPortableBundledReplacementReport_LogsTargets(t *testing.T) {
 	t.Parallel()
 

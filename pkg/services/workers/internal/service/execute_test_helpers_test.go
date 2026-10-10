@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
@@ -46,7 +47,7 @@ func mustExecuteServiceWithEdges(
 		nil,
 		observe,
 		logger,
-		func() time.Time { return time.Unix(10, 0) },
+		func() time.Time { return time.Unix(10, 0) }, platformclock.Real{},
 		worktree,
 		worktreeRelease,
 		temporaryFiles,

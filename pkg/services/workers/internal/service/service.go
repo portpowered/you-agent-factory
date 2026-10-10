@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -23,8 +24,8 @@ type Service struct {
 	observe          workers.ObservationSink
 	logger           logging.Logger
 	clock            func() time.Time
-	// retrySleep waits between provider attempts. Nil means a real timer.
-	retrySleep      func(context.Context, time.Duration) error
+	// scheduler controls attempt backoff independently of fact time.
+	scheduler       platformclock.TimerSource
 	worktree        workers.FactoryWorktreePreparer
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error
 	temporaryFiles  workers.TemporaryFileSystem
@@ -49,6 +50,7 @@ func NewWithProviderOverride(
 	observe workers.ObservationSink,
 	logger logging.Logger,
 	clock func() time.Time,
+	scheduler platformclock.TimerSource,
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
@@ -64,6 +66,7 @@ func NewWithProviderOverride(
 		observe:           observe,
 		logger:            logger,
 		clock:             clock,
+		scheduler:         scheduler,
 		worktree:          worktree,
 		worktreeRelease:   worktreeRelease,
 		temporaryFiles:    temporaryFiles,
