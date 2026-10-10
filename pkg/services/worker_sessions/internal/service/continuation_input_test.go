@@ -658,3 +658,53 @@ func TestContinuationLineageRetainsOwnerWhenPeerAppearsAfterReservation(t *testi
 	}
 	r.finishStart()
 }
+
+// Head traversal is a registry component: detached session facts are enough
+// to prove that unsafe chains never reach reservation or acquire supervision.
+func TestContinuationHeadRejectsUnsafeChainsBeforeReservation(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"cycle", "reverse-link", "missing-head", "reserved", "starting", "running", "paused", "wrong-scope", "used-source"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			req.ResolveHead = true
+			r := newContinuationSource(t, req)
+			source := r.sessions[req.SourceWorkerSessionID]
+			source.SuccessorWorkerSessionID = "head"
+			head := source.Clone()
+			head.ID = "head"
+			head.PredecessorWorkerSessionID = source.ID
+			head.SuccessorWorkerSessionID = ""
+			want := workersessions.ErrContinuationExecutionUnavailable
+			switch cell {
+			case "cycle":
+				head.SuccessorWorkerSessionID = source.ID
+			case "reverse-link":
+				head.PredecessorWorkerSessionID = "foreign"
+			case "missing-head":
+				want = workersessions.ErrContinuationSourceNotFound
+			case "reserved", "starting", "running", "paused":
+				head.State = workersessions.State(strings.ToUpper(cell))
+				want = workersessions.ErrContinuationSourceActive
+			case "wrong-scope":
+				req.FactorySessionID = "foreign"
+				want = workersessions.ErrContinuationSourceNotFound
+			case "used-source":
+				req.ResolveHead = false
+				want = workersessions.ErrContinuationSourceConflict
+			}
+			r.sessions[source.ID] = source
+			if cell != "missing-head" {
+				r.sessions[head.ID] = head
+			}
+			_, err := r.Continue(t.Context(), req)
+			if !errors.Is(err, want) {
+				t.Fatalf("unsafe %s chain: got %v, want %v", cell, err, want)
+			}
+			if len(r.continueReplays) != 0 || len(r.continuationSources) != 0 || len(r.supervisions) != 0 ||
+				r.sessions[source.ID].SuccessorWorkerSessionID != "head" {
+				t.Fatal("rejected chain reserved execution or mutated its source")
+			}
+		})
+	}
+}
