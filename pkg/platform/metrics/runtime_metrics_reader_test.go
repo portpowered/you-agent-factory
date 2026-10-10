@@ -111,6 +111,110 @@ func TestRuntimeMetricsReaderReportsGzipDecoderFailureWithArtifactContext(t *tes
 	}
 }
 
+func TestRuntimeMetricsReaderRejectsDamagedStreamsAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		compressed bool
+		damage     func([]byte) []byte
+		cause      error
+	}{
+		{name: "gzip checksum", compressed: true, cause: gzip.ErrChecksum, damage: func(data []byte) []byte {
+			data[len(data)-8] ^= 1
+			return data
+		}},
+		{name: "gzip truncated trailer", compressed: true, cause: io.ErrUnexpectedEOF, damage: func(data []byte) []byte {
+			return data[:len(data)-4]
+		}},
+		{name: "plain read failure after valid prefix", cause: errors.New("selected artifact read failed")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			name := readerActiveName
+			data := []byte(`{"record_id":"selected-secret"}` + "\n")
+			if test.compressed {
+				name = readerCompressedName
+				data = gzipReaderTestData(t, data)
+			}
+			path := filepath.Join(root, name)
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			filesystem := &damagedStreamArtifactFileSystem{}
+			if test.damage != nil {
+				if err := os.WriteFile(path, test.damage(bytes.Clone(data)), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				filesystem.readErr = test.cause
+			}
+			reader, err := NewRuntimeMetricsReader(filesystem)
+			if err != nil {
+				t.Fatal(err)
+			}
+			records, err := reader.Read(context.Background(), root)
+			assertDamagedStreamRejected(t, records, err, test.cause, path, filesystem)
+			filesystem.readErr = nil
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			records, err = reader.Read(context.Background(), root)
+			if err != nil || len(records) != 1 || records[0]["record_id"] != "selected-secret" ||
+				filesystem.opened != 2 || filesystem.closed != 2 {
+				t.Fatalf("recovered Read() = (%#v, %v), handles=%d/%d", records, err, filesystem.opened, filesystem.closed)
+			}
+		})
+	}
+}
+
+func assertDamagedStreamRejected(t *testing.T, records []RuntimeMetricRecord, err, cause error, path string, filesystem *damagedStreamArtifactFileSystem) {
+	t.Helper()
+	var typed *RuntimeMetricsReadError
+	if records != nil || !errors.Is(err, cause) || !errors.As(err, &typed) ||
+		typed.Path != path || typed.Operation != "decode runtime metrics artifact" {
+		t.Fatalf("damaged Read() = (%#v, %v), want no partial result and selected decode cause", records, err)
+	}
+	if strings.Contains(err.Error(), "selected-secret") || filesystem.opened != 1 || filesystem.closed != 1 {
+		t.Fatalf("error=%v opened=%d closed=%d, want safe diagnostic and released handle", err, filesystem.opened, filesystem.closed)
+	}
+}
+
+func gzipReaderTestData(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return compressed.Bytes()
+}
+
+type damagedStreamArtifactFileSystem struct {
+	trackingArtifactFileSystem
+	readErr error
+}
+
+func (filesystem *damagedStreamArtifactFileSystem) Open(path string) (io.ReadCloser, error) {
+	file, err := filesystem.trackingArtifactFileSystem.Open(path)
+	if err != nil || filesystem.readErr == nil {
+		return file, err
+	}
+	return &damagedStreamReadCloser{Reader: io.MultiReader(file, artifactFailureReader{err: filesystem.readErr}), Closer: file}, nil
+}
+
+type damagedStreamReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
+type artifactFailureReader struct{ err error }
+
+func (reader artifactFailureReader) Read([]byte) (int, error) { return 0, reader.err }
+
 func TestRuntimeMetricsReaderHonorsCancellationAndMissingRoot(t *testing.T) {
 	root := installReaderFixtureTree(t)
 	ctx, cancel := context.WithCancel(context.Background())
