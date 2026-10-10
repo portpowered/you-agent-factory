@@ -463,21 +463,40 @@ func TestFleetHistoryInjectedRolesFreezePagesAndLogOutcomes(t *testing.T) {
 	}
 	live = append(live, row("d", "factory-new", workersessions.StateRunning))
 	req.NextToken = first.NextToken
-	for _, id := range []string{"b", "c"} {
+	req = assertFrozenFleetHistoryPages(t, query, req, "b", "c")
+	if req.NextToken != "" || catalogCalls != 1 || archiveCalls != 1 {
+		t.Fatal("continuation resampled completed roles")
+	}
+	fresh, err := query.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 10})
+	assertFleetHistoryAdmittedOwner(t, fresh, err, archiveCalls)
+	archiveErr = workersessions.ErrObservationProjectionUnavailable
+	assertFleetHistoryFailureAndLogOutcomes(t, query, req, logger, archiveErr)
+	if catalogCalls != 3 {
+		t.Fatalf("expired read sampled catalog: calls=%d", catalogCalls)
+	}
+}
+
+func assertFleetHistoryAdmittedOwner(t *testing.T, fresh workersessions.ListWorkerSessionObservationsResult, err error, archiveCalls int) {
+	t.Helper()
+	if err != nil || len(fresh.Observations) != 3 || fresh.Observations[2].FactorySessionID != "factory-new" || archiveCalls != 1 {
+		t.Fatalf("new owner=%+v err=%v", fresh, err)
+	}
+}
+
+func assertFrozenFleetHistoryPages(t *testing.T, query *FleetHistory, req workersessions.ListWorkerSessionObservationsRequest, ids ...string) workersessions.ListWorkerSessionObservationsRequest {
+	t.Helper()
+	for _, id := range ids {
 		page, err := query.ListWorkerSessionObservations(t.Context(), req)
 		if err != nil || len(page.Observations) != 1 || page.Observations[0].WorkerSessionID != id {
 			t.Fatalf("frozen=%+v err=%v", page, err)
 		}
 		req.NextToken = page.NextToken
 	}
-	if req.NextToken != "" || catalogCalls != 1 || archiveCalls != 1 {
-		t.Fatal("continuation resampled completed roles")
-	}
-	fresh, err := query.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{History: workersessions.ObservationHistoryActive, MaxResults: 10})
-	if err != nil || len(fresh.Observations) != 3 || fresh.Observations[2].FactorySessionID != "factory-new" || archiveCalls != 1 {
-		t.Fatalf("new owner=%+v err=%v", fresh, err)
-	}
-	archiveErr = workersessions.ErrObservationProjectionUnavailable
+	return req
+}
+
+func assertFleetHistoryFailureAndLogOutcomes(t *testing.T, query *FleetHistory, req workersessions.ListWorkerSessionObservationsRequest, logger *recordingLogger, archiveErr error) {
+	t.Helper()
 	if _, err := query.ListWorkerSessionObservations(t.Context(), req); !errors.Is(err, archiveErr) {
 		t.Fatalf("archive failure=%v", err)
 	}
@@ -489,9 +508,6 @@ func TestFleetHistoryInjectedRolesFreezePagesAndLogOutcomes(t *testing.T) {
 	defer cancel()
 	if _, err := query.ListWorkerSessionObservations(ctx, req); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("deadline=%v", err)
-	}
-	if catalogCalls != 3 {
-		t.Fatalf("expired read sampled catalog: calls=%d", catalogCalls)
 	}
 }
 

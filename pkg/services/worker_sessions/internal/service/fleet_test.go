@@ -17,6 +17,44 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
+func TestFleetObservationServiceRejectsAbsentOrCanceledContext(t *testing.T) {
+	t.Parallel()
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		t.Fatal("invalid context reached the catalog")
+		return nil, nil
+	}, nil)
+	reads := map[string]func(context.Context) error{
+		"detail": func(ctx context.Context) error {
+			_, err := service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+			return err
+		},
+		"transcript": func(ctx context.Context) error {
+			_, err := service.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+			return err
+		},
+		"stream": func(ctx context.Context) error {
+			_, err := service.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+			return err
+		},
+		"list": func(ctx context.Context) error {
+			_, err := service.ListWorkerSessionObservations(ctx, workersessions.ListWorkerSessionObservationsRequest{})
+			return err
+		},
+	}
+	for name, read := range reads {
+		t.Run(name, func(t *testing.T) {
+			if err := read(nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+				t.Fatalf("absent context: %v", err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if err := read(ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled context: %v", err)
+			}
+		})
+	}
+}
+
 func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 	t.Parallel()
 

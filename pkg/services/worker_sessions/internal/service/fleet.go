@@ -43,7 +43,7 @@ func (s *FleetObservationService) GetObservationByWorkerSessionID(
 		return workersessions.Observation{}, err
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	if err := ctx.Err(); err != nil {
 		return workersessions.Observation{}, err
@@ -122,7 +122,7 @@ func (s *FleetObservationService) ReadTranscriptByWorkerSessionID(
 		return workersessions.ReadTranscriptResult{}, err
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	if err := ctx.Err(); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
@@ -159,7 +159,7 @@ func (s *FleetObservationService) StreamObservationsByWorkerSessionID(
 		return workersessions.ObservationSubscription{}, err
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	if err := ctx.Err(); err != nil {
 		return workersessions.ObservationSubscription{}, err
@@ -196,7 +196,7 @@ func (s *FleetObservationService) ListWorkerSessionObservations(
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	if req.History != "" {
 		return s.history.ListWorkerSessionObservations(ctx, req)
