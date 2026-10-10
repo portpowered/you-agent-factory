@@ -24,7 +24,7 @@ func (r *validationRunner) Resolve(runners.ResolutionRequest) (runners.Binding, 
 
 func TestT7WorkersPreflightGuardsBeforeRunnerResolution(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"nil-service", "missing-runners", "nil-context", "canceled", "invalid-input", "noop", "runner-unavailable"} {
+	for _, mode := range []string{"nil-service", "nil-context", "canceled", "invalid-input", "noop", "runner-unavailable"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			runner := &validationRunner{}
@@ -38,8 +38,6 @@ func TestT7WorkersPreflightGuardsBeforeRunnerResolution(t *testing.T) {
 			switch mode {
 			case "nil-service":
 				svc, want = nil, workers.ErrExecuteUnavailable
-			case "missing-runners":
-				svc.runners, want = nil, workers.ErrExecuteUnavailable
 			case "nil-context":
 				ctx, want = nil, workers.ErrInvalidExecuteRequest
 			case "canceled":

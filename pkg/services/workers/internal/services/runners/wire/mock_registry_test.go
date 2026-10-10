@@ -197,17 +197,7 @@ func TestMockRunnerMatchesResolvedAndDispatchWorkInputs(t *testing.T) {
 }
 
 func TestNewMockProductionRegistryRejectsMissingConfig(t *testing.T) {
-	_, err := NewMockProductionRegistry(
-		runners.AgentDependencies{Providers: newAgentProvidersFake(), Publish: agentNoopPublisher},
-		runners.ScriptConfig{Command: "fixture"},
-		scriptDependencies(&scriptConformanceCommand{}, func(string) (map[string]string, error) {
-			return nil, nil
-		}),
-		inferenceRegistryConfig(),
-		inferenceDependencies(&inferenceConformanceModels{}, nil),
-		runners.MockConfig{},
-		runners.MockDependencies{},
-	)
+	_, err := NewMockRunner(MockRunnerConfig{}, nil, nil)
 	if err == nil {
 		t.Fatal("NewMockProductionRegistry() error = nil, want missing config")
 	}
@@ -219,17 +209,17 @@ func newExplicitMockRegistry(
 	next workerprocess.CommandRunner,
 ) runners.Service {
 	t.Helper()
-	registry, err := NewMockProductionRegistry(
-		runners.AgentDependencies{Providers: newAgentProvidersFake(), Publish: agentNoopPublisher},
-		runners.ScriptConfig{Command: "fixture"},
-		scriptDependencies(&scriptConformanceCommand{}, func(string) (map[string]string, error) {
-			return nil, nil
-		}),
-		inferenceRegistryConfig(),
-		inferenceDependencies(&inferenceConformanceModels{}, nil),
-		runners.MockConfig{WorkersConfig: config},
-		runners.MockDependencies{Next: next},
-	)
+	implementation, err := NewMockRunner(MockRunnerConfig{WorkersConfig: config}, next, nil)
+	if err != nil {
+		t.Fatalf("NewMockRunner() error = %v", err)
+	}
+	registry, err := NewService([]runners.Registration{{
+		Identity: runners.MockIdentity,
+		Metadata: workers.RunnerMetadata{ID: runners.MockIdentity, DisplayName: "Mock", Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityWorkingDirectory, Status: workers.RunnerOptionalCapabilityStatusSupported},
+		)},
+		Runner: implementation,
+	}})
 	if err != nil {
 		t.Fatalf("NewMockProductionRegistry() error = %v", err)
 	}

@@ -107,7 +107,7 @@ func scriptEnvelopeService(t *testing.T, runner *stubRunner, parser factorydefin
 	t.Helper()
 	service, err := executeservice.NewWithProviderOverride(
 		&staticRunners{runner: runner}, nil, nil, logging.NoopLogger{}, func() time.Time { return time.Unix(10, 0) }, platformclock.Real{},
-		nil, nil, nil, nil, nil, parser,
+		nil, nil, nil, nil, nil, parser, nil,
 	)
 	if err != nil {
 		t.Fatal(err)

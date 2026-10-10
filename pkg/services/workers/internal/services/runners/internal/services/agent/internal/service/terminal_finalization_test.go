@@ -82,7 +82,7 @@ func TestExecuteUnusableResultKeepsTypedFailureTerminal(t *testing.T) {
 		},
 	}
 	recorder := &progressFragmentRecorder{}
-	runner, err := New(provider, recorder.publish)
+	runner, err := New(provider, recorder.publish, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestExecutePartialNativeResultOnTimeoutKeepsTypedFailure(t *testing.T) {
 		},
 	}
 	recorder := &progressFragmentRecorder{}
-	runner, err := New(provider, recorder.publish)
+	runner, err := New(provider, recorder.publish, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -154,7 +154,7 @@ func TestExecuteEmptyResultPublishesNoUsableFailure(t *testing.T) {
 	t.Parallel()
 
 	recorder := &progressFragmentRecorder{}
-	runner, err := New(&resultErrorProvidersFake{}, recorder.publish)
+	runner, err := New(&resultErrorProvidersFake{}, recorder.publish, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -248,7 +248,7 @@ func TestExecuteFinalizationIgnoresLateProviderProgress(t *testing.T) {
 
 	provider := &lateProgressProvidersFake{}
 	recorder := &progressFragmentRecorder{}
-	runner, err := New(provider, recorder.publish)
+	runner, err := New(provider, recorder.publish, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -375,7 +375,7 @@ func TestExecuteNativeLifecycleDoesNotSynthesizeCompletion(t *testing.T) {
 			Detail: "native terminal lifecycle",
 		}}},
 	}}
-	runner, err := New(provider, recorder.publish)
+	runner, err := New(provider, recorder.publish, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
