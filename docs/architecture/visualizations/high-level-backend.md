@@ -6,7 +6,7 @@ flowchart TB
     s_services_automations["automations<br/>9180 LOC · 7 subservices"]
     s_services_chat_sessions["chat sessions<br/>4923 LOC · 0 subservices"]
     s_services_webhooks["webhooks<br/>718 LOC · 0 subservices"]
-    s_services_work["work<br/>19826 LOC · 5 subservices"]
+    s_services_work["work<br/>19820 LOC · 5 subservices"]
   end
   subgraph configuration["Configuration"]
     s_services_factory_definitions["factory definitions<br/>36507 LOC · 8 subservices"]
