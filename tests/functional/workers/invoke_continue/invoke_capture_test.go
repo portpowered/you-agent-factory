@@ -2,15 +2,147 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
+
+// M11 observes the actual admitted credential echoed by the native command
+// edge, through live capture and terminal public CLI/HTTP representations.
+// Each parallel scenario owns its session and provider route on the shared host.
+func TestRequesterExecutionTokenPrivacy(t *testing.T) {
+	t.Cleanup(func() {
+		if !t.Failed() {
+			functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "rest/readWorkerSessionLogs", "rest/readWorkerSessionTranscriptByWorkerSessionId", "rest/getWorkerSessionObservationByWorkerSessionId", "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId")
+		}
+	})
+	for _, outcome := range []string{"success", "failure"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			fixture := ensureInvokeContinuePackageFixture(t)
+			scenario := fixture.scenario(t, "requester-privacy-"+outcome)
+			defer scenario.close(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+			defer cancel()
+			runner := scenario.providerRunner.(*t7GatedProviderRunner)
+			defer t7ReleaseAndJoin(t, ctx, runner)()
+			id := scenarioScopedID(scenario, "requester-private")
+			path := requesterExecutionPath(t, scenario, id)
+			start := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path, "--async")
+			if err := fixture.process.Execute(start.Input); err != nil {
+				t.Fatal("privacy admission failed")
+			}
+			t19AwaitSignal(t, ctx, runner.started, "credential echo progress")
+			token := requesterSourceToken(t, runner, id)
+			awaitRequesterPrivacyLogs(t, fixture, ctx, id, "public credential progress", token)
+			close(runner.release)
+			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+			joinErr := fixture.process.Execute(join.Input)
+			if (joinErr != nil) != (outcome == "failure") {
+				t.Fatal("credential echo execution did not retain its expected outcome")
+			}
+			assertRequesterTokenAbsent(t, token, start.Stdout()+start.Stderr()+join.Stdout()+join.Stderr())
+			awaitRequesterPrivacyLogs(t, fixture, ctx, id, `"health":"COMPLETE"`, token)
+			assertRequesterPrivacyReads(t, fixture, scenario, ctx, id, token, outcome)
+			assertRequesterRefusal(t, fixture, scenario, ctx, "terminal-privacy", id, token)
+			if runner.CallCount() != 1 {
+				t.Fatal("privacy replay or refused retired credential launched another attempt")
+			}
+		})
+	}
+}
+
+func requesterPrivacyProgress(request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) {
+	if observe == nil || !strings.HasPrefix(filepath.Base(request.WorkDir), "requester-privacy-") {
+		return
+	}
+	token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{
+		"id": "credential-progress", "type": "command_execution", "exit_code": 0,
+		"command": "public credential command " + token, "aggregated_output": "public credential progress " + token,
+	}})
+	observe(platformprocess.OutputStreamStdout, append(item, '\n'))
+	observe(platformprocess.OutputStreamStderr, []byte("public credential diagnostic "+token+"\n"))
+}
+
+func requesterPrivacyResult(request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+	output := directCodexSessionOutput("requester-private-thread", "public credential result "+token)
+	diagnostic := []byte("public credential failure " + token + "\n")
+	failed := filepath.Base(request.WorkDir) == "requester-privacy-failure"
+	if failed {
+		failure, _ := json.Marshal(map[string]any{"type": "turn.failed", "error": map[string]string{"message": "public credential failure " + token}})
+		output = append([]byte("{\"type\":\"thread.started\",\"thread_id\":\"requester-private-thread\"}\n"), append(failure, '\n')...)
+	}
+	if observe != nil {
+		observe(platformprocess.OutputStreamStdout, output)
+		observe(platformprocess.OutputStreamStderr, diagnostic)
+	}
+	result := platformprocess.CommandResult{Stdout: output, Stderr: diagnostic}
+	if failed {
+		result.ExitCode = 1
+		return result, errors.New("public credential runner failure " + token)
+	}
+	return result, nil
+}
+
+func awaitRequesterPrivacyLogs(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, id, marker, token string) {
+	t.Helper()
+	// Capture commits asynchronously after the command callback; only a public
+	// read can establish that this session's echoed progress is durably readable.
+	body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+		_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+		assertRequesterTokenAbsent(t, token, body)
+		return body, nil
+	}, func(body string) bool { return strings.Contains(body, marker) })
+	if err != nil || !strings.Contains(body, "redacted") {
+		t.Fatal("public capture did not retain sanitized credential echo evidence")
+	}
+}
+
+func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, id, token, outcome string) {
+	t.Helper()
+	state := "COMPLETED"
+	if outcome == "failure" {
+		state = "FAILED"
+	}
+	observation := requesterObservation(t, fixture, scenario, ctx, id)
+	if string(observation.State) != state {
+		t.Fatal("privacy observation lost the terminal execution outcome")
+	}
+	for _, view := range []string{"transcript", "logs"} {
+		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
+		if err := fixture.process.Execute(read.Input); err != nil {
+			t.Fatalf("public privacy %s read failed", view)
+		}
+		assertRequesterTokenAbsent(t, token, read.Stdout()+read.Stderr())
+	}
+	for _, suffix := range []string{"", "/transcript", "/logs", "/events?replayOnly=true"} {
+		status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+suffix, nil)
+		if status != http.StatusOK {
+			t.Fatalf("public privacy HTTP %s read failed: %d", suffix, status)
+		}
+		assertRequesterTokenAbsent(t, token, body)
+		if strings.HasPrefix(suffix, "/events") && !strings.Contains(body, "public credential progress") {
+			t.Fatal("retained Events replay lost the observed credential echo")
+		}
+	}
+}
+
+func assertRequesterTokenAbsent(t *testing.T, token, body string) {
+	t.Helper()
+	if token == "" || strings.Contains(body, token) {
+		t.Fatal("public output exposed the admitted execution credential or no credential was tested")
+	}
+}
 
 const (
 	t7SecretPrompt = "synthetic-private-t7-user-message"

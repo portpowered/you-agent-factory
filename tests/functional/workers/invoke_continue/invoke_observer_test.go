@@ -66,12 +66,16 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 			observer(platformprocess.OutputStreamStdout, []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-lost-progress\",\"type\":\"command_execution\",\"command\":\"synthetic lost inspection\",\"exit_code\":0}}\n"))
 		}
 	}
+	requesterPrivacyProgress(request, observer)
 	close(r.started)
 	defer close(r.stopped)
 	select {
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-r.release:
+		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-privacy-") {
+			return requesterPrivacyResult(request, observer)
+		}
 		output := "T7 detached attempt completed"
 		if filepath.Base(request.WorkDir) == "t7-factory" || strings.Contains(string(request.Stdin), "durable occupied peer input") {
 			output = "T7 Factory sibling COMPLETE"

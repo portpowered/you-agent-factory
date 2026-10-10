@@ -726,6 +726,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
         }
       ]
     },
@@ -787,6 +791,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
         }
       ]
     },
@@ -828,6 +836,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "cli"
         }
       ]
@@ -1375,6 +1387,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "rest"
         }
       ]
     },
@@ -1661,6 +1677,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "rest"
         }
       ]
     },
@@ -1705,6 +1725,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "rest"
         }
       ]
@@ -1873,10 +1897,15 @@
       "name": "streamWorkerSessionEventsByTopLevelWorkerSessionId",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/streamWorkerSessionEventsByWorkerSessionId",

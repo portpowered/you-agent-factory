@@ -382,7 +382,8 @@ type s8ProviderSession struct {
 }
 
 type s8WorkerList struct {
-	Sessions []s8WorkerObservation `json:"sessions"`
+	Sessions  []s8WorkerObservation `json:"sessions"`
+	NextToken string                `json:"nextToken"`
 }
 
 func listS8RemoteWorkers(
@@ -398,10 +399,27 @@ func listS8RemoteWorkers(
 	for _, state := range states {
 		args = append(args, "--state", state)
 	}
-	inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, args...)
-	var result s8WorkerList
-	decodeS8JSON(t, inputs.Stdout(), &result)
-	return result.Sessions
+	// Parallel scenarios exceed the default page size. A fleet-wide list must
+	// drain its public cursor before asserting any scenario's presence/absence.
+	var observations []s8WorkerObservation
+	seen := make(map[string]bool)
+	for {
+		inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, args...)
+		var result s8WorkerList
+		decodeS8JSON(t, inputs.Stdout(), &result)
+		observations = append(observations, result.Sessions...)
+		if result.NextToken == "" {
+			return observations
+		}
+		if seen[result.NextToken] {
+			t.Fatal("public Worker Session list repeated a continuation cursor")
+		}
+		seen[result.NextToken] = true
+		args = []string{"--json", "worker-sessions", "list", "--scope", "direct", "--next-token", result.NextToken}
+		for _, state := range states {
+			args = append(args, "--state", state)
+		}
+	}
 }
 
 func showS8RemoteWorker(

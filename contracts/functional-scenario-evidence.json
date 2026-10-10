@@ -208,6 +208,18 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionLogs",
+        "rest/readWorkerSessionTranscriptByWorkerSessionId",
+        "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
