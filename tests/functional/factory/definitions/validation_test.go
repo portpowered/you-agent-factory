@@ -72,6 +72,9 @@ func assertDefinitionsHTTPValidationFailures(t *testing.T, host *sharedDefinitio
 		}
 	}
 	for _, target := range result.Targets {
+		if strings.Contains(strings.ToLower(target.Code), "petri") || strings.Contains(strings.ToLower(target.Message), "petri") {
+			t.Fatalf("public validation target uses internal vocabulary: %#v", target)
+		}
 		if target.Code == validationCodeDuplicateIdentifier && target.Subject.Id != valid.Name+"-worker" {
 			t.Fatalf("validation result belongs to a peer: %#v", target)
 		}

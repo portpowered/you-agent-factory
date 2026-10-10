@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
-	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
+	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 )
 
 type stubLoadedSource struct {
@@ -71,7 +72,7 @@ func (s stubOperations) ValidateEffectiveDefinition(
 
 func newValidationService(t *testing.T, operations stubOperations) validationservice.Service {
 	t.Helper()
-	svc := validationwire.NewService(operations, operations, stubLoadCanonical, nil, nil)
+	svc := validationimpl.New(operations, operations, stubLoadCanonical, nil, nil)
 	return svc
 }
 
@@ -82,8 +83,7 @@ func newValidationServiceWithConfig(
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 ) validationservice.Service {
 	t.Helper()
-	validator := factoryvalidation.New(orchestratorValidator, stubLoadCanonicalForConfig(cfg))
-	svc := validationwire.NewService(validator, validator, stubLoadCanonicalForConfig(cfg), checker, orchestratorValidator)
+	svc := validationimpl.New(stubOperations{}, stubOperations{}, stubLoadCanonicalForConfig(cfg), checker, orchestratorValidator)
 	return svc
 }
 
@@ -174,8 +174,16 @@ func TestValidationService_StructuralFindingsReturnValidationFailure(t *testing.
 	if !errors.Is(err, factoryroot.ErrFactoryDefinitionValidationFailed) {
 		t.Fatalf("error = %v, want %v", err, factoryroot.ErrFactoryDefinitionValidationFailed)
 	}
-	if len(validationFailure.Validation.Targets) == 0 {
-		t.Fatal("expected validation targets")
+	if errors.Is(err, factoryroot.ErrInvalidFactoryDefinitionPayload) {
+		t.Fatal("semantic findings must not match the invalid-payload error")
+	}
+	want := []factoryroot.ValidationTarget{{
+		Code:     factoryroot.ValidationCodeFactoryPayloadInvalid,
+		Severity: factoryroot.ValidationSeverityError,
+		Message:  "definition validation failed",
+	}}
+	if !reflect.DeepEqual(validationFailure.Validation.Targets, want) {
+		t.Fatalf("targets = %#v, want %#v", validationFailure.Validation.Targets, want)
 	}
 }
 
@@ -496,7 +504,7 @@ func TestValidationServiceConstructionAndCanceledRequestsHaveNoEffects(t *testin
 		observer.calls++
 		return stubLoadedSource{cfg: validPetriFactoryConfig()}, nil
 	}
-	svc := validationwire.NewService(observer, observer, load, observer, observer)
+	svc := validationimpl.New(observer, observer, load, observer, observer)
 	if svc == nil || observer.calls != 0 {
 		t.Fatalf("construction = %v, calls = %d", svc, observer.calls)
 	}
