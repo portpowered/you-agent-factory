@@ -253,3 +253,44 @@ func (o *delegatedOwner) ReplaceNamedFactory(ctx context.Context, request defini
 	o.ctx, o.request = ctx, request
 	return o.replaced, o.err
 }
+
+func TestDisabledOwnersRetainTypedOperationFailures(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	disabled := definitions.UnimplementedService{}
+	svc := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
+		nil, disabled, nil, disabled.ListEffectiveFactories, disabled,
+	)
+
+	if _, err := svc.ListNamedFactories(ctx, definitions.ListNamedFactoriesRequest{}); err == nil {
+		t.Fatal("promoted ListNamedFactories: expected collaborator-required error")
+	}
+	if _, err := svc.GetNamedFactory(ctx, definitions.GetNamedFactoryRequest{Name: "missing"}); !errors.Is(err, definitions.ErrNamedFactoryNotFound) {
+		t.Fatalf("promoted GetNamedFactory: got %v", err)
+	}
+	if _, err := svc.GetCurrentFactoryPointer(ctx, definitions.GetCurrentFactoryPointerRequest{}); !errors.Is(err, definitions.ErrCurrentFactoryNotFound) {
+		t.Fatalf("promoted GetCurrentFactoryPointer: got %v", err)
+	}
+	if _, err := svc.SetCurrentFactoryPointer(ctx, definitions.SetCurrentFactoryPointerRequest{Name: "alpha"}); !errors.Is(err, definitions.ErrNamedFactoryNotFound) {
+		t.Fatalf("promoted SetCurrentFactoryPointer: got %v", err)
+	}
+	if _, err := svc.PrepareFactoryLayout(ctx, definitions.PrepareFactoryLayoutRequest{}); !errors.Is(err, definitions.ErrMalformedFactoryLayoutPayload) {
+		t.Fatalf("promoted PrepareFactoryLayout: got %v", err)
+	}
+	if _, err := svc.CompileEffectiveFactorySource(ctx, definitions.CompileEffectiveFactorySourceRequest{}); !errors.Is(err, definitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatalf("promoted CompileEffectiveFactorySource: got %v", err)
+	}
+	if _, err := svc.ValidateStructuralFactoryDefinition(ctx, definitions.ValidateStructuralFactoryDefinitionRequest{}); !errors.Is(err, definitions.ErrInvalidFactoryDefinitionPayload) {
+		t.Fatalf("promoted ValidateStructuralFactoryDefinition: got %v", err)
+	}
+	if _, err := svc.CaptureFactorySnapshot(ctx, definitions.CaptureFactorySnapshotRequest{}); !errors.Is(err, definitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf("promoted CaptureFactorySnapshot: got %v", err)
+	}
+	if _, err := svc.InstallPackagedFactory(ctx, definitions.InstallPackagedFactoryRequest{Name: "@you/missing"}); !errors.Is(err, definitions.ErrUnknownPackagedFactoryIdentity) {
+		t.Fatalf("promoted InstallPackagedFactory: got %v", err)
+	}
+	if _, err := svc.CreateFactoryScaffold(ctx, definitions.CreateFactoryScaffoldRequest{}); !errors.Is(err, definitions.ErrFactoryDistributeFailed) {
+		t.Fatalf("promoted CreateFactoryScaffold: got %v", err)
+	}
+}

@@ -203,10 +203,17 @@ func TestNormalCommandInitializesPackagedFactoriesWithoutSetupCommand(t *testing
 		t.Fatalf("normal initialization wrote a legacy working-directory scaffold: %v", statErr)
 	}
 
+	firstFactory, readErr := os.ReadFile(packagedFactory)
+	if readErr != nil || len(firstFactory) == 0 {
+		t.Fatalf("read initialized packaged Factory: bytes=%d error=%v", len(firstFactory), readErr)
+	}
 	firstConfig := fixture.readConfig()
 	err = fixture.executeOn(process, io.Discard, args...)
 	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
 		t.Fatalf("Process.Execute(run missing Factory repeat) error = %v", err)
+	}
+	if got, readErr := os.ReadFile(packagedFactory); readErr != nil || !bytes.Equal(got, firstFactory) {
+		t.Fatalf("repeat initialization changed packaged Factory content: error=%v", readErr)
 	}
 	if got := fixture.readConfig(); got != firstConfig {
 		t.Fatalf("repeat initialization rewrote operator config:\nfirst:\n%s\nsecond:\n%s", firstConfig, got)
