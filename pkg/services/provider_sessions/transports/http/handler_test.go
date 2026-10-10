@@ -154,12 +154,12 @@ func TestAdapterGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *tes
 	}
 }
 
-func TestNewHandlerRequiresInjectedAdapter(t *testing.T) {
-	if handler := NewHandler(nil, zap.NewNop()); handler != nil {
-		t.Fatalf("NewHandler(nil) = %#v, want nil", handler)
-	}
-	if handler := NewHandler(NewAdapter(&rootServiceFake{}), nil); handler != nil {
-		t.Fatalf("NewHandler(adapter, nil) = %#v, want nil", handler)
+func TestNewHandlerIsInertWithInjectedPeers(t *testing.T) {
+	fake := &rootServiceFake{}
+	core, observed := observer.New(zap.WarnLevel)
+	handler := NewHandler(NewAdapter(fake), zap.New(core))
+	if handler == nil || fake.lastID != "" || observed.Len() != 0 {
+		t.Fatalf("construction = %#v, root identity = %q, logs = %d", handler, fake.lastID, observed.Len())
 	}
 }
 
@@ -455,7 +455,7 @@ func TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextBeforeRoot(t 
 }
 
 func TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot(t *testing.T) {
-	fake := newBlockingRootServiceFake()
+	fake := newBlockingRootServiceFake(t)
 	handler := NewHandler(NewAdapter(fake), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
@@ -489,7 +489,7 @@ func TestHandlerGetProviderSessionDetailsMapsCanceledRequestContextDuringRoot(t 
 }
 
 func TestHandlerGetProviderSessionDetailsMapsDeadlineExceededRequestContextDuringRoot(t *testing.T) {
-	fake := newBlockingRootServiceFake()
+	fake := newBlockingRootServiceFake(t)
 	handler := NewHandler(NewAdapter(fake), zap.NewNop())
 	recorder := httptest.NewRecorder()
 

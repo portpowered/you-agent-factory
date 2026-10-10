@@ -19,9 +19,6 @@ type Handler struct {
 
 // NewHandler constructs the Provider Sessions HTTP handler with its adapter.
 func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
-	if adapter == nil || logger == nil {
-		return nil
-	}
 	return &Handler{adapter: adapter, logger: logger}
 }
 
