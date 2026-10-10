@@ -61,16 +61,10 @@ func (s *applicationService) SubmitFileForSession(
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, err
 	}
-	if s.readSubmittedFile == nil {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("submitted Work Request file reader is required")
-	}
 	return submitFile(ctx, path, runtime, s.readSubmittedFile)
 }
 
 func (s *applicationService) runtime(sessionID string) (work.Runtime, error) {
-	if s == nil || s.runtimes == nil {
-		return nil, fmt.Errorf("Factory Session runtime service is required")
-	}
 	runtime, err := s.runtimes.ResolveWorkRuntime(sessionID)
 	if err != nil {
 		return nil, err
