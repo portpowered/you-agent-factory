@@ -258,7 +258,7 @@ func assertBrowserOpenerEnvironmentCase(t *testing.T, tc browserOpenerEnvironmen
 	if tc.wantNoOp {
 		wantCalls = 0
 	}
-	if err != wantErr || hostFactoryCalls != wantCalls || openerCalls != wantCalls {
+	if err != wantErr || hostFactoryCalls != wantCalls || openerCalls != wantCalls { //nolint:errorlint // Require exact unchanged host error identity; wrapping must fail this assertion.
 		t.Fatalf("application opener = (error %v, factories %d, opens %d), want (%v, %d, %d)", err, hostFactoryCalls, openerCalls, wantErr, wantCalls, wantCalls)
 	}
 }
@@ -289,7 +289,7 @@ func assertInjectedBrowserOpener(t *testing.T, tc browserOpenerEnvironmentCase, 
 	if injectedCalls != 0 {
 		t.Fatal("construction invoked injected opener")
 	}
-	if err := selected(ctx, url); err != wantErr || injectedCalls != 1 || hostFactoryCalls != 0 {
+	if err := selected(ctx, url); err != wantErr || injectedCalls != 1 || hostFactoryCalls != 0 { //nolint:errorlint // Require exact unchanged injected error identity; wrapping must fail this assertion.
 		t.Fatalf("injected opener = (error %v, opens %d, factories %d), want (%v, 1, 0)", err, injectedCalls, hostFactoryCalls, wantErr)
 	}
 }
