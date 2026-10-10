@@ -33,10 +33,128 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestPortableReplayInspectionExecutesThroughRootProcess proves a valid
-// portable recording follows the customer-facing run command into the
-// historical-replay path. Historical inspection must not create live runtime
-// components as part of the replay.
+// TestNativeRecordingJourney proves native output, selection, atomic failure
+// and portable historical inspection through the public command boundary.
+func TestNativeRecordingJourney(t *testing.T) {
+	t.Parallel()
+	// The immutable process is shared by parallel invocations; each owns its
+	// source, profile, durable session, output and destination. No binary is built.
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	for _, name := range []string{"explicit-human", "explicit-json", "explicit-jsonl", "generated", "disabled", "conflict", "write-failure", "workflow-failure"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir, home := t.TempDir(), t.TempDir()
+			source := filepath.Join(dir, "native.js")
+			body := `return "native-recorded-result";`
+			if name == "workflow-failure" {
+				body = `throw new Error("native-owned-failure");`
+			}
+			if err := os.WriteFile(source, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "native.json")
+			flags := []string{"--record", path}
+			switch name {
+			case "explicit-json":
+				flags = append(flags, "--json")
+			case "explicit-jsonl":
+				path = filepath.Join(dir, "native.jsonl")
+				flags = []string{"--record", path}
+			case "generated":
+				flags = nil
+			case "disabled":
+				flags = []string{"--no-record"}
+			case "conflict":
+				flags = append(flags, "--no-record")
+			case "write-failure":
+				if err := os.WriteFile(filepath.Join(dir, "blocked"), []byte("keep"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				path = filepath.Join(dir, "blocked", "native.json")
+				flags = []string{"--record", path}
+			}
+			var output, stderr bytes.Buffer
+			execute := func(args []string) error {
+				output.Reset()
+				stderr.Reset()
+				return process.Execute(root.Input{Args: append([]string{"you", "run"}, args...),
+					Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+					WorkingDirectory: dir, Context: t.Context(), Stdout: &output, Stderr: &stderr, Stdin: strings.NewReader("")})
+			}
+			err := execute(append([]string{"--factory", source}, flags...))
+			if name == "conflict" || name == "write-failure" {
+				if err == nil {
+					t.Fatalf("expected refusal; output=%s", output.String())
+				}
+				if _, statErr := os.Stat(path); statErr == nil {
+					t.Fatal("failed export left artifact")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("native run: %v; output=%s stderr=%s", err, output.String(), stderr.String())
+			}
+			if name == "disabled" {
+				if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("disabled recording: %v", err)
+				}
+				if matches, _ := filepath.Glob(filepath.Join(home, ".you-agent-factory", "recordings", "*", "*", "*", "*")); len(matches) != 0 {
+					t.Fatalf("disabled created recordings: %v", matches)
+				}
+				return
+			}
+			if name == "generated" {
+				const prefix = "Recording saved: "
+				index := strings.Index(output.String(), prefix)
+				if index < 0 {
+					t.Fatalf("missing saved path: %s", output.String())
+				}
+				path = strings.TrimSpace(strings.Split(output.String()[index+len(prefix):], "\n")[0])
+			}
+			if name == "explicit-json" && !json.Valid(bytes.TrimSpace(output.Bytes())) {
+				t.Fatalf("invalid JSON result: %s", output.String())
+			}
+			wantStatus := "SUCCEEDED"
+			if name == "workflow-failure" {
+				wantStatus = "FAILED"
+			}
+			recording := assertNativeRecording(t, path, wantStatus)
+			if err := execute([]string{"--replay", path, "--no-record"}); err != nil {
+				t.Fatalf("replay: %v; output=%s", err, output.String())
+			}
+			if !strings.Contains(output.String(), wantStatus) || !strings.Contains(output.String(), recording.Session.ID) {
+				t.Fatalf("lost recorded outcome: %s", output.String())
+			}
+		})
+	}
+}
+
+func assertNativeRecording(t *testing.T, path, status string) recordings.PortableRecording {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value recordings.PortableRecording
+	if err := json.Unmarshal(data, &value); err != nil {
+		t.Fatal(err)
+	}
+	if value.Session.Status != status || value.Result == nil || len(value.Events) == 0 {
+		t.Fatalf("lost terminal recording: %+v", value)
+	}
+	if status == "SUCCEEDED" && !bytes.Contains(value.Result.PrimaryResult, []byte("native-recorded-result")) {
+		t.Fatalf("lost primary result: %+v", value.Result)
+	}
+	for i := 1; i < len(value.Events); i++ {
+		if value.Events[i].Sequence <= value.Events[i-1].Sequence {
+			t.Fatal("recording lost event order")
+		}
+	}
+	return value
+}
+
+// TestPortableReplayInspectionExecutesThroughRootProcess proves portable
+// historical inspection preserves the retained outcome without live execution.
 func TestPortableReplayInspectionExecutesThroughRootProcess(t *testing.T) {
 	t.Parallel()
 

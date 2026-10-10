@@ -533,6 +533,47 @@ type openingDurableStartStub struct {
 	synchronous bool
 	calls       int
 	failure     error
+	recordPath  string
+	recordID    string
+	recordError error
+}
+
+func (s *openingDurableStartStub) WriteRecording(ctx context.Context, id, path string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.recordID, s.recordPath = id, path
+	return s.recordError
+}
+
+func TestCanonicalDirectJavaScriptRecordingSelectionAndFailure(t *testing.T) {
+	t.Parallel()
+	for _, selected := range []string{"", "native.json"} {
+		t.Run(selected, func(t *testing.T) {
+			t.Parallel()
+			owner := &openingDurableStartStub{}
+			opening := &RuntimeOpening{assembly: &legacyservice.Assembly{}, durable: owner}
+			request := factorysessions.SessionStartRequest{
+				Mode: factorysessions.SessionOperationModeDurable, FolderPath: "/selected",
+				Synchronous: true, Correlation: factorysessions.SessionOperationCorrelation{RequestID: "native"},
+				RuntimeSelection: &factorysessions.SessionRuntimeSelection{Recording: factorysessions.SessionRecordingSelection{RecordPath: selected}},
+			}
+			if _, err := opening.Start(t.Context(), request); err != nil || owner.recordPath != selected {
+				t.Fatalf("record path=%q error=%v", owner.recordPath, err)
+			}
+			if selected == "" {
+				return
+			}
+			if owner.recordID != "native" {
+				t.Fatalf("recorded identity=%q", owner.recordID)
+			}
+			cause := errors.New("recording write denied")
+			owner.recordError = cause
+			if _, err := opening.Start(t.Context(), request); !errors.Is(err, cause) {
+				t.Fatalf("export failure=%v, want original cause", err)
+			}
+		})
+	}
 }
 
 func (s *openingDurableStartStub) StartCanonical(ctx context.Context, request factorysessions.StartRequest, synchronous bool) (durableexecution.CanonicalStartResult, error) {

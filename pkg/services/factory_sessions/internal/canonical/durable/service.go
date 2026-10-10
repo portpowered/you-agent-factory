@@ -20,4 +20,5 @@ type Service interface {
 	ReadResultCanonical(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
 	QueryDispatchesCanonical(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
 	SubscribeResponsesCanonical(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	WriteRecording(context.Context, string, string) error
 }
