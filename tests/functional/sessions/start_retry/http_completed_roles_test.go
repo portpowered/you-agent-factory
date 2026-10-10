@@ -15,13 +15,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // HTTP owns the contract here: isolated handler tests cannot prove that both
@@ -40,6 +44,8 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	t.Cleanup(release)
 	var starts atomic.Int32
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
+	failed := newInitialOpeningProviderScenario(t)
+	logCore, logs := observer.New(zap.InfoLevel)
 	overlap := make([]initialOpeningScenario, 4)
 	providerGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{})}
 	for i := range overlap {
@@ -49,10 +55,12 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	t.Cleanup(providerGate.unblock)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		RecordingReadFile:     os.ReadFile,
+		ProcessLogger:         zap.New(logCore).With(zap.String("selected_backend", "completed-http")),
 		ScriptCommandRunner:   initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner: completedHTTPProviderRunner{initialOpeningProviderRunner{effects: effects, selected: providerGate}},
+		ProviderCommandRunner: completedHTTPProviderRunner{initialOpeningProviderRunner: initialOpeningProviderRunner{effects: effects, selected: providerGate}, failedDir: failed.candidateDir},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			starts.Add(1)
+			request.Handler = completedHTTPContextHandler(request.Handler)
 			if request.Port == 18013 {
 				onBound := request.OnBound
 				request.OnBound = func(binding platformhttpserver.Binding) {
@@ -95,7 +103,7 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	t.Run("H10 H11 overlapping HTTP Work and retained then live responses", func(t *testing.T) {
 		t.Parallel()
 		sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
-		testCompletedHTTPOverlap(t, sessions, baseURL, overlap, providerGate)
+		testCompletedHTTPOverlap(t, sessions, baseURL, overlap, providerGate, failed, effects, logs)
 	})
 	t.Run("H02 H13 durable readiness result and unavailable roles", func(t *testing.T) {
 		t.Parallel()
@@ -379,7 +387,7 @@ func completedHTTPHostURL(t *testing.T, server *support.ProcessAPIServer, bound 
 
 // The provider gate makes coexistence deterministic. Only the selected Session
 // is closed; peer invocations and cursor ownership remain live until release.
-func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, baseURL string, scenarios []initialOpeningScenario, gate *selectedProviderGate) {
+func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, baseURL string, scenarios []initialOpeningScenario, gate *selectedProviderGate, failed initialOpeningScenario, effects *initialOpeningEffects, logs *observer.ObservedLogs) {
 	t.Helper()
 	defer gate.unblock()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
@@ -413,6 +421,9 @@ func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, ba
 		done[i] = startCompletedHTTPInvocation(ctx, selected+"/invocations", scenario.candidateID)
 	}
 	awaitSelectedProviders(t, ctx, gate)
+	testCompletedHTTPRequestContexts(t, sessions, baseURL, ids[1])
+	testCompletedHTTPProviderFailure(t, sessions, baseURL, failed, effects, logs)
+	testCompletedHTTPFailedCronRecovery(t, sessions, baseURL, logs)
 	for i, id := range ids {
 		assertSelectedRunningWorker(t, baseURL, id)
 		completedHTTPRequest(t, http.MethodGet, baseURL+"/factory-sessions/"+id+"/status", "", http.StatusOK)
@@ -445,6 +456,202 @@ func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, ba
 	}
 	gate.unblock()
 	finishCompletedHTTPPeers(t, ctx, baseURL, ids, scenarios, done, streams, last)
+}
+
+func testCompletedHTTPFailedCronRecovery(t *testing.T, sessions factorysessions.Service, baseURL string, logs *observer.ObservedLogs) {
+	t.Helper()
+	fixture, path := completedHTTPFailedCronRecording(t)
+	scenario := newInitialOpeningScenario(t)
+	request := scenario.request()
+	request.RuntimeSelection.Recording.ResumePath = path
+	startInitialOpeningSession(t, sessions, request)
+	selected := baseURL + "/factory-sessions/" + scenario.candidateID
+	read := support.GetJSON[factoryapi.FactorySession](t, selected)
+	if read.Id != scenario.candidateID {
+		t.Fatalf("H09: recovery replaced selected Session identity: %#v", read)
+	}
+	completedHTTPRequest(t, http.MethodGet, selected+"/status", "", http.StatusOK)
+	work := support.GetJSON[factoryapi.ListWorkResponse](t, selected+"/work")
+	if len(work.Results) != 2 || !support.HasWorkAtCustomerState(work, "work-recovered-after-automation", "task:complete") || !support.HasWorkAtCustomerState(work, "failed-cron-output", "task:failed") {
+		t.Fatalf("H09: failed cron recovery Work = %#v", work)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	history, err := sessions.SubscribeFactoryEventsForSession(ctx, scenario.candidateID, nil)
+	if err != nil || history == nil {
+		t.Fatalf("H09: recovered history = %#v, %v", history, err)
+	}
+	if len(history.History) < len(fixture.Events) {
+		t.Fatal("H09: recovery discarded recorded events")
+	}
+	for i, recorded := range fixture.Events {
+		restored := history.History[i]
+		if restored.Id != recorded.Id || restored.Type != recorded.Type || !restored.Context.EventTime.Equal(recorded.Context.EventTime) {
+			t.Fatalf("H09: recovery replaced recorded identity/order/time at %d: %#v", i, restored)
+		}
+	}
+	dispatches := 0
+	for _, event := range history.History {
+		if event.Type != factorydefinitions.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		var payload factorydefinitions.DispatchRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.TransitionID == "daily-refresh" {
+			dispatches++
+		}
+	}
+	if dispatches != 1 {
+		t.Fatalf("H09: consumed cron dispatches=%d, want recorded one", dispatches)
+	}
+	for _, entry := range logs.All() {
+		fields := entry.ContextMap()
+		if fields["event"] == "run.restore.disposition" && fields["session_id"] == scenario.candidateID && fields["dispatch_id"] == "dispatch-daily-refresh" && fields["outcome"] == "FAILED" && fields["selected_backend"] == "completed-http" {
+			return
+		}
+	}
+	t.Fatal("H09: failed cron recovery lacks selected scoped disposition")
+}
+
+// A small controlled failed completion extends the existing recording; its
+// failed output supplies the conclusive ownership required by recovery.
+// Generated scenario bytes stay in temporary storage, not the repository.
+func completedHTTPFailedCronRecording(t *testing.T) (*factorydefinitions.ReplayArtifact, string) {
+	t.Helper()
+	fixture := testutil.LoadReplayArtifact(t, testutil.MustRepoPath(t, "tests/functional/sessions/isolation_and_recovery/testdata/automation-work-missing-occupancy.replay.json"))
+	for i := range fixture.Events {
+		event := &fixture.Events[i]
+		if event.Type == factorydefinitions.FactoryEventTypeDispatchResponse && event.Context.DispatchID != nil && *event.Context.DispatchID == "dispatch-daily-refresh" {
+			var payload map[string]any
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			payload["outcome"], payload["error"] = "FAILED", "controlled cron failure"
+			payload["outputWork"] = []map[string]any{{"name": "failed-cron-output", "workId": "failed-cron-output", "workTypeName": "task", "traceId": "trace-automation-recovery", "state": map[string]string{"name": "failed", "type": "FAILED"}}}
+			event.Payload, _ = json.Marshal(payload)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "failed-cron.json")
+	data, err := json.Marshal(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return fixture, path
+}
+
+// The failure is injected only at the provider command effect. Four other
+// Session invocations remain held while the failed attempt returns its public
+// outcome; their completion/output checks follow in the owning overlap cell.
+func testCompletedHTTPProviderFailure(t *testing.T, sessions factorysessions.Service, baseURL string, scenario initialOpeningScenario, effects *initialOpeningEffects, logs *observer.ObservedLogs) {
+	t.Helper()
+	id, _ := completedHTTPOpen(t, sessions, baseURL, scenario.candidateDir)
+	ctx, cancel := context.WithTimeout(t.Context(), 25*time.Second)
+	defer cancel()
+	result := awaitCompletedHTTPInvocation(t, ctx, startCompletedHTTPInvocation(ctx, baseURL+"/factory-sessions/"+id+"/invocations", completedHTTPSecret))
+	outcome := result.response
+	if result.status != http.StatusOK || outcome.Status != "FAILED" || outcome.ErrorCode == nil || *outcome.ErrorCode != "INVOCATION_RUNTIME_FAILURE" ||
+		outcome.WorkState == nil || *outcome.WorkState != "task:failed" || outcome.WorkId == nil || outcome.RequestId == "" || outcome.TraceId == "" || outcome.PrimaryResult != nil {
+		t.Fatalf("H12: provider failure lost its typed attributed outcome: %d %s", result.status, result.body)
+	}
+	work := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+id+"/work")
+	if len(work.Results) != 1 || !support.HasWorkAtCustomerState(work, *outcome.WorkId, "task:failed") {
+		t.Fatalf("H12: failed invocation disagrees with selected Work: %#v", work)
+	}
+	if strings.Contains(string(result.body), completedHTTPSecret) {
+		t.Fatal("H12: public failure exposed secret")
+	}
+	assertInitialOpeningProviderSelection(t, effects, scenario.candidateDir)
+	correlated := false
+	for _, entry := range logs.All() {
+		fields := entry.ContextMap()
+		if strings.Contains(fmt.Sprint(entry.Message, fields), completedHTTPSecret) {
+			t.Fatal("H12: selected diagnostic exposed secret")
+		}
+		if fields["session_id"] == id && fields["selected_backend"] == "completed-http" && entry.Level >= zap.WarnLevel {
+			correlated = true
+		}
+	}
+	if !correlated {
+		t.Fatal("H12: provider failure has no correlated selected diagnostic")
+	}
+}
+
+// The server effect supplies an already terminal request context to the real
+// router. This models cancellation/expiry before admission without a timer race
+// or replacing a service. Ordinary requests retain the listener's context.
+func completedHTTPContextHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var ctx context.Context
+		var cancel context.CancelFunc
+		switch r.Header.Get("X-Completed-Request-Context") {
+		case "canceled":
+			ctx, cancel = context.WithCancel(r.Context())
+			cancel()
+		case "expired":
+			ctx, cancel = context.WithDeadline(r.Context(), time.Unix(0, 0))
+		default:
+			next.ServeHTTP(w, r)
+			return
+		}
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func testCompletedHTTPRequestContexts(t *testing.T, sessions factorysessions.Service, baseURL, peerID string) {
+	t.Helper()
+	scenario := newInitialOpeningScenario(t)
+	body, err := json.Marshal(map[string]string{"folderPath": scenario.candidateDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, state := range []string{"canceled", "expired"} {
+		for _, operation := range []struct{ method, endpoint, body string }{
+			{http.MethodPost, baseURL + "/factory-sessions", string(body)},
+			{http.MethodDelete, baseURL + "/factory-sessions/" + peerID, ""},
+		} {
+			request, err := http.NewRequestWithContext(t.Context(), operation.method, operation.endpoint, strings.NewReader(operation.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Completed-Request-Context", state)
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, readErr := io.ReadAll(response.Body)
+			response.Body.Close()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if state == "canceled" {
+				if response.StatusCode != http.StatusOK || len(data) != 0 {
+					t.Fatalf("H06: canceled %s = %d %s, want empty response", operation.method, response.StatusCode, data)
+				}
+			} else {
+				if response.StatusCode != http.StatusGatewayTimeout {
+					t.Fatalf("H07: expired %s = %d %s, want 504", operation.method, response.StatusCode, data)
+				}
+				assertCompletedHTTPErrorBody(t, data, "INTERNAL_ERROR")
+			}
+		}
+		reads, err := sessions.ListFactorySessions(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, read := range reads {
+			if read.Context.Session != nil && read.Context.Session.FolderPath == scenario.candidateDir {
+				t.Fatalf("H06/H07: %s request admitted its rejected Factory", state)
+			}
+		}
+		assertSelectedRunningWorker(t, baseURL, peerID)
+	}
 }
 
 func finishCompletedHTTPPeers(t *testing.T, ctx context.Context, baseURL string, ids []string, scenarios []initialOpeningScenario, done []<-chan completedHTTPInvocation, streams []*support.FactoryResponseEventStream, last []int64) {
@@ -496,7 +703,20 @@ type completedHTTPInvocation struct {
 	err      error
 }
 
-type completedHTTPProviderRunner struct{ initialOpeningProviderRunner }
+type completedHTTPProviderRunner struct {
+	initialOpeningProviderRunner
+	failedDir string
+}
+
+const completedHTTPSecret = "private-completed-http-provider-sentinel"
+
+func (runner completedHTTPProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if request.WorkDir == runner.failedDir {
+		runner.effects.record("worker.codex", request.WorkDir)
+		return platformprocess.CommandResult{}, fmt.Errorf("controlled provider failure: %s", completedHTTPSecret)
+	}
+	return runner.initialOpeningProviderRunner.Run(ctx, request)
+}
 
 func (runner completedHTTPProviderRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
 	progress := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"completed-http-progress\",\"type\":\"command_execution\",\"command\":\"controlled inspection\",\"aggregated_output\":\"HTTP progress before release\",\"exit_code\":0}}\n")
