@@ -66,6 +66,67 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 			runTypedEmptyMockAcceptance(t, host, mode)
 		})
 	}
+	for _, flag := range []string{"equals", "optional-path"} {
+		t.Run("topology-only/"+flag, func(t *testing.T) {
+			t.Parallel()
+			runTopologyOnlyMockConfig(t, host, flag)
+		})
+	}
+}
+
+// B1's name-only worker is a supported topology placeholder, not an execution
+// definition. Preserve that public routing behavior alongside the typed
+// rejection/gate witnesses: mock policy must not invent a provider attempt.
+func runTopologyOnlyMockConfig(t *testing.T, host *support.FunctionalAPIServer, flag string) {
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"workTypes":    []map[string]any{batchWorkTypeConfig("task")},
+		"workers":      []map[string]string{{"name": "processor"}},
+		"workstations": []map[string]any{batchWorkstationConfig("process-task", "processor", "task", "complete", "failed")},
+	})
+	// Match the original factory.json-only fixture, without synthesizing an
+	// execution definition in the scaffolder's default workstation document.
+	if err := os.Remove(filepath.Join(dir, "workstations", "process-task", "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+	id := uuid.NewString()
+	gate := support.NewMockWorkerGate(t)
+	path := writeBatchMockWorkersConfig(t, workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		ID: "topology-rejection", RunType: workers.MockWorkerRunTypeReject,
+		RejectConfig: &workers.MockWorkerRejectConfig{Stderr: configuredRejectStderr}, GateConfig: gate.Config(30 * time.Second),
+	}}})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "target", WorkTypeID: "task", TraceID: id, Payload: []byte("preserved topology payload")})
+	args := []string{"you", "run", "--session=" + id, "--dir", dir, "--continuously", "--quiet", "--no-record"}
+	if flag == "equals" {
+		args = append(args, "--with-mock-workers="+path)
+	} else {
+		args = append(args, "--with-mock-workers", path)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.WorkingDirectory, inputs.Input.Env = dir, sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	joined := make(chan struct{})
+	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-joined:
+		case <-time.After(30 * time.Second):
+			t.Error("topology invocation did not join")
+		}
+	})
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, host.URL()+"/factory-sessions/"+id+"/work")
+	if support.CountWorkAtCustomerState(listed, "task:complete") != 1 || support.CountWorkAtCustomerState(listed, "task:failed") != 0 {
+		t.Fatalf("topology Work outcome = %+v", listed)
+	}
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	if len(dispatches) != 1 || dispatches[0].Response == nil || dispatches[0].Response.Outcome != factoryapi.WorkOutcomeAccepted ||
+		support.StringPointerValue(dispatches[0].Response.Output) != "" || !support.DispatchObservationIncludesWork(dispatches[0], "target") {
+		t.Fatalf("topology dispatch = %+v, want accepted correlated traversal without provider output", dispatches)
+	}
+	if _, err := os.Stat(gate.Config(30 * time.Second).ArrivedFile); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("topology traversal reached mock execution gate: %v", err)
+	}
 }
 
 // M3 observes default acceptance with an explicitly empty configuration on
