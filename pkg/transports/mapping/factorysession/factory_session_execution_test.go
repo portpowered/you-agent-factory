@@ -19,6 +19,28 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
+func TestInvocationMappingPreservesOwnerFailureClassification(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"throttled", "auth_failure", "misconfigured", ""} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			owner := &invocationServiceFake{result: factorysessionexecution.InvocationResult{
+				Status:    factorysessionexecution.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_RUNTIME_FAILURE", FailureReason: reason,
+				RequestID: "request", TraceID: "trace", SessionID: "selected-session",
+			}}
+			result, err := factorysession.InvokeFactorySession(t.Context(), owner, "selected-session", factoryapi.InvocationRequest{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.FailureReason != reason || result.ErrorCode != owner.result.ErrorCode ||
+				result.RequestID != "request" || result.TraceID != "trace" || result.SessionID != "selected-session" {
+				t.Fatalf("terminal classification/correlation changed: %#v", result)
+			}
+		})
+	}
+}
+
 type durableFixtureCatalog struct {
 	Scenarios        []durableFixtureScenario       `json:"scenarios"`
 	IdempotentReplay durableFixtureIdempotentReplay `json:"idempotentReplay"`
