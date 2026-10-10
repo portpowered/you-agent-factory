@@ -54,15 +54,7 @@ func TestInvocationPrimaryDiagnosticDelegatesSafePresentation(t *testing.T) {
 			if string(response.Code) != code || response.Family != test.family || response.Message != "unsupported https://example.test/provider (workerModelProvider)" {
 				t.Fatalf("response=%#v", response)
 			}
-			if !strings.Contains(contract.Error(), "PRIVATE_PASS") {
-				t.Fatal("original error was mutated")
-			}
-			if invocation, ok := contract.(*factoryruntimecli.InvocationError); ok && !errors.Is(invocation, cause) {
-				t.Fatal("cause identity changed")
-			}
-			if !factoryruntimecli.WriteInvocationError(nil, contract, false) {
-				t.Fatal("nil writer lost contract selection")
-			}
+			assertInvocationDiagnosticPreservesContract(t, contract, cause)
 		}
 	}
 	if factoryruntimecli.WriteInvocationError(nil, nil, false) || factoryruntimecli.WriteInvocationError(nil, cause, false) {
@@ -72,6 +64,20 @@ func TestInvocationPrimaryDiagnosticDelegatesSafePresentation(t *testing.T) {
 	factoryruntimecli.WriteInvocationError(&empty, &factoryruntimecli.InvocationError{}, false)
 	if empty.String() != "{\"code\":\"RUN_INVOCATION_FAILED\",\"family\":\"INTERNAL_SERVER_ERROR\",\"message\":\"\"}\n" {
 		t.Fatalf("default invocation envelope changed: %q", empty.String())
+	}
+}
+
+func assertInvocationDiagnosticPreservesContract(t *testing.T, contract, cause error) {
+	t.Helper()
+	if !strings.Contains(contract.Error(), "PRIVATE_PASS") {
+		t.Fatal("original error was mutated")
+	}
+	var invocation *factoryruntimecli.InvocationError
+	if errors.As(contract, &invocation) && !errors.Is(invocation, cause) {
+		t.Fatal("cause identity changed")
+	}
+	if !factoryruntimecli.WriteInvocationError(nil, contract, false) {
+		t.Fatal("nil writer lost contract selection")
 	}
 }
 

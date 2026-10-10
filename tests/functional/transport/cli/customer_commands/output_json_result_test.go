@@ -74,11 +74,26 @@ func assertPrivateInvocationFailure(t *testing.T, flags []string, malformed bool
 	originalArgs := append([]string(nil), inputs.Input.Args...)
 	originalEnv := append([]string(nil), inputs.Input.Env...)
 	err := fixture.process.Execute(inputs.Input)
+	invocation := assertPrivateInvocationFailureType(t, err, secret)
+	assertPrivateInvocationFailureOutput(t, inputs, wantURL)
+	if !reflect.DeepEqual(inputs.Input.Args, originalArgs) || !reflect.DeepEqual(inputs.Input.Env, originalEnv) || !strings.Contains(invocation.Message, secret) {
+		t.Fatal("presentation mutated caller input or original error")
+	}
+	return inputs
+}
+
+func assertPrivateInvocationFailureType(t *testing.T, err error, secret string) *runcli.InvocationError {
+	t.Helper()
 	var invocation *runcli.InvocationError
 	var resolution operatorsettings.ResolutionFailure
 	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) || !errors.As(err, &resolution) || resolution.Field != "workerModelProvider" || resolution.Message != secret || !errors.As(err, &invocation) || invocation.Code != runcli.InvocationErrorCodeFailed {
 		t.Fatalf("want original typed unsupported provider failure; got %T: %v", err, err)
 	}
+	return invocation
+}
+
+func assertPrivateInvocationFailureOutput(t *testing.T, inputs *support.CapturedInputs, wantURL string) {
+	t.Helper()
 	stdout, stderr := inputs.Stdout(), inputs.Stderr()
 	primary, trailing, _ := strings.Cut(stderr, "\n")
 	response := decodeSingleJSONErrorResponse(t, primary)
@@ -87,11 +102,7 @@ func assertPrivateInvocationFailure(t *testing.T, flags []string, malformed bool
 		t.Fatalf("unsafe or incorrectly framed diagnostic: stdout=%q stderr=%q", stdout, stderr)
 	}
 	assertPrivateDiagnosticCauses(t, trailing)
-	if !reflect.DeepEqual(inputs.Input.Args, originalArgs) || !reflect.DeepEqual(inputs.Input.Env, originalEnv) || !strings.Contains(invocation.Message, secret) {
-		t.Fatal("presentation mutated caller input or original error")
-	}
 	t.Logf("typed unsupported override; empty stdout; primary=%s; safe trailing cause lines=%d", primary, len(nonEmptyStdoutLines(trailing)))
-	return inputs
 }
 
 func assertPrivateDiagnosticCauses(t *testing.T, trailing string) {

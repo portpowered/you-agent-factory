@@ -50,20 +50,31 @@ func TestPrimaryDiagnosticSanitizesDetachedURLsAcrossCodedContracts(t *testing.T
 				if response.Message != test.want || response.Code != "TEST_FAILED" || strings.Contains(output.String(), "PRIVATE") {
 					t.Fatalf("%T response=%#v, want message %q", contract, response, test.want)
 				}
-				if contract.Error() != original || errors.Unwrap(contract) != cause || !reflect.DeepEqual(Normalize(contract), contract) {
-					t.Fatal("rendering mutated original error or cause identity")
-				}
-				if coded, ok := contract.(testResponseCodedError); ok {
-					want := coded.response
-					want.Message = test.want
-					if !reflect.DeepEqual(response, want) || coded.response.Message != test.message {
-						t.Fatal("rendering changed authored response or typed metadata")
-					}
-				} else if coded, ok := contract.(FamilyCodedError); ok && response.Family != coded.CLIErrorFamily() {
-					t.Fatal("rendering changed authored error family")
-				}
+				assertPrimaryDiagnosticPreservesContract(t, contract, original, cause, response, test.message, test.want)
 			}
 		})
+	}
+}
+
+func assertPrimaryDiagnosticPreservesContract(t *testing.T, contract error, original string, cause error, response factoryapi.ErrorResponse, message, wantMessage string) {
+	t.Helper()
+	// Compare interface values to retain strict cause identity, including nil,
+	// rather than accepting an equivalent wrapped error through errors.Is.
+	if contract.Error() != original || any(errors.Unwrap(contract)) != any(cause) || !reflect.DeepEqual(Normalize(contract), contract) {
+		t.Fatal("rendering mutated original error or cause identity")
+	}
+	var coded testResponseCodedError
+	if errors.As(contract, &coded) {
+		want := coded.response
+		want.Message = wantMessage
+		if !reflect.DeepEqual(response, want) || coded.response.Message != message {
+			t.Fatal("rendering changed authored response or typed metadata")
+		}
+		return
+	}
+	var familyCoded FamilyCodedError
+	if errors.As(contract, &familyCoded) && response.Family != familyCoded.CLIErrorFamily() {
+		t.Fatal("rendering changed authored error family")
 	}
 }
 
