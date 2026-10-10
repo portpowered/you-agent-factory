@@ -608,6 +608,117 @@ type walkErrorArtifactFileSystem struct {
 	err error
 }
 
+// Discovery can fail after earlier artifacts have already been consumed. The
+// collecting boundary must discard those records and release their handles;
+// the same reader must remain usable for a fresh, healthy operation.
+func TestRuntimeMetricsReaderLateDiscoveryFailureDiscardsRecordsAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		cause   error
+		missing bool
+		cancel  bool
+	}{
+		{name: "permission", cause: fs.ErrPermission},
+		{name: "vanished entry", cause: fs.ErrNotExist, missing: true},
+		{name: "cancellation during traversal", cause: context.Canceled, cancel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertLateMetricsDiscoveryRecovery(t, test.cause, test.missing, test.cancel)
+		})
+	}
+}
+
+func assertLateMetricsDiscoveryRecovery(t *testing.T, cause error, missing, cancelScan bool) {
+	t.Helper()
+	root := t.TempDir()
+	prefix := filepath.Join(root, "110000.000000000-runtime-metrics-prefix.log")
+	last := filepath.Join(root, readerActiveName)
+	want := []RuntimeMetricRecord{{"record_id": "prefix"}, {"record_id": "last"}}
+	contents := map[string]string{prefix: "{\"record_id\":\"prefix\"}\n", last: "{\"record_id\":\"last\"}\n"}
+	for path, content := range contents {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	filesystem := &lateDiscoveryArtifactFileSystem{path: last, cause: cause, missing: missing}
+	reader, err := NewRuntimeMetricsReader(filesystem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecoveredMetricsDiscovery(t, reader, root, want)
+	filesystem.opened, filesystem.closed = 0, 0
+	filesystem.fail = true
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if cancelScan {
+		filesystem.cancel = cancel
+	}
+	records, err := reader.Read(ctx, root)
+	assertLateMetricsDiscoveryFailure(t, records, err, cause, root, last, cancelScan)
+	if filesystem.opened != 1 || filesystem.closed != 1 {
+		t.Fatalf("failed traversal handles = %d opened/%d closed, want exactly one of each", filesystem.opened, filesystem.closed)
+	}
+	filesystem.fail = false
+	assertRecoveredMetricsDiscovery(t, reader, root, want)
+	if filesystem.opened != 3 || filesystem.closed != 3 {
+		t.Fatalf("recovery handles = %d opened/%d closed, want three of each", filesystem.opened, filesystem.closed)
+	}
+	for path, content := range contents {
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != content {
+			t.Fatalf("artifact %q = %q, %v; want unchanged %q", path, data, err, content)
+		}
+	}
+}
+
+func assertLateMetricsDiscoveryFailure(t *testing.T, records []RuntimeMetricRecord, err, cause error, root, last string, cancelScan bool) {
+	t.Helper()
+	operation, path := "inspect runtime metrics path", last
+	if cancelScan {
+		operation, path = "discover runtime metrics under", root
+	}
+	var typed *RuntimeMetricsReadError
+	if records != nil || !errors.Is(err, cause) || !errors.As(err, &typed) ||
+		typed.Operation != operation || typed.Path != path {
+		t.Fatalf("failed discovery = (%#v, %v), want no records and %s at %q with cause %v", records, err, operation, path, cause)
+	}
+}
+
+func assertRecoveredMetricsDiscovery(t *testing.T, reader *RuntimeMetricsReader, root string, want []RuntimeMetricRecord) {
+	t.Helper()
+	records, err := reader.Read(t.Context(), root)
+	if err != nil || !reflect.DeepEqual(records, want) {
+		t.Fatalf("healthy discovery = (%#v, %v), want %#v", records, err, want)
+	}
+}
+
+type lateDiscoveryArtifactFileSystem struct {
+	trackingArtifactFileSystem
+	path    string
+	cause   error
+	missing bool
+	fail    bool
+	cancel  context.CancelFunc
+}
+
+func (filesystem *lateDiscoveryArtifactFileSystem) WalkDir(root string, visit fs.WalkDirFunc) error {
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if filesystem.fail && path == filesystem.path {
+			if filesystem.cancel != nil {
+				filesystem.cancel()
+			} else {
+				err = filesystem.cause
+			}
+			if filesystem.missing {
+				entry = nil
+			}
+		}
+		return visit(path, entry, err)
+	})
+}
+
 func (filesystem *walkErrorArtifactFileSystem) Stat(string) (fs.FileInfo, error) {
 	return os.Stat(".")
 }
