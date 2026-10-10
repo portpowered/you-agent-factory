@@ -3244,8 +3244,6 @@
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachAuthoringLayout_RejectsMissingDependencies",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachPublishesEffectiveCatalogOnRootService",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachRuntimeSnapshotDelegatesThroughDefinitionsRoot",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachSnapshotsPortabilityDelegatesRootSnapshotSlice",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachSnapshotsPortabilityRejectsMissingDependencies",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestCatalogCancellationIsAtomicAcrossDiscoveryAndMerge",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestCatalogCancellationIsAtomicAcrossDiscoveryAndMerge/global_discovery",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestCatalogCancellationIsAtomicAcrossDiscoveryAndMerge/merge_normalization",

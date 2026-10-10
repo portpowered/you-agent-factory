@@ -11,6 +11,7 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
+	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -42,6 +43,7 @@ func NewWithAuthoringLayout(
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 	authoringLayout authoringlayout.Service,
 	listEffective factoryroot.EffectiveFactoryCatalogOperation,
+	snapshotsPortability snapshotsportability.Service,
 	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
@@ -100,5 +102,6 @@ func NewWithAuthoringLayout(
 		compilation,
 		versionFileSystem,
 		listEffective,
+		snapshotsPortability,
 	)
 }

@@ -43,6 +43,7 @@ func TestCompletedLifecycleDelegatesRuntimeSnapshot(t *testing.T) {
 		}),
 		factorydefinitions.UnimplementedService{}, nil,
 		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+		factorydefinitions.UnimplementedService{},
 	)
 	if called {
 		t.Fatal("construction queried snapshot owner")
@@ -95,6 +96,7 @@ func TestCompletedLifecycleDelegatesCompilation(t *testing.T) {
 				nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
 				factorydefinitions.UnimplementedService{}, owner, nil,
 				factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+				factorydefinitions.UnimplementedService{},
 			)
 			if calls != 0 {
 				t.Fatal("construction invoked compilation")
@@ -140,6 +142,7 @@ func TestCompletedLifecycleDelegatesEffectiveCatalog(t *testing.T) {
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 				nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
 				disabled, disabled, nil, listEffective,
+				factorydefinitions.UnimplementedService{},
 			)
 			if calls != 0 {
 				t.Fatal("construction queried effective catalog")

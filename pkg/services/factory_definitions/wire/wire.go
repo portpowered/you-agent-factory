@@ -157,13 +157,14 @@ func composeService(
 		orchestratorValidator,
 		authoringLayout,
 		listEffective,
+		snapshotsPortability,
 		options...,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
 	}
 
-	return factorydefinitionsinternal.AttachSnapshotsPortability(definitions, snapshotsPortability)
+	return definitions, nil
 }
 
 func composeFactoryDefinitionSupport(

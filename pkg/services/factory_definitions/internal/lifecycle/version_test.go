@@ -17,6 +17,7 @@ func injectedLifecycle(host lifecycle.Host, filesystem definitions.VersionFileSy
 	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
 		disabled, disabled, filesystem, disabled.ListEffectiveFactories,
+		definitions.UnimplementedService{},
 	)
 }
 
@@ -208,6 +209,7 @@ func TestStaleSaveRejectsBeforePersistenceOrActivation(t *testing.T) {
 			gateway := staleActivation{DefinitionActivationGateway: lifecycle.StubActivationGateway(), t: t}
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 				host, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories,
+				definitions.UnimplementedService{},
 			)
 			got, err := service.Save(context.Background(), "session", definitions.SaveModeReplaceCurrent, definitions.EditableFactory{Snapshot: snapshot, Version: submitted})
 			if !errors.Is(err, definitions.ErrFactoryVersionStale) || got.Snapshot != nil {

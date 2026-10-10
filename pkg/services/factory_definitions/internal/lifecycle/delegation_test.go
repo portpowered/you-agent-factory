@@ -10,17 +10,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 )
 
-// Only these four component ports are active. Unselected operations retain the
+// Only the selected component ports are active. Unselected operations retain the
 // disabled contract, so none of these cases assembles another service owner.
 type delegatedOwner struct {
 	definitions.UnimplementedService
-	ctx        context.Context
-	request    any
-	err        error
-	validation definitions.ValidateStructuralFactoryDefinitionResult
-	layout     definitions.PrepareFactoryLayoutResult
-	packaged   definitions.ListBuiltInPackagedFactoriesResult
-	snapshot   definitions.ResolveRuntimeSnapshotResult
+	ctx           context.Context
+	request       any
+	err           error
+	validation    definitions.ValidateStructuralFactoryDefinitionResult
+	layout        definitions.PrepareFactoryLayoutResult
+	packaged      definitions.ListBuiltInPackagedFactoriesResult
+	snapshot      definitions.ResolveRuntimeSnapshotResult
+	capture       definitions.CaptureFactorySnapshotResult
+	prepareImport definitions.PrepareFactorySnapshotImportResult
+	materialize   definitions.MaterializeFactorySnapshotResult
 }
 
 func (o *delegatedOwner) ValidateStructuralFactoryDefinition(ctx context.Context, request definitions.ValidateStructuralFactoryDefinitionRequest) (definitions.ValidateStructuralFactoryDefinitionResult, error) {
@@ -50,7 +53,7 @@ func TestInjectedDelegationPreservesResultsRequestsAndErrorIdentity(t *testing.T
 	} {
 		t.Run(failure.name, func(t *testing.T) {
 			t.Parallel()
-			for _, operation := range []string{"validation", "authoring", "distribution", "snapshot"} {
+			for _, operation := range []string{"validation", "authoring", "distribution", "snapshot", "capture", "prepare-import", "materialize"} {
 				t.Run(operation, func(t *testing.T) {
 					t.Parallel()
 					ctx, cancel := context.WithCancel(t.Context())
@@ -59,15 +62,22 @@ func TestInjectedDelegationPreservesResultsRequestsAndErrorIdentity(t *testing.T
 						cancel()
 					}
 					owner := &delegatedOwner{err: failure.err,
-						validation: definitions.ValidateStructuralFactoryDefinitionResult{Validation: definitions.ValidationResult{Targets: []definitions.ValidationTarget{{}}}},
-						layout:     definitions.PrepareFactoryLayoutResult{Prepared: definitions.PreparedFactoryLayoutPayload{Canonical: []byte(`{"name":"alpha"}`)}},
-						packaged:   definitions.ListBuiltInPackagedFactoriesResult{Entries: []definitions.BuiltInPackagedFactoryEntry{{Name: "alpha"}}},
-						snapshot:   definitions.ResolveRuntimeSnapshotResult{Snapshot: definitions.RuntimeSnapshot{FactoryDir: "alpha"}},
+						validation:    definitions.ValidateStructuralFactoryDefinitionResult{Validation: definitions.ValidationResult{Targets: []definitions.ValidationTarget{{}}}},
+						layout:        definitions.PrepareFactoryLayoutResult{Prepared: definitions.PreparedFactoryLayoutPayload{Canonical: []byte(`{"name":"alpha"}`)}},
+						packaged:      definitions.ListBuiltInPackagedFactoriesResult{Entries: []definitions.BuiltInPackagedFactoryEntry{{Name: "alpha"}}},
+						snapshot:      definitions.ResolveRuntimeSnapshotResult{Snapshot: definitions.RuntimeSnapshot{FactoryDir: "alpha"}},
+						capture:       definitions.CaptureFactorySnapshotResult{Snapshot: snapshotPayload()},
+						prepareImport: definitions.PrepareFactorySnapshotImportResult{Name: "alpha"},
+						materialize:   definitions.MaterializeFactorySnapshotResult{TargetDir: "alpha"},
 					}
 					disabled := definitions.UnimplementedService{}
 					service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 						nil, lifecycle.StubActivationGateway(), disabled, owner, owner, owner, owner, disabled, nil, disabled.ListEffectiveFactories,
+						owner,
 					)
+					if owner.ctx != nil {
+						t.Fatal("construction called the snapshot collaborator")
+					}
 					assertDelegation(t, ctx, service, owner, operation, failure.err)
 				})
 			}
@@ -80,6 +90,18 @@ func assertDelegation(t *testing.T, ctx context.Context, service *lifecycle.Serv
 	var request, result, expected any
 	var err error
 	switch operation {
+	case "capture":
+		r := definitions.CaptureFactorySnapshotRequest{FactoryDir: "alpha", Canonical: []byte(`{"name":"alpha"}`), Name: "alpha"}
+		request, expected = r, owner.capture
+		result, err = service.CaptureFactorySnapshot(ctx, r)
+	case "prepare-import":
+		r := definitions.PrepareFactorySnapshotImportRequest{Payload: []byte(`{"name":"alpha"}`)}
+		request, expected = r, owner.prepareImport
+		result, err = service.PrepareFactorySnapshotImport(ctx, r)
+	case "materialize":
+		r := definitions.MaterializeFactorySnapshotRequest{TargetDir: "alpha", Snapshot: snapshotPayload()}
+		request, expected = r, owner.materialize
+		result, err = service.MaterializeFactorySnapshot(ctx, r)
 	case "validation":
 		r := definitions.ValidateStructuralFactoryDefinitionRequest{Canonical: []byte(`{"name":"alpha"}`)}
 		request, expected = r, owner.validation
@@ -100,4 +122,41 @@ func assertDelegation(t *testing.T, ctx context.Context, service *lifecycle.Serv
 	if owner.ctx != ctx || !reflect.DeepEqual(owner.request, request) || !reflect.DeepEqual(result, expected) || err != cause || !errors.Is(err, cause) {
 		t.Fatalf("delegation request=%#v result=%#v error=%v; want request=%#v result=%#v error=%v", owner.request, result, err, request, expected, cause)
 	}
+}
+
+func (o *delegatedOwner) CaptureFactorySnapshot(ctx context.Context, request definitions.CaptureFactorySnapshotRequest) (definitions.CaptureFactorySnapshotResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.capture, o.err
+}
+
+func (o *delegatedOwner) PrepareFactorySnapshotImport(ctx context.Context, request definitions.PrepareFactorySnapshotImportRequest) (definitions.PrepareFactorySnapshotImportResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.prepareImport, o.err
+}
+
+func (o *delegatedOwner) MaterializeFactorySnapshot(ctx context.Context, request definitions.MaterializeFactorySnapshotRequest) (definitions.MaterializeFactorySnapshotResult, error) {
+	o.ctx, o.request = ctx, request
+	return o.materialize, o.err
+}
+
+func TestExplicitlyDisabledSnapshotOwnerRetainsDisabledResults(t *testing.T) {
+	t.Parallel()
+	disabled := definitions.UnimplementedService{}
+	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled, nil, disabled, nil, disabled.ListEffectiveFactories, disabled)
+	for _, subject := range []*lifecycle.Service{service} {
+		captured, captureErr := subject.CaptureFactorySnapshot(t.Context(), definitions.CaptureFactorySnapshotRequest{})
+		expectedCapture, expectedCaptureErr := disabled.CaptureFactorySnapshot(t.Context(), definitions.CaptureFactorySnapshotRequest{})
+		imported, importErr := subject.PrepareFactorySnapshotImport(t.Context(), definitions.PrepareFactorySnapshotImportRequest{})
+		expectedImport, expectedImportErr := disabled.PrepareFactorySnapshotImport(t.Context(), definitions.PrepareFactorySnapshotImportRequest{})
+		materialized, materializeErr := subject.MaterializeFactorySnapshot(t.Context(), definitions.MaterializeFactorySnapshotRequest{})
+		expectedMaterialize, expectedMaterializeErr := disabled.MaterializeFactorySnapshot(t.Context(), definitions.MaterializeFactorySnapshotRequest{})
+		if !reflect.DeepEqual(captured, expectedCapture) || !errors.Is(captureErr, expectedCaptureErr) || !reflect.DeepEqual(imported, expectedImport) || !errors.Is(importErr, expectedImportErr) || !reflect.DeepEqual(materialized, expectedMaterialize) || !errors.Is(materializeErr, expectedMaterializeErr) {
+			t.Fatalf("disabled snapshot owner changed contract: %v, %v, %v", captureErr, importErr, materializeErr)
+		}
+	}
+}
+
+func snapshotPayload() *definitions.FactorySnapshot {
+	payload := definitions.FactorySnapshot(`{"name":"alpha"}`)
+	return &payload
 }

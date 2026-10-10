@@ -84,6 +84,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		rootSurfaceOrchestratorValidator{},
 		stubAuthoringLayout{},
 		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+		factorydefinitions.UnimplementedService{},
 	)
 	if root == nil {
 		t.Fatal("NewWithAuthoringLayout() = nil, want composed Factory Definitions root")

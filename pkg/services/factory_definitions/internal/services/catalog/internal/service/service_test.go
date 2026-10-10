@@ -431,6 +431,7 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 		factorydefinitions.UnimplementedService{},
 		nil,
 		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+		factorydefinitions.UnimplementedService{},
 	)
 }
 

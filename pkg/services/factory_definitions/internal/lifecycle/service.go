@@ -16,6 +16,7 @@ import (
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
 	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
+	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -43,6 +44,7 @@ type Service struct {
 	versionFileSystem      factoryroot.VersionFileSystem
 	distributionService    distributionservice.Service
 	listEffective          factoryroot.EffectiveFactoryCatalogOperation
+	snapshotsPortability   snapshotsportability.Service
 }
 
 // CompilationOperations is the lifecycle's exact effective-source compilation dependency.
@@ -112,6 +114,7 @@ func NewWithCatalogAndPackages(
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
 		factoryroot.UnimplementedService{}.ListEffectiveFactories,
+		factoryroot.UnimplementedService{},
 	)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
@@ -147,6 +150,7 @@ func NewWithCatalogPackagesAndInstallation(
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
 		factoryroot.UnimplementedService{}.ListEffectiveFactories,
+		factoryroot.UnimplementedService{},
 	)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
@@ -179,6 +183,7 @@ func NewWithCompilation(
 		compilationService,
 		versionFileSystem,
 		factoryroot.UnimplementedService{}.ListEffectiveFactories,
+		factoryroot.UnimplementedService{},
 	)
 	return service
 }
@@ -223,6 +228,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	compilation CompilationOperations,
 	versionFileSystem factoryroot.VersionFileSystem,
 	listEffective factoryroot.EffectiveFactoryCatalogOperation,
+	snapshotsPortability snapshotsportability.Service,
 ) *Service {
 	return &Service{
 		nonCatalogDefaults:     factoryroot.UnimplementedService{},
@@ -236,6 +242,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		versionFileSystem:      versionFileSystem,
 		distributionService:    distributionService,
 		listEffective:          listEffective,
+		snapshotsPortability:   snapshotsPortability,
 	}
 }
 
@@ -562,4 +569,16 @@ func (s *Service) ResolveRuntimeSnapshot(
 	request factoryroot.ResolveRuntimeSnapshotRequest,
 ) (factoryroot.ResolveRuntimeSnapshotResult, error) {
 	return s.runtimeSnapshot.ResolveRuntimeSnapshot(ctx, request)
+}
+
+func (s *Service) CaptureFactorySnapshot(ctx context.Context, request factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error) {
+	return s.snapshotsPortability.CaptureFactorySnapshot(ctx, request)
+}
+
+func (s *Service) PrepareFactorySnapshotImport(ctx context.Context, request factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error) {
+	return s.snapshotsPortability.PrepareFactorySnapshotImport(ctx, request)
+}
+
+func (s *Service) MaterializeFactorySnapshot(ctx context.Context, request factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error) {
+	return s.snapshotsPortability.MaterializeFactorySnapshot(ctx, request)
 }
