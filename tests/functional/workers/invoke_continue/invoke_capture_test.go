@@ -113,7 +113,7 @@ func assertRequesterRecipeSourceUnchanged(t *testing.T, fixture *invokeContinueP
 func TestRequesterExecutionTokenPrivacy(t *testing.T) {
 	t.Cleanup(func() {
 		if !t.Failed() {
-			functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "rest/readWorkerSessionLogs", "rest/readWorkerSessionTranscriptByWorkerSessionId", "rest/getWorkerSessionObservationByWorkerSessionId", "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId")
+			functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "rest/readWorkerSessionLogs", "rest/readWorkerSessionTranscriptByWorkerSessionId", "rest/getWorkerSessionObservationByWorkerSessionId", "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId")
 		}
 	})
 	for _, outcome := range []string{"success", "failure"} {
@@ -217,7 +217,11 @@ func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFix
 			t.Fatalf("public privacy %s read failed", view)
 		}
 		assertRequesterTokenAbsent(t, token, read.Stdout()+read.Stderr())
+		if !strings.Contains(read.Stdout(), "public credential") || !strings.Contains(read.Stdout(), "redacted") {
+			t.Fatalf("public privacy %s read lost the sanitized ordinary content", view)
+		}
 	}
+	assertRequesterPrivacyListShow(t, fixture, scenario, ctx, observation, token)
 	for _, suffix := range []string{"", "/transcript", "/logs", "/events?replayOnly=true"} {
 		status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+suffix, nil)
 		if status != http.StatusOK {
@@ -227,6 +231,39 @@ func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFix
 		if strings.HasPrefix(suffix, "/events") && !strings.Contains(body, "public credential progress") {
 			t.Fatal("retained Events replay lost the observed credential echo")
 		}
+	}
+}
+
+func assertRequesterPrivacyListShow(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, observation api.WorkerSessionObservation, token string) {
+	t.Helper()
+	listed := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "list", "--history", "all")
+	if err := fixture.process.Execute(listed.Input); err != nil {
+		t.Fatal("privacy list failed")
+	}
+	assertRequesterTokenAbsent(t, token, listed.Stdout()+listed.Stderr())
+	var rows api.ListWorkerSessionsResponse
+	decodeDirectWorkerSessionResult(t, listed.Stdout(), &rows)
+	found := false
+	for _, row := range rows.Sessions {
+		if row.WorkerSessionId == observation.WorkerSessionId {
+			found = true
+			if row.State != observation.State || !reflect.DeepEqual(row.Requester, observation.Requester) ||
+				!reflect.DeepEqual(row.Correlation, observation.Correlation) || !reflect.DeepEqual(row.Labels, observation.Labels) {
+				t.Fatal("privacy list changed terminal identity or metadata")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("privacy list omitted the terminal execution")
+	}
+	show := support.FakeInputs(ctx, []string{"you", "--remote", "--server", fixture.baseURL, "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId})
+	show.Input.Env, show.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatal("human privacy show failed")
+	}
+	assertRequesterTokenAbsent(t, token, show.Stdout()+show.Stderr())
+	if !strings.Contains(show.Stdout(), observation.WorkerSessionId) || !strings.Contains(show.Stdout(), string(observation.State)) {
+		t.Fatal("human privacy show lost terminal identity")
 	}
 }
 

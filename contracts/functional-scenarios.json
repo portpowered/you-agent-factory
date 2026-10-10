@@ -840,6 +840,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
           "boundary": "cli"
         },
