@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -568,5 +569,58 @@ func TestFileWriterSelectedSummaryRejectsDamagedAndAmbiguous(t *testing.T) {
 				t.Fatalf("unsafe %s summary=%v", kind, err)
 			}
 		})
+	}
+}
+
+func TestFileWriterSelectedSummaryControlledTerminalReopen(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{"CANCELED", "TERMINATED"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			probe := &catalogReadProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+			writer := journalWriter(t, probe)
+			opening := journalRecord(t, "controlled-summary", "selected")
+			if err := writer.PersistWorkerRecord(t.Context(), opening); err != nil {
+				t.Fatal(err)
+			}
+			terminal := opening
+			terminal.Record = mustRecord(t, terminalAppend(opening.Record.ID.Topic, "selected"), 2)
+			cause, detail := "OPERATOR_CANCELED", "an operator cancel control ended the Worker Session"
+			if state == "TERMINATED" {
+				cause, detail = "OPERATOR_TERMINATED", "an operator terminate control ended the Worker Session"
+			}
+			raw, _ := json.Marshal(map[string]string{"status": state, "failureCause": cause, "failureDetail": detail})
+			terminal.Record.Payload, _ = json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseCanceled, DispatchID: "attempt", Payload: raw})
+			if err := writer.PersistWorkerRecord(t.Context(), terminal); err != nil {
+				t.Fatal(err)
+			}
+			before, err := writer.LookupWorkerSessionSummary(t.Context(), "selected")
+			if err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := newTestFileWriter(probe, writer.root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := reopened.(*FileWriter)
+			if err := reader.RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			probe.fault = errors.New("ordinary recording read denied")
+			after, err := reader.LookupWorkerSessionSummary(t.Context(), "selected")
+			assertControlledSummaryReopen(t, state, before, after, terminal.Record.Payload, err)
+			after.Capture.MetadataRecords[0].Payload[0] = '!'
+			again, err := reader.LookupWorkerSessionSummary(t.Context(), "selected")
+			if err != nil || !bytes.Equal(again.Capture.MetadataRecords[0].Payload, terminal.Record.Payload) {
+				t.Fatalf("aliased terminal: %+v %v", again, err)
+			}
+		})
+	}
+}
+
+func assertControlledSummaryReopen(t *testing.T, state string, before, after recordings.WorkerCapturedSummary, terminalPayload []byte, err error) {
+	t.Helper()
+	if err != nil || after.Capture.Terminal.Status != state || !reflect.DeepEqual(before.Capture.MetadataRecords, after.Capture.MetadataRecords) || !reflect.DeepEqual(before.Capture.CapturedAt, after.Capture.CapturedAt) || after.Capture.CapturedAt["2"].IsZero() || !bytes.Equal(after.Capture.MetadataRecords[0].Payload, terminalPayload) {
+		t.Fatalf("controlled reopen: before=%+v after=%+v error=%v", before, after, err)
 	}
 }

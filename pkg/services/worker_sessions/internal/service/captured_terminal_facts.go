@@ -10,11 +10,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Completed durable attempts use the same host capture clock as archives.
+// Durable terminal attempts use the same host capture clock as archives.
 // A live terminal may precede durable admission; retain its owned lifecycle
 // timing until the committed capture can supply the complete timing tuple.
 func (r *registry) withCapturedTerminalObservation(ctx context.Context, observation workersessions.Observation) workersessions.Observation {
-	if observation.State != workersessions.StateCompleted && observation.State != workersessions.StateFailed {
+	if _, err := terminalPhase(observation.State); err != nil {
 		return observation
 	}
 	publication := r.publicationFor(r.workerAddress(observation.WorkerSessionID, observation.FactorySessionID))
@@ -23,14 +23,30 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 	}
 	publication.mu.Lock()
 	recordingID := publication.recordingID
+	target := publication.capture
 	publication.mu.Unlock()
-	if recordingID == "" {
+	if recordingID == "" || r.logs == nil {
 		return observation
 	}
-	captured, err := r.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: observation.FactorySessionID})
-	if err != nil || captured.AttemptID != observation.AttemptID || captured.State != observation.State {
+	reader, ok := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
+	if !ok {
 		return observation
 	}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, observation.WorkerSessionID)
+	item := summary.Capture
+	if err != nil || item.Catalog.RecordingID != recordingID ||
+		item.Catalog.WorkerSessionID != observation.WorkerSessionID || item.Catalog.FactorySessionID != observation.FactorySessionID ||
+		item.Catalog.RecordingGenerationID != target.RecordingGenerationID || item.Catalog.OwnerEpoch != target.OwnerEpoch {
+		return observation
+	}
+	if !capturedTerminalMatchesObservation(item, observation) {
+		return observation
+	}
+	captured, err := capturedHistoryIdentity(item, nil)
+	if err != nil || captured == nil || captured.AttemptID != observation.AttemptID || captured.State != observation.State {
+		return observation
+	}
+	applySummaryTerminalCause(summary, captured)
 	if captured.StartedAt != nil && captured.EndedAt != nil && captured.Duration != nil {
 		observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
 		observation.DurationBasis = captured.DurationBasis
@@ -54,10 +70,32 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 	return observation
 }
 
-// Only the selected committed terminal can establish a completed association
+func capturedTerminalMatchesObservation(item recordings.WorkerCapturedCatalogItem, observation workersessions.Observation) bool {
+	if item.Terminal == nil || item.Terminal.Position < 1 || uint64(item.Terminal.Position) > item.Catalog.CommittedPosition {
+		return false
+	}
+	matched := false
+	for _, record := range item.MetadataRecords {
+		if record.ID.Position != item.Terminal.Position {
+			continue
+		}
+		var draft workers.Draft
+		var terminal workers.SessionPayload
+		opening := workers.SessionPayload{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: observation.FactorySessionID, AttemptID: observation.AttemptID}
+		if matched || !uniqueInterruptJSONFields(record.Payload) || json.Unmarshal(record.Payload, &draft) != nil ||
+			!uniqueInterruptJSONFields(draft.Payload) || json.Unmarshal(draft.Payload, &terminal) != nil ||
+			!capturedTerminalDraftMatches(draft, terminal, opening, string(observation.State)) {
+			return false
+		}
+		matched = true
+	}
+	return matched
+}
+
+// Only the selected committed terminal can establish a terminal association
 // or failure. Prefixes and legacy terminals without those facts stay unknown.
 func applyCapturedTerminalFacts(observation *workersessions.Observation, item recordings.WorkerCapturedCatalogItem) error {
-	if observation.State != workersessions.StateCompleted && observation.State != workersessions.StateFailed {
+	if _, err := terminalPhase(observation.State); err != nil {
 		return nil
 	}
 	if item.Terminal == nil || item.Terminal.Position < 1 || uint64(item.Terminal.Position) > item.Catalog.CommittedPosition {
@@ -70,7 +108,17 @@ func applyCapturedTerminalFacts(observation *workersessions.Observation, item re
 		var draft workers.Draft
 		var terminal workers.SessionPayload
 		opening := workers.SessionPayload{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: observation.FactorySessionID, AttemptID: observation.AttemptID}
-		if json.Unmarshal(record.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &terminal) != nil ||
+		// Old controlled records carry no optional facts. Their physical terminal
+		// attempt can differ from the opening after a retry; leave those facts
+		// unknown and let the existing causal-control projection select it.
+		if observation.State == workersessions.StateCanceled || observation.State == workersessions.StateTerminated {
+			var payload terminalSessionPayload
+			if json.Unmarshal(record.Payload, &draft) == nil && json.Unmarshal(draft.Payload, &payload) == nil && payload.FailureCause == "" && payload.Continuation == nil {
+				return nil
+			}
+		}
+		if !capturedTerminalMatchesObservation(item, *observation) || json.Unmarshal(record.Payload, &draft) != nil ||
+			!uniqueInterruptJSONFields(draft.Payload) || json.Unmarshal(draft.Payload, &terminal) != nil ||
 			!capturedTerminalDraftMatches(draft, terminal, opening, string(observation.State)) {
 			return workersessions.ErrObservationProjectionUnavailable
 		}
@@ -94,7 +142,7 @@ func applyCapturedTerminalPayload(observation *workersessions.Observation, termi
 	if json.Unmarshal(raw, &failure) != nil {
 		return workersessions.ErrObservationProjectionUnavailable
 	}
-	if observation.State == workersessions.StateFailed && failure.FailureCause != "" {
+	if observation.State != workersessions.StateCompleted && failure.FailureCause != "" {
 		cause := &workersessions.FailureCause{Kind: workersessions.FailureCauseKind(failure.FailureCause), Detail: failure.FailureDetail, AgentRunFailureClass: failure.AgentRunFailureClass}
 		if cause.Validate() != nil {
 			return workersessions.ErrObservationProjectionUnavailable

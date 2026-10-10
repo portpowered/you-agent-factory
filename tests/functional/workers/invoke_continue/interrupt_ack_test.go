@@ -23,7 +23,17 @@ type interruptPhaseAckStore struct {
 	inputAcknowledgements sync.Map
 }
 
+func (store *interruptPhaseAckStore) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
+	if failure.WorkerSessionID == "terminal-owner-lost" {
+		return errors.New("controlled missing terminal classification")
+	}
+	return store.WorkerRecordingStore.PersistWorkerRecordingFailure(ctx, failure)
+}
+
 func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if record.WorkerSessionID == "terminal-owner-lost" && record.Record.ID.Position >= 2 {
+		return errors.New("controlled missing terminal capture")
+	}
 	if strings.HasPrefix(record.WorkerSessionID, "t7-degraded-") && record.Record.ID.Position >= 3 {
 		return errors.New("private-t7-capture-failure")
 	}
