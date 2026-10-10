@@ -4,7 +4,7 @@
 // workersessions.Service root interface, and starts no lifecycle
 // components. It composes the implementation through direct single
 // injection of one request-scoped workers.Service and one
-// EventsAppender, clock, and captured Recordings reader, with no dependency
+// EventsAppender, clock, and completed optional log reader, with no dependency
 // bag, service locator, or alternate construction path. Factory Runtime is the production consumer (W4
 // dispatch cutover), composed through pkg/services/factory_runtime/internal
 // and pkg/wire.
@@ -35,7 +35,7 @@ type HistorySnapshotBudget = internalservice.HistorySnapshotBudget
 // injected Workers execution service that Start publishes attempts
 // through, the one directly injected EventsAppender Start's before-handoff
 // publication barrier commits through, and the one directly injected
-// captured Recordings reader for observation facts. logger is the required
+// completed optional log reader for observation facts. logger is the required
 // operation-logging abstraction; callers with no operation logging pass
 // logging.NoopLogger{}.
 // clock supplies observation facts; scheduler supplies deadline timers.
@@ -48,7 +48,7 @@ func NewService(
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 	recording recordings.WorkerSessionRecordingService,
-	captured recordings.WorkerCapturedActivityReader,
+	logs *LogReader,
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
@@ -62,7 +62,7 @@ func NewService(
 		clock,
 		scheduler,
 		recording,
-		captured,
+		logs,
 		operations,
 		restart,
 		snapshots,

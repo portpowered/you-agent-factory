@@ -110,6 +110,7 @@ func testProvidersessionscliWorkerSessionsFleetListBoundedRootPages(t *testing.T
 		}
 	}
 
+	assertRetainedFleetHistory(t, ctx, process, env, factoryDir, baseURL, expected)
 	assertBoundedFleetNoMatch(t, ctx, process, env, factoryDir, baseURL)
 	assertBoundedFleetMalformedToken(t, ctx, process, env, factoryDir, baseURL)
 
@@ -808,4 +809,88 @@ func waitForFleetWorkerSessionsState(t *testing.T, ctx context.Context, process 
 			t.Fatalf("waiting for fleet Worker Sessions in %s canceled: %v", state, ctx.Err())
 		}
 	}
+}
+
+// FH-F retained history exercises the injected query via public CLI/HTTP reads.
+// Terminal peers remain visible in all-history even though no active owner remains.
+func assertRetainedFleetHistory(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string, expected map[string]boundedFleetExpectedObservation) {
+	t.Helper()
+	for _, history := range []string{"all", "archived"} {
+		token := ""
+		selected := make(map[string]bool)
+		var expectedHTTP []byte
+		for {
+			output := readRetainedFleetCLIPage(t, ctx, process, env, factoryDir, baseURL, history, token)
+			if expectedHTTP != nil {
+				assertNormalizedFleetJSONEqual(t, history+" frozen CLI/HTTP continuation", output, expectedHTTP)
+			}
+			var page workerSessionListJSON
+			if err := json.Unmarshal(output, &page); err != nil {
+				t.Fatal(err)
+			}
+			if len(page.Sessions) > 3 || page.PaginationContext == nil {
+				t.Fatalf("unbounded history: %+v", page)
+			}
+			assertRetainedFleetPageIdentities(t, history, page, expected, selected)
+			token = page.PaginationContext.NextToken
+			if token == "" {
+				break
+			}
+			// Replaying a retained cursor through HTTP must return identical frozen facts.
+			expectedHTTP = readRetainedFleetHTTPPage(t, ctx, baseURL, history, token)
+		}
+		if len(selected) != len(expected) {
+			t.Fatalf("%s history selected %d of %d scoped works", history, len(selected), len(expected))
+		}
+	}
+}
+
+func readRetainedFleetCLIPage(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, history, token string) []byte {
+	t.Helper()
+	args := []string{"you", "--server", baseURL, "worker-sessions", "list", "--history", history, "--limit", "3", "--output", "json"}
+	if token != "" {
+		args = append(args, "--next-token", token)
+	}
+	input := support.FakeInputs(ctx, args)
+	input.Input.Env, input.Input.WorkingDirectory = env, factoryDir
+	if err := process.Execute(input.Input); err != nil {
+		t.Fatalf("%s history: %v: %s", history, err, input.Stderr())
+	}
+	return []byte(input.Stdout())
+}
+
+func assertRetainedFleetPageIdentities(t *testing.T, history string, page workerSessionListJSON, expected map[string]boundedFleetExpectedObservation, selected map[string]bool) {
+	t.Helper()
+	for _, row := range page.Sessions {
+		if row.WorkID == nil {
+			continue
+		}
+		want, ok := expected[*row.WorkID]
+		if !ok {
+			continue
+		}
+		if selected[*row.WorkID] || row.FactorySessionID == nil || *row.FactorySessionID != want.FactorySessionID || row.State != want.State {
+			t.Fatalf("%s history lost scoped terminal identity: %+v", history, row)
+		}
+		selected[*row.WorkID] = true
+	}
+}
+
+func readRetainedFleetHTTPPage(t *testing.T, ctx context.Context, baseURL, history, token string) []byte {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/worker-sessions?" + url.Values{"history": {history}, "limit": {"3"}, "nextToken": {token}}.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("retained page status=%d err=%v body=%s", response.StatusCode, err, body)
+	}
+	return body
 }

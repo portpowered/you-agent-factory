@@ -7,7 +7,6 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -22,29 +21,21 @@ type capturedObservationReader interface {
 type FleetHistory struct {
 	continuation capturedObservationReader
 	catalog      func(context.Context) ([]workersessions.Service, error)
-	logs         *LogReader
+	logs         fleetHistoryLogs
 	clock        platformclock.Source
 	logger       logging.Logger
 	snapshots    observationSnapshots
 }
 
-func NewFleetHistory(catalog func(context.Context) ([]workersessions.Service, error), captured recordings.WorkerCapturedActivityReader, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget, continuation capturedObservationReader) *FleetHistory {
-	if catalog == nil || clock == nil || snapshots == nil {
-		return nil
-	}
-	query := &FleetHistory{continuation: continuation, catalog: catalog, clock: clock, logger: logging.EnsureLogger(logger), snapshots: newObservationSnapshots(snapshots)}
-	// Older injected writers can lack captured-read support. Active queries
-	// remain available; durable queries explicitly report unavailable.
-	if captured != nil {
-		query.logs = &LogReader{reader: captured, logger: query.logger}
-	}
-	return query
+type fleetHistoryLogs interface {
+	archivedHistory(context.Context, workersessions.ListWorkerSessionObservationsRequest, map[historyIdentity]struct{}) ([]workersessions.Observation, error)
+}
+
+func NewFleetHistory(catalog ObservationServiceCatalog, logs fleetHistoryLogs, clock platformclock.Source, logger logging.Logger, snapshots *HistorySnapshotBudget, continuation capturedObservationReader) *FleetHistory {
+	return &FleetHistory{continuation: continuation, catalog: catalog, logs: logs, clock: clock, logger: logger, snapshots: newObservationSnapshots(snapshots)}
 }
 
 func (s *FleetHistory) ListWorkerSessionObservations(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
-	if s == nil {
-		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
-	}
 	if err := req.Validate(); err != nil {
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}

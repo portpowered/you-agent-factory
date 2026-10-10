@@ -6,11 +6,77 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+type testFamilyCodedError struct{ *Failure }
+
+func (testFamilyCodedError) CLIErrorFamily() factoryapi.ErrorFamily {
+	return factoryapi.ErrorFamilyNotFound
+}
+
+func TestPrimaryDiagnosticSanitizesDetachedURLsAcrossCodedContracts(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct{ name, message, want string }{
+		{"credentials", "unsupported https://PRIVATE_USER:PRIVATE_PASS@example.test/provider?token=PRIVATE_QUERY#PRIVATE_FRAGMENT (workerModelProvider)", "unsupported https://example.test/provider (workerModelProvider)"},
+		{"encoded and quoted", `retry "https://PRIVATE%55SER:PRIVATE%50ASS@example.test/a%20b?token=PRIVATE_QUERY#PRIVATE_FRAGMENT"; then 'HTTP://user:PRIVATE_PASS@other.test/path?q=PRIVATE_QUERY'.`, `retry "https://example.test/a%20b"; then 'http://other.test/path'.`},
+		{"malformed", "unsupported https://user:PRIVATE_PASS@%zz/provider?token=PRIVATE_QUERY#PRIVATE_FRAGMENT (workerModelProvider)", "unsupported <unavailable> (workerModelProvider)"},
+		{"safe long text and paths", strings.Repeat("safe context ", 60) + `open "C:\safe folder\config.json" /safe/path ./safe/path`, strings.Repeat("safe context ", 60) + `open "C:\safe folder\config.json" /safe/path ./safe/path`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			targets := []factoryapi.FactoryValidationTarget{{Code: "SAFE_TARGET", Message: "safe field context"}}
+			for _, contract := range []error{
+				&Failure{Code: "TEST_FAILED", Message: test.message, Cause: errors.New("original cause")},
+				testFamilyCodedError{&Failure{Code: "TEST_FAILED", Message: test.message}},
+				testInvocationCodedError{code: "TEST_FAILED", message: test.message},
+				testResponseCodedError{response: factoryapi.ErrorResponse{Code: "TEST_FAILED", Family: factoryapi.ErrorFamilyBadRequest, Message: test.message, Details: map[string]any{"field": "workerModelProvider"}, Targets: &targets, ResourceCapacity: &factoryapi.FactorySessionResourceCapacityErrorDetails{ResourceId: "safe-resource", CurrentCapacity: 3, InUseCount: 2}}},
+			} {
+				original := contract.Error()
+				cause := errors.Unwrap(contract)
+				var output bytes.Buffer
+				writer := NewDiagnosticWriter(&output)
+				if !WriteFailure(writer, contract) || !writer.DiagnosticRendered() {
+					t.Fatal("coded diagnostic was not rendered and marked")
+				}
+				var response factoryapi.ErrorResponse
+				if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+					t.Fatal(err)
+				}
+				if response.Message != test.want || response.Code != "TEST_FAILED" || strings.Contains(output.String(), "PRIVATE") {
+					t.Fatalf("%T response=%#v, want message %q", contract, response, test.want)
+				}
+				assertPrimaryDiagnosticPreservesContract(t, contract, original, cause, response, test.message, test.want)
+			}
+		})
+	}
+}
+
+func assertPrimaryDiagnosticPreservesContract(t *testing.T, contract error, original string, cause error, response factoryapi.ErrorResponse, message, wantMessage string) {
+	t.Helper()
+	// Compare interface values to retain strict cause identity, including nil,
+	// rather than accepting an equivalent wrapped error through errors.Is.
+	if contract.Error() != original || any(errors.Unwrap(contract)) != any(cause) || !reflect.DeepEqual(Normalize(contract), contract) {
+		t.Fatal("rendering mutated original error or cause identity")
+	}
+	var coded testResponseCodedError
+	if errors.As(contract, &coded) {
+		want := coded.response
+		want.Message = wantMessage
+		if !reflect.DeepEqual(response, want) || coded.response.Message != message {
+			t.Fatal("rendering changed authored response or typed metadata")
+		}
+		return
+	}
+	var familyCoded FamilyCodedError
+	if errors.As(contract, &familyCoded) && response.Family != familyCoded.CLIErrorFamily() {
+		t.Fatal("rendering changed authored error family")
+	}
+}
 
 func TestNormalizeUnclassifiedFailureUsesSafeDiagnosticAndPreservesCause(t *testing.T) {
 	t.Parallel()
