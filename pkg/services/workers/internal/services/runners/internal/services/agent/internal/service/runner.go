@@ -104,7 +104,7 @@ var _ agent.Service = (*service)(nil)
 func New(
 	providersService providers.Service,
 	publish workers.ProgressPublisher,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) (agent.Service, error) {
 	if providersService == nil {
 		return nil, misconfigured("agent Providers service is required", nil)
@@ -115,19 +115,8 @@ func New(
 	return &service{
 		providers:         providersService,
 		publish:           publish,
-		decisionEnvelopes: firstDecisionEnvelopeService(decisionEnvelopes),
+		decisionEnvelopes: decisionEnvelopes,
 	}, nil
-}
-
-func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
-	for _, service := range services {
-		if service != nil {
-			return service
-		}
-	}
-	return nil
 }
 
 // Execute snapshots one common Runner request and delegates exactly one

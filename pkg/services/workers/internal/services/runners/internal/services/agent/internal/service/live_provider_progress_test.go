@@ -72,7 +72,7 @@ func runOneAttempt(t *testing.T, service providers.Service) []workers.ProgressFr
 	var published []workers.ProgressFragment
 	runner, err := New(service, func(fragment workers.ProgressFragment) {
 		published = append(published, fragment)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -182,7 +182,7 @@ func TestExecutePublishesProviderProgressBeforeTheAttemptReturns(t *testing.T) {
 
 	runner, err := New(fake, func(fragment workers.ProgressFragment) {
 		published = append(published, fragment)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -220,7 +220,7 @@ func TestExecutePublishesNothingMidAttemptForABufferedProvider(t *testing.T) {
 	}
 	runner, err := New(fake, func(fragment workers.ProgressFragment) {
 		published = append(published, fragment)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

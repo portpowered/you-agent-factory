@@ -40,7 +40,7 @@ func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *
 		if err := bridge.PublishWorkerSessionProgress(context.Background(), sessions, "worker-live-provider-session", fragment); err != nil {
 			t.Errorf("publish live progress: %v", err)
 		}
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("agent New() error = %v", err)
 	}

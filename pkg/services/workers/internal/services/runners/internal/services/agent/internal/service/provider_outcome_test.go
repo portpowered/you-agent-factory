@@ -15,7 +15,7 @@ func TestExecuteOpaqueContinuationPreservesKindAndIdentity(t *testing.T) {
 	t.Parallel()
 
 	fake := &providersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestExecutePreservesProviderOutcomeAndStructuredDiagnostics(t *testing.T) {
 			Panic: &providers.ExecutePanicDiagnostics{Message: "bounded", Stack: "bounded-stack"},
 		},
 	}}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -91,7 +91,7 @@ func TestExecuteNormalizesUnexpectedErrorAfterProviderCancelsContext(t *testing.
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(t.Context())
-	runner, err := New(&cancelingErrorProvidersFake{cancel: cancel}, noopPublisher)
+	runner, err := New(&cancelingErrorProvidersFake{cancel: cancel}, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestExecuteReportsUnsupportedContinuationWithoutFallingBackToExecute(t *tes
 	t.Parallel()
 
 	fake := &noContinuationProvidersFake{}
-	runner, err := New(fake, noopPublisher)
+	runner, err := New(fake, noopPublisher, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -151,7 +151,7 @@ func TestExecuteFailurePublishesProviderDiagnosticsAndUsesDiagnosticFailureType(
 		},
 	}}
 	var published []workers.ProgressFragment
-	runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) })
+	runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) }, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -188,7 +188,7 @@ func TestExecuteFailureClassifiesAnOversizedCommandLineFromProviderDiagnostics(t
 			Metadata: map[string]string{"work-failure-type": string(workers.WorkFailureTypeCommandLineTooLong)},
 		},
 	}}
-	runner, err := New(fake, func(workers.ProgressFragment) {})
+	runner, err := New(fake, func(workers.ProgressFragment) {}, nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
