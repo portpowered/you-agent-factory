@@ -203,6 +203,42 @@ func TestPrepareFactorySnapshotImport_InvalidPayloadReturnsTypedFailure(t *testi
 	}
 }
 
+func TestEmptySnapshotRequestsRejectBeforeCallingPorts(t *testing.T) {
+	t.Parallel()
+	svc := snapshotsportabilityservice.New(
+		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			t.Fatal("empty request called loader")
+			return nil, nil
+		},
+		func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+			t.Fatal("empty request called capture")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig, bool) (*factorydefinitions.FactoryConfig, error) {
+			t.Fatal("empty request called portable preparation")
+			return nil, nil
+		},
+		func([]byte) (*factorydefinitions.FactorySnapshot, error) {
+			t.Fatal("empty request called decoder")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			t.Fatal("empty request wrote files")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) error {
+			t.Fatal("empty request validated writes")
+			return nil
+		},
+	)
+	if _, err := svc.PrepareFactorySnapshotImport(t.Context(), factorydefinitions.PrepareFactorySnapshotImportRequest{}); err != factorydefinitions.ErrInvalidFactorySnapshotPayload {
+		t.Fatalf("empty import error = %v, want ErrInvalidFactorySnapshotPayload", err)
+	}
+	if _, err := svc.MaterializeFactorySnapshot(t.Context(), factorydefinitions.MaterializeFactorySnapshotRequest{}); err != factorydefinitions.ErrUnsafeFactorySnapshotMaterialize {
+		t.Fatalf("empty materialization error = %v, want ErrUnsafeFactorySnapshotMaterialize", err)
+	}
+}
+
 func TestMaterializeFactorySnapshotValidatesBeforeWritingAndReturnsAssetFacts(t *testing.T) {
 	t.Parallel()
 	calls := []string{}
