@@ -9,12 +9,12 @@ import (
 func TestCommandFailureLogFields_AppendsBoundedStderrTail(t *testing.T) {
 	base := []any{"status", "non_zero_exit"}
 
-	if got := commandFailureLogFields(base, CommandResult{}); len(got) != len(base) {
+	if got := commandFailureLogFields(CommandRequest{}, base, CommandResult{}); len(got) != len(base) {
 		t.Fatalf("empty stderr must not add fields, got %v", got)
 	}
 
 	stderr := strings.Repeat("é", 5000) + "\nfinal error line\n"
-	fields := commandFailureLogFields(base, CommandResult{Stderr: []byte(stderr)})
+	fields := commandFailureLogFields(CommandRequest{}, base, CommandResult{Stderr: []byte(stderr)})
 	if len(fields) != len(base)+2 || fields[len(base)] != "stderr_tail" {
 		t.Fatalf("expected stderr_tail field, got %v", fields)
 	}

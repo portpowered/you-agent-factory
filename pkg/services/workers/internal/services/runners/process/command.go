@@ -46,6 +46,9 @@ type CommandRequest struct {
 	Execution                work.ExecutionMetadata
 	Inputs                   []workers.WorkInput
 	ExecutionLogger          logging.Logger
+	// ProviderDiagnostics excludes provider payloads from the logging view only.
+	// Ordinary scripts retain their bounded stderr-tail diagnostics.
+	ProviderDiagnostics      bool
 	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
 	OwnedProcessObserver     platformprocess.OwnedProcessObserver
 }
@@ -281,7 +284,7 @@ func (runner LoggingCommandRunner) Run(ctx context.Context, request CommandReque
 	status := commandResultStatus(ctx, loggedResult, err)
 	completionFields := commandCompletionLogFields(request, loggedResult, duration, status, err)
 	if commandStatusIsFailure(status) {
-		logger.Error("command runner: request failed", commandFailureLogFields(completionFields, loggedResult)...)
+		logger.Error("command runner: request failed", commandFailureLogFields(request, completionFields, loggedResult)...)
 	} else {
 		logger.Info("command runner: request completed", completionFields...)
 	}
@@ -318,7 +321,7 @@ func (runner LoggingCommandRunner) RunStreaming(
 	status := commandResultStatus(ctx, loggedResult, err)
 	completionFields := commandCompletionLogFields(request, loggedResult, duration, status, err)
 	if commandStatusIsFailure(status) {
-		logger.Error("command runner: request failed", commandFailureLogFields(completionFields, loggedResult)...)
+		logger.Error("command runner: request failed", commandFailureLogFields(request, completionFields, loggedResult)...)
 	} else {
 		logger.Info("command runner: request completed", completionFields...)
 	}
@@ -536,7 +539,10 @@ func commandCompletionLogFields(
 // command log entries so a script's own error message is visible in the log.
 const commandFailureStderrTailBytes = 2048
 
-func commandFailureLogFields(fields []any, result CommandResult) []any {
+func commandFailureLogFields(request CommandRequest, fields []any, result CommandResult) []any {
+	if request.ProviderDiagnostics {
+		return append(fields, "stdout_bytes", len(result.Stdout), "stderr_bytes", len(result.Stderr))
+	}
 	tail := commandStderrTail(result.Stderr, commandFailureStderrTailBytes)
 	if tail == "" {
 		return fields
@@ -604,7 +610,7 @@ func commandContextLogger(logger logging.Logger, request CommandRequest) logging
 	if request.WorkstationName != "" {
 		fields = append(fields, "workstation_name", request.WorkstationName)
 	}
-	return contextualLogger{logger: logger, fields: fields}
+	return contextualLogger{logger: logger, fields: fields, providerDiagnostics: request.ProviderDiagnostics}
 }
 
 func commandRequestCorrelationFields(request CommandRequest, keysAndValues ...any) []any {
@@ -630,12 +636,22 @@ func primaryWorkName(inputs []workers.WorkInput) string {
 }
 
 type contextualLogger struct {
-	logger logging.Logger
-	fields []any
+	logger              logging.Logger
+	fields              []any
+	providerDiagnostics bool
 }
 
 func (logger contextualLogger) append(values []any) []any {
 	fields := append(append([]any(nil), values...), logger.fields...)
+	// Native process start/cleanup errors may contain command payloads. Keep
+	// their occurrence visible without publishing their arbitrary error text.
+	if logger.providerDiagnostics {
+		for index := 0; index+1 < len(fields); index += 2 {
+			if fields[index] == "error" {
+				fields[index], fields[index+1] = "has_error", true
+			}
+		}
+	}
 	for index, value := range fields {
 		if ids, ok := value.([]string); ok {
 			fields[index] = slices.Clone(ids)
