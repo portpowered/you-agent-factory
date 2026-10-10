@@ -299,6 +299,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
           "boundary": "cli"
         }
@@ -683,6 +687,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
         },
@@ -777,6 +785,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
           "boundary": "cli"
         },
@@ -805,11 +817,11 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -965,6 +977,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
           "boundary": "cli"
         },
         {

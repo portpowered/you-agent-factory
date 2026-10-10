@@ -671,6 +671,9 @@ func (f *factoryImpl) PrepareInvocation(ctx context.Context, request work.Submit
 		return work.SubmitRequest{}, nil, err
 	}
 	if request.WorkID == "" {
+		// Allocating execution scope must not change the ordinary unnamed Work
+		// display name into its new identity. Preserve admission's own policy.
+		request.Name = work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}).Works[0].Name
 		request.WorkID = f.cfg.workRequestIDs()
 	}
 	release, err := f.cfg.retainInvocationCaller(request.WorkID, caller)

@@ -1175,7 +1175,7 @@ func TestPrepareInvocationCallerValidatesBeforeRetainingAuthority(t *testing.T) 
 				}
 				return
 			}
-			if err != nil || release == nil || request.WorkID != "child-work" || request.RequestID != "request" {
+			if err != nil || release == nil || request.WorkID != "child-work" || request.RequestID != "request" || request.Name != "work-1" {
 				t.Fatal("prepared invocation changed ordinary request facts")
 			}
 			defer assertInvocationScopeReleasedWithoutRefusal(t, release)

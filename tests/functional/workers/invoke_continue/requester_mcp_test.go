@@ -81,7 +81,7 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 		return err
 	}
 	late := newInvokeContinueResettableProviderCommandRunner(result)
-	return appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-mcp-failure-late", late, late, nil, nil, nil, late.Reset)
+	return appendRequesterIndependenceScenarios(rootDir, setup, late)
 }
 
 // The existing recording-store edge pauses sync-confirmed preparation. Public
