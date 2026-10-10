@@ -69,6 +69,17 @@ graph references; shadowed callables do not. The caller/callee/file allowance
 schema is retired. This does not prove graph reachability, imported helper
 bodies, inactive platforms or full repository conformance. These limits permit no allowance or baseline growth.
 
+The maintained ci-smoke production-registry witness covers same-owner,
+cross-owner and unlisted Chat catalog construction with qualified diagnostics,
+plus lawful owning Wire and scoped map allocation controls. It is not a
+repository coverage witness. Events enablement remains blocked by optional
+logger selection in `pkg/services/events/wire/wire.go:NewService` and nested
+construction in `pkg/services/events/internal/service/store.go:New` calling
+`NewWithRetention`. Retention policy defaults and topic state remain lawful;
+they do not authorize either dependency substitution or a new composition
+exception. Return these exact sites to the Events owner rather than classifying
+them as terminal dispositions or adding an allowance.
+
 The constructor inventory names qualified service constructors, effects, their required parameters, returned service interfaces, and approved focused provider operations. It is enforcement metadata with exact semantic meaning, not a broad exception list. Validate references against source and reject stale entries. Derive provider references from authored Wire sets where possible and resolve exported aliases in owner Wire packages. Go internal visibility still applies: canonical composition consumes focused owner exports rather than importing private implementation packages.
 
 Required rules:

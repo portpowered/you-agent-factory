@@ -105,6 +105,21 @@ classified. Composition identity does not prove upstream graph reachability,
 unused-provider absence, or imported helper bodies. Those properties retain
 their existing Wire, deadcode and independent review gates.
 
+The maintained `ci-smoke` cohort uses the production registry with minimal,
+compiler-valid declarations for the Chat catalog and its exact inputs. Its
+clean/seeded/recovered plugin invocations distinguish lawful owning Wire
+construction and scoped map allocation from same-owner construction,
+cross-owner construction, and an unlisted constructor returning the classified
+type. These fixtures prove diagnostics and qualified symbols for that set;
+they do not prove that unclassified repository owners conform.
+
+Final owner enablement must stop at unresolved production findings. Events
+still selects an optional logger in `events/wire.NewService`, and
+`events/internal/service.New` delegates to `NewWithRetention` outside Wire.
+Those sites require an owner delta before strict Events enablement; neither
+domain retention defaults nor per-topic state allocation justify a logger
+fallback or an internal service-construction exception.
+
 Compiler-invalid historical examples are rejected before lint analysis:
 initialization cycles, ambiguous selectors, recursive aliases, and undefined
 interface embeddings have explicit compiler fixtures. They are not successful
