@@ -45,6 +45,26 @@ func TestPrebuiltRecordedReadControlParity(t *testing.T) {
 	if !bytes.Contains(transcript, []byte("recorded parity completed marker")) {
 		t.Fatalf("completed output missing: %s", transcript)
 	}
+	second := recoverRecordedParityOwner(t, ctx, binary, f, first)
+	assertRecordedParityUnavailable(t, ctx, binary, f)
+	after := readRecordedParityTranscript(t, ctx, f, "completed", http.StatusOK)
+	assertRecordedParityJSON(t, transcript, after)
+	cli := runCancelCLI(ctx, binary, f, "worker-sessions", "read", "--worker-session-id", "completed", "--view", "transcript")
+	if cli.err != nil {
+		t.Fatalf("completed CLI: %+v", cli)
+	}
+	assertRecordedParityJSON(t, after, []byte(cli.stdout))
+	assertRecordedParityMCP(t, ctx, binary, f, after)
+	cleanupCancelDaemon(second)
+	select {
+	case <-second.done:
+	case <-ctx.Done():
+		t.Fatal("recovered host was not joined")
+	}
+}
+
+func recoverRecordedParityOwner(t *testing.T, ctx context.Context, binary string, f cancelFixture, first *cancelDaemon) *cancelDaemon {
+	t.Helper()
 	admitRecordedParityWorker(t, ctx, f, "lost")
 	waitRecordedParityState(t, ctx, f, "lost", "RUNNING")
 	prefix, err := getJSON[factoryapi.WorkerSessionLogPage](ctx, http.DefaultClient, f.serverURL+"/worker-sessions/lost/logs")
@@ -69,6 +89,11 @@ func TestPrebuiltRecordedReadControlParity(t *testing.T) {
 	if err != nil || recoveredLogs.Health != "INCOMPLETE" || !reflect.DeepEqual(prefix.Events, recoveredLogs.Events) {
 		t.Fatalf("lost capture prefix changed: before=%+v after=%+v err=%v", prefix, recoveredLogs, err)
 	}
+	return second
+}
+
+func assertRecordedParityUnavailable(t *testing.T, ctx context.Context, binary string, f cancelFixture) {
+	t.Helper()
 	lostBody := readRecordedParityTranscript(t, ctx, f, "lost", http.StatusInternalServerError)
 	if errorResponseCode(lostBody) != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
 		t.Fatalf("HTTP error: %s", lostBody)
@@ -76,20 +101,6 @@ func TestPrebuiltRecordedReadControlParity(t *testing.T) {
 	cli := runCancelCLI(ctx, binary, f, "worker-sessions", "read", "--worker-session-id", "lost", "--view", "transcript")
 	if cli.err == nil || firstErrorCode(cli.stdout, cli.stderr) != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
 		t.Fatalf("CLI unavailable: %+v", cli)
-	}
-	after := readRecordedParityTranscript(t, ctx, f, "completed", http.StatusOK)
-	assertRecordedParityJSON(t, transcript, after)
-	cli = runCancelCLI(ctx, binary, f, "worker-sessions", "read", "--worker-session-id", "completed", "--view", "transcript")
-	if cli.err != nil {
-		t.Fatalf("completed CLI: %+v", cli)
-	}
-	assertRecordedParityJSON(t, after, []byte(cli.stdout))
-	assertRecordedParityMCP(t, ctx, binary, f, after)
-	cleanupCancelDaemon(second)
-	select {
-	case <-second.done:
-	case <-ctx.Done():
-		t.Fatal("recovered host was not joined")
 	}
 }
 
@@ -182,53 +193,74 @@ func assertRecordedParityMCP(t *testing.T, ctx context.Context, binary string, f
 		}
 	}()
 	for _, id := range []string{"lost", "completed"} {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": id, "view": "transcript"}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		encoded, err := json.Marshal(result.StructuredContent)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if id == "completed" {
-			if len(result.Content) != 1 {
-				t.Fatalf("MCP completed content: %+v", result)
-			}
-			content, ok := result.Content[0].(*mcp.TextContent)
-			if !ok {
-				t.Fatalf("MCP completed content type: %T", result.Content[0])
-			}
-			encoded = []byte(content.Text)
-		}
-		var envelope struct {
-			Error struct {
-				Code            string
-				Retryable       bool
-				WorkerSessionID string `json:"workerSessionId"`
-				Details         struct {
-					Status       int
-					UpstreamCode string `json:"upstreamCode"`
-				}
-			}
-			Result struct{ Transcript json.RawMessage }
-		}
-		if err := json.Unmarshal(encoded, &envelope); err != nil {
-			t.Fatal(err)
-		}
+		result, encoded := readRecordedParityMCP(t, ctx, session, id)
 		if id == "lost" {
-			if !result.IsError || envelope.Error.Code != "worker_session.unavailable" || envelope.Error.Retryable || envelope.Error.WorkerSessionID != id || envelope.Error.Details.Status != 500 || envelope.Error.Details.UpstreamCode != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
-				t.Fatalf("MCP unavailable: %s", encoded)
-			}
+			assertRecordedParityMCPUnavailable(t, result, encoded, id)
 		} else {
-			if result.IsError {
-				t.Fatalf("MCP completed: %s", encoded)
-			}
-			if len(envelope.Result.Transcript) == 0 {
-				t.Fatalf("MCP transcript envelope missing: %s", encoded)
-			}
-			assertRecordedParityJSON(t, transcript, envelope.Result.Transcript)
+			assertRecordedParityMCPCompleted(t, result, encoded, transcript)
 		}
 	}
+}
+
+func readRecordedParityMCP(t *testing.T, ctx context.Context, session *mcp.ClientSession, id string) (*mcp.CallToolResult, []byte) {
+	t.Helper()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": id, "view": "transcript"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id == "completed" {
+		if len(result.Content) != 1 {
+			t.Fatalf("MCP completed content: %+v", result)
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		if !ok {
+			t.Fatalf("MCP completed content type: %T", result.Content[0])
+		}
+		encoded = []byte(content.Text)
+	}
+	return result, encoded
+}
+
+func assertRecordedParityMCPUnavailable(t *testing.T, result *mcp.CallToolResult, encoded []byte, id string) {
+	t.Helper()
+	var envelope struct {
+		Error struct {
+			Code            string
+			Retryable       bool
+			WorkerSessionID string `json:"workerSessionId"`
+			Details         struct {
+				Status       int
+				UpstreamCode string `json:"upstreamCode"`
+			}
+		}
+	}
+	if err := json.Unmarshal(encoded, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError || envelope.Error.Code != "worker_session.unavailable" || envelope.Error.Retryable || envelope.Error.WorkerSessionID != id || envelope.Error.Details.Status != 500 || envelope.Error.Details.UpstreamCode != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("MCP unavailable: %s", encoded)
+	}
+}
+
+func assertRecordedParityMCPCompleted(t *testing.T, result *mcp.CallToolResult, encoded, transcript []byte) {
+	t.Helper()
+	var envelope struct {
+		Result struct{ Transcript json.RawMessage }
+	}
+	if err := json.Unmarshal(encoded, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError {
+		t.Fatalf("MCP completed: %s", encoded)
+	}
+	if len(envelope.Result.Transcript) == 0 {
+		t.Fatalf("MCP transcript envelope missing: %s", encoded)
+	}
+	assertRecordedParityJSON(t, transcript, envelope.Result.Transcript)
 }
 
 type cancelJourney struct {
