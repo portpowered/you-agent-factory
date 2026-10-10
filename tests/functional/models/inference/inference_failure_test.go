@@ -78,22 +78,45 @@ func TestModelsCLIFileInputPreservesDestinationOnFailure(t *testing.T) {
 	effects := &genericCLIOutputFailureEffects{
 		failedCreateDirectory: failedCreateDirectory, failedTarget: failedRenameTarget,
 	}
-	process, _, _ := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, effects, nil, nil, nil, nil)
-	for _, scenario := range []string{"success", "missing input", "directory input", "empty input", "create failure", "rename failure"} {
+	launcher := &terminalModelHostLauncher{failures: make(map[string]bool)}
+	protocol := &fileInputProtocolClient{prompts: make(map[string]int)}
+	config := func(endpoint string) map[string]any {
+		launcher.endpoint = endpoint
+		return singleOutputModelFactoryConfig(endpoint)
+	}
+	process, _, _ := buildGenericCLIProcess(t, config, effects, launcher, terminalModelProtocol{}, nil, nil, serviceedges.Edges{
+		ModelInvocationProtocolClient: protocol,
+		ModelCLIInputReadFile: func(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if filepath.Base(path) == "denied.txt" {
+				return nil, os.ErrPermission
+			}
+			return os.ReadFile(path)
+		},
+	})
+	for _, scenario := range []string{"success", "injected read failure", "missing input", "directory input", "empty input", "create failure", "rename failure"} {
 		t.Run(scenario, func(t *testing.T) {
-			runModelsCLIFileInputScenario(t, process, scenario, failedCreateDirectory, failedRenameTarget)
+			runModelsCLIFileInputScenario(t, process, protocol, scenario, failedCreateDirectory, failedRenameTarget)
 		})
+	}
+	for _, diagnostic := range []string{"valid diagnostic", "absent diagnostic", "invalid digest"} {
+		t.Run(diagnostic, func(t *testing.T) { runTerminalModelHostScenario(t, process, launcher, diagnostic) })
 	}
 }
 
-func runModelsCLIFileInputScenario(t *testing.T, process support.Process, scenario, createDirectory, renameTarget string) {
+func runModelsCLIFileInputScenario(t *testing.T, process support.Process, protocol *fileInputProtocolClient, scenario, createDirectory, renameTarget string) {
 	t.Helper()
 	home := functionalTempDir(t)
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	writeGenericBackendCache(t, home, "localai-llamacpp", genericLlamaBackendSelection(), []byte("localai-llamacpp/linux-amd64"))
 	directory := functionalScaffoldFactory(t, singleOutputModelFactoryConfig("http://127.0.0.1:1"))
 	inputPath := filepath.Join(functionalTempDir(t), "prompt.txt")
-	const payload = "customer input bytes\nsecond line\n"
+	payload := "customer input " + scenario + "\nsecond line\n"
+	if scenario == "injected read failure" {
+		inputPath = filepath.Join(filepath.Dir(inputPath), "denied.txt")
+	}
 	if err := os.WriteFile(inputPath, []byte(payload), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +153,36 @@ func runModelsCLIFileInputScenario(t *testing.T, process support.Process, scenar
 		if err != nil {
 			t.Fatalf("file input invocation: %v; stderr=%s", err, inputs.Stderr())
 		}
-		assertFunctionalFile(t, outputPath, payload)
+		assertFileInputReplacement(t, process, protocol, inputs, inputPath, outputPath, payload)
 		return
 	}
 	assertModelsCLIFileFailure(t, inputs, err, scenario, outputPath)
+	if scenario == "injected read failure" {
+		diagnostic := decodeFirstDiagnostic(t, inputs.Stderr())
+		if diagnostic.Code != "CLI_LOCAL_INPUT_FAILED" || diagnostic.Family != "BAD_REQUEST" {
+			t.Fatalf("input-read diagnostic = %#v", diagnostic)
+		}
+		if protocol.callsFor(payload) != 0 {
+			t.Fatal("unreadable input reached inference")
+		}
+	}
+}
+
+func assertFileInputReplacement(t *testing.T, process support.Process, protocol *fileInputProtocolClient, inputs *support.CapturedInputs, inputPath, outputPath, payload string) {
+	t.Helper()
+	assertFunctionalFile(t, outputPath, payload)
+	// Reuse the same customer destination: no bytes from the earlier result
+	// may survive a second complete publication.
+	if err := os.WriteFile(inputPath, []byte("replacement"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("replace prior publication: %v", err)
+	}
+	assertFunctionalFile(t, outputPath, "replacement")
+	if protocol.callsFor(payload) != 1 || protocol.callsFor("replacement") != 1 {
+		t.Fatal("model effect did not receive both complete file contents")
+	}
 }
 
 func assertModelsCLIFileFailure(t *testing.T, inputs *support.CapturedInputs, err error, scenario, outputPath string) {
@@ -349,6 +398,7 @@ func buildGenericCLIProcess(
 	protocol genericCLIProtocolNegotiator,
 	compatibility genericCLICompatibilityChecker,
 	clock genericCLIHostClock,
+	replacements ...serviceedges.Edges,
 ) (support.Process, string, []string) {
 	t.Helper()
 	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -407,6 +457,9 @@ func buildGenericCLIProcess(
 		edges.ModelCLIOutputInspectPath = outputEffects.Inspect
 		edges.ModelCLIOutputRemovePath = outputEffects.Remove
 		edges.ModelCLIOutputRenamePath = outputEffects.Rename
+	}
+	for _, replacement := range replacements {
+		edges = serviceedges.Merge(edges, replacement)
 	}
 	return functionalBuildProcess(t, edges), directory, functionalHomeEnvironment(home)
 }
