@@ -1078,7 +1078,7 @@ func producingSnapshot(origin work.WorkPayloadSnapshot, parents map[string]work.
 			continue
 		}
 		seen[snapshot.SnapshotID] = true
-		if snapshot.SourceKind == work.WorkPayloadSnapshotKindDispatchOutput {
+		if snapshot.SourceKind == work.WorkPayloadSnapshotKindDispatchOutput || (snapshot.SourceKind == work.WorkPayloadSnapshotKindWorkRequest && snapshot.DispatchID != "") {
 			if snapshot.DispatchID == "" {
 				return nil, fmt.Errorf("producing dispatch unavailable for Work %q", origin.WorkID)
 			}

@@ -486,3 +486,28 @@ func TestIncrementalSessionProjection_WorkOriginFactsRetainOriginalProducer(t *t
 		t.Fatal("missing Work invented lineage")
 	}
 }
+
+func TestIncrementalSessionProjection_GeneratedRequestRetainsOriginalProducer(t *testing.T) {
+	t.Parallel()
+	producer, later, requestID := "producer", "later", "batch"
+	events := []interfaces.FactoryEvent{
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchWorkerSessionAssoc, interfaces.FactoryEventContext{DispatchID: &producer}, map[string]string{"workerSessionId": "lead"}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkRequest, interfaces.FactoryEventContext{DispatchID: &producer, RequestID: &requestID}, work.WorkRequestEventPayload{Type: work.WorkRequestTypeFactoryRequestBatch, Source: "forged-source", Works: []work.WorkRequestEventWork{{WorkID: "lane", WorkTypeID: "task", Tags: map[string]string{"project": "example"}}}}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkRequest, interfaces.FactoryEventContext{DispatchID: &later, RequestID: &requestID}, work.WorkRequestEventPayload{Type: work.WorkRequestTypeFactoryRequestBatch, Works: []work.WorkRequestEventWork{{WorkID: "lane", WorkTypeID: "task"}}}),
+	}
+	for _, projection := range []*IncrementalSessionProjection{NewIncrementalSessionProjection(), NewIncrementalSessionProjection()} {
+		for _, event := range events {
+			if err := projection.Apply(event); err != nil {
+				t.Fatal(err)
+			}
+		}
+		facts := projection.WorkOriginFacts("lane", "")
+		if facts.InitialSnapshot == nil || facts.InitialSnapshot.DispatchID != producer || facts.WorkerSessionID != "lead" {
+			t.Fatalf("original producer lost: %+v", facts)
+		}
+		facts.InitialSnapshot.WorkItem.Tags["project"] = "poisoned"
+		if projection.WorkOriginFacts("lane", "").InitialSnapshot.WorkItem.Tags["project"] != "example" {
+			t.Fatal("origin facts alias retained state")
+		}
+	}
+}

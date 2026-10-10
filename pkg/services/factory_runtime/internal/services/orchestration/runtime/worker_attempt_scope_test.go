@@ -424,9 +424,17 @@ func TestRequesterFromWorkOrigin(t *testing.T) {
 			}
 		})
 	}
+	batchSnapshot := snapshot
+	batchSnapshot.SourceKind = work.WorkPayloadSnapshotKindWorkRequest
+	batch := facts
+	batch.InitialSnapshot = &batchSnapshot
+	if got, err := requesterFromWorkOrigin("lane", "example", batch); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("generated requester=%+v err=%v", got, err)
+	}
 	root := facts
 	rootSnapshot := snapshot
 	rootSnapshot.SourceKind = work.WorkPayloadSnapshotKindWorkRequest
+	rootSnapshot.DispatchID = ""
 	root.InitialSnapshot = &rootSnapshot
 	if got, err := requesterFromWorkOrigin("lane", "invented-project", root); err != nil || got != nil {
 		t.Fatalf("root invented requester: %+v err=%v", got, err)

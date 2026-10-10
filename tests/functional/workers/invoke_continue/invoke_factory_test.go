@@ -675,8 +675,22 @@ func assertActiveHeadRefusal(t *testing.T, started invokeContinueStartedProcess,
 func TestRequesterFactoryProducingDispatch(t *testing.T) {
 	t.Parallel()
 	functionalevidence.Covers(t, "cli/you.worker-sessions.show", "cli/you.worker-sessions.list")
+	runRequesterFactoryProducingDispatch(t, false)
+}
+
+func TestRequesterFactoryGeneratedBatch(t *testing.T) {
+	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.show", "cli/you.worker-sessions.list")
+	runRequesterFactoryProducingDispatch(t, true)
+}
+
+func runRequesterFactoryProducingDispatch(t *testing.T, batch bool) {
 	fixture := ensureInvokeContinuePackageFixture(t)
-	lead, lane := fixture.scenario(t, "requester-factory-lead"), fixture.scenario(t, "requester-factory-lane")
+	leadName, laneName := "requester-factory-lead", "requester-factory-lane"
+	if batch {
+		leadName, laneName = "requester-batch-lead", "requester-batch-lane"
+	}
+	lead, lane := fixture.scenario(t, leadName), fixture.scenario(t, laneName)
 	defer lead.close(t)
 	defer lane.close(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -684,6 +698,23 @@ func TestRequesterFactoryProducingDispatch(t *testing.T) {
 	runner := lane.providerRunner.(*t7GatedProviderRunner)
 	defer t7ReleaseAndJoin(t, ctx, runner)()
 	writeRequesterFactoryLineage(t, lead.workingDirectory, lane.workingDirectory)
+	if batch {
+		// The lead must finish without independently propagating its input.
+		path := filepath.Join(lead.workingDirectory, "factory.json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document map[string]any
+		if err := json.Unmarshal(data, &document); err != nil {
+			t.Fatal(err)
+		}
+		seed := document["workTypes"].([]any)[0].(map[string]any)
+		seed["states"] = append(seed["states"].([]any), map[string]any{"name": "done", "type": "TERMINAL"})
+		station := document["workstations"].([]any)[0].(map[string]any)
+		station["outputs"] = []any{map[string]any{"workType": "seed", "state": "done"}}
+		writeInvokeContinueJSON(t, path, document)
+	}
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, lead.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
 	projectName := "requester-project"

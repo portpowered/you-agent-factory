@@ -597,3 +597,18 @@ func recordedJSON(submitted string) json.RawMessage {
 	encoded, _ := json.Marshal(submitted)
 	return encoded
 }
+
+func TestReplayWorkerProducedRequestWithCustomSource(t *testing.T) {
+	t.Parallel()
+	dispatchID := "actual-producer"
+	event := interfaces.FactoryEvent{Id: "generated", Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}, Payload: json.RawMessage(`{"source":"forged-source","works":[{"workId":"lane","workTypeId":"task"}]}`)}
+	submissions, err := replaySubmissionsFromEvent(event)
+	if err != nil || len(submissions) != 0 {
+		t.Fatalf("worker-produced batch replayed independently: %v %v", submissions, err)
+	}
+	event.Context.DispatchID = nil
+	submissions, err = replaySubmissionsFromEvent(event)
+	if err != nil || len(submissions) != 1 {
+		t.Fatalf("unattributed batch lost: %v %v", submissions, err)
+	}
+}

@@ -502,19 +502,22 @@ type FactoryRelation struct {
 
 // WorkRequestRecord stores the batch-level request observed before runtime injection.
 type WorkRequestRecord struct {
-	RequestID     string
-	Type          WorkRequestType
-	TraceID       string
-	Source        string
-	ParentLineage []string
-	WorkItems     []FactoryWorkItem
-	Relations     []FactoryRelation
+	ProducingDispatchID string
+	RequestID           string
+	Type                WorkRequestType
+	TraceID             string
+	Source              string
+	ParentLineage       []string
+	WorkItems           []FactoryWorkItem
+	Relations           []FactoryRelation
 }
 
 // GeneratedSubmissionBatchMetadata captures request-level metadata for generated work.
 type GeneratedSubmissionBatchMetadata struct {
-	Source        string   `json:"source"`
-	ParentLineage []string `json:"parentLineage"`
+	// ProducingDispatchID is runtime-owned provenance, never worker-authored JSON.
+	ProducingDispatchID string   `json:"-"`
+	Source              string   `json:"source"`
+	ParentLineage       []string `json:"parentLineage"`
 }
 
 // GeneratedSubmissionBatch carries a canonical generated request with runtime submissions.

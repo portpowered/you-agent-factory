@@ -595,6 +595,7 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 			metadata.Source = "worker-output:" + result.dispatchID
 		}
 	}
+	metadata.ProducingDispatchID = result.dispatchID
 	batch := work.GeneratedSubmissionBatch{
 		Request:     request,
 		Metadata:    metadata,
