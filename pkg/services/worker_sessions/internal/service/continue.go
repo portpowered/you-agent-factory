@@ -84,17 +84,18 @@ type continueTuple struct {
 }
 
 type continuePlan struct {
-	sourceAddress     string
-	addressedSourceID string
-	executor          workers.Service
-	clock             platformclock.Source
-	scheduler         platformclock.TimerSource
-	request           workersessions.ContinueRequest
-	execution         workers.WorkstationDispatchRequest
-	direct            bool
-	lineage           *workers.SessionLineage
-	archived          bool
-	interrupt         bool
+	sourceAddress        string
+	addressedSourceID    string
+	executor             workers.Service
+	clock                platformclock.Source
+	scheduler            platformclock.TimerSource
+	request              workersessions.ContinueRequest
+	execution            workers.WorkstationDispatchRequest
+	direct               bool
+	observationRuntimeID string
+	lineage              *workers.SessionLineage
+	archived             bool
+	interrupt            bool
 }
 
 type continuationSourceSnapshot struct {
@@ -312,6 +313,9 @@ func (r *registry) reserveAvailableContinuationLocked(
 	}
 	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
 	replay.plan.addressedSourceID = addressed.SourceWorkerSessionID
+	if metadata := r.observations[snapshot.address]; metadata != nil {
+		replay.plan.observationRuntimeID = metadata.runtimeID
+	}
 	if archived != nil {
 		r.publications[snapshot.address] = &publication{capture: archived.target}
 	}
@@ -491,10 +495,11 @@ func (r *registry) storeContinuationReservationLocked(
 		tuple: tuple,
 		plan: continuePlan{
 			sourceAddress: address, executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
-			request:   req,
-			execution: continuation,
-			direct:    true,
-			archived:  snapshot.archived,
+			request:              req,
+			execution:            continuation,
+			direct:               true,
+			observationRuntimeID: snapshot.execution.Execution.RuntimeID,
+			archived:             snapshot.archived,
 			lineage: &workers.SessionLineage{
 				PredecessorWorkerSessionID: req.SourceWorkerSessionID,
 				PreviousDispatchID:         snapshot.dispatchID,
@@ -588,12 +593,13 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 		serverCtx,
 		invoke,
 		invocationPreparationOptions{
-			serverOwned:      true,
-			direct:           plan.direct,
-			continuation:     plan.execution.Execution.Continuation != nil,
-			requestID:        plan.request.RequestID,
-			verifyTopicReady: true,
-			lineage:          plan.lineage,
+			serverOwned:          true,
+			observationRuntimeID: plan.observationRuntimeID,
+			direct:               plan.direct,
+			continuation:         plan.execution.Execution.Continuation != nil,
+			requestID:            plan.request.RequestID,
+			verifyTopicReady:     true,
+			lineage:              plan.lineage,
 		},
 		plan.executor,
 		plan.clock,

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -115,7 +116,7 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 	return r.readContinuationRecipeContext(ctx, req)
 }
 
-func (r *registry) readContinuationRecipeContext(ctx context.Context, req workersessions.ContinueRequest) (*workers.WorkstationDispatchRequest, error) {
+func (r *registry) readContinuationRecipeContext(ctx context.Context, req workersessions.ContinueRequest, observationOnly ...bool) (*workers.WorkstationDispatchRequest, error) {
 	r.mu.RLock()
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	source, exists := r.sessions[address]
@@ -151,7 +152,7 @@ func (r *registry) readContinuationRecipeContext(ctx context.Context, req worker
 		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: catalog.RecordingGenerationID,
 		OwnerEpoch: catalog.OwnerEpoch, ExpectedAttemptID: source.ProviderSessionAssociation.AttemptID,
 	}
-	return r.readCapturedContinuationRecipe(ctx, target, source)
+	return r.readCapturedContinuationRecipe(ctx, target, source, observationOnly...)
 }
 
 // The caller holds r.mu while selecting the exact attempt's publication.
@@ -165,6 +166,9 @@ func (r *registry) continuationPublicationLocked(address string) (string, <-chan
 			terminalPublished = supervision.done
 		}
 		supervision.mu.Unlock()
+	}
+	if attempt := r.runtimeAttemptControls[address]; attempt != nil {
+		terminalPublished = attempt.completed
 	}
 	return factorySessionID, terminalPublished
 }
@@ -183,8 +187,8 @@ func waitContinuationPublication(ctx context.Context, terminalPublished <-chan s
 	return nil
 }
 
-func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {
-	captured, err := r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
+func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session, observationOnly ...bool) (*workers.WorkstationDispatchRequest, error) {
+	captured, err := r.lookupContinuationSource(ctx, target, observationOnly...)
 	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
 		captured.Execution.Execution.FactorySessionID != target.FactorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
@@ -235,4 +239,18 @@ func (r *registry) lockFrozenCapture(id string, target frozenControlTarget) (fun
 		return nil, staleControlTargetError()
 	}
 	return pub.mu.Unlock, nil
+}
+
+// Observation consumes activation-prepared facts. Admission also checks that
+// the immutable artifact still agrees before granting execution authority.
+func (r *registry) lookupContinuationSource(ctx context.Context, target recordings.WorkerControlTarget, observationOnly ...bool) (recordings.WorkerContinuationSource, error) {
+	captured, err := r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
+	if err != nil || (len(observationOnly) != 0 && observationOnly[0]) {
+		return captured, err
+	}
+	persisted, err := r.restart.ReadWorkerRestartRecipe(ctx, target)
+	if err != nil || !reflect.DeepEqual(persisted, captured.Execution) {
+		return recordings.WorkerContinuationSource{}, workersessions.ErrContinuationExecutionUnavailable
+	}
+	return captured, nil
 }

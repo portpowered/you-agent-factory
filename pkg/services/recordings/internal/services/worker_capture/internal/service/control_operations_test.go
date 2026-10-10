@@ -24,7 +24,8 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			local := platformreplay.NewLocal(runtime.GOOS)
-			writer := journalWriter(t, local)
+			probe := &journalProbe{Local: local}
+			writer := journalWriter(t, probe)
 			target := controlIntent(t, writer, "recording", "worker", "request").Target
 			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
 			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
@@ -37,7 +38,7 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			if cell != "active" {
 				persistContinuationSourceTerminal(t, writer, target, cell)
 			}
-			reopened, err := newTestFileWriter(local, writer.root)
+			reopened, err := newTestFileWriter(probe, writer.root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -50,6 +51,7 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			if cell == "wrong-generation" {
 				target.RecordingGenerationID = "foreign-generation"
 			}
+			reads := probe.reads
 			source, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
 			if cell != "captured" {
 				if err == nil || source.Reference.ID != "" {
@@ -62,6 +64,12 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			again, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
 			if err != nil || again.Execution.Execution.Model != "captured-model" {
 				t.Fatalf("read mutated persisted source: %+v, %v", again, err)
+			}
+			if probe.reads != reads {
+				t.Fatalf("prepared continuation read storage: %d -> %d", reads, probe.reads)
+			}
+			if _, err := reopened.ReadWorkerRestartRecipe(t.Context(), target); err != nil || probe.reads <= reads {
+				t.Fatalf("admission did not revalidate recipe: reads=%d err=%v", probe.reads, err)
 			}
 		})
 	}

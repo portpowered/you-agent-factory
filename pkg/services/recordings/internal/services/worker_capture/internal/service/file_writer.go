@@ -74,6 +74,7 @@ type recordingEntry struct {
 	summaryOperations map[recordings.WorkerControlTarget][]recordings.WorkerControlOperationRecord
 }
 type recordingSession struct {
+	restartRecipes      map[string][]byte
 	workName            string
 	originatingArtifact string
 	generation          string

@@ -69,6 +69,10 @@ func (writer *FileWriter) readWorkerRestartRecipe(ctx context.Context, target re
 	entry := writer.entry(target.RecordingID)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	return writer.readWorkerRestartRecipeLocked(ctx, entry, target, preparedOnly)
+}
+
+func (writer *FileWriter) readWorkerRestartRecipeLocked(ctx context.Context, entry *recordingEntry, target recordings.WorkerControlTarget, preparedOnly bool) (workers.WorkstationDispatchRequest, error) {
 	key := recordings.WorkerControlOperationKey{
 		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
 		FactorySessionID: target.FactorySessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID,
@@ -81,17 +85,25 @@ func (writer *FileWriter) readWorkerRestartRecipe(ctx context.Context, target re
 	if target.ExpectedAttemptID == "" || session.generation != target.RecordingGenerationID || session.ownerEpoch != target.OwnerEpoch {
 		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerControlConflict
 	}
-	path := writer.controlInputPath(controlInputRef(identity))
-	if err := writer.checkControlInputPath(path); err != nil {
-		return workers.WorkstationDispatchRequest{}, err
-	}
-	data, err := writer.storage.ReadFile(path)
-	if err != nil {
-		return workers.WorkstationDispatchRequest{}, err
-	}
-	input, err := decodeControlInput(data, identity)
-	if err != nil {
-		return workers.WorkstationDispatchRequest{}, err
+	var input []byte
+	if preparedOnly {
+		input = bytes.Clone(session.restartRecipes[target.ExpectedAttemptID])
+		if len(input) == 0 {
+			return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+		}
+	} else {
+		path := writer.controlInputPath(controlInputRef(identity))
+		if err := writer.checkControlInputPath(path); err != nil {
+			return workers.WorkstationDispatchRequest{}, err
+		}
+		data, err := writer.storage.ReadFile(path)
+		if err != nil {
+			return workers.WorkstationDispatchRequest{}, err
+		}
+		input, err = decodeControlInput(data, identity)
+		if err != nil {
+			return workers.WorkstationDispatchRequest{}, err
+		}
 	}
 	var recipe workerRestartRecipe
 	decoder := json.NewDecoder(bytes.NewReader(input))
@@ -156,6 +168,12 @@ func (writer *FileWriter) SaveWorkerRestartRecipe(ctx context.Context, target re
 		return recordings.ErrWorkerControlConflict
 	}
 	_, err = writer.persistWorkerControlInputLocked(ctx, entry, key, input)
+	if err == nil {
+		if session.restartRecipes == nil {
+			session.restartRecipes = make(map[string][]byte)
+		}
+		session.restartRecipes[target.ExpectedAttemptID] = bytes.Clone(input)
+	}
 	return err
 }
 
@@ -261,4 +279,36 @@ func (writer *FileWriter) restartInputIdentity(ctx context.Context, entry *recor
 		return controlInputArtifact{}, recordings.ErrWorkerControlConflict
 	}
 	return controlInputArtifact{Key: key, Generation: session.generation}, nil
+}
+
+// Activation prepares only the immutable recipe for each captured current attempt.
+// Observation uses these detached bytes; admission revalidates the artifact.
+func (writer *FileWriter) prepareRestartRecipe(ctx context.Context, entry *recordingEntry, session *recordingSession, catalog recordings.WorkerSessionCatalogEntry) {
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if json.Unmarshal(session.records[0].Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil {
+		return
+	}
+	if opening.AttemptID == "" && session.projection.ExecutionTerminal != nil {
+		for _, record := range session.records {
+			if record.ID.Position == session.projection.ExecutionTerminal.Position && json.Unmarshal(record.Payload, &draft) == nil {
+				opening.AttemptID = draft.DispatchID
+				break
+			}
+		}
+	}
+	target := recordings.WorkerControlTarget{RecordingID: catalog.RecordingID, WorkerSessionID: catalog.WorkerSessionID,
+		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: session.generation, OwnerEpoch: session.ownerEpoch, ExpectedAttemptID: opening.AttemptID}
+	execution, err := writer.readWorkerRestartRecipeLocked(ctx, entry, target, false)
+	if err != nil {
+		return
+	}
+	input, err := encodeWorkerRestartRecipe(target, execution)
+	if err != nil {
+		return
+	}
+	if session.restartRecipes == nil {
+		session.restartRecipes = make(map[string][]byte)
+	}
+	session.restartRecipes[target.ExpectedAttemptID] = input
 }

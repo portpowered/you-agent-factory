@@ -489,19 +489,21 @@ func (router *inferenceWorkerRecordingRouter) ListWorkerSessionCaptures(ctx cont
 	}
 	router.mu.RUnlock()
 	result := recordings.WorkerCapturedCatalogPage{}
+	var generations []string
 	seen := make(map[string]bool)
 	for _, writer := range writers {
 		reader, ok := writer.(recordings.WorkerCapturedActivityReader)
 		if !ok {
 			return result, recordings.ErrMissingWorkerRecordingReader
 		}
-		page, err := reader.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{Limit: 1000, PreparedSummariesOnly: request.PreparedSummariesOnly})
+		page, err := reader.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{Limit: 1000, PreparedSummariesOnly: request.PreparedSummariesOnly, RequireCompleteMembership: request.RequireCompleteMembership})
 		if err != nil {
 			return result, err
 		}
 		if page.NextToken != "" {
 			return result, recordings.ErrWorkerRecordingPersistence
 		}
+		generations = append(generations, page.GenerationID)
 		for _, item := range page.Items {
 			if !seen[item.Catalog.WorkerSessionID] {
 				result.Items = append(result.Items, item)
@@ -509,6 +511,8 @@ func (router *inferenceWorkerRecordingRouter) ListWorkerSessionCaptures(ctx cont
 			}
 		}
 	}
+	sort.Strings(generations)
+	result.GenerationID = strings.Join(generations, ":")
 	if request.Limit > 0 && len(result.Items) > request.Limit {
 		return result, recordings.ErrWorkerRecordingPersistence
 	}

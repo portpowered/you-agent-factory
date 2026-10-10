@@ -52,11 +52,11 @@ func (r *registry) withContinuationCapability(ctx context.Context, projected wor
 }
 
 func (r *registry) continuationCapabilitySnapshot(ctx context.Context, req workersessions.ContinueRequest) (continuationSourceSnapshot, *archivedContinuationSource, error) {
-	captured, err := r.readContinuationRecipeContext(ctx, req)
+	captured, err := r.readContinuationRecipeContext(ctx, req, true)
 	if err != nil {
 		return continuationSourceSnapshot{}, nil, err
 	}
-	archived, err := r.readArchivedContinuationSourceContext(ctx, req)
+	archived, err := r.readArchivedContinuationSourceContext(ctx, req, true)
 	if err != nil {
 		return continuationSourceSnapshot{}, nil, err
 	}
@@ -157,9 +157,16 @@ func (r *registry) continuationNeedsCapturedSource(req workersessions.ContinueRe
 	return (!exists || liveFactory) && !replay && r.logs != nil
 }
 
-func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
+func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, req workersessions.ContinueRequest, observationOnly ...bool) (*archivedContinuationSource, error) {
 	if !r.continuationNeedsCapturedSource(req) {
 		return nil, nil
+	}
+	r.mu.RLock()
+	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	_, published := r.continuationPublicationLocked(address)
+	r.mu.RUnlock()
+	if err := waitContinuationPublication(ctx, published); err != nil {
+		return nil, err
 	}
 	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
 	if !supported {
@@ -177,7 +184,7 @@ func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, re
 	if r.restart == nil {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
-	captured, err := r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
+	captured, err := r.lookupContinuationSource(ctx, target, observationOnly...)
 	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
 		captured.Execution.Execution.Dispatch.DispatchID != target.ExpectedAttemptID ||
 		captured.Execution.Execution.FactorySessionID != target.FactorySessionID || captured.Terminal != *page.Terminal {
