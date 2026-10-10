@@ -808,7 +808,7 @@ func (index *workerSessionWorkIndex) indexWorkName(id, name string) {
 
 // WorkOriginFacts copies only the selected ancestry and associated identities.
 // It does not choose a requester or interpret tags as authorization.
-func (projection *IncrementalSessionProjection) WorkOriginFacts(workID, relatedWorkName string) sessionprojectionfacts.WorkOriginFacts {
+func (projection *IncrementalSessionProjection) WorkOriginFacts(workID, relatedWorkName, relatedWorkTypeID string) sessionprojectionfacts.WorkOriginFacts {
 	facts := sessionprojectionfacts.WorkOriginFacts{ParentSnapshotsByID: make(map[string]work.WorkPayloadSnapshot), WorkerSessionIDsByDispatchID: make(map[string]string)}
 	if projection == nil || projection.reducer == nil || projection.workerWork == nil {
 		return facts
@@ -849,7 +849,9 @@ func (projection *IncrementalSessionProjection) WorkOriginFacts(workID, relatedW
 	}
 
 	for id := range projection.workerWork.workIDsByName[relatedWorkName] {
-		facts.RelatedWorkIDs = append(facts.RelatedWorkIDs, id)
+		if item, found := projection.reducer.stateValue.WorkItemsByID[id]; found && item.WorkTypeID == relatedWorkTypeID {
+			facts.RelatedWorkIDs = append(facts.RelatedWorkIDs, id)
+		}
 	}
 	sort.Strings(facts.RelatedWorkIDs)
 	return facts

@@ -26,8 +26,8 @@ type WorkerWorkAttributionReader interface {
 	ResolveWorkerWorkAttribution(context.Context, []WorkerWorkAttributionRequest) ([]WorkerWorkAttribution, error)
 }
 
-// WorkOriginProjectionReader selects retained Work ancestry and named Work
+// WorkOriginProjectionReader selects retained Work ancestry and named, typed Work
 // identities within one Factory Session without replaying its recording.
 type WorkOriginProjectionReader interface {
-	CurrentWorkOriginFacts(context.Context, string, string) (sessionprojectionfacts.WorkOriginFacts, error)
+	CurrentWorkOriginFacts(context.Context, string, string, string) (sessionprojectionfacts.WorkOriginFacts, error)
 }

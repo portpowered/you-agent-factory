@@ -453,7 +453,7 @@ func assertIncrementalProjectionZeroValues(t *testing.T, events []interfaces.Fac
 func TestIncrementalSessionProjection_WorkOriginFactsRetainOriginalProducer(t *testing.T) {
 	t.Parallel()
 	projection := NewIncrementalSessionProjection()
-	project := work.FactoryWorkItem{ID: "project-id", DisplayName: "example", Tags: map[string]string{"project": "example"}}
+	project := work.FactoryWorkItem{ID: "project-id", WorkTypeID: "project", DisplayName: "example", Tags: map[string]string{"project": "example"}}
 	lane := work.FactoryWorkItem{ID: "lane", DisplayName: "lane", Tags: map[string]string{"project": "example"}}
 	// The component's prepared state represents append-time inputs. Later visits
 	// may transform the same Work without becoming its producing requester.
@@ -465,24 +465,34 @@ func TestIncrementalSessionProjection_WorkOriginFactsRetainOriginalProducer(t *t
 	lineage.RecordDispatchOutputSnapshot(3, "later-visit", []work.FactoryWorkItem{lane}, lane, 0)
 	projection.workerWork = newWorkerSessionWorkIndex()
 	projection.workerWork.indexWorkName(project.ID, project.DisplayName)
+	projection.reducer.stateValue.WorkItemsByID[project.ID] = project
+	projection.reducer.stateValue.WorkItemsByID["thoughts-id"] = work.FactoryWorkItem{ID: "thoughts-id", WorkTypeID: "thoughts", DisplayName: "example"}
+	projection.workerWork.indexWorkName("thoughts-id", "example")
 	projection.workerWork.associations["producer"] = sessionprojectionfacts.WorkerSessionAssociationFacts{WorkerSessionID: "lead-session"}
 	projection.workerWork.associations["later-visit"] = sessionprojectionfacts.WorkerSessionAssociationFacts{WorkerSessionID: "lane-session"}
-	facts := projection.WorkOriginFacts("lane", "example")
+	facts := projection.WorkOriginFacts("lane", "example", "project")
 	if facts.InitialSnapshot == nil || facts.InitialSnapshot.DispatchID != "producer" || facts.WorkerSessionID != "lead-session" || len(facts.RelatedWorkIDs) != 1 || facts.RelatedWorkIDs[0] != "project-id" {
 		t.Fatalf("origin facts=%+v", facts)
 	}
 	facts.InitialSnapshot.WorkItem.Tags["project"] = "poisoned"
 	facts.InitialSnapshot.ParentSnapshotIDs[0] = "poisoned"
 	facts.RelatedWorkIDs[0] = "poisoned"
-	again := projection.WorkOriginFacts("lane", "example")
+	again := projection.WorkOriginFacts("lane", "example", "project")
 	if again.InitialSnapshot.WorkItem.Tags["project"] != "example" || again.InitialSnapshot.ParentSnapshotIDs[0] == "poisoned" || again.RelatedWorkIDs[0] != "project-id" {
 		t.Fatal("selected facts mutated retained origin")
 	}
 	projection.workerWork.indexWorkName("other-project", "example")
-	if len(projection.WorkOriginFacts("lane", "example").RelatedWorkIDs) != 2 {
-		t.Fatal("duplicate name silently selected one Work")
+	projection.reducer.stateValue.WorkItemsByID["other-project"] = work.FactoryWorkItem{ID: "other-project", WorkTypeID: "project", DisplayName: "example"}
+	if len(projection.WorkOriginFacts("lane", "example", "project").RelatedWorkIDs) != 2 {
+		t.Fatal("duplicate Project name silently selected one Project")
 	}
-	if missing := projection.WorkOriginFacts("absent", "example"); missing.InitialSnapshot != nil || missing.WorkerSessionID != "" {
+	if got := projection.WorkOriginFacts("lane", "example", "thoughts").RelatedWorkIDs; len(got) != 1 || got[0] != "thoughts-id" {
+		t.Fatalf("typed name selection=%v", got)
+	}
+	if got := projection.WorkOriginFacts("lane", "example", "absent-type").RelatedWorkIDs; len(got) != 0 {
+		t.Fatalf("missing type invented related Work: %v", got)
+	}
+	if missing := projection.WorkOriginFacts("absent", "example", "project"); missing.InitialSnapshot != nil || missing.WorkerSessionID != "" {
 		t.Fatal("missing Work invented lineage")
 	}
 }
@@ -501,12 +511,12 @@ func TestIncrementalSessionProjection_GeneratedRequestRetainsOriginalProducer(t 
 				t.Fatal(err)
 			}
 		}
-		facts := projection.WorkOriginFacts("lane", "")
+		facts := projection.WorkOriginFacts("lane", "", "project")
 		if facts.InitialSnapshot == nil || facts.InitialSnapshot.DispatchID != producer || facts.WorkerSessionID != "lead" {
 			t.Fatalf("original producer lost: %+v", facts)
 		}
 		facts.InitialSnapshot.WorkItem.Tags["project"] = "poisoned"
-		if projection.WorkOriginFacts("lane", "").InitialSnapshot.WorkItem.Tags["project"] != "example" {
+		if projection.WorkOriginFacts("lane", "", "project").InitialSnapshot.WorkItem.Tags["project"] != "example" {
 			t.Fatal("origin facts alias retained state")
 		}
 	}

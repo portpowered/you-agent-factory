@@ -257,7 +257,7 @@ func enrichFactoryChangeSequence(event interfaces.FactoryEvent) interfaces.Facto
 }
 
 // CurrentWorkOriginFacts reads immutable ancestry at the ledger append barrier.
-func (h *FactoryEventHistory) CurrentWorkOriginFacts(ctx context.Context, workID, relatedWorkName string) (recordings.WorkOriginFacts, error) {
+func (h *FactoryEventHistory) CurrentWorkOriginFacts(ctx context.Context, workID, relatedWorkName, relatedWorkTypeID string) (recordings.WorkOriginFacts, error) {
 	if err := ctx.Err(); err != nil {
 		return recordings.WorkOriginFacts{}, err
 	}
@@ -272,5 +272,5 @@ func (h *FactoryEventHistory) CurrentWorkOriginFacts(ctx context.Context, workID
 	if h.sessionProjectionErr != nil {
 		return recordings.WorkOriginFacts{}, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
 	}
-	return h.sessionProjection.WorkOriginFacts(workID, relatedWorkName), nil
+	return h.sessionProjection.WorkOriginFacts(workID, relatedWorkName, relatedWorkTypeID), nil
 }

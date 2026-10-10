@@ -1029,7 +1029,7 @@ func (cfg *runtimeConfig) dispatchRequesterMetadata(ctx context.Context, request
 			project = input.Tags["project"]
 		}
 	}
-	facts, err := reader.CurrentWorkOriginFacts(ctx, metadata.Correlation.WorkID, project)
+	facts, err := reader.CurrentWorkOriginFacts(ctx, metadata.Correlation.WorkID, project, "project")
 	if err != nil {
 		return nil, fmt.Errorf("read producing Work lineage: %w", err)
 	}
