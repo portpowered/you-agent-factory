@@ -49,6 +49,8 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 	}
 	registry = registeredUnlistedConstructors(pass, registry)
 	values := registeredConstructionValues(pass)
+	helpers := registeredConstructionHelpers(pass, values)
+	registry = helpers.storageResults(registry)
 	var blocking []violation
 	add := func(caller, callee ConstructionSymbol, constructor ConstructionConstructor, rule string, pos token.Pos) {
 		mode := ConstructionReport
@@ -70,8 +72,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 		}
 	}
 	typeset := scanRegisteredConstructionBags(pass, registry, add)
-	helpers := registeredConstructionHelpers(pass, values)
-	stored := registeredConstructionStorage(pass, registry, values, helpers)
+	stored := registeredConstructionStorage(pass, registry, helpers)
 	scanRegisteredConstructionGuards(pass, registry, helpers, stored, add)
 	getters := registeredConstructionGetters(pass, registry, helpers, stored, typeset)
 	for _, file := range pass.Files {

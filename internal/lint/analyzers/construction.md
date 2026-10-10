@@ -139,16 +139,23 @@ surviving requiredness guards. Provider Sessions PR #3132 removed the captured
 reader and named HTTP requiredness guards; its existing context and identity
 validation remains lawful. Operator Settings PR #3133 removed the constructed
 root's receiver/effect guards, including LoadDocument, ApplyDocumentUpdate and
-ResolveEffective. These corrections do not close private Settings findings:
-document/internal/service.Service still guards its receiver in LoadDocument,
-MergeDocumentProviderModel, ApplyDocumentUpdate and PersistDocument; loadDocument,
-persistDocument and marshalDocument still guard required storage/codec effects.
-resolution/internal/service.newProvidersRootQuery checks its required Providers
-root. The dormant HTTP NewAdapterFromRoot also constructs NewAdapter from a
-RootBinding record outside Wire. These findings remain BLOCKED for full
-enforcement, not domain validation or analysis exclusions. T29 cannot enable a
-blocked classification with suppression or fix production outside its authorized
-scope. The original Settings owner must supply the smallest correction.
+ResolveEffective. PR #3137 (merge
+`6415826884a338ceac875e8b892b690921ac9bcc`) subsequently removed the private
+document receiver, storage/codec/catalog and Providers-query requiredness guards,
+and retired `RootBinding`/`NewAdapterFromRoot`. Optional `diagnosticDecoder` and
+`preserveUnknown`, request/domain validation, cancellation and resource errors
+remain lawful. These source corrections do not classify Settings automatically.
+
+Work still has requiredness findings in `work/internal/service.go`:
+`(applicationService).runtime` checks the constructed receiver and injected
+`runtimes`; `SubmitFileForSession` checks injected `readSubmittedFile`.
+`NewService` stores these completed inputs directly; canonical
+`pkg/wire/runtime_inputs.go:provideWorkService` supplies them, with
+`provideWorkSubmittedFileReader` selecting the host override or `os.ReadFile`.
+The runtime returned by `ResolveWorkRuntime` may legitimately be unavailable
+for a session; its resource/domain absence check must remain. Required receiver
+and stored-input checks need the original T05 owner's correction. T29 cannot
+suppress them, classify them as scoped state or edit production in this lane.
 
 The Provider Sessions smoke extension uses the unchanged full production
 registry. Both tag configurations add same-owner and new cross-owner construction,
@@ -157,11 +164,26 @@ and a parameterized view. A local Zap declaration is a controlled signature
 fixture, not proof of logging behavior. Execution evidence belongs in PR comments.
 The S1-S9 full-repository witness remains incomplete while other roles are unclassified.
 
-Receiver/storage requiredness currently follows exact constructor result types.
-A constructor returning a public interface does not by itself trace storage or
-receiver guards on its private concrete implementation. Explicitly listing the
-concrete type does not close that provenance gap. This is an analyzer limit to
-address with typed fixtures; it is not permission to ignore a known source finding.
+Receiver/storage requiredness now follows authored concrete return values behind
+classified interface results, including immutable aliases and same-package
+helpers whose required parameters flow from the constructor. Compiler field
+identities connect keyed/positional storage to concrete receivers and getters;
+returned identities stay local to the compilation unit and never classify all
+interface implementers. Nested closure returns and unrelated implementations
+are excluded. The compiler-valid `interfacestorage` fixture protects required
+receiver/storage guards, mutations, getter calls/escapes and lawful optional or
+parameterized views. The maintained Provider Sessions plugin smoke also seeds
+receiver and stored-reader guards behind its public interface return.
+
+Named/bare returns, mutated result aliases, interface conversions, parameter-return
+helpers, opaque/imported helper bodies and recursive return summaries still lack
+complete concrete-result identity tracking. Existing unresolved dependency rules
+remain applicable where an origin is known; absence of a finding on unsupported
+return identity is not proof. Multi-result paths use declared assignability to
+select matching return slots, not an inventory of every interface implementer.
+Build tags/platforms limit bodies to the actual compiler-selected source, and
+arbitrary factories or erased/structural types still need explicit classification.
+These limits grant no exemption for known production findings.
 
 Events classifies the public `events.Service`, private `service.Store` and
 private `topicState` as behavior, behavior and scoped state respectively.
