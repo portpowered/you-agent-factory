@@ -267,6 +267,8 @@ func runControlledRestartLive(t *testing.T, first invokeContinueStartedProcess, 
 		summaryRestartCLI(t, first, home, c.a.path, "interrupt", c.id, "--request-id", "recorded-interrupt", "--successor-worker-session-id", "recorded-successor", "--replacement-message", s8ReplacementMessage, "--resume-mode", "recorded", "--async")
 		c.runner.waitStarted(t, c.a.path, s8InterruptCallASuccessor)
 		c.runner.release(t, c.a.path, s8InterruptCallASuccessor)
+		// Replay synchronously to join the successor before capability parity.
+		summaryRestartCLI(t, first, home, c.a.path, "interrupt", c.id, "--request-id", "recorded-interrupt", "--successor-worker-session-id", "recorded-successor", "--replacement-message", s8ReplacementMessage, "--resume-mode", "recorded")
 		awaitContinuationRestartLogs(t, first, home, c.a.path, "recorded-successor", s8InterruptProviderSessionA)
 		c.before["recorded-successor"] = readSummaryRestartSnapshot(t, first, home, c.a.path, "recorded-successor")
 	} else if c.action == "ownerlost" {
@@ -295,6 +297,11 @@ func runControlledRestartLive(t *testing.T, first invokeContinueStartedProcess, 
 		assertControlledRestartFacts(t, c.action, c.before[c.id].observation)
 	}
 	c.runner.release(t, c.b.path, s8InterruptCallBInitial)
+	// A committed terminal log can precede supervision completion. Revivable
+	// remains false until that completion, so join the same admitted invocation
+	// through its synchronous public replay before comparing successive reads.
+	// The retained runner call-count assertion also protects replay idempotency.
+	summaryRestartCLI(t, first, home, c.b.path, "invoke", "--execution", filepath.Join(c.b.path, peerID+".json"))
 	awaitContinuationRestartLogs(t, first, home, c.b.path, peerID, s8InterruptProviderSessionB)
 	if c.action != "ownerlost" {
 		c.before[peerID] = readSummaryRestartSnapshot(t, first, home, c.b.path, peerID)
@@ -351,6 +358,8 @@ func proveScopedCapturedTerminalAndNaturalWinner(t *testing.T, host invokeContin
 	summaryRestartCLI(t, host, home, dir, "invoke", "--execution", path, "--async")
 	runner.waitStarted(t, dir, s8InterruptCallAInitial)
 	runner.release(t, dir, s8InterruptCallAInitial)
+	// Join publication before comparing the complete natural-winner tuple.
+	summaryRestartCLI(t, host, home, dir, "invoke", "--execution", path)
 	awaitContinuationRestartLogs(t, host, home, dir, id, s8InterruptProviderSessionA)
 	endpoint := host.baseURL + "/factory-sessions/" + selected + "/worker-sessions/" + id
 	before := support.GetJSON[api.WorkerSessionObservation](t, endpoint)
