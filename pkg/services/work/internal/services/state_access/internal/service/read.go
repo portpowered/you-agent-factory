@@ -141,7 +141,7 @@ func (s *Service) readSnapshot(ctx context.Context, sessionID string) (work.Read
 	}
 	if s == nil || s.snapshots == nil {
 		if resolveErr != nil {
-			return work.ReadSnapshot{}, resolveErr
+			return work.ReadSnapshot{}, fmt.Errorf("resolve Work session: %w", resolveErr)
 		}
 		return work.ReadSnapshot{}, errors.New("Work state access snapshot reader is required")
 	}
