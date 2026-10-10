@@ -422,7 +422,7 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	catalogService := catalogwire.NewService(paths, fileSystem)
 	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		nil,
-		lifecycle.StubActivationGateway(),
+		nil,
 		catalogService,
 		factorydefinitions.UnimplementedService{},
 		factorydefinitions.UnimplementedService{},

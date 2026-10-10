@@ -37,7 +37,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		t.Fatal(err)
 	}
 	root := factorylifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		rootSurfaceSessionHost{}, factorylifecycle.StubActivationGateway(),
+		rootSurfaceSessionHost{}, nil,
 		factorydefinitions.UnimplementedService{}, factorydefinitions.UnimplementedService{},
 		rootSurfaceAuthoring{}, distribution, factorydefinitions.UnimplementedService{},
 		factorydefinitions.UnimplementedService{}, platformfilesystem.Local{},

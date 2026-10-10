@@ -433,10 +433,6 @@
       "minimum": 80.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-      "minimum": 58.82
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
       "minimum": 50.00
     },

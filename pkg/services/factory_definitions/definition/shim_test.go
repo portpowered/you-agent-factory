@@ -1,13 +1,16 @@
-// Package factorydefinition is a transitional compile shim. Production composition
-// constructs the lifecycle host through pkg/services/factory_definitions/internal;
-// this package forwards to internal/lifecycle for residual tests and DEL-DEF cleanup.
+// Package factorydefinition retains owner-local characterization fixtures only.
+// Production composition uses the completed lifecycle constructor directly.
 package factorydefinition
 
 import (
+	"context"
+	"fmt"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -80,12 +83,10 @@ func NewWithCatalogAndPackages(
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithCatalogAndPackages(
-		host,
-		activationGateway,
-		catalogService,
-		packagedCatalog,
-		versionFileSystems...,
+	return NewWithCatalogPackagesValidationInstallationAndAuthoring(
+		host, activationGateway, catalogService, factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{}, packagedCatalog,
+		factoryroot.PackagedFactoryInstallationOperations{}, versionFileSystems...,
 	)
 }
 
@@ -97,13 +98,9 @@ func NewWithCatalogPackagesAndInstallation(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithCatalogPackagesAndInstallation(
-		host,
-		activationGateway,
-		catalogService,
-		packagedCatalog,
-		packagedInstaller,
-		versionFileSystems...,
+	return NewWithCatalogPackagesValidationInstallationAndAuthoring(
+		host, activationGateway, catalogService, factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{}, packagedCatalog, packagedInstaller, versionFileSystems...,
 	)
 }
 
@@ -112,7 +109,15 @@ func NewWithCompilation(
 	compilationService lifecycle.CompilationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithCompilation(host, compilationService, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	disabled := factoryroot.UnimplementedService{}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host, StubActivationGateway(), disabled, disabled, disabled, disabled,
+		nil, compilationService, versionFileSystem, disabled.ListEffectiveFactories, disabled,
+	)
 }
 
 func NewWithValidation(
@@ -151,22 +156,54 @@ func NewWithCatalogPackagesValidationInstallationAndAuthoring(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithCatalogPackagesValidationInstallationAndAuthoring(
-		host,
-		activationGateway,
-		catalogService,
-		validationService,
-		authoringLayoutService,
-		packagedCatalog,
-		packagedInstaller,
-		versionFileSystems...,
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	distribution := testDistributionService(packagedCatalog, packagedInstaller, nil, nil)
+	disabled := factoryroot.UnimplementedService{}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host, activationGateway, catalogService, validationService, authoringLayoutService,
+		distribution, nil, disabled, versionFileSystem, disabled.ListEffectiveFactories, disabled,
 	)
 }
 
 func StubActivationGateway() factoryroot.DefinitionActivationGateway {
-	return lifecycle.StubActivationGateway()
+	return stubActivationGateway{}
 }
 
 func SessionFactoryPersistRoot(serviceRootDir string, session *factoryroot.DefinitionSession) string {
 	return lifecycle.SessionFactoryPersistRoot(serviceRootDir, session)
+}
+
+// testDistributionService constructs the private Distribution subservice from
+// exact injected distribute ports for Factory Definitions composition.
+func testDistributionService(
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	scaffoldInitializer factoryroot.ScaffoldInitializer,
+	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
+) distributionservice.Service {
+	if packagedInstaller.Install == nil {
+		packagedInstaller = factoryroot.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factoryroot.PackagedFactoryInstallParams,
+			) (factoryroot.PackagedFactoryInstallResult, error) {
+				return factoryroot.PackagedFactoryInstallResult{},
+					fmt.Errorf("%w: packaged Factory installation collaborator is required",
+						factoryroot.ErrFactoryDistributeFailed)
+			},
+		}
+	}
+	service, err := distributionwire.NewService(
+		packagedCatalog,
+		packagedInstaller,
+		scaffoldInitializer,
+		scaffoldFactoryNameResolver,
+	)
+	if err != nil {
+		return nil
+	}
+	return service
 }

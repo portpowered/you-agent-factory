@@ -36,7 +36,7 @@ func TestCompletedLifecycleDelegatesRuntimeSnapshot(t *testing.T) {
 	t.Parallel()
 	called := false
 	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
 		snapshotOperation(func(ctx context.Context, request factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
 			called = true
 			return factorydefinitions.ResolveRuntimeSnapshotResult{Snapshot: factorydefinitions.RuntimeSnapshot{FactoryDir: request.FactoryDir}}, nil
@@ -93,7 +93,7 @@ func TestCompletedLifecycleDelegatesCompilation(t *testing.T) {
 				return expected, operationError
 			})
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-				nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
+				nil, nil, nil, nil, nil, nil,
 				factorydefinitions.UnimplementedService{}, owner, nil,
 				factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
 				factorydefinitions.UnimplementedService{},
@@ -140,7 +140,7 @@ func TestCompletedLifecycleDelegatesEffectiveCatalog(t *testing.T) {
 			}
 			disabled := factorydefinitions.UnimplementedService{}
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-				nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
+				nil, nil, disabled, disabled, disabled, disabled,
 				disabled, disabled, nil, listEffective,
 				factorydefinitions.UnimplementedService{},
 			)
