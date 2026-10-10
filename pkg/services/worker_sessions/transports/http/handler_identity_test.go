@@ -775,3 +775,48 @@ func TestWorkerSessionContinuationCapabilityMappingPreservesFalseAndUnknownHead(
 		t.Fatalf("unknown capability became authority: %+v", mapped)
 	}
 }
+
+func TestWorkerSessionObservationMetadataMappingIsDetached(t *testing.T) {
+	t.Parallel()
+	source := workersessions.Observation{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead/exact", WorkID: "project-work"},
+		Correlation: &workersessions.Correlation{WorkID: "lane-work", FactorySessionID: "factory/exact"},
+		Labels:      []string{"project:agent-messaging"},
+	}
+	mapped := WorkerSessionObservationToAPI(source)
+	if mapped.Requester == nil || mapped.Correlation == nil || mapped.Labels == nil {
+		t.Fatalf("metadata lost: %+v", mapped)
+	}
+	*mapped.Requester.WorkId = "mutated"
+	*mapped.Correlation.WorkId = "mutated"
+	(*mapped.Labels)[0] = "mutated"
+	if source.Requester.WorkID != "project-work" || source.Correlation.WorkID != "lane-work" || source.Labels[0] != "project:agent-messaging" {
+		t.Fatalf("mapping shares source metadata: %+v", source)
+	}
+	payload, err := json.Marshal(WorkerSessionObservationToAPI(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"requester":{"kind":"WORKER_SESSION","workId":"project-work","workerSessionId":"lead/exact"}`,
+		`"correlation":{"factorySessionId":"factory/exact","workId":"lane-work"}`,
+		`"labels":["project:agent-messaging"]`,
+	} {
+		if !strings.Contains(string(payload), want) {
+			t.Fatalf("metadata representation missing %s: %s", want, payload)
+		}
+	}
+
+}
+
+func TestWorkerSessionObservationMetadataMappingKeepsLegacyAbsent(t *testing.T) {
+	t.Parallel()
+	legacy := WorkerSessionObservationToAPI(workersessions.Observation{})
+	if legacy.Requester != nil || legacy.Correlation != nil || legacy.Labels != nil {
+		t.Fatalf("legacy metadata invented: %+v", legacy)
+	}
+	payload, err := json.Marshal(legacy)
+	if err != nil || !strings.Contains(string(payload), `"requester":null`) || strings.Contains(string(payload), `"correlation":`) || strings.Contains(string(payload), `"labels":`) {
+		t.Fatalf("legacy representation = %s, %v", payload, err)
+	}
+}

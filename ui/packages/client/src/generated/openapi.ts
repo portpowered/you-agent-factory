@@ -1770,6 +1770,20 @@ export interface components {
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Recorded requester, when verified at admission. Null or absent when no requester was recorded. */
+      requester?: {
+        /** @enum {string} */
+        kind: WorkerSessionObservationRequesterKind;
+        workerSessionId: string;
+        workId?: string;
+      } | null;
+      /** @description Work and Factory Session identities recorded at admission, when known. */
+      correlation?: {
+        workId?: string;
+        factorySessionId?: string;
+      };
+      /** @description Descriptive labels recorded at admission. */
+      labels?: string[];
       /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
       direct: boolean;
       /** @description Explicit Factory Session scope used for this observation. */
@@ -10693,6 +10707,11 @@ export const WorkerSessionControlResponseState = {
 } as const;
 export type WorkerSessionControlResponseState =
   (typeof WorkerSessionControlResponseState)[keyof typeof WorkerSessionControlResponseState];
+export const WorkerSessionObservationRequesterKind = {
+  WORKER_SESSION: "WORKER_SESSION",
+} as const;
+export type WorkerSessionObservationRequesterKind =
+  (typeof WorkerSessionObservationRequesterKind)[keyof typeof WorkerSessionObservationRequesterKind];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",

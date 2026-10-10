@@ -1563,6 +1563,11 @@ const (
 	WorkerSessionObservationRecordingHealthIncomplete WorkerSessionObservationRecordingHealth = "INCOMPLETE"
 )
 
+// Defines values for WorkerSessionObservationRequesterKind.
+const (
+	WORKERSESSION WorkerSessionObservationRequesterKind = "WORKER_SESSION"
+)
+
 // Defines values for WorkerSessionObservationState.
 const (
 	WorkerSessionObservationStateCanceled   WorkerSessionObservationState = "CANCELED"
@@ -9246,6 +9251,12 @@ type WorkerSessionObservation struct {
 	// ContinuationHeadWorkerSessionId Newest validated Worker Session in this continuation chain. Omitted when the chain cannot be resolved.
 	ContinuationHeadWorkerSessionId *string `json:"continuationHeadWorkerSessionId,omitempty"`
 
+	// Correlation Work and Factory Session identities recorded at admission, when known.
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+
 	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
 	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
@@ -9257,6 +9268,9 @@ type WorkerSessionObservation struct {
 	// FactorySessionId Explicit Factory Session scope used for this observation.
 	FactorySessionId *string               `json:"factorySessionId,omitempty"`
 	Failure          *WorkerSessionFailure `json:"failure,omitempty"`
+
+	// Labels Descriptive labels recorded at admission.
+	Labels *[]string `json:"labels,omitempty"`
 
 	// Model Model identifier resolved for the provider invocation, when recorded.
 	Model *string                       `json:"model,omitempty"`
@@ -9280,6 +9294,13 @@ type WorkerSessionObservation struct {
 
 	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
 	RecordingHealthReason *string `json:"recordingHealthReason,omitempty"`
+
+	// Requester Recorded requester, when verified at admission. Null or absent when no requester was recorded.
+	Requester *struct {
+		Kind            WorkerSessionObservationRequesterKind `json:"kind"`
+		WorkId          *string                               `json:"workId,omitempty"`
+		WorkerSessionId string                                `json:"workerSessionId"`
+	} `json:"requester"`
 
 	// Revivable Whether the validated continuation head can currently admit a direct successor using an available exact provider reference.
 	Revivable *bool                         `json:"revivable,omitempty"`
@@ -9318,6 +9339,9 @@ type WorkerSessionObservationDurationBasis string
 
 // WorkerSessionObservationRecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
 type WorkerSessionObservationRecordingHealth string
+
+// WorkerSessionObservationRequesterKind defines model for WorkerSessionObservation.Requester.Kind.
+type WorkerSessionObservationRequesterKind string
 
 // WorkerSessionObservationState defines model for WorkerSessionObservation.State.
 type WorkerSessionObservationState string

@@ -213,6 +213,16 @@ type listJSONResponse struct {
 }
 
 type listJSONObservation struct {
+	Requester *struct {
+		Kind            factoryapi.WorkerSessionObservationRequesterKind `json:"kind"`
+		WorkId          *string                                          `json:"workId,omitempty"`
+		WorkerSessionId string                                           `json:"workerSessionId"`
+	} `json:"requester"`
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+	Labels                          *[]string                                           `json:"labels,omitempty"`
 	Revivable                       *bool                                               `json:"revivable,omitempty"`
 	ContinuationHeadWorkerSessionID *string                                             `json:"continuationHeadWorkerSessionId,omitempty"`
 	Provider                        *string                                             `json:"provider,omitempty"`

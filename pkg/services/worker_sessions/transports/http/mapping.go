@@ -657,12 +657,33 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		Parse:                    workerSessionParseDiagnosticsToAPI(observation.Parse),
 	}
 	mapWorkerSessionIdentity(&result, observation)
+	mapWorkerSessionMetadata(&result, observation)
 	mapWorkerSessionResolvedFacts(&result, observation)
 	mapWorkerSessionProvider(&result, observation)
 	mapWorkerSessionTiming(&result, observation)
 	mapWorkerSessionUsage(&result, observation)
 	mapWorkerSessionFailure(&result, observation)
 	return result
+}
+
+func mapWorkerSessionMetadata(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {
+	if requester := observation.Requester; requester != nil {
+		result.Requester = &struct {
+			Kind            factoryapi.WorkerSessionObservationRequesterKind `json:"kind"`
+			WorkId          *string                                          `json:"workId,omitempty"`
+			WorkerSessionId string                                           `json:"workerSessionId"`
+		}{factoryapi.WorkerSessionObservationRequesterKind(requester.Kind), stringPointer(requester.WorkID), requester.WorkerSessionID}
+	}
+	if correlation := observation.Correlation; correlation != nil {
+		result.Correlation = &struct {
+			FactorySessionId *string `json:"factorySessionId,omitempty"`
+			WorkId           *string `json:"workId,omitempty"`
+		}{stringPointer(correlation.FactorySessionID), stringPointer(correlation.WorkID)}
+	}
+	if observation.Labels != nil {
+		labels := append([]string{}, observation.Labels...)
+		result.Labels = &labels
+	}
 }
 
 func mapWorkerSessionIdentity(result *factoryapi.WorkerSessionObservation, observation workersessions.Observation) {

@@ -219,6 +219,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		}
 	}
 	return listJSONObservation{
+		Requester: session.Requester, Correlation: session.Correlation, Labels: session.Labels,
 		Revivable: session.Revivable, ContinuationHeadWorkerSessionID: session.ContinuationHeadWorkerSessionId,
 		Provider: session.Provider, PredecessorWorkerSessionID: session.PredecessorWorkerSessionId, SuccessorWorkerSessionID: session.SuccessorWorkerSessionId,
 		AttemptID: session.AttemptId, Direct: session.Direct, DurationBasis: session.DurationBasis, DurationMillis: session.DurationMillis,
@@ -263,6 +264,8 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		provider, kind, id = session.ProviderSession.Provider, session.ProviderSession.Kind, session.ProviderSession.Id
 	}
 	fields := []struct{ label, value string }{
+		{"Requester", requesterDisplay(session)},
+		{"Correlation", correlationDisplay(session)}, {"Labels", labelsDisplay(session)},
 		{"Worker Session ID", session.WorkerSessionId}, {"Direct", fmt.Sprintf("%t", session.Direct)}, {"Provider", provider}, {"Kind", kind}, {"Provider Session ID", id},
 		{"Model", stringOrDash(session.Model)}, {"Reasoning Effort", stringOrDash(session.ReasoningEffort)},
 		{"Predecessor Worker Session ID", stringOrDash(session.PredecessorWorkerSessionId)}, {"Successor Worker Session ID", stringOrDash(session.SuccessorWorkerSessionId)},
@@ -279,6 +282,31 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		}
 	}
 	return nil
+}
+
+func requesterDisplay(session factoryapi.WorkerSessionObservation) string {
+	if session.Requester == nil {
+		return "-"
+	}
+	value := session.Requester.WorkerSessionId
+	if session.Requester.WorkId != nil {
+		value += " (Work: " + *session.Requester.WorkId + ")"
+	}
+	return value
+}
+
+func correlationDisplay(session factoryapi.WorkerSessionObservation) string {
+	if session.Correlation == nil {
+		return "-"
+	}
+	return "Work: " + stringOrDash(session.Correlation.WorkId) + "; Factory Session: " + stringOrDash(session.Correlation.FactorySessionId)
+}
+
+func labelsDisplay(session factoryapi.WorkerSessionObservation) string {
+	if session.Labels == nil {
+		return "-"
+	}
+	return joinOrDash(*session.Labels)
 }
 
 func optionalTerminalCause(cause *factoryapi.WorkerSessionObservationTerminalCause) string {
