@@ -1622,6 +1622,113 @@ func TestRuntimeMetricsRetentionPreservesOrphanMarkerOnFailureAndReapsAfterRecov
 	}
 }
 
+// Marker cleanup never removes customer content or traverses a replacement
+// directory. Repairing the selected path must permit the same owner to recover.
+func TestRuntimeMetricsRetentionProtectsUnsafeMarkerPathsAndRecovers(t *testing.T) {
+	for _, replacement := range []string{"nonempty marker", "marker directory", "claims directory file"} {
+		t.Run(replacement, func(t *testing.T) {
+			t.Parallel()
+			assertUnsafeMarkerRecovery(t, replacement)
+		})
+	}
+}
+
+func assertUnsafeMarkerRecovery(t *testing.T, replacement string) {
+	t.Helper()
+	root, retained, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+	expired := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "expired-runtime-expired", 7)
+	selected, contentPath, diagnostic := replaceRetentionMarkerPath(t, replacement, marker)
+	rootLock, artifactLock, markerLock := &metricsTestCloser{}, &metricsTestCloser{}, &metricsTestCloser{}
+	coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaim: artifactLock, tryClaimMarker: markerLock}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, func() time.Time {
+		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	}, coordination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
+	report, err := retention.Sweep(t.Context(), request)
+	assertUnsafeMarkerReport(t, report, err, selected, diagnostic)
+	if rootLock.closed != 1 || artifactLock.closed != 1 || markerLock.closed != 0 {
+		t.Fatalf("unsafe releases root=%d artifact=%d marker=%d, want 1/1/0", rootLock.closed, artifactLock.closed, markerLock.closed)
+	}
+	assertRetentionPathAbsent(t, expired, "independently pruned peer")
+	assertRetentionPreservedContent(t, contentPath, "replacement customer content")
+	assertRetentionPreservedContent(t, retained, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+	repairRetentionMarkerPath(t, replacement, marker, contentPath)
+	report, err = retention.Sweep(t.Context(), request)
+	if err != nil || len(report.Failures) != 0 || report.Removed.Files != 0 ||
+		report.Before != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) || report.After != report.Before {
+		t.Fatalf("recovered marker sweep = %#v, %v", report, err)
+	}
+	if rootLock.closed != 2 || artifactLock.closed != 1 || markerLock.closed != 1 {
+		t.Fatalf("recovery releases root=%d artifact=%d marker=%d, want 2/1/1", rootLock.closed, artifactLock.closed, markerLock.closed)
+	}
+	assertRetentionPathAbsent(t, marker, "recovered zero-byte orphan marker")
+	assertRetentionPreservedContent(t, retained, "mmmmmmmmm")
+	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+}
+
+func assertUnsafeMarkerReport(t *testing.T, report RuntimeMetricsRetentionReport, err error, selected, diagnostic string) {
+	t.Helper()
+	if err != nil || report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 16}) ||
+		report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) ||
+		report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) ||
+		report.Failed.Files != 0 || report.Protected.Files != 0 {
+		t.Fatalf("unsafe marker sweep = %#v, %v", report, err)
+	}
+	if len(report.Failures) != 1 || report.Failures[0].Path != selected || report.Failures[0].Error.Error() != diagnostic {
+		t.Fatalf("unsafe marker diagnostic = %#v, want %q at %q", report.Failures, diagnostic, selected)
+	}
+}
+
+func replaceRetentionMarkerPath(t *testing.T, replacement, marker string) (selected, contentPath, diagnostic string) {
+	t.Helper()
+	selected, contentPath = marker, marker
+	diagnostic = "claim marker is not a zero-byte regular file"
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	switch replacement {
+	case "marker directory":
+		if err := os.Mkdir(marker, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		contentPath = filepath.Join(marker, "customer.txt")
+	case "claims directory file":
+		selected, contentPath = filepath.Dir(marker), filepath.Dir(marker)
+		diagnostic = "claim marker path is not a directory"
+		if err := os.Remove(selected); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(contentPath, []byte("replacement customer content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return selected, contentPath, diagnostic
+}
+
+func repairRetentionMarkerPath(t *testing.T, replacement, marker, contentPath string) {
+	t.Helper()
+	// Delete only explicitly created scenario-owned paths, after preservation
+	// assertions. Never recursively remove the protected replacement.
+	if err := os.Remove(contentPath); err != nil {
+		t.Fatal(err)
+	}
+	if replacement == "marker directory" {
+		if err := os.Remove(marker); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(marker), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func installOrphanMarkerRecoveryFixture(t *testing.T) (root, artifact, marker, unknown string) {
 	t.Helper()
 	root = t.TempDir()
