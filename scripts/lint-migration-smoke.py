@@ -749,6 +749,7 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
           " return &Store{logger: logger, topics: make(map[string]*topicState)}\n}\n"
           "func (s *Store) Observe() { s.logger.Observe() }\n"
           "func (s *Store) Topic() { s.topics[\"topic\"] = &topicState{Values: make(map[string]string)} }\n" +
+          "func NewGeneric[T any](value T, logger logging.Logger) *Store { _ = value; return &Store{logger: logger} }\n" +
           "func NewPeer(peer events.Service) *Store {\n" +
           (" if peer == nil { return nil }\n" if seeded else "") +
           " return &Store{peer: peer}\n}\n"
@@ -757,7 +758,7 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
           "func (s *Store) View() { s.PeerView(\"scope\") }\n" +
           ("func (s *Store) UsePeer() { if s.peer != nil { s.peer.Observe() }; s.Peer() }\n"
            "func (s *Store) EscapePeer() any { return s.Peer }\n" if seeded else "") +
-          ("func Operation(logger logging.Logger) { NewWithRetention(0, logger) }\n" if seeded else ""))
+          ("func Operation(logger logging.Logger) { NewWithRetention(0, logger); NewGeneric(\"scope\", logger) }\n" if seeded else ""))
     write(root, events + "/wire/provider.go", "package wire\n" +
           f'import logging "{module}/pkg/platform/logging"\n' +
           f'import events "{module}/{events}"\n' +
@@ -773,6 +774,13 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
           "func Scoped(view *View) { view.PeerView(\"scope\") }\n" +
           ("func Use(view *View) { view.Peer() }\n"
            "func Escape(view *View) any { return view.Peer }\n" if seeded else ""))
+    write(root, events + "/internal/consumer/dot.go", "package consumer\n" +
+          (f'import . "{module}/{store}"\n' if seeded else "") +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          "func Shadow(logger logging.Logger) {\n"
+          " NewWithRetention := func(_ int, _ logging.Logger) int { return 1 }\n"
+          " _ = NewWithRetention(0, logger)\n}\n" +
+          ("func Dot(logger logging.Logger) { NewWithRetention(0, logger) }\n" if seeded else ""))
     # Keep the operational caller in the existing private consumer package;
     # public service roots own contracts rather than floating operations.
     write(root, "pkg/services/unrelated/internal/consumer/events.go", "package consumer\n" +
@@ -785,6 +793,8 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
         ("repolint", "service-construction: pkg/services/unrelated/internal/consumer -> pkg/services/chat_sessions/wire.NewCatalog"),
         ("repolint", "service-subpackage: pkg/services/unrelated/internal/consumer -> pkg/services/chat_sessions/wire"),
         ("repolint", f"{module}/{store}.Operation->{module}/{store}.NewWithRetention"),
+        ("repolint", f"{module}/{store}.Operation->{module}/{store}.NewGeneric"),
+        ("repolint", f"{module}/{events}/internal/consumer.Dot->{module}/{store}.NewWithRetention"),
         ("repolint", f"{module}/pkg/services/unrelated/internal/consumer.EventsOperation->{module}/{events}/wire.NewService"),
         ("repolint", f"service-construction: pkg/services/unrelated/internal/consumer -> {events}/wire.NewService"),
         ("repolint", f"service-subpackage: pkg/services/unrelated/internal/consumer -> {events}/wire"),
@@ -837,9 +847,9 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         issues = fixtures.lint(root, "seeded", expected_issues)
         complete_issues = fixtures.lint(root, "seeded-complete", expected_issues, tags=complete_tags)
         construction_issues = [issue for issue in issues if "registered-construction:" in issue["Text"]]
-        assert len(construction_issues) == 5, construction_issues
+        assert len(construction_issues) == 7, construction_issues
         complete_construction = [issue for issue in complete_issues if "registered-construction:" in issue["Text"]]
-        assert len(complete_construction) == 5, complete_construction
+        assert len(complete_construction) == 7, complete_construction
         expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
         for name, diagnostic in expected.items():
             assert any((issue["Pos"]["Filename"].replace("\\", "/") == name

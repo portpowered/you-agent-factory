@@ -123,6 +123,13 @@ consumer's promoted getter call and escape must retain the original qualified
 Store method identity through compiler object facts. The fixture adds no production constructor or owner
 classification; it proves the existing registry's typed guard/getter rules.
 
+The same production-registry fixtures distinguish an unlisted generic Store
+constructor and a dot-imported constructor call from a local function shadow
+with the same name. Generic and dot-imported calls retain the original qualified
+constructor identity; the unrelated shadow remains lawful. The plugin smoke
+controls seed and recover these calls in both tag configurations. Execution
+evidence, rather than fixture presence, determines the plugin proof status.
+
 Final inventory auditing must distinguish retired construction paths from
 surviving requiredness guards. Provider Sessions' captured-only `service.New`
 still checks its required Recordings reader. Its HTTP `NewAdapter`, `Details`

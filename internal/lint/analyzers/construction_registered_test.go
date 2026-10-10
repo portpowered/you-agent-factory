@@ -273,6 +273,7 @@ func (s *Store) Observe() {
 }
 func (s *Store) Topic() { s.topics["topic"] = &topicState{values: make(map[string]string)} }
 func NewAlternate(logger logging.Logger) *Store { return &Store{logger: logger} }
+func NewGeneric[T any](value T, logger logging.Logger) *Store { _ = value; return &Store{logger: logger} }
 func NewPeer(peer events.Service) *Store {
  if peer == nil { return nil } // want "required-dependency-guard:.*NewPeer"
  return &Store{peer: peer}
@@ -288,6 +289,7 @@ func (s *Store) View() { s.PeerView("scope") }
 func Operation(logger logging.Logger) {
  NewWithRetention(0, logger) // want "registered-construction:.*Operation.*NewWithRetention"
  NewAlternate(logger) // want "registered-construction:.*Operation.*NewAlternate"
+ NewGeneric("scope", logger) // want "registered-construction:.*Operation.*NewGeneric"
 }
 `,
 		module + "/pkg/services/events/wire/provider.go": `package wire
@@ -307,6 +309,17 @@ func Use(view *View) {
  view.PeerView("scope")
 }
 func Escape(view *View) any { return view.Peer } // want "unresolved-service-getter-reference:.*Escape.*\\(Store\\).Peer"
+`,
+		module + "/pkg/services/events/internal/consumer/dot.go": `package consumer
+import . "github.com/portpowered/infinite-you/pkg/services/events/internal/service"
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
+func Dot(logger logging.Logger) {
+ NewWithRetention(0, logger) // want "registered-construction:.*Dot.*events/internal/service.NewWithRetention"
+}
+func Shadow(logger logging.Logger) {
+ NewWithRetention := func(_ int, _ logging.Logger) int { return 1 }
+ _ = NewWithRetention(0, logger)
+}
 `,
 		module + "/pkg/services/other/consumer.go": `package other
 import "github.com/portpowered/infinite-you/pkg/platform/logging"
