@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -572,6 +573,8 @@ func TestDefaultWorkTypeResolverPreservesSessionAdmissionPolicy(t *testing.T) {
 type workerSessionControlRouterServiceFake struct {
 	workersessions.Service
 	id           string
+	getError     error
+	getCalls     int
 	controlCalls int
 }
 
@@ -579,6 +582,10 @@ func (service *workerSessionControlRouterServiceFake) Get(
 	_ context.Context,
 	request workersessions.GetRequest,
 ) (workersessions.Session, error) {
+	service.getCalls++
+	if service.getError != nil {
+		return workersessions.Session{}, service.getError
+	}
 	if request.ID != service.id {
 		return workersessions.Session{}, workersessions.ErrSessionNotFound
 	}
@@ -629,6 +636,61 @@ func TestWorkerSessionControlRouterKeepsUnknownIdentityNotFound(t *testing.T) {
 	}
 	if owner.controlCalls != 0 {
 		t.Fatalf("unknown identity caused %d control calls, want zero", owner.controlCalls)
+	}
+}
+
+// Direct router proof controls only the discovery and registry read boundaries;
+// it neither constructs a process nor simulates Worker execution.
+func TestWorkerSessionControlRouterRejectsReadFailureAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"source discovery", "registry inspection"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			cause := fmt.Errorf("%s: %w", phase, fs.ErrPermission)
+			owner := &workerSessionControlRouterServiceFake{id: "target-session"}
+			peer := &workerSessionControlRouterServiceFake{id: "target-session"}
+			archived := &workerSessionControlRouterServiceFake{id: "target-session"}
+			var discoveryError error
+			if phase == "source discovery" {
+				discoveryError = cause
+			} else {
+				owner.getError = cause
+			}
+			router := workerSessionControlRouter{
+				archived: archived,
+				sources: func(context.Context) ([]workersessions.Service, error) {
+					return []workersessions.Service{nil, owner, peer}, discoveryError
+				},
+			}
+			request := workersessions.ControlRequest{ID: owner.id}
+			result, err := router.Cancel(t.Context(), request)
+			if !errors.Is(err, cause) || !errors.Is(err, fs.ErrPermission) || result.Session.ID != "" || result.Outcome != "" {
+				t.Fatalf("rejected control = (%#v, %v), want original permission failure and no outcome", result, err)
+			}
+			if [4]int{owner.controlCalls, peer.getCalls, peer.controlCalls, archived.controlCalls} != [4]int{} {
+				t.Fatal("read failure issued a control or consulted another identity owner")
+			}
+			wantReads := 0
+			if phase == "registry inspection" {
+				wantReads = 1
+			}
+			if owner.getCalls != wantReads {
+				t.Fatalf("owner reads = %d, want %d", owner.getCalls, wantReads)
+			}
+			discoveryError, owner.getError = nil, nil
+			result, err = router.Cancel(t.Context(), request)
+			assertWorkerSessionRouterAppliedCancellation(t, result, err, owner.id)
+			if [5]int{owner.getCalls, owner.controlCalls, peer.getCalls, peer.controlCalls, archived.controlCalls} != [5]int{wantReads + 1, 1, 0, 0, 0} {
+				t.Fatal("recovery did not control the exact owner exclusively")
+			}
+		})
+	}
+}
+
+func assertWorkerSessionRouterAppliedCancellation(t *testing.T, result workersessions.ControlResult, err error, id string) {
+	t.Helper()
+	if err != nil || result.Session.ID != id || result.Session.State != workersessions.StateCanceled || result.Action != workersessions.ControlActionCancel || result.Outcome != workersessions.ControlOutcomeApplied {
+		t.Fatalf("recovered control = (%#v, %v), want applied cancellation of selected owner", result, err)
 	}
 }
 
