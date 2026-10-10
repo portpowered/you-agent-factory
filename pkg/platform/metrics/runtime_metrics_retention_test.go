@@ -872,6 +872,82 @@ type retentionFailureFileSystem struct {
 	failPath   string
 	lstatErr   error
 	readDirErr error
+	walkErr    error
+}
+
+func (filesystem *retentionFailureFileSystem) WalkDir(root string, visit fs.WalkDirFunc) error {
+	return filesystem.Local.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if path == filesystem.failPath && filesystem.walkErr != nil {
+			return visit(path, entry, filesystem.walkErr)
+		}
+		return visit(path, entry, walkErr)
+	})
+}
+
+// An incomplete inventory must preserve orphan claims, while independently
+// inspected expired artifacts remain eligible. Retrying the same component
+// after the filesystem recovers must remove only safe metrics and markers.
+func TestRuntimeMetricsRetentionIncompleteInventoryPreservesClaimsAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"artifact inspection", "partial walk"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			root, healthy, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+			selected := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "selected-runtime-selected", 11)
+			peer := writeRetentionArtifact(t, root, "2026/07/02", "010000.000000000", "peer-runtime-peer", 7)
+			cause := errors.New("selected inventory operation rejected")
+			filesystem := &retentionFailureFileSystem{Local: platformfilesystem.Local{}, failPath: selected}
+			if failure == "artifact inspection" {
+				filesystem.lstatErr = cause
+			} else {
+				filesystem.walkErr = cause
+			}
+			rootLock, claim, markerLock := &metricsTestCloser{}, &metricsTestCloser{}, &metricsTestCloser{}
+			coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaim: claim, tryClaimMarker: markerLock}
+			retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+				return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+			}, coordination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
+			report, err := retention.Sweep(t.Context(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertIncompleteRetentionInventory(t, report, selected, marker, cause)
+			if rootLock.closed != 1 || claim.closed != 1 || markerLock.closed != 0 {
+				t.Fatalf("failure releases root=%d claim=%d marker=%d, want 1/1/0", rootLock.closed, claim.closed, markerLock.closed)
+			}
+			assertRetentionPathAbsent(t, peer, "independently expired peer")
+			assertRetentionPathExists(t, marker, "orphan claim after incomplete inventory")
+			assertRetentionPreservedContent(t, selected, "mmmmmmmmmmm")
+			assertRetentionPreservedContent(t, healthy, "mmmmmmmmm")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+			filesystem.failPath = ""
+			report, err = retention.Sweep(t.Context(), request)
+			if err != nil || len(report.Failures) != 0 || report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 11}) || report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) {
+				t.Fatalf("recovered sweep = %#v, %v", report, err)
+			}
+			if rootLock.closed != 2 || claim.closed != 2 || markerLock.closed != 1 {
+				t.Fatalf("recovery releases root=%d claim=%d marker=%d, want 2/2/1", rootLock.closed, claim.closed, markerLock.closed)
+			}
+			assertRetentionPathAbsent(t, selected, "recovered expired artifact")
+			assertRetentionPathAbsent(t, marker, "recovered orphan claim")
+			assertRetentionPreservedContent(t, healthy, "mmmmmmmmm")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+		})
+	}
+}
+
+func assertIncompleteRetentionInventory(t *testing.T, report RuntimeMetricsRetentionReport, selected, marker string, cause error) {
+	t.Helper()
+	if report.Failed.Files != 1 || report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) || len(report.Failures) != 2 {
+		t.Fatalf("incomplete sweep = %#v", report)
+	}
+	if report.Failures[0].Path != selected || !errors.Is(report.Failures[0].Error, cause) || report.Failures[1].Path != filepath.Dir(marker) || !strings.Contains(report.Failures[1].Error.Error(), "inventory is incomplete") {
+		t.Fatalf("incomplete inventory diagnostics = %#v", report.Failures)
+	}
 }
 
 func (filesystem *retentionFailureFileSystem) Remove(path string) error {
