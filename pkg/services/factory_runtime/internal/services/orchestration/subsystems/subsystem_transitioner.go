@@ -143,6 +143,7 @@ func (t *TransitionerSubsystem) Execute(ctx context.Context, snapshot *interface
 	var mutations []interfaces.MarkingMutation
 	var generatedBatches []work.GeneratedSubmissionBatch
 	var completedDispatches []interfaces.CompletedDispatch
+	var stateChanges []work.WorkStateChangeRecord
 	for i := range results {
 		muts, completedDispatch, batchRecords, err := t.mapToCorrespondingTokenMutations(ctx, snapshot, &results[i])
 		if err != nil {
@@ -152,6 +153,7 @@ func (t *TransitionerSubsystem) Execute(ctx context.Context, snapshot *interface
 		mutations = append(mutations, muts...)
 		generatedBatches = append(generatedBatches, batchRecords...)
 		completedDispatches = append(completedDispatches, completedDispatch)
+		stateChanges = append(stateChanges, t.dispatchStateChanges(snapshot, consumedTokensForResult(snapshot, &results[i]), muts)...)
 	}
 
 	if len(mutations) == 0 && len(completedDispatches) == 0 {
@@ -162,7 +164,51 @@ func (t *TransitionerSubsystem) Execute(ctx context.Context, snapshot *interface
 		Mutations:           mutations,
 		GeneratedBatches:    generatedBatches,
 		CompletedDispatches: completedDispatches,
+		WorkStateChanges:    stateChanges,
 	}, nil
+}
+
+// Dispatch consumes input tokens before routing their replacements. Match the
+// actual output mutation to that input identity, never to generic worker output.
+func (t *TransitionerSubsystem) dispatchStateChanges(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], consumed []factorytoken.Token, mutations []interfaces.MarkingMutation) []work.WorkStateChangeRecord {
+	inputs := make(map[string]factorytoken.Token, len(consumed))
+	for _, token := range consumed {
+		inputs[token.Color.WorkID] = token
+	}
+	var changes []work.WorkStateChangeRecord
+	for _, mutation := range mutations {
+		var before factorytoken.Token
+		switch mutation.Type {
+		case interfaces.MutationCreate:
+			if mutation.NewToken == nil {
+				continue
+			}
+			before = inputs[mutation.NewToken.Color.WorkID]
+			if before.Color.WorkTypeID != mutation.NewToken.Color.WorkTypeID {
+				continue
+			}
+		case interfaces.MutationMove:
+			if token := snapshot.Marking.Tokens[mutation.TokenID]; token != nil {
+				before = *token
+			}
+		default:
+			continue
+		}
+		if before.Color.DataType != factorytoken.DataTypeWork || before.Color.WorkID == "" {
+			continue
+		}
+		from, to := t.netDefinition.Places[before.PlaceID], t.netDefinition.Places[mutation.ToPlace]
+		workType := t.netDefinition.WorkTypes[before.Color.WorkTypeID]
+		if from == nil || to == nil || workType == nil || from.TypeID != to.TypeID || from.State == to.State {
+			continue
+		}
+		changes = append(changes, work.WorkStateChangeRecord{
+			WorkID: before.Color.WorkID, WorkTypeID: before.Color.WorkTypeID, WorkTypeName: workType.Name,
+			FromState: from.State, ToState: to.State, Source: work.WorkStateChangeSourceDispatch,
+			Reason: mutation.Reason,
+		})
+	}
+	return changes
 }
 
 // mapToCorrespondingTokenMutations handles a single WorkResult: routes tokens via the appropriate

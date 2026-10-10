@@ -112,6 +112,8 @@ func assertPackagedGoalEventOrder(
 	previousSequence := -1
 	admissionSequence := -1
 	terminalSequence := -1
+	dispatchSequence := -1
+	dispatchID := ""
 	for index, event := range ordered {
 		if (event.Type == factoryapi.FactoryEventTypeWorkRequest || event.Type == factoryapi.FactoryEventTypeWorkStateChange) &&
 			(event.Context.SessionId == nil || *event.Context.SessionId != sessionID) {
@@ -153,6 +155,10 @@ func assertPackagedGoalEventOrder(
 					t.Fatalf("multiple correlated terminal WORK_STATE_CHANGE events for Work %q", workID)
 				}
 				terminalSequence = sequence
+				if payload.Source != factoryapi.WorkStateChangeSourceDispatch || payload.FromState == payload.ToState ||
+					payload.FromPlaceId == payload.ToPlaceId || payload.TriggerWorkId != nil || !crossEventContainsWorkID(event, workID) {
+					t.Fatalf("terminal relocation lost dispatch source or Work identity: %#v", payload)
+				}
 			}
 		case factoryapi.FactoryEventTypeDispatchResponse:
 			payload, err := event.Payload.AsDispatchResponseEventPayload()
@@ -161,10 +167,19 @@ func assertPackagedGoalEventOrder(
 			}
 			if crossEventContainsWorkID(event, workID) &&
 				(payload.Outcome == factoryapi.WorkOutcomeAccepted || payload.Outcome == factoryapi.WorkOutcomeFailed) {
-				if terminalSequence >= 0 {
-					t.Fatalf("multiple correlated terminal events for Work %q", workID)
+				if dispatchSequence >= 0 {
+					t.Fatalf("multiple correlated terminal dispatch results for Work %q", workID)
 				}
-				terminalSequence = sequence
+				if event.Context.DispatchId == nil || *event.Context.DispatchId == "" ||
+					payload.OutputWork == nil || len(*payload.OutputWork) != 1 {
+					t.Fatalf("terminal dispatch lost identity/output: %#v", event)
+				}
+				output := (*payload.OutputWork)[0]
+				if output.WorkId == nil || *output.WorkId != workID || output.State == nil || output.State.Name != wantTerminalState {
+					t.Fatalf("terminal dispatch output=%#v, want Work %q state %q", output, workID, wantTerminalState)
+				}
+				dispatchID = *event.Context.DispatchId
+				dispatchSequence = sequence
 			}
 		}
 	}
@@ -176,6 +191,9 @@ func assertPackagedGoalEventOrder(
 	}
 	if admissionSequence >= terminalSequence {
 		t.Fatalf("Work %q admission sequence=%d terminal sequence=%d, want admission first", workID, admissionSequence, terminalSequence)
+	}
+	if dispatchID == "" || dispatchSequence <= admissionSequence || dispatchSequence >= terminalSequence {
+		t.Fatalf("Work %q admission=%d dispatch=%d relocation=%d, want separate ordered facts", workID, admissionSequence, dispatchSequence, terminalSequence)
 	}
 }
 

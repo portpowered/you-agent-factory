@@ -31,7 +31,7 @@ func TestHandlerFromRoot_ListFactorySessionsDecodesScopeBeforeRootInvocation(t *
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.ListFactorySessions(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions?scope=persisted", nil), factoryapi.ListFactorySessionsParams{Scope: &persistedScope})
@@ -68,7 +68,7 @@ func TestHandlerFromRoot_ListFactorySessionsInvalidScopeReturnsBadRequestWithout
 			return nil, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.ListFactorySessions(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions?scope=workspace", nil), factoryapi.ListFactorySessionsParams{Scope: &unsupportedScope})
@@ -105,7 +105,7 @@ func TestHandlerFromRoot_GetFactorySessionEncodesRootProjectionToAPI(t *testing.
 			},
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil), "session-alpha")
@@ -129,7 +129,7 @@ func TestHandlerFromRoot_GetFactorySessionNotFoundReturnsTypedErrorResponse(t *t
 	t.Parallel()
 
 	root := &httpSessionsRootFake{}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session", nil), "missing-session")

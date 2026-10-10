@@ -49,7 +49,7 @@ func TestCanonicalDirectJavaScriptRunUsesProcessSessions(t *testing.T) {
 	var disclosed bool
 	root := &directJavaScriptSessionsStub{}
 	op, err := NewDirectJavaScriptRunOperation(root, func() string { return "direct-id" },
-		func(factorysessions.Service, factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+		func(factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 			t.Fatal("HTTP host opened without API request")
 			return nil, nil
 		}, directJavaScriptPresentationStub{scope: factorysessions.DirectJavaScriptRunScope{Output: &output}},
@@ -86,11 +86,12 @@ func TestCanonicalDirectJavaScriptRunUsesProcessSessions(t *testing.T) {
 
 func TestCanonicalDirectJavaScriptHostedRunWaitsForHTTPReadiness(t *testing.T) {
 	var ready atomic.Bool
+	cancellation := &selectionCancellationStub{}
 	root := &directJavaScriptSessionsStub{ready: &ready}
 	op, err := NewDirectJavaScriptRunOperation(root, func() string { return "host-id" },
-		func(sessions factorysessions.Service, host factorysessions.RuntimeHostRequest, _ initializer.InvocationCancellation, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
-			if sessions != root || host.Port != 7437 {
-				t.Fatalf("host binding = (%T, %#v), want process root and selected port", sessions, host)
+		func(host factorysessions.RuntimeHostRequest, gotCancellation initializer.InvocationCancellation, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+			if host.Port != 7437 || gotCancellation != cancellation {
+				t.Fatalf("host binding = %#v, want selected port and cancellation", host)
 			}
 			return lifecycle.NewRunner(func(ctx context.Context) error {
 				ready.Store(true)
@@ -104,7 +105,7 @@ func TestCanonicalDirectJavaScriptHostedRunWaitsForHTTPReadiness(t *testing.T) {
 	}
 	err = op.Run(context.Background(), factorysessions.DirectJavaScriptRunRequest{
 		SourcePath: "workflow.js", Host: &factorysessions.RuntimeHostRequest{Port: 7437}, ScopeID: "test-scope",
-	}, nil, nil)
+	}, cancellation, nil)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestDirectJavaScriptRunCleansHostWhenLifecycleBuildFails(t *testing.T) {
 				return nil, testCase.buildErr
 			}
 			op, err := NewDirectJavaScriptRunOperation(root, func() string { return "failed-id" },
-				func(factorysessions.Service, factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+				func(factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 					return lifecycle.Functions{StopFunc: func(ctx context.Context) error {
 						if ctx.Err() != nil {
 							t.Fatal("host cleanup received a canceled context")

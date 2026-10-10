@@ -744,3 +744,12 @@ func (a *Assembly) BindHistoricalOpening(sessionID string, owner durableexecutio
 	}
 	return binder.BindHistoricalExecution(sessionID, owner), nil
 }
+
+// ReadSessionDetail drops engine-bearing context before publishing a detail read.
+func (a *Assembly) ReadSessionDetail(ctx context.Context, sessionID string) (factorysessions.SessionDetail, error) {
+	projection, err := a.GetFactorySession(ctx, sessionID)
+	if err != nil {
+		return factorysessions.SessionDetail{}, err
+	}
+	return factorysessions.SessionDetail{Session: projection.Context.Session, SessionID: projection.Context.FactorySessionID, NormalizedTarget: projection.Context.NormalizedTarget, Runtime: projection.Runtime}, nil
+}

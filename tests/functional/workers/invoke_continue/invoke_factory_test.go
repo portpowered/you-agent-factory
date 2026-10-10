@@ -232,24 +232,59 @@ func assertRequesterUnattributedFactory(t *testing.T, fixture *invokeContinuePac
 
 func assertRequesterFactoryListed(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, workID, sessionID string, observation api.WorkerSessionObservation) {
 	t.Helper()
-	list := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "list", "--session", sessionID, "--work-id", workID)
-	if err := fixture.process.Execute(list.Input); err != nil {
-		t.Fatal(err)
-	}
-	var rows api.ListWorkerSessionsResponse
-	decodeDirectWorkerSessionResult(t, list.Stdout(), &rows)
-	var selected []api.WorkerSessionObservation
-	for _, row := range rows.Sessions {
-		if row.WorkerSessionId == observation.WorkerSessionId {
-			selected = append(selected, row)
-		}
-	}
+	selected := requesterFactoryListSelection(t, fixture, scenario, ctx, workID, sessionID, observation.WorkerSessionId)
 	if len(selected) != 1 || !reflect.DeepEqual(selected[0].Requester, observation.Requester) || !reflect.DeepEqual(selected[0].Correlation, observation.Correlation) || !reflect.DeepEqual(selected[0].Labels, observation.Labels) {
 		got, _ := json.Marshal(selected)
 		want, _ := json.Marshal(observation)
 		t.Fatalf("CLI list lost exact Factory dispatch metadata: selected=%s want=%s", got, want)
 	}
 
+}
+
+// Workflow provider attempts can have no Work. That input selects the fleet
+// collection, whose bounded pages must be traversed despite concurrent peers.
+func requesterFactoryListSelection(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, workID, sessionID, workerID string) []api.WorkerSessionObservation {
+	t.Helper()
+	args := []string{"list", "--session", sessionID, "--work-id", workID}
+	if workID == "" {
+		args = []string{"list", "--scope", "factory", "--limit", "2"}
+	}
+	seen := make(map[string]bool)
+	for {
+		list := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, args...)
+		if err := fixture.process.Execute(list.Input); err != nil {
+			t.Fatal(err)
+		}
+		var page api.ListWorkerSessionsResponse
+		decodeDirectWorkerSessionResult(t, list.Stdout(), &page)
+		selected := requesterListedWorker(page.Sessions, workerID)
+		next := requesterFactoryListCursor(page, workID)
+		if len(selected) > 0 || next == "" {
+			return selected
+		}
+		if seen[next] {
+			t.Fatal("Factory fleet list repeated a pagination cursor")
+		}
+		seen[next] = true
+		args = []string{"list", "--scope", "factory", "--limit", "2", "--next-token", next}
+	}
+}
+
+func requesterListedWorker(rows []api.WorkerSessionObservation, workerID string) []api.WorkerSessionObservation {
+	var selected []api.WorkerSessionObservation
+	for _, row := range rows {
+		if row.WorkerSessionId == workerID {
+			selected = append(selected, row)
+		}
+	}
+	return selected
+}
+
+func requesterFactoryListCursor(page api.ListWorkerSessionsResponse, workID string) string {
+	if workID != "" || page.PaginationContext == nil || page.PaginationContext.NextToken == nil {
+		return ""
+	}
+	return *page.PaginationContext.NextToken
 }
 
 func requesterCorrelationAgrees(observation api.WorkerSessionObservation, workID, sessionID string) bool {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimehttpdispatch "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/dispatch"
 )
 
 func TestPlanDispatch_ForwardsDecodedFieldsToRoot(t *testing.T) {
@@ -25,7 +26,7 @@ func TestPlanDispatch_ForwardsDecodedFieldsToRoot(t *testing.T) {
 			}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpdispatch.NewHandler(fake)
 
 	body := strings.NewReader(`{
 		"dispatchId":"dispatch-1",
@@ -49,7 +50,7 @@ func TestPlanDispatch_ForwardsDecodedFieldsToRoot(t *testing.T) {
 		t.Fatalf("workIds = %#v, want [work-1 work-2]", got.WorkIDs)
 	}
 
-	var response runtimeDispatchPlanHTTPResponse
+	var response runtimehttpdispatch.RuntimeDispatchPlanHTTPResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestPlanDispatch_EncodesDuplicateIdempotentOutcome(t *testing.T) {
 			}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpdispatch.NewHandler(fake)
 
 	rec := httptest.NewRecorder()
 	adapter.PlanDispatch(
@@ -85,7 +86,7 @@ func TestPlanDispatch_EncodesDuplicateIdempotentOutcome(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	var response runtimeDispatchPlanHTTPResponse
+	var response runtimehttpdispatch.RuntimeDispatchPlanHTTPResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -108,7 +109,7 @@ func TestAcceptDispatchResult_ForwardsDecodedFieldsToRoot(t *testing.T) {
 			}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpdispatch.NewHandler(fake)
 
 	body := strings.NewReader(`{
 		"dispatchId":"dispatch-1",
@@ -127,7 +128,7 @@ func TestAcceptDispatchResult_ForwardsDecodedFieldsToRoot(t *testing.T) {
 		t.Fatalf("accept request = %#v, want decoded dispatch result fields", got)
 	}
 
-	var response runtimeDispatchPlanHTTPResponse
+	var response runtimehttpdispatch.RuntimeDispatchPlanHTTPResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestPlanDispatch_MapsTypedDispatchFailures(t *testing.T) {
 					return factoryruntime.PlanDispatchResult{}, tc.programmed
 				},
 			}
-			adapter := NewAdapter(fake)
+			adapter := runtimehttpdispatch.NewHandler(fake)
 			rec := httptest.NewRecorder()
 			adapter.PlanDispatch(
 				rec,
@@ -242,7 +243,7 @@ func TestAcceptDispatchResult_MapsTypedDispatchFailures(t *testing.T) {
 					return factoryruntime.AcceptDispatchResultResult{}, tc.programmed
 				},
 			}
-			adapter := NewAdapter(fake)
+			adapter := runtimehttpdispatch.NewHandler(fake)
 			rec := httptest.NewRecorder()
 			adapter.AcceptDispatchResult(
 				rec,
@@ -260,7 +261,7 @@ func TestAcceptDispatchResult_MapsTypedDispatchFailures(t *testing.T) {
 func TestPlanDispatch_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapter(&runtimeRootFake{})
+	adapter := runtimehttpdispatch.NewHandler(&runtimeRootFake{})
 	rec := httptest.NewRecorder()
 	adapter.PlanDispatch(rec, httptest.NewRequest(http.MethodPost, "/runtime/dispatch/plan", strings.NewReader("{")))
 	assertErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")

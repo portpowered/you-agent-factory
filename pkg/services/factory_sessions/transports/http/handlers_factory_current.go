@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
+func (s *AuthoringHandler) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	namedFactory, ok := s.loadCurrentFactory(w, r)
 	if !ok {
 		return
@@ -19,7 +19,7 @@ func (s *Server) GetCurrentFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, namedFactory)
 }
 
-func (s *Server) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *AuthoringHandler) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	definitions, ok := s.requireFactoryDefinitionAPI(w)
 	if !ok {
 		return
@@ -42,7 +42,7 @@ func (s *Server) GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Req
 	s.writeJSON(w, http.StatusOK, namedFactory)
 }
 
-func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, workstationName string) {
+func (s *AuthoringHandler) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, workstationName string) {
 	namedFactory, ok := s.loadCurrentFactoryBySession(w, r, sessionID)
 	if !ok {
 		return
@@ -64,7 +64,7 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w
 	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
 }
 
-func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, workstationName string) {
+func (s *AuthoringHandler) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, workstationName string) {
 	namedFactory, ok := s.loadCurrentFactoryBySession(w, r, sessionID)
 	if !ok {
 		return
@@ -99,7 +99,7 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
 }
 
-func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (factoryapi.Factory, bool) {
+func (s *AuthoringHandler) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (factoryapi.Factory, bool) {
 	namedFactory, err := s.currentFactory.GetCurrentNamedFactory(r.Context())
 	if err != nil {
 		switch {
@@ -115,7 +115,7 @@ func (s *Server) loadCurrentFactory(w http.ResponseWriter, r *http.Request) (fac
 	return namedFactory, true
 }
 
-func (s *Server) loadCurrentFactoryBySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) (factoryapi.Factory, bool) {
+func (s *AuthoringHandler) loadCurrentFactoryBySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) (factoryapi.Factory, bool) {
 	definitions, ok := s.requireFactoryDefinitionAPI(w)
 	if !ok {
 		return factoryapi.Factory{}, false
@@ -138,7 +138,7 @@ func (s *Server) loadCurrentFactoryBySession(w http.ResponseWriter, r *http.Requ
 	return namedFactory, true
 }
 
-func (s *Server) SaveCurrentFactoryBySessionId(
+func (s *AuthoringHandler) SaveCurrentFactoryBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
@@ -172,7 +172,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	s.writeJSON(w, http.StatusOK, saved)
 }
 
-func (s *Server) writeCurrentFactoryError(
+func (s *AuthoringHandler) writeCurrentFactoryError(
 	w http.ResponseWriter,
 	err error,
 	action string,

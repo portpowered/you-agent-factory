@@ -42,3 +42,12 @@ type SessionProjection struct {
 	Context ProjectionContext
 	Runtime RuntimeProjection
 }
+
+// SessionDetail contains only the detached values needed for session detail
+// and approval reads. Engine snapshots and observations stay in the owner.
+type SessionDetail struct {
+	Session          *ScopedLiveSessionSummary
+	SessionID        string
+	NormalizedTarget *RuntimeLogicalTarget
+	Runtime          RuntimeProjection
+}

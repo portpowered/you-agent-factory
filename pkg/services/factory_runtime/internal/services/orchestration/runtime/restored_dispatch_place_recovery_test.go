@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -18,6 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRestoreRestoredActiveDispatchResolvesUniqueCanonicalPlace(t *testing.T) {
@@ -986,5 +989,44 @@ func TestRestoreValidatorsReturnStructuralContext(t *testing.T) {
 				t.Fatalf("restore error = %v (%#v), want %s Work and place context", err, restore, tc.reason)
 			}
 		})
+	}
+}
+
+func TestHTTPRuntimeSelectedLoggerRecoveryPreservesScopeAndPeer(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.DebugLevel)
+	base := zap.New(core).With(zap.String("backend", "selected-runtime"))
+	for _, session := range []string{"session-one", "session-peer"} {
+		cfg := &runtimeConfig{
+			publicSessionID: session,
+			recordingID:     "recording-" + session,
+			logger:          logging.NewZapLogger(base.With(zap.String("runtime_id", "runtime-"+session)), false),
+		}
+		logRestoredWorkRecovery(cfg, restoredWorkRecovery{
+			failedCronDispatchIDs: map[string]string{"work-" + session: "dispatch-" + session},
+		})
+		// The selected backend remains usable after recovery returns, within the same scope.
+		cfg.logger.Info("recovery complete", "session_id", session)
+	}
+	entries := logs.All()
+	if len(entries) != 4 {
+		t.Fatalf("selected backend entries = %d, want 4", len(entries))
+	}
+	for i, session := range []string{"session-one", "session-peer"} {
+		warning := entries[i*2]
+		fields := warning.ContextMap()
+		if warning.Level != zap.WarnLevel || fields["event"] != "run.restore.disposition" ||
+			fields["backend"] != "selected-runtime" || fields["runtime_id"] != "runtime-"+session ||
+			fields["session_id"] != session || fields["recording_id"] != "recording-"+session ||
+			fields["work_id"] != "work-"+session || fields["dispatch_id"] != "dispatch-"+session {
+			t.Fatalf("recovery diagnostic = %#v", warning)
+		}
+		if len(fields) != 9 {
+			t.Fatalf("unexpected diagnostic fields: %#v", fields)
+		}
+		terminal := entries[i*2+1].ContextMap()
+		if terminal["session_id"] != session || terminal["runtime_id"] != "runtime-"+session {
+			t.Fatalf("recovery scope leaked to peer: %#v", terminal)
+		}
 	}
 }

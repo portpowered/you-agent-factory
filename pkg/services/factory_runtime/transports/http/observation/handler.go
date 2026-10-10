@@ -29,19 +29,11 @@ type SessionObserver interface {
 }
 
 // NewHandler binds observation to the already-constructed Runtime root.
-func NewHandler(root factoryruntime.Service) *Handler {
+func NewHandler(root factoryruntime.Service, sessions SessionObserver) *Handler {
 	if _, err := common.RequireRuntimeRoot(root); err != nil {
 		return nil
 	}
-	return &Handler{root: root}
-}
-
-// BindSessionObserver attaches the Factory Sessions session router after the
-// stable Runtime HTTP adapter has been constructed.
-func (h *Handler) BindSessionObserver(sessions SessionObserver) {
-	if h != nil {
-		h.sessions = sessions
-	}
+	return &Handler{root: root, sessions: sessions}
 }
 
 // GetStatus handles GET /status through the Runtime observation root.

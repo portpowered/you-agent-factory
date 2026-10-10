@@ -288,9 +288,9 @@ func assertRequesterIndependentContinuation(t *testing.T, fixture *invokeContinu
 func normalizeRequesterFactorySnapshot(t *testing.T, snapshot requesterFactorySnapshot, prior int, directory string) string {
 	t.Helper()
 	snapshot.Events = snapshot.Events[prior:]
-	wantTypes := []api.FactoryEventType{"WORK_REQUEST", "DISPATCH_REQUEST", "DISPATCH_WORKER_SESSION_ASSOCIATION", "MODEL_REQUEST", "MODEL_RESPONSE", "AGENT_RUN_RESPONSE", "DISPATCH_RESPONSE"}
+	wantTypes := []api.FactoryEventType{"WORK_REQUEST", "DISPATCH_REQUEST", "DISPATCH_WORKER_SESSION_ASSOCIATION", "MODEL_REQUEST", "MODEL_RESPONSE", "AGENT_RUN_RESPONSE", "DISPATCH_RESPONSE", "WORK_STATE_CHANGE"}
 	if len(snapshot.Events) != len(wantTypes) || len(snapshot.Work.Results) != 1 {
-		t.Fatal("Factory invocation added/lost canonical events or Work")
+		t.Fatalf("Factory invocation added/lost canonical events or Work: events=%d work=%d", len(snapshot.Events), len(snapshot.Work.Results))
 	}
 	item := snapshot.Work.Results[0]
 	if item.Name != "work-1" || support.WorkItemCustomerLocation(item) != "task:complete" || item.Payload != "independence input" {

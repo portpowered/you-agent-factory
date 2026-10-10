@@ -41,6 +41,7 @@ var btrcOneShotEventOrder = []interfaces.FactoryEventType{
 	interfaces.FactoryEventTypeModelResponse,
 	interfaces.FactoryEventTypeAgentRunResponse,
 	interfaces.FactoryEventTypeDispatchResponse,
+	interfaces.FactoryEventTypeWorkStateChange,
 	interfaces.FactoryEventTypeFactoryStateResponse,
 	interfaces.FactoryEventTypeRunResponse,
 	interfaces.FactoryEventTypeSessionResultUpdated,
@@ -179,6 +180,7 @@ func scaffoldBTRCOneShotFactory(t *testing.T) string {
 
 func assertBTRCOneShotEventOrder(t *testing.T, events []interfaces.FactoryEvent) {
 	t.Helper()
+	assertBTRCDispatchRelocations(t, events, 1)
 	got := make([]interfaces.FactoryEventType, len(events))
 	for index, event := range events {
 		got[index] = event.Type

@@ -2,6 +2,7 @@ package execution_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,7 +31,7 @@ type browserHostRoute struct {
 	failBrowser bool
 }
 
-// These invocations share a process, but each owns its session, port selector,
+// These continuous hosts share a process, but each owns its session, port selector,
 // listener, browser outcome and output. Readiness and completion are observed
 // before shutdown; the browser failure must leave customer Work runnable.
 func TestHostedReadinessAndBrowserOutcome(t *testing.T) {
@@ -48,7 +50,7 @@ func TestHostedReadinessAndBrowserOutcome(t *testing.T) {
 			if name == "B10-O" {
 				flag = "--with-server"
 			}
-			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", dir + "/factory.json", "--session", id, "--continuously", "--no-record", flag, "--listen", fmt.Sprintf("127.0.0.1:%d", selector), "hosted request"})
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", dir + "/factory.json", "--session", id, "--continuously", "--no-record", flag, "--listen", fmt.Sprintf("127.0.0.1:%d", selector)})
 			inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.WorkingDirectory = dir
 			command := support.StartProcessCommand(t, process, inputs.Input)
@@ -60,7 +62,7 @@ func TestHostedReadinessAndBrowserOutcome(t *testing.T) {
 				assertRejectedHostSessionReleased(t, process, &routes, selector+1000, id, dir, home)
 				return
 			}
-			assertReadyBrowserHost(t, command, route, id, name, inputs)
+			assertReadyBrowserHost(t, process, command, route, id, name, inputs)
 		})
 	}
 }
@@ -166,7 +168,7 @@ func buildBrowserOutcomeProcess(t *testing.T, routes *sync.Map) support.Applicat
 	})
 }
 
-func assertReadyBrowserHost(t *testing.T, command *support.ProcessCommand, route *browserHostRoute, id, name string, inputs *support.CapturedInputs) {
+func assertReadyBrowserHost(t *testing.T, process support.Process, command *support.ProcessCommand, route *browserHostRoute, id, name string, inputs *support.CapturedInputs) {
 	t.Helper()
 	var baseURL string
 	select {
@@ -176,6 +178,9 @@ func assertReadyBrowserHost(t *testing.T, command *support.ProcessCommand, route
 	case <-time.After(30 * time.Second):
 		t.Fatal("host did not bind")
 	}
+	// A positional invocation owns its listener only until completion. Admit
+	// through the ready continuous host so terminal reads precede owned shutdown.
+	submitBrowserHostWork(t, process, baseURL, id, inputs)
 	support.WaitForSessionTerminalStatus(t, baseURL, id, 30*time.Second)
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+id+"/work")
 	if support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "complete")) != 1 {
@@ -201,5 +206,35 @@ func assertReadyBrowserHost(t *testing.T, command *support.ProcessCommand, route
 	}
 	if route.failBrowser && !strings.Contains(output, "Dashboard auto-open unavailable: selected browser rejected") {
 		t.Fatalf("missing nonfatal browser diagnostic: %s", output)
+	}
+}
+
+func submitBrowserHostWork(t *testing.T, process support.Process, baseURL, id string, host *support.CapturedInputs) {
+	t.Helper()
+	_, err := support.WaitForObservation(30*time.Second, func() (factoryapi.StatusResponse, error) {
+		response, err := http.Get(baseURL + "/factory-sessions/" + id + "/status")
+		if err != nil {
+			return factoryapi.StatusResponse{}, err
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return factoryapi.StatusResponse{}, fmt.Errorf("session status: HTTP %d", response.StatusCode)
+		}
+		var status factoryapi.StatusResponse
+		err = json.NewDecoder(response.Body).Decode(&status)
+		return status, err
+	}, func(status factoryapi.StatusResponse) bool { return status.FactoryState == "RUNNING" })
+	if err != nil {
+		t.Fatalf("hosted session did not become ready: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "payload.md")
+	if err := os.WriteFile(path, []byte("hosted request"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", baseURL, "submit", "--session", id, "--name", "hosted-work", "--work-type-name", "task", "--payload", path})
+	inputs.Env = host.Env
+	inputs.WorkingDirectory = host.WorkingDirectory
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("submit hosted Work: %v; stderr=%s", err, inputs.Stderr())
 	}
 }

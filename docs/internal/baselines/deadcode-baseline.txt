@@ -773,19 +773,6 @@ pkg/services/factory_runtime/transports/cli/workflow/validate.go: unreachable fu
 pkg/services/factory_runtime/transports/cli/workflow/validate.go: unreachable func: ValidateRunE
 pkg/services/factory_runtime/transports/cli/workflow/validate.go: unreachable func: renderValidateHuman
 pkg/services/factory_runtime/transports/cli/workflow/validate.go: unreachable func: renderValidationSourceMetadata
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.BindSessionObserver
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.Root
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.guardRuntimeRequestContext
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.invokeControlResume
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.runtimeRoot
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.writeError
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.writeJSON
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: Adapter.writeRuntimeRequestContextOutcome
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: NewAdapter
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: isRequestContextEnded
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: requestContextEnded
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: runtimeRequestContextErrorResponse
-pkg/services/factory_runtime/transports/http/adapter.go: unreachable func: shouldEndOnRequestContext
 pkg/services/factory_runtime/transports/http/control/decode.go: unreachable func: decodeMoveWorkRequestBody
 pkg/services/factory_runtime/transports/http/control/decode.go: unreachable func: decodeTerminateControlRequest
 pkg/services/factory_runtime/transports/http/control/handler.go: unreachable func: Handler.ControlPause
@@ -819,9 +806,6 @@ pkg/services/factory_runtime/transports/http/dispatch/mapping.go: unreachable fu
 pkg/services/factory_runtime/transports/http/dispatch/mapping.go: unreachable func: dispatchPlanResponseFromAcceptResult
 pkg/services/factory_runtime/transports/http/dispatch/mapping.go: unreachable func: dispatchPlanResponseFromPlanResult
 pkg/services/factory_runtime/transports/http/dispatch/mapping.go: unreachable func: planDispatchRequestFromHTTP
-pkg/services/factory_runtime/transports/http/error_mapping.go: unreachable func: Adapter.writeRootError
-pkg/services/factory_runtime/transports/http/error_mapping.go: unreachable func: Adapter.writeRootOrInternalError
-pkg/services/factory_runtime/transports/http/error_mapping.go: unreachable func: RootErrorResponse
 pkg/services/factory_runtime/transports/http/internal/common/common.go: unreachable func: DecodeOptionalJSON
 pkg/services/factory_runtime/transports/http/internal/common/common.go: unreachable func: DecodeRequiredJSON
 pkg/services/factory_runtime/transports/http/internal/common/common.go: unreachable func: ErrorFamilyForStatus
@@ -842,7 +826,6 @@ pkg/services/factory_runtime/transports/http/internal/errors/errors.go: unreacha
 pkg/services/factory_runtime/transports/http/internal/errors/errors.go: unreachable func: moveWorkRequestConflictErrorResponse
 pkg/services/factory_runtime/transports/http/internal/errors/errors.go: unreachable func: notFoundErrorResponse
 pkg/services/factory_runtime/transports/http/internal/errors/errors.go: unreachable func: serviceUnavailableErrorResponse
-pkg/services/factory_runtime/transports/http/observation/handler.go: unreachable func: Handler.BindSessionObserver
 pkg/services/factory_runtime/transports/http/observation/handler.go: unreachable func: Handler.GetStatus
 pkg/services/factory_runtime/transports/http/observation/handler.go: unreachable func: Handler.GetStatusBySessionId
 pkg/services/factory_runtime/transports/http/observation/handler.go: unreachable func: Handler.getStatus
@@ -1024,7 +1007,6 @@ pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable fu
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: RequestFieldValidationMessage
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: decodeStrictJSON
 pkg/services/factory_sessions/transports/http/handlers_events.go: unreachable func: ReconnectCursorFromParams
-pkg/services/factory_sessions/transports/http/root_binding.go: unreachable func: NewHandlerFromRoot
 pkg/services/factory_sessions/transports/mcp/discoverygen/verify.go: unreachable func: VerifyDiscoveryToolIdentityCompleteness
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedResultPolicyInventory
 pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: ToolByName

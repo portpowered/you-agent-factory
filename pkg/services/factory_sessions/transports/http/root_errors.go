@@ -81,7 +81,7 @@ func sessionsRootNotFoundErrorResponse(err error) (int, factoryapi.ErrorResponse
 	}
 }
 
-func (s *Server) writeSessionsRootError(w http.ResponseWriter, sessionID string, err error) bool {
+func (s *responseWriter) writeSessionsRootError(w http.ResponseWriter, sessionID string, err error) bool {
 	if status, response, ok := sessionsRootErrorResponse(sessionID, err); ok {
 		if response == nil {
 			return true
@@ -92,14 +92,14 @@ func (s *Server) writeSessionsRootError(w http.ResponseWriter, sessionID string,
 	return false
 }
 
-func (s *Server) writeWorkerCallerError(w http.ResponseWriter, err error) bool {
+func (s *responseWriter) writeWorkerCallerError(w http.ResponseWriter, err error) bool {
 	if !errors.Is(err, workersessions.ErrCallerInvalid) {
 		return false
 	}
 	return s.writeSessionsRootError(w, "", err)
 }
 
-func (s *Server) writeSessionsRootErrorOrInternal(w http.ResponseWriter, sessionID string, err error, fallbackMessage string) {
+func (s *responseWriter) writeSessionsRootErrorOrInternal(w http.ResponseWriter, sessionID string, err error, fallbackMessage string) {
 	if s.writeSessionsRootError(w, sessionID, err) {
 		return
 	}

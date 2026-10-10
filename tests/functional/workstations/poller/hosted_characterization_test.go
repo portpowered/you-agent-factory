@@ -155,6 +155,7 @@ var btrcHostedServiceSuccessEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
+	factoryapi.FactoryEventTypeWorkStateChange,
 }
 
 var btrcHostedServiceFailureEventOrder = []factoryapi.FactoryEventType{
@@ -169,6 +170,7 @@ var btrcHostedServiceFailureEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
+	factoryapi.FactoryEventTypeWorkStateChange,
 }
 
 var btrcHostedServiceSourceFailureEventOrder = []factoryapi.FactoryEventType{
@@ -237,7 +239,7 @@ func waitForBTRCHostedDispatchResponse(t *testing.T, stream *support.FactoryEven
 	t.Helper()
 	for {
 		event := stream.NextEventContext(t.Context())
-		if event.Type == factoryapi.FactoryEventTypeDispatchResponse && btrcHostedEventIncludesWork(event, workID) {
+		if event.Type == factoryapi.FactoryEventTypeWorkStateChange && btrcHostedEventIncludesWork(event, workID) {
 			return
 		}
 	}
@@ -248,6 +250,24 @@ func assertBTRCHostedEventOrder(t *testing.T, events []factoryapi.FactoryEvent, 
 	got := make([]factoryapi.FactoryEventType, len(events))
 	for index, event := range events {
 		got[index] = event.Type
+		if event.Type == factoryapi.FactoryEventTypeWorkStateChange {
+			change, err := event.Payload.AsWorkStateChangeEventPayload()
+			if err != nil || change.Source != factoryapi.WorkStateChangeSourceDispatch ||
+				change.FromState != "init" || change.WorkTypeName != "story" ||
+				change.FromPlaceId != "story:init" || change.ToPlaceId != "story:"+change.ToState ||
+				change.TriggerWorkId != nil || !btrcHostedEventIncludesWork(event, change.WorkId) {
+				t.Fatalf("hosted dispatch relocation=%#v, err=%v", change, err)
+			}
+			if index == 0 || events[index-1].Type != factoryapi.FactoryEventTypeDispatchResponse ||
+				!btrcHostedEventIncludesWork(events[index-1], change.WorkId) {
+				t.Fatal("hosted relocation must follow its correlated result")
+			}
+			result, err := events[index-1].Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertBTRCHostedOutputState(t, result, change.ToState)
+		}
 		if event.Context.Sequence != index {
 			t.Fatalf("hosted event[%d] sequence = %d, want %d", index, event.Context.Sequence, index)
 		}

@@ -631,7 +631,7 @@ func sessionLifecycleDigestJSON(raw json.RawMessage) string {
 }
 
 // RecordWorkStateChange records a canonical marking relocation for operator or
-// cascade recovery paths.
+// cascade recovery and automatic dispatch paths.
 func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkStateChangeRecord, eventTime time.Time) {
 	if h == nil || record.WorkID == "" || record.Source == "" {
 		return

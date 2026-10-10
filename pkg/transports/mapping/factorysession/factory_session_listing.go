@@ -126,12 +126,10 @@ func SessionSummaryToAPI(
 // SessionResponseToAPI maps a live session and its owner-defined runtime
 // projection to the public detail contract.
 func SessionResponseToAPI(read factorysessions.SessionProjection) factoryapi.FactorySession {
-	summary := SessionSummaryToAPI(read.Context.Session, read.Context.FactorySessionID)
-	runtime := RuntimeProjectionToAPI(read.Runtime, read.Context.NormalizedTarget)
-	return factoryapi.FactorySession{
-		FactoryDir: summary.FactoryDir, FolderPath: summary.FolderPath, Id: summary.Id,
-		IsDefault: summary.IsDefault, Project: summary.Project, Target: summary.Target, Runtime: runtime,
-	}
+	return SessionDetailResponseToAPI(factorysessions.SessionDetail{
+		Session: read.Context.Session, SessionID: read.Context.FactorySessionID,
+		NormalizedTarget: read.Context.NormalizedTarget, Runtime: read.Runtime,
+	})
 }
 
 // SummaryWithRuntimeToAPI maps a live session and runtime projection to the
@@ -790,4 +788,11 @@ func recordingWarningsToAPI(diagnostics []factorysessions.RecordedSessionDiagnos
 		})
 	}
 	return &warnings
+}
+
+// SessionDetailResponseToAPI maps the engine-free detail capability.
+func SessionDetailResponseToAPI(read factorysessions.SessionDetail) factoryapi.FactorySession {
+	summary := SessionSummaryToAPI(read.Session, read.SessionID)
+	runtime := RuntimeProjectionToAPI(read.Runtime, read.NormalizedTarget)
+	return factoryapi.FactorySession{FactoryDir: summary.FactoryDir, FolderPath: summary.FolderPath, Id: summary.Id, IsDefault: summary.IsDefault, Project: summary.Project, Target: summary.Target, Runtime: runtime}
 }

@@ -16,7 +16,7 @@ import (
 func TestHandlerUnavailableBranchesStayOwnedBySessions(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{}, zap.NewNop())
+	handler := newUnavailableTestHandler(zap.NewNop())
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	sessionID := factoryapi.SessionID("session-alpha")
 
@@ -47,4 +47,14 @@ func TestHandlerUnavailableBranchesStayOwnedBySessions(t *testing.T) {
 	unsupported := httptest.NewRequest(http.MethodPost, "/", nil)
 	unsupported.Header.Set("Content-Type", "text/plain")
 	handler.OpenFactorySession(httptest.NewRecorder(), unsupported)
+}
+
+func newUnavailableTestHandler(logger *zap.Logger) *Adapter {
+	return NewHandler(
+		NewDurableLifecycleHandler(nil, nil, logger),
+		NewDurableReadHandler(nil, nil, logger),
+		NewDurableAuthoringHandler(nil, logger),
+		NewUnavailableInvocationHandler(logger),
+		NewDurableObservationHandler(nil, nil, logger),
+	)
 }

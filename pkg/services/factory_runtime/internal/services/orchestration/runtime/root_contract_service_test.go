@@ -19,7 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
-	runtimehttp "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http"
+	runtimehttp "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -941,7 +941,7 @@ func TestFactoryImpl_StatusHTTPDoesNotVisitCanonicalHistory(t *testing.T) {
 	}
 	impl.state = interfaces.FactoryStateRunning
 
-	adapter := runtimehttp.NewAdapter(impl)
+	adapter := runtimehttp.NewHandler(impl, nil)
 	recorder := httptest.NewRecorder()
 	adapter.GetStatus(recorder, httptest.NewRequest(http.MethodGet, "/status", nil))
 	if recorder.Code != http.StatusOK {

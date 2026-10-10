@@ -32,7 +32,7 @@ func TestSetFactorySessionResourceCapacityMapsStableIDAndResponse(t *testing.T) 
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	body := `{"requestId":"raise-1","expectedRevision":2,"capacity":8,"reason":"raise throughput"}`
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(body))
@@ -66,7 +66,7 @@ func TestSetFactorySessionResourceCapacityMapsCapacityConflict(t *testing.T) {
 			}
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"lower-1","expectedRevision":2,"capacity":1}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -106,7 +106,7 @@ func TestSetFactorySessionResourceCapacityMapsNoOpAndAPIAttribution(t *testing.T
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"noop-1","expectedRevision":2,"capacity":2}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -129,7 +129,7 @@ func TestSetFactorySessionResourceCapacityMapsRequestConflict(t *testing.T) {
 			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{Code: factorysessions.LiveChangeErrorRequestConflict, Message: "request conflict"}
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"conflict-1","expectedRevision":2,"capacity":2}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -162,7 +162,7 @@ func TestSetFactorySessionResourceCapacityMapsCLIAttribution(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-beta/resources/reviewers/capacity", strings.NewReader(`{"requestId":"cli-1","expectedRevision":2,"capacity":2}`))
 	request.Header.Set("Content-Type", "application/json")

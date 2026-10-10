@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (s *Server) InvokeFactorySessionBySessionId(
+func (s *InvocationHandler) InvokeFactorySessionBySessionId(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,

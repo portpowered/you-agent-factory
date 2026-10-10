@@ -86,9 +86,6 @@ func TestDirectJavaScriptHTTPCompositionRejectsMissingRoles(t *testing.T) {
 	if _, err := provideDirectJavaScriptHostAdapter(nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("provideDirectJavaScriptHostAdapter(nil roles) error = nil, want required-role validation")
 	}
-	if _, err := newDurableExecutionHTTPHandler(nil, nil, nil, nil, nil, nil, nil); err == nil {
-		t.Fatal("newDurableExecutionHTTPHandler(nil roles) error = nil, want required-role validation")
-	}
 }
 
 // Unconfigured operations panic. These collaborators are inert completed
