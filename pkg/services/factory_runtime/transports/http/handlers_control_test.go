@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimehttpcontrol "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control"
 )
 
 func TestControlPause_ForwardsToRootAndEncodesOutcome(t *testing.T) {
@@ -22,7 +23,7 @@ func TestControlPause_ForwardsToRootAndEncodesOutcome(t *testing.T) {
 			return factoryruntime.PauseResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpcontrol.NewHandler(fake)
 
 	rec := httptest.NewRecorder()
 	adapter.ControlPause(rec, httptest.NewRequest(http.MethodPost, "/control/pause", nil))
@@ -33,7 +34,7 @@ func TestControlPause_ForwardsToRootAndEncodesOutcome(t *testing.T) {
 	if !invoked {
 		t.Fatal("ControlPause did not reach injected Runtime root")
 	}
-	var response runtimeControlHTTPResponse
+	var response runtimehttpcontrol.RuntimeControlHTTPResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestControlResume_ForwardsToRootAndEncodesNoOpOutcome(t *testing.T) {
 			return factoryruntime.ResumeResult{Outcome: factoryruntime.ControlOutcomeNoOp}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpcontrol.NewHandler(fake)
 
 	rec := httptest.NewRecorder()
 	adapter.ControlResume(rec, httptest.NewRequest(http.MethodPost, "/control/resume", nil))
@@ -58,7 +59,7 @@ func TestControlResume_ForwardsToRootAndEncodesNoOpOutcome(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	var response runtimeControlHTTPResponse
+	var response runtimehttpcontrol.RuntimeControlHTTPResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestControlTerminate_ForwardsDecodedReasonToRoot(t *testing.T) {
 			return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpcontrol.NewHandler(fake)
 
 	body := strings.NewReader(`{"reason":"operator stop"}`)
 	rec := httptest.NewRecorder()
@@ -126,7 +127,7 @@ func TestControlPause_MapsTypedLifecycleFailures(t *testing.T) {
 					return factoryruntime.PauseResult{}, tc.programmed
 				},
 			}
-			adapter := NewAdapter(fake)
+			adapter := runtimehttpcontrol.NewHandler(fake)
 			rec := httptest.NewRecorder()
 			adapter.ControlPause(rec, httptest.NewRequest(http.MethodPost, "/control/pause", nil))
 			assertErrorResponse(t, rec, tc.wantStatus, tc.wantCode, tc.wantMsg)
@@ -142,7 +143,7 @@ func TestControlTerminate_MapsAlreadyStopped(t *testing.T) {
 			return factoryruntime.TerminateResult{}, factoryruntime.ErrAlreadyStopped
 		},
 	}
-	adapter := NewAdapter(fake)
+	adapter := runtimehttpcontrol.NewHandler(fake)
 
 	rec := httptest.NewRecorder()
 	adapter.ControlTerminate(rec, httptest.NewRequest(http.MethodPost, "/control/terminate", bytes.NewReader(nil)))
@@ -152,7 +153,7 @@ func TestControlTerminate_MapsAlreadyStopped(t *testing.T) {
 func TestControlTerminate_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapter(&runtimeRootFake{})
+	adapter := runtimehttpcontrol.NewHandler(&runtimeRootFake{})
 	rec := httptest.NewRecorder()
 	adapter.ControlTerminate(rec, httptest.NewRequest(http.MethodPost, "/control/terminate", strings.NewReader("{")))
 	assertErrorResponse(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")

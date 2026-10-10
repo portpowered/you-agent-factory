@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,61 +12,6 @@ import (
 	runtimehttpcommon "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common"
 	runtimehttpobservation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation"
 )
-
-func TestAdapter_BindsRuntimeRootViaFakeRootSeam(t *testing.T) {
-	t.Parallel()
-
-	var invoked bool
-	fake := &runtimeRootFake{
-		observe: func(_ context.Context, _ factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-			invoked = true
-			return factoryruntime.ObserveResult{}, factoryruntime.ErrNotRunning
-		},
-	}
-
-	adapter := NewAdapter(fake)
-	if adapter.Root() != fake {
-		t.Fatal("adapter must expose the injected Runtime root")
-	}
-
-	root, err := adapter.runtimeRoot()
-	if err != nil {
-		t.Fatalf("runtimeRoot() error = %v", err)
-	}
-	if root != fake {
-		t.Fatal("runtimeRoot() must return the injected Runtime root")
-	}
-
-	_, err = root.Observe(context.Background(), factoryruntime.ObserveRequest{})
-	if !invoked {
-		t.Fatal("adapter-owned operation did not reach the injected Runtime root")
-	}
-	if !errors.Is(err, factoryruntime.ErrNotRunning) {
-		t.Fatalf("Observe error = %v, want ErrNotRunning", err)
-	}
-}
-
-func TestNewAdapter_RejectsNilRoot(t *testing.T) {
-	t.Parallel()
-
-	if NewAdapter(nil) != nil {
-		t.Fatal("NewAdapter(nil) must return nil")
-	}
-}
-
-func TestNewAdapter_RejectsTypedNilRoot(t *testing.T) {
-	t.Parallel()
-
-	var typedNil *typedNilRuntimeRoot
-	if NewAdapter(typedNil) != nil {
-		t.Fatal("NewAdapter(typed nil root) must return nil")
-	}
-
-	adapter := &Adapter{root: typedNil}
-	if adapter.Root() != nil {
-		t.Fatal("Root() must return nil for a typed nil root")
-	}
-}
 
 func TestOperationHandlers_RejectTypedNilRoot(t *testing.T) {
 	t.Parallel()
@@ -80,7 +24,7 @@ func TestOperationHandlers_RejectTypedNilRoot(t *testing.T) {
 		name  string
 		isNil func() bool
 	}{
-		{name: "observation", isNil: func() bool { return runtimehttpobservation.NewHandler(typedNil) == nil }},
+		{name: "observation", isNil: func() bool { return runtimehttpobservation.NewHandler(typedNil, nil) == nil }},
 		{name: "control", isNil: func() bool { return runtimehttpcontrol.NewHandler(typedNil) == nil }},
 		{name: "dispatch", isNil: func() bool { return runtimehttpdispatch.NewHandler(typedNil) == nil }},
 	} {
@@ -171,4 +115,11 @@ func (fake *runtimeRootFake) AcceptDispatchResult(ctx context.Context, req facto
 
 func (fake *runtimeRootFake) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
 	return factoryruntime.InvokeWorkerResult{}, nil
+}
+
+func TestOperationHandlers_RejectNilRoot(t *testing.T) {
+	t.Parallel()
+	if runtimehttpobservation.NewHandler(nil, nil) != nil || runtimehttpcontrol.NewHandler(nil) != nil || runtimehttpdispatch.NewHandler(nil) != nil {
+		t.Fatal("operation constructors must reject a missing Runtime root")
+	}
 }

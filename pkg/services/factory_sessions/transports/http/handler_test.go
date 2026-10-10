@@ -43,7 +43,7 @@ func (fake liveSessionAPIFake) GetFactorySession(ctx context.Context, id string)
 }
 
 func TestHandlerGetFactorySessionOwnsServiceInvocationAndEncoding(t *testing.T) {
-	handler := NewHandler(Dependencies{Sessions: liveSessionAPIFake{
+	handler := NewReadHandler(nil, liveSessionAPIFake{
 		get: func(_ context.Context, id string) (factoryapi.FactorySession, error) {
 			return factoryapi.FactorySession{
 				Id: id, FactoryDir: "/workspace/alpha", FolderPath: "/workspace",
@@ -51,7 +51,7 @@ func TestHandlerGetFactorySessionOwnsServiceInvocationAndEncoding(t *testing.T) 
 				Runtime: factoryapi.FactorySessionRuntime{},
 			}, nil
 		},
-	}}, zap.NewNop())
+	}, nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil), "session-alpha")
@@ -62,7 +62,7 @@ func TestHandlerGetFactorySessionOwnsServiceInvocationAndEncoding(t *testing.T) 
 }
 
 func TestHandlerOpenFactorySessionRejectsInvalidPayloadBeforeServiceInvocation(t *testing.T) {
-	handler := NewHandler(Dependencies{Sessions: liveSessionAPIFake{}}, zap.NewNop())
+	handler := NewDurableLifecycleHandler(nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.OpenFactorySession(
@@ -79,9 +79,7 @@ func TestHandlerInvokeFactorySessionPreservesWrappedPayloadLimitDiagnostic(t *te
 	payloadSize := &work.PayloadSizeError{
 		WorkName: "invocation", PayloadBytes: 65537, PayloadLimitBytes: 65536,
 	}
-	handler := NewHandler(Dependencies{
-		Invocation: invocationAPIFake{err: fmt.Errorf("prepare invocation: %w", payloadSize)},
-	}, zap.NewNop())
+	handler := NewInvocationHandler(invocationAPIFake{err: fmt.Errorf("prepare invocation: %w", payloadSize)}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.InvokeFactorySessionBySessionId(
@@ -117,7 +115,7 @@ func TestRequestAcceptsJSONContentType(t *testing.T) {
 }
 
 func TestHandlerOpenFactorySessionRejectsUnsupportedMediaTypeBeforeServiceInvocation(t *testing.T) {
-	handler := NewHandler(Dependencies{Sessions: liveSessionAPIFake{}}, zap.NewNop())
+	handler := NewDurableLifecycleHandler(nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(`{"target":{"kind":"default"}}`))
 	request.Header.Set("Content-Type", "text/plain")
@@ -131,7 +129,7 @@ func TestHandlerOpenFactorySessionRejectsUnsupportedMediaTypeBeforeServiceInvoca
 }
 
 func TestHandlerGetFactorySessionMapsUnavailableDependency(t *testing.T) {
-	handler := NewHandler(Dependencies{}, zap.NewNop())
+	handler := newUnavailableTestHandler(zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil), "session-alpha")
@@ -359,7 +357,7 @@ func TestHandlerCurrentFactoryUsesInjectedDefinitionReader(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			core, logs := observer.New(zap.ErrorLevel)
-			handler := NewHandler(Dependencies{CurrentFactory: test.reader}, zap.New(core))
+			handler := NewAuthoringHandler(test.reader, nil, nil, nil, nil, zap.New(core))
 			response := httptest.NewRecorder()
 			handler.GetCurrentFactory(response, httptest.NewRequest(http.MethodGet, "/factory/current", nil))
 			if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) {

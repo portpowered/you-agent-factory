@@ -40,7 +40,7 @@ func TestOpenFactorySession_UsesCanonicalStartAndMapsLiveResult(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 
 	body := `{"folderPath":"/workspace","target":{"kind":"named","name":"beta"},"validateOnly":true,"initNewFactory":true}`
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(body))
@@ -85,7 +85,7 @@ func TestOpenFactorySession_CanonicalStartErrorMapsToBadRequest(t *testing.T) {
 			return factorysessions.SessionStartResult{}, errOpenCanonicalBoom
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	body := `{"folderPath":"/workspace"}`
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
@@ -99,7 +99,7 @@ func TestOpenFactorySession_CanonicalStartErrorMapsToBadRequest(t *testing.T) {
 
 func TestOpenFactorySession_RequiresCanonicalSessionsRoot(t *testing.T) {
 	t.Parallel()
-	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, zap.NewNop())
+	handler := factorysessionshttp.NewDurableLifecycleHandler(nil, testRequestPreparation{}, zap.NewNop())
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(`{"folderPath":"/workspace"}`))
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -117,7 +117,7 @@ func TestOpenFactorySession_SessionNotFoundReturnsCanonicalFailure(t *testing.T)
 			return factorysessions.SessionStartResult{}, factorysessions.ErrSessionNotFound
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 	body := `{"folderPath":"/workspace"}`
 	request := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")

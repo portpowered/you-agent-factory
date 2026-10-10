@@ -18,6 +18,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -57,16 +58,25 @@ func newAPIServerFromRoles(
 	if workAPI != nil {
 		sessionsRoot = liveEventsTestRoot{Service: sessionsRoot, source: workAPI}
 	}
-	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot:   sessionsRoot,
-		CurrentFactory: currentFactoryTestReader{runtime}, FactoryStatus: factoryStatus,
-		Sessions: sessions, Invocation: invocation,
-		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
-		WorkflowPreview: workflowPreview,
-		DurableLister:   durableLister, LiveSessionLister: liveSessionLister,
-		WorkerPrompts:   workerPrompts,
-		SessionRequests: sessionRequests,
-	}, logger)
+	listRoot := sessionsRoot
+	if durableLister != nil {
+		listRoot = testDurableListRoot{Service: sessionsRoot, lister: durableLister}
+	}
+	var liveControl interface {
+		ReadSessionDetail(context.Context, string) (factorysessions.SessionDetail, error)
+		PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error)
+		ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error)
+	}
+	if sessions != nil {
+		liveControl = testLiveControl{live: sessions}
+	}
+	handler := factorysessionshttp.NewHandler(
+		factorysessionshttp.NewLifecycleHandler(sessionsRoot, liveControl, nil, sessionRequests, logger),
+		factorysessionshttp.NewReadHandler(listRoot, sessions, liveSessionLister, sessionRequests, logger),
+		factorysessionshttp.NewAuthoringHandler(currentFactoryTestReader{runtime}, factoryDefinitions, factoryValidation, workflowPreview, workerPrompts, logger),
+		factorysessionshttp.NewInvocationHandler(invocation, logger),
+		factorysessionshttp.NewObservationHandler(sessionsRoot, sessions, factoryStatus, sessionRequests, logger),
+	)
 	workRoot := &completeWorkTestRoot{
 		submission: workAPI, read: workRead, staging: contentStaging, preparation: requestPreparation,
 		invocationInput: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
@@ -221,4 +231,32 @@ type currentFactoryTestReader struct{ source currentFactoryTestAPI }
 
 func (reader currentFactoryTestReader) GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error) {
 	return reader.source.GetCurrentFactory(ctx)
+}
+
+type testDurableListRoot struct {
+	factorysessions.Service
+	lister factorysessionshttp.DurableExecutionSessionLister
+}
+
+func (root testDurableListRoot) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return root.lister.ListSessions(ctx, request)
+}
+
+// testLiveControl migrates legacy response fixtures onto the explicit control role.
+type testLiveControl struct {
+	factorysessions.LiveControlService
+	live apisurface.LiveSessionAPI
+}
+
+func (root testLiveControl) PauseLiveFactorySession(ctx context.Context, id string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	response, err := root.live.PauseLiveFactorySession(ctx, id, request)
+	return factorysession.LifecycleControlResultFromAPI(response), err
+}
+func (root testLiveControl) ResumeLiveFactorySession(ctx context.Context, id string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	response, err := root.live.ResumeLiveFactorySession(ctx, id, request)
+	return factorysession.LifecycleControlResultFromAPI(response), err
+}
+
+func (root testLiveControl) ReadSessionDetail(context.Context, string) (factorysessions.SessionDetail, error) {
+	return factorysessions.SessionDetail{}, factorysessions.ErrSessionNotFound
 }

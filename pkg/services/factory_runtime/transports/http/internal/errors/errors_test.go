@@ -1,4 +1,4 @@
-package http
+package errors_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	transporterrors "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/errors"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -18,11 +19,11 @@ import (
 func TestRootErrorResponse_MapsSharedRuntimeSentinels(t *testing.T) {
 	t.Parallel()
 
-	operations := []runtimeHTTPOperation{
-		runtimeHTTPOperationObserve,
-		runtimeHTTPOperationControl,
-		runtimeHTTPOperationMoveWork,
-		runtimeHTTPOperationDispatchPlan,
+	operations := []transporterrors.Operation{
+		transporterrors.OperationObserve,
+		transporterrors.OperationControl,
+		transporterrors.OperationMoveWork,
+		transporterrors.OperationDispatchPlan,
 	}
 	cases := []struct {
 		name       string
@@ -53,12 +54,12 @@ func TestRootErrorResponse_MapsSharedRuntimeSentinels(t *testing.T) {
 			operation := operation
 			t.Run(fmt.Sprintf("%s/%s", operationName(operation), tc.name), func(t *testing.T) {
 				t.Parallel()
-				status, response, ok := RootErrorResponse(tc.err, operation)
+				status, response, ok := transporterrors.RootErrorResponse(tc.err, operation)
 				if !ok {
-					t.Fatalf("RootErrorResponse(%v, %s) = not handled", tc.err, operationName(operation))
+					t.Fatalf("transporterrors.RootErrorResponse(%v, %s) = not handled", tc.err, operationName(operation))
 				}
 				if status != tc.wantStatus || response.Code != tc.wantCode || response.Message != tc.wantMsg {
-					t.Fatalf("RootErrorResponse(%v, %s) = %d %#v, want %d code=%s msg=%q",
+					t.Fatalf("transporterrors.RootErrorResponse(%v, %s) = %d %#v, want %d code=%s msg=%q",
 						tc.err, operationName(operation), status, response, tc.wantStatus, tc.wantCode, tc.wantMsg)
 				}
 			})
@@ -95,12 +96,12 @@ func TestRootErrorResponse_MapsObservationFailures(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			status, response, ok := RootErrorResponse(tc.err, runtimeHTTPOperationObserve)
+			status, response, ok := transporterrors.RootErrorResponse(tc.err, transporterrors.OperationObserve)
 			if !ok {
-				t.Fatalf("RootErrorResponse(%v) = not handled", tc.err)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = not handled", tc.err)
 			}
 			if status != tc.wantStatus || response.Code != tc.wantCode || response.Message != tc.wantMsg {
-				t.Fatalf("RootErrorResponse(%v) = %d %#v, want %d code=%s msg=%q",
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = %d %#v, want %d code=%s msg=%q",
 					tc.err, status, response, tc.wantStatus, tc.wantCode, tc.wantMsg)
 			}
 		})
@@ -136,12 +137,12 @@ func TestRootErrorResponse_MapsControlFailures(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			status, response, ok := RootErrorResponse(tc.err, runtimeHTTPOperationControl)
+			status, response, ok := transporterrors.RootErrorResponse(tc.err, transporterrors.OperationControl)
 			if !ok {
-				t.Fatalf("RootErrorResponse(%v) = not handled", tc.err)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = not handled", tc.err)
 			}
 			if status != tc.wantStatus || response.Code != tc.wantCode || response.Message != tc.wantMsg {
-				t.Fatalf("RootErrorResponse(%v) = %d %#v", tc.err, status, response)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = %d %#v", tc.err, status, response)
 			}
 		})
 	}
@@ -197,12 +198,12 @@ func TestRootErrorResponse_MapsMoveWorkFailures(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			status, response, ok := RootErrorResponse(tc.err, runtimeHTTPOperationMoveWork)
+			status, response, ok := transporterrors.RootErrorResponse(tc.err, transporterrors.OperationMoveWork)
 			if !ok {
-				t.Fatalf("RootErrorResponse(%v) = not handled", tc.err)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = not handled", tc.err)
 			}
 			if status != tc.wantStatus || response.Code != tc.wantCode || response.Message != tc.wantMsg {
-				t.Fatalf("RootErrorResponse(%v) = %d %#v", tc.err, status, response)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = %d %#v", tc.err, status, response)
 			}
 		})
 	}
@@ -244,12 +245,12 @@ func TestRootErrorResponse_MapsDispatchPlanFailures(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			status, response, ok := RootErrorResponse(tc.err, runtimeHTTPOperationDispatchPlan)
+			status, response, ok := transporterrors.RootErrorResponse(tc.err, transporterrors.OperationDispatchPlan)
 			if !ok {
-				t.Fatalf("RootErrorResponse(%v) = not handled", tc.err)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = not handled", tc.err)
 			}
 			if status != tc.wantStatus || response.Code != tc.wantCode || response.Message != tc.wantMsg {
-				t.Fatalf("RootErrorResponse(%v) = %d %#v", tc.err, status, response)
+				t.Fatalf("transporterrors.RootErrorResponse(%v) = %d %#v", tc.err, status, response)
 			}
 		})
 	}
@@ -258,16 +259,16 @@ func TestRootErrorResponse_MapsDispatchPlanFailures(t *testing.T) {
 func TestRootErrorResponse_IgnoresCrossOperationTypedFailures(t *testing.T) {
 	t.Parallel()
 
-	if _, _, ok := RootErrorResponse(factoryruntime.ErrMoveWorkNotFound, runtimeHTTPOperationControl); ok {
+	if _, _, ok := transporterrors.RootErrorResponse(factoryruntime.ErrMoveWorkNotFound, transporterrors.OperationControl); ok {
 		t.Fatal("move-work not found must not map through control operation")
 	}
-	if _, _, ok := RootErrorResponse(factoryruntime.ErrAlreadyStopped, runtimeHTTPOperationMoveWork); ok {
+	if _, _, ok := transporterrors.RootErrorResponse(factoryruntime.ErrAlreadyStopped, transporterrors.OperationMoveWork); ok {
 		t.Fatal("already stopped must not map through move-work operation")
 	}
-	if _, _, ok := RootErrorResponse(factoryruntime.ErrDuplicateDispatchIntent, runtimeHTTPOperationControl); ok {
+	if _, _, ok := transporterrors.RootErrorResponse(factoryruntime.ErrDuplicateDispatchIntent, transporterrors.OperationControl); ok {
 		t.Fatal("duplicate dispatch intent must not map through control operation")
 	}
-	if _, _, ok := RootErrorResponse(apisurface.ErrFactorySessionNotFound, runtimeHTTPOperationControl); ok {
+	if _, _, ok := transporterrors.RootErrorResponse(apisurface.ErrFactorySessionNotFound, transporterrors.OperationControl); ok {
 		t.Fatal("session not found must not map through control operation")
 	}
 }
@@ -276,14 +277,14 @@ func TestRootErrorResponse_ReturnsFalseForUnmappedFailures(t *testing.T) {
 	t.Parallel()
 
 	err := fmt.Errorf("pkg/services/factory_runtime/internal/service: boom")
-	operations := []runtimeHTTPOperation{
-		runtimeHTTPOperationObserve,
-		runtimeHTTPOperationControl,
-		runtimeHTTPOperationMoveWork,
-		runtimeHTTPOperationDispatchPlan,
+	operations := []transporterrors.Operation{
+		transporterrors.OperationObserve,
+		transporterrors.OperationControl,
+		transporterrors.OperationMoveWork,
+		transporterrors.OperationDispatchPlan,
 	}
 	for _, operation := range operations {
-		if _, _, ok := RootErrorResponse(err, operation); ok {
+		if _, _, ok := transporterrors.RootErrorResponse(err, operation); ok {
 			t.Fatalf("unmapped failure %#v must not be handled for %s", err, operationName(operation))
 		}
 	}
@@ -292,11 +293,10 @@ func TestRootErrorResponse_ReturnsFalseForUnmappedFailures(t *testing.T) {
 func TestWriteRootOrInternalError_SanitizesUnmappedFailures(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapter(&runtimeRootFake{})
 	recorder := httptest.NewRecorder()
 	err := errors.New("pkg/services/factory_runtime/internal/service: boom")
 
-	adapter.writeRootOrInternalError(recorder, context.Background(), runtimeHTTPOperationObserve, "failed to observe factory runtime status", err)
+	transporterrors.WriteRootOrInternalError(recorder, context.Background(), transporterrors.OperationObserve, "failed to observe factory runtime status", err)
 
 	body := recorder.Body.String()
 	if recorder.Code != http.StatusInternalServerError ||
@@ -311,10 +311,9 @@ func TestWriteRootOrInternalError_SanitizesUnmappedFailures(t *testing.T) {
 func TestWriteRootOrInternalError_HandlesContextOutcomeCarriedByErr(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapter(&runtimeRootFake{})
 	recorder := httptest.NewRecorder()
 
-	adapter.writeRootOrInternalError(recorder, context.Background(), runtimeHTTPOperationObserve, "failed to observe factory runtime status", context.DeadlineExceeded)
+	transporterrors.WriteRootOrInternalError(recorder, context.Background(), transporterrors.OperationObserve, "failed to observe factory runtime status", context.DeadlineExceeded)
 
 	body := recorder.Body.String()
 	if recorder.Code != http.StatusGatewayTimeout ||
@@ -323,15 +322,15 @@ func TestWriteRootOrInternalError_HandlesContextOutcomeCarriedByErr(t *testing.T
 	}
 }
 
-func operationName(operation runtimeHTTPOperation) string {
+func operationName(operation transporterrors.Operation) string {
 	switch operation {
-	case runtimeHTTPOperationObserve:
+	case transporterrors.OperationObserve:
 		return "observe"
-	case runtimeHTTPOperationControl:
+	case transporterrors.OperationControl:
 		return "control"
-	case runtimeHTTPOperationMoveWork:
+	case transporterrors.OperationMoveWork:
 		return "move-work"
-	case runtimeHTTPOperationDispatchPlan:
+	case transporterrors.OperationDispatchPlan:
 		return "dispatch-plan"
 	default:
 		return fmt.Sprintf("operation(%d)", operation)

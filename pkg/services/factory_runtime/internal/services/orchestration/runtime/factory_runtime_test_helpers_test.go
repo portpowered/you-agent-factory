@@ -173,7 +173,7 @@ type testFactoryConfig struct {
 }
 
 func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
-	cfg := &testFactoryConfig{runtimeMode: interfaces.RuntimeModeBatch, clock: platformclock.Real{}}
+	cfg := &testFactoryConfig{runtimeMode: interfaces.RuntimeModeBatch, clock: platformclock.Real{}, logger: logging.NoopLogger{}}
 	for _, opt := range opts {
 		opt(cfg)
 	}

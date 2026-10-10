@@ -18,7 +18,7 @@ import (
 // TODO: this should be done under factory validations, why is this here?
 // ValidateFactory handles POST /factory-validations using factorydefinitionentry.ValidateFactoryAPI
 // with ProfileTopology (structural checks only; no canonical JSON load).
-func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
+func (s *AuthoringHandler) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	decoded, err := decodeJSONWithDiagnostics[factoryapi.Factory](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -45,7 +45,7 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 }
 
 // PreviewFactory handles POST /factories/preview using canonical Factory preview semantics.
-func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
+func (s *AuthoringHandler) PreviewFactory(w http.ResponseWriter, r *http.Request) {
 	decoded, err := decodeJSONWithDiagnostics[factoryapi.FactoryPreviewRequest](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -82,7 +82,7 @@ func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSessionAPI, bool) {
+func (s *ReadHandler) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSessionAPI, bool) {
 	if s.sessions == nil {
 		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
 		return nil, false
@@ -90,7 +90,7 @@ func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSe
 	return s.sessions, true
 }
 
-func (s *Server) requireFactoryDefinitionAPI(w http.ResponseWriter) (apisurface.FactorySaveAPI, bool) {
+func (s *AuthoringHandler) requireFactoryDefinitionAPI(w http.ResponseWriter) (apisurface.FactorySaveAPI, bool) {
 	if s.factoryDefinitions == nil {
 		s.writeError(w, http.StatusInternalServerError, "factory definition API is unavailable", "INTERNAL_ERROR")
 		return nil, false
@@ -98,7 +98,7 @@ func (s *Server) requireFactoryDefinitionAPI(w http.ResponseWriter) (apisurface.
 	return s.factoryDefinitions, true
 }
 
-func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
+func (s *ReadHandler) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
 	raw, err := decodeListFactorySessionsRequest(params, s.sessionRequests)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
@@ -120,7 +120,7 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *ReadHandler) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	if isDurableExecutionSessionID(string(sessionID)) {
 		if s.sessionsRoot == nil {
 			s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
@@ -145,11 +145,11 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 		return
 	}
 
-	if s.liveControl != nil {
+	if s.sessionsRoot != nil {
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		projection, err := s.liveControl.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
+		projection, err := s.sessionsRoot.ReadSessionDetail(r.Context(), decodeGetFactorySessionRequest(sessionID))
 		if err != nil {
 			if s.writeSessionsRootError(w, string(sessionID), err) {
 				return
@@ -158,7 +158,7 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 			s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
 			return
 		}
-		s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
+		s.writeJSON(w, http.StatusOK, factorysession.SessionDetailResponseToAPI(projection))
 		return
 	}
 
@@ -179,7 +179,7 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *ReadHandler) GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
@@ -197,7 +197,7 @@ func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request,
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *ReadHandler) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
@@ -215,11 +215,11 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *LifecycleHandler) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.handleDurableInterruptDispatchControl(w, r, sessionID)
 }
 
-func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
+func (s *LifecycleHandler) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	if !requestAcceptsJSONContentType(r.Header.Get("Content-Type")) {
 		s.writeUnsupportedMediaTypeError(w)
 		return
@@ -262,7 +262,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, factorysession.SessionOpenResultToAPI(start.Live))
 }
 
-func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
+func (s *LifecycleHandler) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
 	if s.writeSessionsRequestContextOutcome(w, err) {
 		return
 	}
@@ -299,15 +299,12 @@ func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err erro
 	s.writeError(w, http.StatusBadRequest, err.Error(), code)
 }
 
-func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
+func (s *LifecycleHandler) CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if s.liveControl != nil {
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
 		deletion := s.sessionDeletion
-		if deletion == nil {
-			deletion, _ = s.liveControl.(factorysessionexecution.LiveDeletionService)
-		}
 		if deletion == nil {
 			s.writeError(w, http.StatusInternalServerError, "factory session deletion is unavailable", "INTERNAL_ERROR")
 			return
@@ -324,23 +321,10 @@ func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, ses
 		return
 	}
 
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
-		return
-	}
-	if err := sessionRuntime.CloseFactorySession(r.Context(), sessionID); err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-			return
-		}
-		s.logger.Error("delete factory session failed", zap.Error(err), zap.String("session_id", sessionID))
-		s.writeError(w, http.StatusInternalServerError, "failed to delete factory session", "INTERNAL_ERROR")
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
 }
 
-func (s *Server) writeDurableExecutionError(w http.ResponseWriter, err error) bool {
+func (s *LifecycleHandler) writeDurableExecutionError(w http.ResponseWriter, err error) bool {
 	if status, response, ok := factorysession.ExecutionErrorResponse(err); ok {
 		s.writeJSON(w, status, response)
 		return true
@@ -376,7 +360,7 @@ func durableSessionStartRequest(raw factorysessionexecution.StartRequest, synchr
 	}, nil
 }
 
-func (s *Server) durableProjectRoot(ctx context.Context) (string, error) {
+func (s *LifecycleHandler) durableProjectRoot(ctx context.Context) (string, error) {
 	defaultSession, err := s.sessionsRoot.Get(ctx, factorysessionexecution.SessionGetRequest{
 		SessionID: factorysessionexecution.DefaultSessionID,
 		Mode:      factorysessionexecution.SessionOperationModeLive,
@@ -414,7 +398,7 @@ func (s *Server) durableProjectRoot(ctx context.Context) (string, error) {
 	return root, nil
 }
 
-func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
+func (s *LifecycleHandler) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -465,7 +449,7 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 
 }
 
-func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
+func (s *LifecycleHandler) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -527,37 +511,19 @@ func isDurableExecutionSessionID(sessionID string) bool {
 	return strings.HasPrefix(strings.TrimSpace(sessionID), "dur-sess-")
 }
 
-func (s *Server) mergeScopedFactorySessionList(
-	ctx context.Context,
-	normalized factorysessionexecution.ListSessionsRequest,
-) (factoryapi.ListFactorySessionsResponse, error) {
-	var live scopedLiveReader
-	var durable scopedDurableReader
-
-	if s.sessionsRoot != nil {
-		if s.liveControl != nil {
-			live = ReadProjectionSessionListReader{Reader: s.liveControl}
-		} else {
-			live = s.liveSessionLister
-		}
-		durable = s.sessionsRoot
-	} else {
-		live = s.liveSessionLister
-		durable = s.durableLister
-	}
-
-	result, err := mergeScopedSessionList(ctx, normalized, live, durable)
+func (s *ReadHandler) mergeScopedFactorySessionList(ctx context.Context, normalized factorysessionexecution.ListSessionsRequest) (factoryapi.ListFactorySessionsResponse, error) {
+	result, err := mergeScopedSessionList(ctx, normalized, s.liveSessionLister, s.sessionsRoot)
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
 	return factorysession.ScopedSessionListResponseToAPI(result), nil
 }
 
-func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
+func (s *ReadHandler) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
 	return s.writeSessionsRootError(w, "", err)
 }
 
-func (s *Server) writeDurableSessionListError(w http.ResponseWriter, err error) {
+func (s *ReadHandler) writeDurableSessionListError(w http.ResponseWriter, err error) {
 	if s.writeDurableSessionReadError(w, err) {
 		return
 	}

@@ -15,20 +15,21 @@ import (
 	"go.uber.org/zap"
 )
 
-func waitForRootGetSession(ctx context.Context, _ string) (factorysessions.SessionProjection, error) {
-	<-ctx.Done()
-	return factorysessions.SessionProjection{}, ctx.Err()
-}
-
 func TestHandlerFromRoot_GetFactorySessionCanceledDuringRootCallCompletesWithoutHang(t *testing.T) {
 	t.Parallel()
 
+	entered := make(chan struct{})
 	root := &httpSessionsRootFake{
-		getSession: waitForRootGetSession,
+		getSession: func(ctx context.Context, _ string) (factorysessions.SessionProjection, error) {
+			close(entered)
+			<-ctx.Done()
+			return factorysessions.SessionProjection{}, ctx.Err()
+		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha", nil).WithContext(ctx)
 	recorder := httptest.NewRecorder()
 
@@ -38,12 +39,16 @@ func TestHandlerFromRoot_GetFactorySessionCanceledDuringRootCallCompletesWithout
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	select {
+	case <-entered:
+	case <-time.After(time.Minute):
+		t.Fatal("GetFactorySession did not enter the selected root")
+	}
 	cancel()
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(time.Minute):
 		t.Fatal("GetFactorySession hung after request cancellation")
 	}
 	if body := recorder.Body.String(); body != "" {
@@ -55,7 +60,7 @@ func TestHandlerFromRoot_GetFactorySessionCanceledBeforeRootCallCompletesWithout
 	t.Parallel()
 
 	root := &httpSessionsRootFake{}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -71,29 +76,19 @@ func TestHandlerFromRoot_GetFactorySessionCanceledBeforeRootCallCompletesWithout
 func TestHandlerFromRoot_ListFactorySessionsDeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.WithValue(t.Context(), contextTestKey{}, "selected-list")
 	root := &httpSessionsRootFake{
-		listSessions: func(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
-			<-ctx.Done()
-			return factorysessions.ListSessionsResult{}, ctx.Err()
+		listSessions: func(received context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			if received != ctx {
+				t.Fatal("list dropped the selected request context")
+			}
+			return factorysessions.ListSessionsResult{}, context.DeadlineExceeded
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
-	defer cancel()
+	handler := factorysessionshttp.NewReadHandler(root, nil, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, testRequestPreparation{}, zap.NewNop())
 
 	recorder := httptest.NewRecorder()
-	done := make(chan struct{})
-	go func() {
-		handler.ListFactorySessions(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions", nil).WithContext(ctx), factoryapi.ListFactorySessionsParams{})
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("ListFactorySessions hung after request deadline")
-	}
+	handler.ListFactorySessions(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions", nil).WithContext(ctx), factoryapi.ListFactorySessionsParams{})
 	if recorder.Code != http.StatusGatewayTimeout {
 		t.Fatalf("status = %d, want 504 Gateway Timeout", recorder.Code)
 	}
@@ -103,34 +98,26 @@ func TestHandlerFromRoot_ListFactorySessionsDeadlineExceededReturnsGatewayTimeou
 func TestHandlerFromRoot_CloseFactorySessionDeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.WithValue(t.Context(), contextTestKey{}, "selected-close")
 	root := &httpSessionsRootFake{
-		onDelete: func(ctx context.Context, _ string) error {
-			<-ctx.Done()
-			return ctx.Err()
+		onDelete: func(received context.Context, _ string) error {
+			if received != ctx {
+				t.Fatal("close dropped the selected request context")
+			}
+			return context.DeadlineExceeded
 		},
 	}
-	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
-	defer cancel()
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
 
 	recorder := httptest.NewRecorder()
-	done := make(chan struct{})
-	go func() {
-		handler.CloseFactorySession(recorder, httptest.NewRequest(http.MethodDelete, "/factory-sessions/session-alpha", nil).WithContext(ctx), "session-alpha")
-		close(done)
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("CloseFactorySession hung after request deadline")
-	}
+	handler.CloseFactorySession(recorder, httptest.NewRequest(http.MethodDelete, "/factory-sessions/session-alpha", nil).WithContext(ctx), "session-alpha")
 	if recorder.Code != http.StatusGatewayTimeout {
 		t.Fatalf("status = %d, want 504 Gateway Timeout", recorder.Code)
 	}
 	assertErrorResponse(t, recorder.Body.Bytes(), factoryapi.ErrorFamilyInternalServerError, factoryapi.ErrorResponseCodeINTERNALERROR, "factory session request timed out")
 }
+
+type contextTestKey struct{}
 
 func TestSessionsRequestContextErrorResponseForTest(t *testing.T) {
 	t.Parallel()

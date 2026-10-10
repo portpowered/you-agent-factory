@@ -10,21 +10,24 @@ import (
 	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimehttpcontrol "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control"
+	runtimehttpcommon "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common"
+	runtimehttpobservation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-var RuntimeRequestContextErrorResponseForTest = runtimeRequestContextErrorResponse
+var RuntimeRequestContextErrorResponseForTest = runtimehttpcommon.RequestContextErrorResponse
 
 func TestGetStatus_EndsWithoutBodyWhenContextCanceledBeforeFakeRoot(t *testing.T) {
 	t.Parallel()
 
 	var invoked bool
-	adapter := NewAdapter(&runtimeRootFake{
+	adapter := runtimehttpobservation.NewHandler(&runtimeRootFake{
 		observe: func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 			invoked = true
 			return factoryruntime.ObserveResult{}, nil
 		},
-	})
+	}, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -45,12 +48,12 @@ func TestGetStatus_EndsWithoutErrorWhenCanceledDuringFakeRoot(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	adapter := NewAdapter(&runtimeRootFake{
+	adapter := runtimehttpobservation.NewHandler(&runtimeRootFake{
 		observe: func(blockCtx context.Context, _ factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 			<-blockCtx.Done()
 			return factoryruntime.ObserveResult{}, context.Canceled
 		},
-	})
+	}, nil)
 	recorder := httptest.NewRecorder()
 
 	done := make(chan struct{})
@@ -78,12 +81,12 @@ func TestGetStatus_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	adapter := NewAdapter(&runtimeRootFake{
+	adapter := runtimehttpobservation.NewHandler(&runtimeRootFake{
 		observe: func(blockCtx context.Context, _ factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 			<-blockCtx.Done()
 			return factoryruntime.ObserveResult{}, context.DeadlineExceeded
 		},
-	})
+	}, nil)
 	recorder := httptest.NewRecorder()
 
 	done := make(chan struct{})
@@ -107,7 +110,7 @@ func TestControlPause_EndsWithoutBodyWhenContextCanceledBeforeFakeRoot(t *testin
 	t.Parallel()
 
 	var invoked bool
-	adapter := NewAdapter(&runtimeRootFake{
+	adapter := runtimehttpcontrol.NewHandler(&runtimeRootFake{
 		pause: func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
 			invoked = true
 			return factoryruntime.PauseResult{}, nil
@@ -133,7 +136,7 @@ func TestControlPause_EndsWithoutErrorWhenCanceledDuringFakeRoot(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	adapter := NewAdapter(&runtimeRootFake{
+	adapter := runtimehttpcontrol.NewHandler(&runtimeRootFake{
 		pause: func(blockCtx context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
 			<-blockCtx.Done()
 			return factoryruntime.PauseResult{}, context.Canceled
@@ -166,7 +169,7 @@ func TestControlPause_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	adapter := NewAdapter(&runtimeRootFake{
+	adapter := runtimehttpcontrol.NewHandler(&runtimeRootFake{
 		pause: func(blockCtx context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
 			<-blockCtx.Done()
 			return factoryruntime.PauseResult{}, context.DeadlineExceeded

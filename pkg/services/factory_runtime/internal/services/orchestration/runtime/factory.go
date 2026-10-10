@@ -278,7 +278,7 @@ func (opening *EngineOpening) openConfiguredRuntime(cfg *runtimeConfig) (factory
 	}
 
 	sched := buildRuntimeScheduler(cfg)
-	effectiveLogger := logging.EnsureLogger(cfg.logger)
+	effectiveLogger := cfg.logger
 	marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, err := buildRuntimeMarking(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)

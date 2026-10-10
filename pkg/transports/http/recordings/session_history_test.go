@@ -138,3 +138,44 @@ func requireHistorySessionID(t *testing.T, got, want string, request any) {
 		t.Fatalf("session request = %#v, want session %q", request, want)
 	}
 }
+
+type durableHTTPInspectionStub struct {
+	factorysessions.SessionInspectionService
+	requestedID string
+	err         error
+}
+
+func (stub *durableHTTPInspectionStub) QueryArtifacts(_ context.Context, request factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error) {
+	stub.requestedID = request.SessionID
+	return factorysessions.ListArtifactsResult{SessionID: request.SessionID}, stub.err
+}
+
+func TestDurableHTTPUsesInjectedInspectionForSelectedSession(t *testing.T) {
+	for _, missing := range []bool{false, true} {
+		name := "selected artifacts"
+		if missing {
+			name = "typed missing session"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			inspection := &durableHTTPInspectionStub{}
+			if missing {
+				inspection.err = factorysessions.ErrDurableSessionNotFound
+			}
+			handler := NewAdapterWithSessions(nil, nil, inspection)
+			const sessionID = "dur-sess-selected-inspection"
+			response := httptest.NewRecorder()
+			handler.ListFactorySessionArtifacts(response, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/artifacts", nil), sessionID)
+			wantStatus := http.StatusOK
+			if missing {
+				wantStatus = http.StatusNotFound
+			}
+			if inspection.requestedID != sessionID || response.Code != wantStatus {
+				t.Fatalf("selected inspection = %q, status = %d, body = %s", inspection.requestedID, response.Code, response.Body.String())
+			}
+			if missing && !strings.Contains(response.Body.String(), `"code":"NOT_FOUND"`) {
+				t.Fatalf("missing session lost typed error: %s", response.Body.String())
+			}
+		})
+	}
+}

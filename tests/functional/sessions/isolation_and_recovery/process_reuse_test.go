@@ -110,7 +110,7 @@ func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T,
 	var stdout, stderr bytes.Buffer
 	err := fixture.process.Execute(root.Input{
 		Args: []string{
-			"you", "run", "--factory", workflowPath, "--with-mock-workers", "--with-server",
+			"you", "run", "--factory", workflowPath, "--with-server",
 		},
 		Env:              append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir()),
 		Stdin:            strings.NewReader(""),
@@ -133,6 +133,24 @@ func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T,
 	fixture.router.mu.Unlock()
 	if listenerContext == nil || !errors.Is(listenerContext.Err(), context.Canceled) {
 		t.Fatalf("failed listener context = %v, want cancellation before Execute returns", listenerContext)
+	}
+
+	// A retry uses the same process and its prebuilt durable HTTP roles, with a
+	// fresh listener and cancellation owner. Serialize this pair because reuse
+	// after the failed host has unwound is the customer invariant under test.
+	server := support.NewProcessAPIServer()
+	fixture.router.setCurrent(server)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--factory", workflowPath, "--with-server",
+	})
+	home := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf("retry direct JavaScript after host failure: %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if !strings.Contains(inputs.Stdout(), "completed (SUCCEEDED)") {
+		t.Fatalf("retry output = %q, want canonical durable success", inputs.Stdout())
 	}
 }
 

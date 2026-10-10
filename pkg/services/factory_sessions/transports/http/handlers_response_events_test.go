@@ -41,13 +41,11 @@ func blockingResponseEventCursor() *factorysessions.ResponseEventCursor {
 func TestGetFactoryResponseEventsBySessionId_CanceledStreamCompletesWithoutHang(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{
-		SessionsRoot: responseEventsRootFake{
-			subscribe: func(ctx context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
-				return factorysessions.SessionResponseSubscriptionResult{Cursor: blockingResponseEventCursor()}, nil
-			},
+	handler := NewObservationHandler(responseEventsRootFake{
+		subscribe: func(ctx context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+			return factorysessions.SessionResponseSubscriptionResult{Cursor: blockingResponseEventCursor()}, nil
 		},
-	}, zap.NewNop())
+	}, nil, nil, nil, zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/dur-sess-1/response-events", nil).WithContext(ctx)
@@ -75,13 +73,11 @@ func TestGetFactoryResponseEventsBySessionId_CanceledStreamCompletesWithoutHang(
 func TestGetFactoryResponseEventsBySessionId_DeadlineExceededStreamCompletesWithoutHang(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{
-		SessionsRoot: responseEventsRootFake{
-			subscribe: func(ctx context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
-				return factorysessions.SessionResponseSubscriptionResult{Cursor: blockingResponseEventCursor()}, nil
-			},
+	handler := NewObservationHandler(responseEventsRootFake{
+		subscribe: func(ctx context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+			return factorysessions.SessionResponseSubscriptionResult{Cursor: blockingResponseEventCursor()}, nil
 		},
-	}, zap.NewNop())
+	}, nil, nil, nil, zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
@@ -111,26 +107,24 @@ func TestGetFactoryResponseEventsBySessionId_DeadlineExceededStreamCompletesWith
 func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{
-		SessionsRoot: responseEventsRootFake{
-			subscribe: func(_ context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
-				if request.SessionID != "dur-sess-1" || request.AfterSequence != 2 {
-					t.Fatalf("subscribe request = %#v", request)
-				}
-				called := false
-				return factorysessions.SessionResponseSubscriptionResult{Cursor: &factorysessions.ResponseEventCursor{
-					NextEvents: func(context.Context) ([]factorysessions.FactoryResponseEvent, error) {
-						if called {
-							return nil, context.Canceled
-						}
-						called = true
-						return []factorysessions.FactoryResponseEvent{{Sequence: 1, Kind: factorysessions.ResponseEventKindMessage, DispatchID: "dispatch-1"}}, nil
-					},
-					DetachCursor: func() {},
-				}}, nil
-			},
+	handler := NewObservationHandler(responseEventsRootFake{
+		subscribe: func(_ context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+			if request.SessionID != "dur-sess-1" || request.AfterSequence != 2 {
+				t.Fatalf("subscribe request = %#v", request)
+			}
+			called := false
+			return factorysessions.SessionResponseSubscriptionResult{Cursor: &factorysessions.ResponseEventCursor{
+				NextEvents: func(context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+					if called {
+						return nil, context.Canceled
+					}
+					called = true
+					return []factorysessions.FactoryResponseEvent{{Sequence: 1, Kind: factorysessions.ResponseEventKindMessage, DispatchID: "dispatch-1"}}, nil
+				},
+				DetachCursor: func() {},
+			}}, nil
 		},
-	}, zap.NewNop())
+	}, nil, nil, nil, zap.NewNop())
 
 	recorder := httptest.NewRecorder()
 	afterSequence := factoryapi.ResponseEventAfterSequence(2)
@@ -150,7 +144,7 @@ func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing
 func TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{SessionsRoot: responseEventsRootFake{}}, zap.NewNop())
+	handler := NewObservationHandler(responseEventsRootFake{}, nil, nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	afterSequence := factoryapi.ResponseEventAfterSequence(-1)
 	handler.GetFactoryResponseEventsBySessionId(
@@ -167,7 +161,7 @@ func TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence(t *test
 func TestGetFactoryResponseEventsBySessionId_RejectsInvalidKindFilter(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{SessionsRoot: responseEventsRootFake{}}, zap.NewNop())
+	handler := NewObservationHandler(responseEventsRootFake{}, nil, nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	kinds := factoryapi.ResponseEventKind{"NOT_A_KIND"}
 	handler.GetFactoryResponseEventsBySessionId(
@@ -184,13 +178,11 @@ func TestGetFactoryResponseEventsBySessionId_RejectsInvalidKindFilter(t *testing
 func TestGetFactoryResponseEventsBySessionId_MapsDurableSessionNotFound(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{
-		SessionsRoot: responseEventsRootFake{
-			subscribe: func(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
-				return factorysessions.SessionResponseSubscriptionResult{}, factorysessions.ErrSessionNotFound
-			},
+	handler := NewObservationHandler(responseEventsRootFake{
+		subscribe: func(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+			return factorysessions.SessionResponseSubscriptionResult{}, factorysessions.ErrSessionNotFound
 		},
-	}, zap.NewNop())
+	}, nil, nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetFactoryResponseEventsBySessionId(
 		recorder,
@@ -206,7 +198,7 @@ func TestGetFactoryResponseEventsBySessionId_MapsDurableSessionNotFound(t *testi
 func TestGetFactoryResponseEventsBySessionId_RequiresSessionsRoot(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{}, zap.NewNop())
+	handler := NewObservationHandler(nil, nil, nil, nil, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	handler.GetFactoryResponseEventsBySessionId(
 		recorder,
