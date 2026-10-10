@@ -13,6 +13,19 @@ import (
 // Completed durable attempts use the same host capture clock as archives.
 // A live terminal may precede durable admission; that interval proves no end.
 func (r *registry) withCapturedTerminalObservation(ctx context.Context, observation workersessions.Observation) workersessions.Observation {
+	if observation.State != workersessions.StateCompleted && observation.State != workersessions.StateFailed {
+		return observation
+	}
+	publication := r.publicationFor(r.workerAddress(observation.WorkerSessionID, observation.FactorySessionID))
+	if publication == nil {
+		return observation
+	}
+	publication.mu.Lock()
+	recordingID := publication.recordingID
+	publication.mu.Unlock()
+	if recordingID == "" {
+		return observation
+	}
 	observation.EndedAt, observation.Duration = nil, nil
 	observation.DurationBasis = workersessions.DurationBasisUnavailable
 	captured, err := r.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: observation.FactorySessionID})
@@ -23,8 +36,17 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 	observation.DurationBasis = captured.DurationBasis
 	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable
 	observation.Transcript, observation.TokenUsage = captured.Transcript, captured.TokenUsage
-	if captured.Failure != nil || observation.State == workersessions.StateCompleted || observation.State == workersessions.StateFailed {
-		observation.Failure = captured.Failure
+	if captured.Failure != nil {
+		if observation.Failure == nil {
+			observation.Failure = captured.Failure
+		} else {
+			failure := *observation.Failure
+			failure.Kind, failure.Detail = captured.Failure.Kind, captured.Failure.Detail
+			if captured.Failure.AgentRunFailureClass != "" {
+				failure.AgentRunFailureClass = captured.Failure.AgentRunFailureClass
+			}
+			observation.Failure = &failure
+		}
 	}
 	observation.TerminalCause = captured.TerminalCause
 	observation.RecordingHealth, observation.RecordingHealthReason = captured.RecordingHealth, captured.RecordingHealthReason
@@ -34,6 +56,9 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 // Only the selected committed terminal can establish a completed association
 // or failure. Prefixes and legacy terminals without those facts stay unknown.
 func applyCapturedTerminalFacts(observation *workersessions.Observation, item recordings.WorkerCapturedCatalogItem) error {
+	if observation.State != workersessions.StateCompleted && observation.State != workersessions.StateFailed {
+		return nil
+	}
 	if item.Terminal == nil || item.Terminal.Position < 1 || uint64(item.Terminal.Position) > item.Catalog.CommittedPosition {
 		return nil
 	}

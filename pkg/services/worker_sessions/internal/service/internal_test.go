@@ -1983,6 +1983,9 @@ func TestKeyedRuntime_SelectedFactClocksRemainScopedThroughRetention(t *testing.
 			t.Fatal(err)
 		}
 		ended := fixture.clock.Add(3 * time.Minute)
+		// This fixture admits capture; supply its selected committed clock at
+		// the read boundary rather than substituting registry lifecycle timing.
+		installSelectedRuntimeTerminalCapture(t, fixture, sink, ended)
 		clock.SetTick(9)
 		assertSelectedRuntimeTiming(t, fixture, sink, fixture.clock, &ended, 3*time.Minute)
 		if err := attempt.Complete(context.Background(), runtimeAttemptFailedDispatch(perRuntimeLogicalDispatchID), errors.New("late result")); err != nil {
@@ -1990,6 +1993,28 @@ func TestKeyedRuntime_SelectedFactClocksRemainScopedThroughRetention(t *testing.
 		}
 		assertSelectedRuntimeTiming(t, fixture, sink, fixture.clock, &ended, 3*time.Minute)
 	}
+}
+
+func installSelectedRuntimeTerminalCapture(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, ended time.Time) {
+	t.Helper()
+	execution := fixture.request.Execution.Execution
+	item := historyCapture(t, fixture.request.ID, execution.FactorySessionID, fixture.request.AttemptID, true)
+	item.Catalog.RecordingID = execution.RecordingID
+	requests := sink.requestsFor(workersessions.Topic(fixture.request.ID, execution.FactorySessionID))
+	for index, request := range requests {
+		draft := decodePerRuntimeDraft(t, request)
+		record := events.Record{ID: events.RecordID{Position: events.AggregateSequence(index + 1)}, Payload: request.Payload}
+		if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted {
+			item.Opening = record
+		}
+		if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseCompleted {
+			item.Terminal.Position = record.ID.Position
+			item.MetadataRecords = []events.Record{record}
+			item.Catalog.CommittedPosition = uint64(record.ID.Position)
+			item.CapturedAt = map[string]time.Time{fmt.Sprint(record.ID.Position): ended}
+		}
+	}
+	fixture.service.logs = &LogReader{reader: &terminalSummaryReader{item: item}}
 }
 
 func assertSelectedRuntimeTiming(t *testing.T, fixture *perRuntimeAttemptFixture, sink *perRuntimeAppendCapture, started time.Time, ended *time.Time, duration time.Duration) {

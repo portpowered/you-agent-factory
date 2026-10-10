@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -63,7 +64,7 @@ func TestCapturedCompletedSummarySelectedCatalogAndLiveAgree(t *testing.T) {
 			if err != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0], got) {
 				t.Fatalf("catalog differs: %+v %v", rows, err)
 			}
-			live := (&registry{logs: logs}).withCapturedTerminalObservation(t.Context(), workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: got.State, EndedAt: got.StartedAt})
+			live := (&registry{logs: logs, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}).withCapturedTerminalObservation(t.Context(), workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: got.State, EndedAt: got.StartedAt})
 			if !reflect.DeepEqual(live.EndedAt, got.EndedAt) || !reflect.DeepEqual(live.Failure, got.Failure) || live.ProviderSession != got.ProviderSession || live.Transcript != got.Transcript {
 				t.Fatalf("live differs: %+v", live)
 			}
@@ -143,5 +144,45 @@ func mutateCompletedSummaryFixture(name string, draft *workers.Draft, payload ma
 		delete(payload, "failureCause")
 		delete(payload, "failureDetail")
 		item.CapturedAt = nil
+	}
+}
+
+func TestCapturedTerminalEnrichmentPreservesLiveFailureClassification(t *testing.T) {
+	t.Parallel()
+	item := completedSummaryFixture(t, true)
+	reader := &terminalSummaryReader{item: item}
+	r := &registry{logs: &LogReader{reader: reader}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+	failure := &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live detail", ProviderFailureKind: providers.ExecuteFailureKindTimeout, ProviderContinuationFailureKind: providers.ContinuationFailureKindStale, ProviderContinuationOutcome: providers.ContinuationOutcomeUnsupported, AgentRunFailureClass: "agent_run_provider_failure"}
+	observation := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: workersessions.StateFailed, Failure: failure}
+	got := r.withCapturedTerminalObservation(t.Context(), observation)
+	want := *failure
+	want.Detail = "expected output artifact was not produced"
+	if !reflect.DeepEqual(got.Failure, &want) || failure.Detail != "live detail" {
+		t.Fatalf("lost or mutated normalized live failure: %+v", got.Failure)
+	}
+	archived, err := r.logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+	if err != nil || archived.Failure.ProviderFailureKind != "" || archived.Failure.ProviderContinuationFailureKind != "" || archived.Failure.ProviderContinuationOutcome != "" {
+		t.Fatalf("inferred unrecorded classification: %+v %v", archived.Failure, err)
+	}
+}
+
+func TestCapturedTerminalEnrichmentPreservesUnrecordedAndControlledTiming(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
+	end, duration := start.Add(time.Second), time.Second
+	for _, state := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled, workersessions.StateTerminated} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			observation := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", State: state, StartedAt: &start, EndedAt: &end, Duration: &duration, DurationBasis: workersessions.DurationBasisRecordedTimestamps}
+			for _, recordingID := range []string{"", "recording"} {
+				if recordingID != "" && (state == workersessions.StateCompleted || state == workersessions.StateFailed) {
+					continue
+				}
+				r := &registry{publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: recordingID}}}
+				if got := r.withCapturedTerminalObservation(t.Context(), observation); !reflect.DeepEqual(got, observation) {
+					t.Fatalf("lost lifecycle timing: %+v", got)
+				}
+			}
+		})
 	}
 }

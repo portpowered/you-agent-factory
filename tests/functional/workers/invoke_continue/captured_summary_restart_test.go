@@ -57,6 +57,8 @@ func TestCapturedSummaryRestart(t *testing.T) {
 		// Live Runtime confirmation belongs to the canonical Factory ledger;
 		// it is independent of durable Worker capture and is not a capture fact.
 		want.observation.ConfirmationState = got.observation.ConfirmationState
+		assertArchivedFailureUnknowns(t, got.observation)
+		want.observation = recordedSummaryFailure(want.observation)
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("%s restart changed captured facts/content: before=%+v after=%+v", id, want, got)
 		}
@@ -106,7 +108,10 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 			if row.WorkerSessionId == id {
 				found = true
 				row.ConfirmationState = http.ConfirmationState
-				if !reflect.DeepEqual(row, http) {
+				if history == "archived" {
+					assertArchivedFailureUnknowns(t, row)
+				}
+				if !reflect.DeepEqual(recordedSummaryFailure(row), recordedSummaryFailure(http)) {
 					t.Fatalf("%s row differs: %+v %+v", history, row, http)
 				}
 			}
@@ -122,4 +127,24 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 		t.Fatal(err)
 	}
 	return snapshot
+}
+
+// The terminal schema records safe failure fields, not normalized provider
+// classification. Compare durable facts while explicitly protecting unknowns.
+func recordedSummaryFailure(row api.WorkerSessionObservation) api.WorkerSessionObservation {
+	if row.Failure != nil {
+		failure := *row.Failure
+		failure.ProviderFailureKind = nil
+		failure.ProviderContinuationFailureKind = nil
+		failure.ProviderContinuationOutcome = nil
+		row.Failure = &failure
+	}
+	return row
+}
+
+func assertArchivedFailureUnknowns(t *testing.T, row api.WorkerSessionObservation) {
+	t.Helper()
+	if row.Failure != nil && (row.Failure.ProviderFailureKind != nil || row.Failure.ProviderContinuationFailureKind != nil || row.Failure.ProviderContinuationOutcome != nil) {
+		t.Fatalf("archive invented unrecorded provider classification: %+v", row.Failure)
+	}
 }
