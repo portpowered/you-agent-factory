@@ -51,6 +51,27 @@ The inspected checkers use Go AST parsing, import maps, symbol inventories, and 
 
 ## 4. Detection rules and limits
 
+The repository capability set now enforces the delivered captured-only Provider
+Sessions root and HTTP Adapter/Handler with exact required reader/root/adapter/Zap
+logger signatures. It preserves Chat/Events enforcement and adds no allowance.
+Its production-registry smoke controls cover same-owner and a new cross-owner
+caller, captured-reader/logger guards and getter calls/escapes in both tag modes.
+This is partial classification, not repository-wide PASS or the complete S1-S9
+witness. Other owners, Platform effects and transport roles remain unclassified.
+
+PR #3132 removed Provider Sessions' named requiredness findings. PR #3133 removed
+the Settings root findings, but private document receiver/storage/codec guards
+and resolution.newProvidersRootQuery's required Providers guard survive. The
+dormant Settings HTTP NewAdapterFromRoot still calls NewAdapter outside Wire.
+Full Settings enabling remains BLOCKED pending the original owner's smallest
+delta; no suppression or T29 production edit is authorized. The exact sources
+and delivered merge references are reconciled in inventory.md.
+
+Required receiver/storage provenance follows exact constructor results. A public
+interface result does not currently prove the private implementation's receiver
+or stored origins merely because that concrete type is also classified. This
+limit joins the type/tag/platform/callable edges below and permits no exemption.
+
 The maintained typed analyzer now recognizes unlisted constructor declarations
 and references with the existing `New`/`Build`/`Create`/`Ensure`/`Open`/`Provide`
 vocabulary when their compiler signature returns an exact classified named
@@ -87,14 +108,11 @@ effect and transport classifications, complete inventory dispositions and the
 full S1-S9 plugin matrix remain T29 obligations; no allowance or baseline growth
 is authorized.
 
-Current production findings remain blocking. Provider Sessions' captured-only
-`internal/service.New` guards the required Recordings reader; HTTP `NewAdapter`,
-`Details` and `NewHandler` guard required collaborators/receivers. Operator
-Settings' `internal/service.Service` guards its receiver in `LoadDocument`,
-`ApplyDocumentUpdate` and `ResolveEffective`. Reader-path retirement does not
-close these requiredness findings. Original owners must remove them while
-preserving supported boundary validation, context and domain checks. T29
-must not suppress them, call them terminal, or make production changes in a
+The formerly named Provider Sessions and Settings root guards are removed by
+PR #3132 and #3133 respectively. The surviving private Settings findings listed
+above remain blocking and require the original owner's correction while
+preserving supported boundary validation, context and domain checks. T29 must
+not suppress them, call them terminal, or make production changes in a
 checker-only lane.
 
 The constructor inventory names qualified service constructors, effects, their required parameters, returned service interfaces, and approved focused provider operations. It is enforcement metadata with exact semantic meaning, not a broad exception list. Validate references against source and reject stale entries. Derive provider references from authored Wire sets where possible and resolve exported aliases in owner Wire packages. Go internal visibility still applies: canonical composition consumes focused owner exports rather than importing private implementation packages.

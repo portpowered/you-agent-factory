@@ -36,13 +36,17 @@ retain direct provider references at those composition boundaries; shadowed
 or unrelated callables receive no such treatment. No caller/callee/file
 migration allowance schema remains.
 
-The `chat-target-catalog` and `events` capability sets enforce. The analyzer returns
+The `chat-target-catalog`, `events`, and populated `repository` capability sets enforce. The analyzer returns
 `[]ConstructionFinding` with mode, set, caller, callee, file, line and rule.
 Report mode remains available to controlled analyzer fixtures, without enabling
 an owner or entering the baseline. Enforced findings and conservative unresolved debt use the shared
 exact `baseline.txt`; stale entries fail and the `baselinegrowth` analyzer rejects
 growth. Other owner classifications remain final-enforcement obligations; this
-checker increment does not prove repository coverage.
+checker increment does not prove repository coverage. The repository set currently
+classifies Provider Sessions' public Service, private inspectionService and HTTP
+Adapter/Handler. Its explicit New/NewService inputs require the captured reader;
+NewAdapter requires the root; NewHandler requires the adapter and Zap logger.
+Adding this set does not classify the remaining repository owners.
 
 ## Bounded typed rules
 
@@ -131,15 +135,33 @@ controls seed and recover these calls in both tag configurations. Execution
 evidence, rather than fixture presence, determines the plugin proof status.
 
 Final inventory auditing must distinguish retired construction paths from
-surviving requiredness guards. Provider Sessions' captured-only `service.New`
-still checks its required Recordings reader. Its HTTP `NewAdapter`, `Details`
-and `NewHandler` still guard required collaborators/receivers. Operator Settings'
-private `Service` still guards its receiver in `LoadDocument`,
-`ApplyDocumentUpdate` and `ResolveEffective`. These are unresolved production
-findings, not domain validation or analysis exclusions. T29 cannot enable those
-classifications with a suppression or fix production outside its authorized
-scope. The original owners must supply the smallest correction before final
-repository enforcement can pass.
+surviving requiredness guards. Provider Sessions PR #3132 removed the captured
+reader and named HTTP requiredness guards; its existing context and identity
+validation remains lawful. Operator Settings PR #3133 removed the constructed
+root's receiver/effect guards, including LoadDocument, ApplyDocumentUpdate and
+ResolveEffective. These corrections do not close private Settings findings:
+document/internal/service.Service still guards its receiver in LoadDocument,
+MergeDocumentProviderModel, ApplyDocumentUpdate and PersistDocument; loadDocument,
+persistDocument and marshalDocument still guard required storage/codec effects.
+resolution/internal/service.newProvidersRootQuery checks its required Providers
+root. The dormant HTTP NewAdapterFromRoot also constructs NewAdapter from a
+RootBinding record outside Wire. These findings remain BLOCKED for full
+enforcement, not domain validation or analysis exclusions. T29 cannot enable a
+blocked classification with suppression or fix production outside its authorized
+scope. The original Settings owner must supply the smallest correction.
+
+The Provider Sessions smoke extension uses the unchanged full production
+registry. Both tag configurations add same-owner and new cross-owner construction,
+captured-reader and Zap-logger guards, getter calls/escapes, lawful Wire construction
+and a parameterized view. A local Zap declaration is a controlled signature
+fixture, not proof of logging behavior. Execution evidence belongs in PR comments.
+The S1-S9 full-repository witness remains incomplete while other roles are unclassified.
+
+Receiver/storage requiredness currently follows exact constructor result types.
+A constructor returning a public interface does not by itself trace storage or
+receiver guards on its private concrete implementation. Explicitly listing the
+concrete type does not close that provenance gap. This is an analyzer limit to
+address with typed fixtures; it is not permission to ignore a known source finding.
 
 Events classifies the public `events.Service`, private `service.Store` and
 private `topicState` as behavior, behavior and scoped state respectively.

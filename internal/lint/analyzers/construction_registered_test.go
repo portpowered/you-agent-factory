@@ -1,11 +1,79 @@
 package analyzers
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"golang.org/x/tools/go/analysis/analysistest"
 )
+
+// Compiler-valid source exercises the actual production policy, including the
+// explicit captured reader and HTTP logger inputs that result inference misses.
+func TestConstructionProviderSessionsProductionPolicy(t *testing.T) {
+	useFixtures(t)
+	const module = "github.com/portpowered/infinite-you"
+	modulePrefix = module + "/"
+	const root = module + "/pkg/services/provider_sessions"
+	files := map[string]string{
+		module + "/pkg/services/recordings/reader.go": "package recordings\ntype WorkerCapturedActivityReader interface { Read() }\n",
+		"go.uber.org/zap/logger.go":                   "package zap\ntype Logger struct{}\n",
+		root + "/contract.go":                         "package provider_sessions\ntype Service interface { Observe() }\n",
+		root + "/internal/service/service.go": fmt.Sprintf(`package service
+import recordings %q
+import sessions %q
+type inspectionService struct{ reader recordings.WorkerCapturedActivityReader }
+func New(reader recordings.WorkerCapturedActivityReader) (sessions.Service, error) {
+ if reader == nil { return nil, nil } // want "required-dependency-guard:.*New.*New"
+ return &inspectionService{reader: reader}, nil
+}
+func (s *inspectionService) Observe() { s.reader.Read() }
+func Operation(reader recordings.WorkerCapturedActivityReader) { New(reader) } // want "registered-construction:.*Operation.*internal/service.New"
+`, module+"/pkg/services/recordings", root),
+		root + "/wire/provider.go": fmt.Sprintf(`package wire
+import recordings %q
+import sessions %q
+import service %q
+func NewService(reader recordings.WorkerCapturedActivityReader) (sessions.Service, error) { return service.New(reader) }
+`, module+"/pkg/services/recordings", root, root+"/internal/service"),
+		root + "/transports/http/adapter.go": fmt.Sprintf(`package http
+import sessions %q
+import zap "go.uber.org/zap"
+type Adapter struct{ sessions sessions.Service }
+type Handler struct{ adapter *Adapter; logger *zap.Logger }
+func NewAdapter(peer sessions.Service) *Adapter { return &Adapter{sessions: peer} }
+func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
+ if logger == nil { return nil } // want "required-dependency-guard:.*NewHandler.*NewHandler"
+ return &Handler{adapter: adapter, logger: logger}
+}
+func (a *Adapter) Observe() { if a.sessions != nil { a.sessions.Observe() } } // want "required-dependency-guard:.*Observe.*NewAdapter"
+func (a *Adapter) Peer() sessions.Service { return a.sessions } // want Peer:"construction-getter=service-getter-locator"
+func (a *Adapter) Use() { a.Peer().Observe() } // want "service-getter-locator:.*Use.*\\(Adapter\\).Peer"
+func (a *Adapter) Escape() any { return a.Peer } // want "unresolved-service-getter-reference:.*Escape.*\\(Adapter\\).Peer"
+func (a *Adapter) View(id string) sessions.Service { _ = id; return a.sessions }
+`, root),
+		module + "/pkg/services/new_caller/caller.go": fmt.Sprintf(`package new_caller
+import wire %q
+import recordings %q
+func Run(reader recordings.WorkerCapturedActivityReader) { wire.NewService(reader) } // want "registered-construction:.*Run.*provider_sessions/wire.NewService"
+`, root+"/wire", module+"/pkg/services/recordings"),
+		module + "/pkg/wire/provider.go": fmt.Sprintf(`package wire
+import sessions %q
+import transport %q
+import zap "go.uber.org/zap"
+func Provide(peer sessions.Service, logger *zap.Logger) *transport.Handler {
+ return transport.NewHandler(transport.NewAdapter(peer), logger)
+}
+`, root, root+"/transports/http"),
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(RepositoryConstructionRegistry()),
+		root+"/internal/service", root+"/wire", root+"/transports/http", module+"/pkg/services/new_caller", module+"/pkg/wire")
+}
 
 func registeredFixtureRegistry(mode ConstructionMode) ConstructionRegistry {
 	const owner = "m/pkg/registeredowner"
