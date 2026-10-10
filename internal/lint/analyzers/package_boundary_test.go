@@ -2,10 +2,69 @@ package analyzers
 
 import (
 	"errors"
+	"path/filepath"
+	"testing"
+
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/analysistest"
-	"testing"
 )
+
+// Fixture globals and compiler environment are invocation-local and serialized,
+// like the existing analyzer fixtures. These tests observe lint diagnostics,
+// not application behavior or a production source inventory.
+func TestPackageBoundaryRootSelectedClockAllowance(t *testing.T) {
+	useFixtures(t)
+	for _, tc := range []struct {
+		name string
+		root string
+		want string
+	}{
+		{name: "BuildProcess selected", root: `func BuildProcess() { _ = c.Real{}; _ = f.Local{} }`},
+		{name: "BuildProcess normalization", root: `func BuildProcess() { normalizeProcessTime() }; func normalizeProcessTime() { _ = c.Real{} }`},
+		{name: "unselected", root: `func BuildProcess() {}`, want: ` // want "production-default:.*Real.Now#clock#time.Now::count=1"`},
+		{name: "uncalled normalization", root: `func BuildProcess() {}; func normalizeProcessTime() { _ = c.Real{} }`, want: ` // want "production-default:.*Real.Now#clock#time.Now::count=1"`},
+		{name: "other operation", root: `func BuildProcess() {}; func helper() { _ = c.Real{} }`, want: ` // want "production-default:.*Real.Now#clock#time.Now::count=1"`},
+		{name: "other symbol", root: `func BuildProcess() { _ = c.Fake{} }`, want: ` // want "production-default:.*Real.Now#clock#time.Now::count=1"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			directory, cleanup, err := analysistest.WriteFiles(map[string]string{
+				"m/pkg/wire/wire.go":                 `package wire`,
+				"m/pkg/root/process.go":              "package root\nimport c \"m/pkg/platform/clock\"\nimport f \"m/pkg/platform/filesystem\"\nvar _ c.Fake\nvar _ f.Local\n" + tc.root,
+				"m/pkg/platform/filesystem/local.go": `package filesystem; type Local struct{}`,
+				"m/pkg/root/process_test.go": `package root
+import c "m/pkg/platform/clock"
+var _ = c.Real{}
+`,
+				"m/pkg/platform/clock/clock.go": `package clock
+import "time"
+type Real struct{}
+type Fake struct{}
+func (Real) Now() time.Time { return time.Now() }` + tc.want + `
+func (Real) Neighbor() time.Time { return time.Now() } // want "production-default:.*Real.Neighbor#clock#time.Now::count=1"
+func (Real) Since(t time.Time) time.Duration { return time.Since(t) } // want "production-default:.*Real.Since#clock#time.Since::count=1"
+`,
+				"m/pkg/platform/clock/other.go": `package clock
+import "time"
+func other() time.Time { return time.Now() } // want "production-default:.*other.go#other#clock#time.Now::count=1"
+`,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(cleanup)
+			t.Setenv("GOPATH", directory)
+			t.Setenv("GO111MODULE", "off")
+			selected, _, err := loadWireSelections(filepath.Join(directory, "src", "m"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if selected["m/pkg/platform/filesystem.Local"] {
+				t.Fatal("root selection widened an unrelated leaf allowance")
+			}
+			analysistest.Run(t, directory, boundaryFixtureAnalyzer(selected, nil), "m/pkg/platform/clock")
+		})
+	}
+}
 
 func boundaryFixtureAnalyzer(selected map[string]bool, failure error) *analysis.Analyzer {
 	wire := wireSelectionSnapshot(selected, "fixture", failure)

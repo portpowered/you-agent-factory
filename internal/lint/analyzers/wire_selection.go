@@ -56,7 +56,7 @@ func loadWireSelections(directory string) (map[string]bool, string, error) {
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
 		BuildFlags: []string{"-tags=" + compilerOwnerTags},
-	}, modulePrefix+"pkg/wire/...")
+	}, modulePrefix+"pkg/wire/...", modulePrefix+"pkg/root")
 	if err != nil {
 		return nil, configuration, fmt.Errorf("load Wire compiler metadata: %w", err)
 	}
@@ -66,11 +66,13 @@ func loadWireSelections(directory string) (map[string]bool, string, error) {
 func collectWireSelections(loaded []*packages.Package, configuration string) (map[string]bool, string, error) {
 	selections := map[string]bool{}
 	var identities []string
+	hasWireSource := false
 	for _, pkg := range loaded {
 		if len(pkg.Errors) > 0 {
 			return nil, configuration, fmt.Errorf("Wire compiler metadata for %s: %s", pkg.PkgPath, pkg.Errors[0])
 		}
-		if !strings.HasPrefix(pkg.PkgPath, modulePrefix) || !under(strings.TrimPrefix(pkg.PkgPath, modulePrefix), "pkg/wire") {
+		isRoot := pkg.PkgPath == modulePrefix+"pkg/root"
+		if !strings.HasPrefix(pkg.PkgPath, modulePrefix) || (!isRoot && !under(strings.TrimPrefix(pkg.PkgPath, modulePrefix), "pkg/wire")) {
 			return nil, configuration, fmt.Errorf("unexpected Wire compiler owner %q", pkg.PkgPath)
 		}
 		if pkg.TypesInfo == nil || len(pkg.Syntax) == 0 {
@@ -89,12 +91,21 @@ func collectWireSelections(loaded []*packages.Package, configuration string) (ma
 			}
 			digest := sha256.Sum256(content.Bytes())
 			identities = append(identities, fmt.Sprintf("%s:%x", name, digest))
-			for symbol := range typedWireSelections(file, pkg.TypesInfo) {
-				selections[symbol] = true
+			var selected map[string]bool
+			if isRoot {
+				selected = typedRootEdgeSelections(file, pkg.TypesInfo)
+			} else {
+				selected = typedWireSelections(file, pkg.TypesInfo)
+				hasWireSource = true
+			}
+			for symbol, chosen := range selected {
+				if chosen {
+					selections[symbol] = true
+				}
 			}
 		}
 	}
-	if len(identities) == 0 {
+	if !hasWireSource {
 		return nil, configuration, fmt.Errorf("missing canonical Wire compiler sources")
 	}
 	sort.Strings(identities)
@@ -105,7 +116,46 @@ func wireSelectionSource(name string) bool {
 	return !strings.HasSuffix(name, "_test.go") && filepath.Base(name) != "wire_gen.go"
 }
 
-func typedWireSelections(file *ast.File, info *types.Info) map[string]bool {
+// Only the clock leaf lost its Wire selection in the selected-effects lane.
+// Recognize its exact selection in BuildProcess, without extending other
+// allowances to unrelated root helpers or package-level defaults.
+func typedRootEdgeSelections(file *ast.File, info *types.Info) map[string]bool {
+	selected := map[string]bool{}
+	var build, normalize *ast.FuncDecl
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv != nil || fn.Body == nil {
+			continue
+		}
+		switch fn.Name.Name {
+		case "BuildProcess":
+			build = fn
+		case "normalizeProcessTime":
+			normalize = fn
+		}
+	}
+	if build == nil {
+		return selected
+	}
+	symbol := modulePrefix + "pkg/platform/clock.Real"
+	selected[symbol] = typedWireSelections(build.Body, info)[symbol]
+	if normalize != nil {
+		ast.Inspect(build.Body, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			id, ok := call.Fun.(*ast.Ident)
+			if ok && info.Uses[id] == info.Defs[normalize.Name] {
+				selected[symbol] = selected[symbol] || typedWireSelections(normalize.Body, info)[symbol]
+			}
+			return true
+		})
+	}
+	return selected
+}
+
+func typedWireSelections(file ast.Node, info *types.Info) map[string]bool {
 	selected := map[string]bool{}
 	ast.Inspect(file, func(node ast.Node) bool {
 		var expression ast.Expr
