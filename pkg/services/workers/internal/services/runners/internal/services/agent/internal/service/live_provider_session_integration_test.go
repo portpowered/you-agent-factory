@@ -267,3 +267,7 @@ func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context
 func (*liveSessionService) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
 	return request.Validate()
 }
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}

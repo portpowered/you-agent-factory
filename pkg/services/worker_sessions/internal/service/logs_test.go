@@ -156,3 +156,7 @@ func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context
 func (*capturedActivityFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	panic("unexpected prepared catalog read")
 }
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}

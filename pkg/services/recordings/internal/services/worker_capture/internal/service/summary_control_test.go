@@ -173,3 +173,55 @@ func TestPreparedCatalogRefusesHydrationAndReturnsDetachedSummaries(t *testing.T
 	}
 	probe.mu.Unlock()
 }
+
+func TestPreparedScopedCatalogSurvivesUnrelatedScopeOpening(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+
+	persistScopedCatalogOpening(t, writer, "a", "selected")
+	persistScopedCatalogOpening(t, writer, "b", "selected")
+	if err := writer.RecoverWorkerOwners(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	request := recordings.WorkerCapturedCatalogRequest{FactorySessionID: "selected", Limit: 1, RequireCompleteMembership: true}
+	first, err := writer.ListPreparedWorkerSessionCaptures(t.Context(), request)
+	if err != nil || len(first.Items) != 1 || first.Items[0].Catalog.WorkerSessionID != "a" || first.NextToken == "" {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	persistScopedCatalogOpening(t, writer, "unrelated", "other")
+	// An unavailable unrelated summary must not turn the selected capability off.
+	writer.entry("unrelated").loaded = false
+	reads := probe.reads
+	request.NextToken = first.NextToken
+	second, err := writer.ListPreparedWorkerSessionCaptures(t.Context(), request)
+	if err != nil || second.GenerationID != first.GenerationID || len(second.Items) != 1 || second.Items[0].Catalog.WorkerSessionID != "b" || second.NextToken != "" {
+		t.Fatalf("scoped continuation=%+v err=%v", second, err)
+	}
+	if probe.reads != reads {
+		t.Fatal("scoped prepared query read storage")
+	}
+	persistScopedCatalogOpening(t, writer, "c", "selected")
+	if _, err := writer.ListPreparedWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+		t.Fatalf("changed selected membership accepted old cursor: %v", err)
+	}
+}
+
+func persistScopedCatalogOpening(t *testing.T, writer *FileWriter, id, scope string) {
+	t.Helper()
+	record := journalRecord(t, id, id)
+	var draft workers.Draft
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(record.Record.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.FactorySessionID = scope
+	draft.Payload, _ = json.Marshal(payload)
+	record.Record.Payload, _ = json.Marshal(draft)
+	if err := writer.PersistWorkerRecord(t.Context(), record); err != nil {
+		t.Fatal(err)
+	}
+}

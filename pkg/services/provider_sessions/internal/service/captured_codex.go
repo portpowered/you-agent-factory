@@ -52,6 +52,7 @@ func (s *capturedProvider) inspectAssociation(ctx context.Context, req providers
 func (s *capturedProvider) inspectCaptures(ctx context.Context, req providersessions.InspectRequest) (map[string]recordings.WorkerCapturedCatalogItem, error) {
 	request := recordings.WorkerCapturedCatalogRequest{
 		Limit: capturedPageLimit, RequireCompleteMembership: true, PreparedSummariesOnly: true,
+		FactorySessionID: req.FactorySessionID,
 	}
 	items := make(map[string]recordings.WorkerCapturedCatalogItem)
 	seen := make(map[string]bool)

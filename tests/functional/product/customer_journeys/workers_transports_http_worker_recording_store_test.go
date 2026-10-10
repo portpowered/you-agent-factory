@@ -49,3 +49,7 @@ func (unavailableWorkerControlStore) PersistWorkerControlInput(context.Context, 
 func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, recordings.WorkerControlOperationKey, string) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}

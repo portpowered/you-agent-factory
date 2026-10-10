@@ -256,3 +256,11 @@ func (store *interruptPhaseAckStore) LookupWorkerSessionSummary(ctx context.Cont
 func (store *interruptPhaseAckStore) RecoverWorkerOwners(ctx context.Context) error {
 	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
 }
+
+func (store *interruptPhaseAckStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	source, err := store.LookupPreparedWorkerContinuationSource(ctx, target)
+	if err != nil || source.Execution.Execution.Dispatch.DispatchID != target.ExpectedAttemptID {
+		return source, err
+	}
+	return store.WorkerRecordingStore.ValidateWorkerContinuationSource(ctx, target)
+}

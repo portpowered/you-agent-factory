@@ -557,3 +557,11 @@ func (router *inferenceWorkerRecordingRouter) ListPreparedWorkerSessionCaptures(
 	request.PreparedSummariesOnly = true
 	return router.ListWorkerSessionCaptures(ctx, request)
 }
+
+func (router *inferenceWorkerRecordingRouter) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	store, err := router.restartStore(target.RecordingID, target.WorkerSessionID)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	return store.ValidateWorkerContinuationSource(ctx, target)
+}

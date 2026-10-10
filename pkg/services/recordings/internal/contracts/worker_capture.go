@@ -50,6 +50,9 @@ type WorkerRestartInputStore interface {
 	// LookupPreparedWorkerContinuationSource selects activated metadata and the
 	// bounded immutable recipe. It never hydrates recording history.
 	LookupPreparedWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
+	// ValidateWorkerContinuationSource revalidates the exact immutable input
+	// against prepared facts for admission, without replaying history.
+	ValidateWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
 	ReadWorkerContinuationInput(context.Context, workerrecording.WorkerControlOperationKey) (json.RawMessage, error)
 }
 

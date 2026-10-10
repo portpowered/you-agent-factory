@@ -17,16 +17,18 @@ import (
 )
 
 type capturedCodexFake struct {
-	catalog       map[string]recordings.WorkerCapturedCatalogPage
-	pages         map[string]recordings.WorkerCapturedActivityPage
-	failure       error
-	calls         int
-	activityCalls int
-	preparedOnly  bool
+	catalog          map[string]recordings.WorkerCapturedCatalogPage
+	pages            map[string]recordings.WorkerCapturedActivityPage
+	failure          error
+	calls            int
+	activityCalls    int
+	preparedOnly     bool
+	lastFactoryScope string
 }
 
 func (f *capturedCodexFake) ListPreparedWorkerSessionCaptures(ctx context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	req.PreparedSummariesOnly = true
+	f.lastFactoryScope = req.FactorySessionID
 	return f.ListWorkerSessionCaptures(ctx, req)
 }
 
@@ -685,7 +687,7 @@ func TestCapturedInspectScopesReusedOpaqueReferences(t *testing.T) {
 			}
 			for _, worker := range []string{"source", "third"} {
 				got, err := service.Inspect(providersessions.InspectRequest{Session: ref, WorkerSessionID: worker, FactorySessionID: scope})
-				if err != nil || got.Session != ref || fake.activityCalls != 0 {
+				if err != nil || got.Session != ref || fake.activityCalls != 0 || fake.lastFactoryScope != scope {
 					t.Fatalf("scoped chain unavailable: %+v %v", got, err)
 				}
 			}

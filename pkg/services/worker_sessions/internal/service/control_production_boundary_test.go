@@ -754,3 +754,7 @@ func (unavailableWorkerControlStore) LookupPreparedWorkerContinuationSource(cont
 func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
+
+func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}

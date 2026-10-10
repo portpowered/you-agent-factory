@@ -68,7 +68,7 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			if probe.reads != reads {
 				t.Fatalf("prepared continuation read storage: %d -> %d", reads, probe.reads)
 			}
-			if _, err := reopened.ReadWorkerRestartRecipe(t.Context(), target); err != nil || probe.reads <= reads {
+			if _, err := reopened.ValidateWorkerContinuationSource(t.Context(), target); err != nil || probe.reads <= reads {
 				t.Fatalf("admission did not revalidate recipe: reads=%d err=%v", probe.reads, err)
 			}
 		})
@@ -706,5 +706,54 @@ func TestRestartRecipePreflightBoundsSuccessorArtifact(t *testing.T) {
 	execution.Execution.Dispatch.DispatchID = "source/continue/" + id
 	if err := writer.ValidateWorkerRestartRecipe(t.Context(), id, execution); !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
 		t.Fatalf("oversized successor artifact accepted: %v", err)
+	}
+}
+
+func TestContinuationAdmissionRefusesChangedImmutableArtifact(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"missing", "canonical-replacement"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+			target := controlIntent(t, writer, "recording", "worker", "request").Target
+			execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+			execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+			execution.Execution.Dispatch.WorkstationName = "direct"
+			execution.Execution.Model = "captured-model"
+			execution.Execution.WorkingDirectory = "captured-workspace"
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+				t.Fatal(err)
+			}
+			persistContinuationSourceTerminal(t, writer, target, "captured")
+			identity := controlInputArtifact{Key: recordings.WorkerControlOperationKey{
+				RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
+				FactorySessionID: target.FactorySessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID,
+			}, Generation: target.RecordingGenerationID}
+			path := writer.controlInputPath(controlInputRef(identity))
+			if cell == "missing" {
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				execution.Execution.Model = "replacement-model"
+				input, err := encodeWorkerRestartRecipe(target, execution)
+				if err != nil {
+					t.Fatal(err)
+				}
+				identity.Input = input
+				data, err := json.Marshal(identity)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			source, err := writer.LookupPreparedWorkerContinuationSource(t.Context(), target)
+			assertCapturedContinuationSource(t, source, err)
+			if admitted, err := writer.ValidateWorkerContinuationSource(t.Context(), target); err == nil || admitted.Reference.ID != "" {
+				t.Fatalf("changed artifact authorized admission: %+v, %v", admitted, err)
+			}
+		})
 	}
 }

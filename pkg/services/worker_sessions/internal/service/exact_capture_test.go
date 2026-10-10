@@ -1027,3 +1027,7 @@ func TestWorkNameCaptureUsesPrimaryDispatchedWork(t *testing.T) {
 func (*controlCaptureReader) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	panic("unexpected prepared catalog read")
 }
+
+func (store *restartRecipeStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}

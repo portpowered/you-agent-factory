@@ -85,7 +85,7 @@ func (writer *FileWriter) listWorkerSessionCaptures(ctx context.Context, request
 	if request.RequireCompleteMembership && unproven {
 		return recordings.WorkerCapturedCatalogPage{}, recordings.ErrWorkerRecordingReplay
 	}
-	entries, generation := writer.catalogMembership()
+	entries, generation := writer.scopedCatalogMembership(request.FactorySessionID)
 	after, err := decodeCatalogCursor(request.NextToken, generation)
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
@@ -95,7 +95,7 @@ func (writer *FileWriter) listWorkerSessionCaptures(ctx context.Context, request
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
 	end := min(start+limit, len(entries))
-	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation, request.PreparedSummariesOnly)
+	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation, request.PreparedSummariesOnly, request.FactorySessionID)
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
@@ -187,4 +187,20 @@ func decodeCatalogCursor(token, generation string) (string, error) {
 		return "", recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return cursor.After, nil
+}
+
+// Unrelated scopes cannot invalidate a scoped association snapshot. Damage and
+// ambiguity still fence complete membership before selecting this subset.
+func (writer *FileWriter) scopedCatalogMembership(factorySessionID string) ([]recordings.WorkerSessionCatalogEntry, string) {
+	entries, generation := writer.catalogMembership()
+	if factorySessionID == "" {
+		return entries, generation
+	}
+	scoped := make([]recordings.WorkerSessionCatalogEntry, 0)
+	for _, entry := range entries {
+		if entry.FactorySessionID == factorySessionID {
+			scoped = append(scoped, entry)
+		}
+	}
+	return scoped, writer.catalogGeneration(scoped)
 }

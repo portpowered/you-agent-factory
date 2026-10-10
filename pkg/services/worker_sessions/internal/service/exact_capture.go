@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -244,13 +243,8 @@ func (r *registry) lockFrozenCapture(id string, target frozenControlTarget) (fun
 // Observation consumes activation-prepared facts. Admission also checks that
 // the immutable artifact still agrees before granting execution authority.
 func (r *registry) lookupContinuationSource(ctx context.Context, target recordings.WorkerControlTarget, observationOnly ...bool) (recordings.WorkerContinuationSource, error) {
-	captured, err := r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
-	if err != nil || (len(observationOnly) != 0 && observationOnly[0]) {
-		return captured, err
+	if len(observationOnly) != 0 && observationOnly[0] {
+		return r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
 	}
-	persisted, err := r.restart.ReadWorkerRestartRecipe(ctx, target)
-	if err != nil || !reflect.DeepEqual(persisted, captured.Execution) {
-		return recordings.WorkerContinuationSource{}, workersessions.ErrContinuationExecutionUnavailable
-	}
-	return captured, nil
+	return r.restart.ValidateWorkerContinuationSource(ctx, target)
 }

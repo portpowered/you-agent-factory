@@ -100,7 +100,7 @@ func capturedUsageCountersPresent(payload json.RawMessage) bool {
 	return false
 }
 
-func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []recordings.WorkerSessionCatalogEntry, generation string, preparedOnly bool) ([]recordings.WorkerCapturedCatalogItem, error) {
+func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []recordings.WorkerSessionCatalogEntry, generation string, preparedOnly bool, factorySessionID string) ([]recordings.WorkerCapturedCatalogItem, error) {
 	items := make([]recordings.WorkerCapturedCatalogItem, 0, len(entries))
 	for _, catalog := range entries {
 		var item recordings.WorkerCapturedCatalogItem
@@ -117,7 +117,7 @@ func (writer *FileWriter) capturedCatalogItems(ctx context.Context, entries []re
 		}
 		items = append(items, item)
 	}
-	if _, current := writer.catalogMembership(); current != generation {
+	if _, current := writer.scopedCatalogMembership(factorySessionID); current != generation {
 		return nil, recordings.ErrInvalidWorkerRecordingRequest
 	}
 	return items, nil

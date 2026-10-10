@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -31,6 +32,24 @@ func (writer *FileWriter) LookupPreparedWorkerContinuationSource(ctx context.Con
 		RecordingGenerationID: capture.Catalog.RecordingGenerationID, OwnerEpoch: capture.Catalog.OwnerEpoch,
 		Status: capture.Health, ExecutionTerminal: capture.Terminal, Records: capture.MetadataRecords,
 	}, target, execution)
+}
+
+// ValidateWorkerContinuationSource keeps immutable input validation with its
+// owner. Prepared history alone never authorizes execution after artifact loss
+// or replacement, even when the replacement is another canonical recipe.
+func (writer *FileWriter) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+	source, err := writer.LookupPreparedWorkerContinuationSource(ctx, target)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	persisted, err := writer.readWorkerRestartRecipe(ctx, target, false)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	if !reflect.DeepEqual(persisted, source.Execution) {
+		return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+	}
+	return source, nil
 }
 
 func capturedContinuationSource(session recordings.WorkerSessionRecordingSnapshot, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) (recordings.WorkerContinuationSource, error) {

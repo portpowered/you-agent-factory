@@ -26,6 +26,9 @@ type WorkerSessionCatalogEntry struct {
 type WorkerCapturedCatalogRequest struct {
 	Limit     int
 	NextToken string
+	// FactorySessionID restricts membership and its generation to one Factory
+	// scope. Empty retains the complete profile catalog.
+	FactorySessionID string
 	// RequireCompleteMembership fails closed when damage or ambiguity prevents
 	// proving association absence or uniqueness. Default reads retain healthy histories.
 	RequireCompleteMembership bool
