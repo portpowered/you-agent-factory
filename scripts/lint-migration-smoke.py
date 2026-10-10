@@ -852,6 +852,17 @@ def provider_sessions_smoke_sources(root: Path, seeded: bool) -> list[tuple[str,
           " return &Handler{adapter: adapter, logger: logger}\n}\n"
           "func (a *Adapter) Peer() sessions.Service { return a.sessions }\n"
           "func (a *Adapter) View(id string) sessions.Service { _ = id; return a.sessions }\n" +
+          "func (a *Adapter) Variadic(names []string) {\n"
+          " omitted(a.sessions)\n multiple(a.sessions, \"one\", \"two\")\n spread(a.sessions, names...)\n}\n" +
+          "func omitted(peer sessions.Service, names ...string) {\n" +
+          (" if peer == nil { return }\n" if seeded else "") +
+          " peer.Observe()\n}\n"
+          "func multiple(peer sessions.Service, names ...string) {\n" +
+          (" if peer == nil { return }\n" if seeded else "") +
+          " peer.Observe()\n}\n"
+          "func spread(peer sessions.Service, names ...string) {\n" +
+          (" if peer == nil { return }\n" if seeded else "") +
+          " if names == nil { return }\n peer.Observe()\n}\n" +
           ("func (a *Adapter) Use() { a.Peer().Observe() }\n"
            "func (a *Adapter) Escape() any { return a.Peer }\n" if seeded else ""))
     write(root, "pkg/services/new_caller/contract.go",
@@ -877,6 +888,8 @@ def provider_sessions_smoke_sources(root: Path, seeded: bool) -> list[tuple[str,
         ("repolint", f"required-receiver-guard: {private} -> {module}/{private}.(inspectionService).Observe->{module}/{private}.New"),
         ("repolint", f"required-dependency-guard: {private} -> {module}/{private}.(inspectionService).Observe->{module}/{private}.New"),
         ("repolint", f"required-dependency-guard: {transport} -> {module}/{transport}.NewHandler->{module}/{transport}.NewHandler"),
+        *[("repolint", f"required-dependency-guard: {transport} -> {module}/{transport}.{name}->{module}/{transport}.NewAdapter")
+          for name in ("omitted", "multiple", "spread")],
         ("repolint", f"service-getter-locator: {transport} -> {module}/{transport}.(Adapter).Use->{module}/{transport}.(Adapter).Peer"),
         ("repolint", f"unresolved-service-getter-reference: {transport} -> {module}/{transport}.(Adapter).Escape->{module}/{transport}.(Adapter).Peer"),
     ]

@@ -99,6 +99,25 @@ func PublicOnly(path string, read Reader) ([]byte, error) {
  return read(path)
 }
 func (s *Service) Direct(path string) ([]byte, error) { return s.read(path) }
+func (s *Service) Variadic(path string, names []string) {
+ omitted(s.read)
+ multiple(s.read, path, path)
+ spread(s.read, names...)
+ optionalNames(s.read, names...)
+}
+func omitted(read Reader, names ...string) {
+ if read == nil { return } // want "required-dependency-guard:.*requiredreader.omitted.*requiredreader.New"
+}
+func multiple(read Reader, names ...string) {
+ if read == nil { return } // want "required-dependency-guard:.*requiredreader.multiple.*requiredreader.New"
+}
+func spread(read Reader, names ...string) {
+ if read == nil { return } // want "required-dependency-guard:.*requiredreader.spread.*requiredreader.New"
+}
+func optionalNames(read Reader, names ...string) {
+ if names == nil { return }
+ read(names[0])
+}
 // Absence of the selected resource is distinct from absence of the resolver.
 func (s *Service) Selected(resolve func() any) bool {
  resource := resolve()

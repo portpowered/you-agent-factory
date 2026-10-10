@@ -83,12 +83,21 @@ func (h *registeredGuardHelpers) propagate(call *ast.CallExpr, p registeredGuard
 	if fn == nil {
 		return false
 	}
-	params := h.pass.TypesInfo.Defs[fn.Name].Type().(*types.Signature).Params()
-	if params.Len() != len(call.Args) {
+	sig := h.pass.TypesInfo.Defs[fn.Name].Type().(*types.Signature)
+	params := sig.Params()
+	count := params.Len()
+	if sig.Variadic() && len(call.Args) != count {
+		// Fixed arguments retain their identities regardless of omitted,
+		// expanded or individually supplied variadic domain arguments. The
+		// trailing slice's element provenance is not summarized here. Keep
+		// the existing equal-arity propagation unchanged.
+		count--
+	}
+	if len(call.Args) < count || (!sig.Variadic() && len(call.Args) != count) {
 		return false
 	}
 	changed := false
-	for i, arg := range call.Args {
+	for i, arg := range call.Args[:count] {
 		rule := p.origin(arg, false, map[types.Object]bool{})
 		obj := params.At(i)
 		prior := origins[symbol][obj]

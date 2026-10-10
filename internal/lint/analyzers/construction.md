@@ -69,8 +69,11 @@ promoted methods, method values/expressions, pointer receivers, and shadowing.
 Object facts carry classified ancestry and getter observations across imports;
 dependency source is not indexed. Required storage follows keyed/positional
 result literals, grouped/embedded fields, assignments, and local owner aliases.
-Same-package helper parameter requiredness reaches a finite fixed point. Helper
-return summaries skip nested closure returns and retain unresolved origins
+Same-package helper parameter requiredness reaches a finite fixed point. Fixed
+helper parameters retain provenance when variadic trailing arguments are omitted,
+supplied individually or spread. Variadic slice elements remain unsummarized;
+optional trailing domain slices are not classified as required dependencies.
+Helper return summaries skip nested closure returns and retain unresolved origins
 instead of selecting an arbitrary return value.
 
 Provider recursion follows compiled same-package helpers, concrete methods,

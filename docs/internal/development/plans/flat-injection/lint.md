@@ -51,6 +51,13 @@ The inspected checkers use Go AST parsing, import maps, symbol inventories, and 
 
 ## 4. Detection rules and limits
 
+Same-package helper propagation preserves required fixed parameters across
+variadic calls with omitted, individual or spread trailing arguments. Typed
+reader fixtures and maintained Provider Sessions smoke controls cover these
+forms, including lawful optional trailing domain-slice guards. Variadic element
+provenance and helper return summaries remain outside this bounded improvement;
+it does not close missing registry coverage or production inventory findings.
+
 The repository capability set now enforces the delivered captured-only Provider
 Sessions root and HTTP Adapter/Handler with exact required reader/root/adapter/Zap
 logger signatures. It preserves Chat/Events enforcement and adds no allowance.
