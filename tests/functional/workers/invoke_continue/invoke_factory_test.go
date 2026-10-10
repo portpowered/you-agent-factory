@@ -133,7 +133,7 @@ func assertDurableRevivalCLIRefusal(t *testing.T, host invokeContinueStartedProc
 // assembled host. Each attempt has its own command gate and captured identity.
 func TestT7DirectStopLeavesFactorySiblingRunning(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.cancel", "rest/readWorkerSessionLogs")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.show", "cli/you.worker-sessions.list", "rest/readWorkerSessionLogs")
 	fixture := ensureInvokeContinuePackageFixture(t)
 	target := fixture.scenario(t, "t7-factory-target")
 	defer target.close(t)
@@ -150,6 +150,7 @@ func TestT7DirectStopLeavesFactorySiblingRunning(t *testing.T) {
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
 	work := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{
 		WorkTypeName: "task", Payload: "T7 Factory sibling input",
+		Tags: &api.StringMap{"project": "unattributed", "role": "root"},
 	})
 	if work.WorkId == nil {
 		t.Fatal("Factory Work has no ID")
@@ -161,8 +162,10 @@ func TestT7DirectStopLeavesFactorySiblingRunning(t *testing.T) {
 		t.Fatalf("Factory Worker Sessions = %#v", rows)
 	}
 	peerID := rows.Sessions[0].WorkerSessionId
-	id, _ := t7StartGatedAsync(t, ctx, fixture, target)
+	assertRequesterUnattributedFactory(t, fixture, peer, ctx, peerID, *work.WorkId, opened.Session.Id, rows.Sessions[0])
+	id := startRequesterFactoryChild(t, fixture, target, ctx, peerRunner, peerID)
 	t19AwaitSignal(t, ctx, targetRunner.started, "direct invocation started")
+	assertRequesterFactoryChild(t, fixture, target, ctx, id, peerID, requesterSourceToken(t, peerRunner, peerID), *work.WorkId, opened.Session.Id)
 	t7AssertFactorySibling(t, ctx, fixture.baseURL, peerID, opened.Session.Id, "RUNNING")
 	stop := t7RemoteCLIInputs(target, ctx, fixture.baseURL, "cancel", id)
 	if err := fixture.process.Execute(stop.Input); err != nil {
@@ -191,6 +194,79 @@ func TestT7DirectStopLeavesFactorySiblingRunning(t *testing.T) {
 		!strings.Contains(strings.Join(command.Args, " "), `model_reasoning_effort="high"`) ||
 		!strings.Contains(string(command.Stdin), "T7 Factory sibling input") || targetRunner.CallCount() != 1 || peerRunner.CallCount() != 1 {
 		t.Fatalf("Factory command settings or isolated attempt counts: command=%s args=%q prompt=%q target=%d peer=%d", command.Command, command.Args, command.Stdin, targetRunner.CallCount(), peerRunner.CallCount())
+	}
+}
+
+// M4: submitted Work tags are descriptive. Runner identity and public reads
+// agree on known dispatch context without inferring a requester from tags.
+func assertRequesterUnattributedFactory(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, id, workID, sessionID string, listed api.WorkerSessionObservation) {
+	t.Helper()
+	observation := requesterObservation(t, fixture, scenario, ctx, id)
+	wantLabels := []string{"factory-session:" + sessionID, "tag:_work_name=work-1", "tag:_work_type=task", "tag:project=unattributed", "tag:role=root", "work:" + workID, "workstation:process"}
+	if observation.Requester != nil || !requesterCorrelationAgrees(observation, workID, sessionID) ||
+		observation.Labels == nil || !reflect.DeepEqual(*observation.Labels, wantLabels) {
+		metadata, _ := json.Marshal(map[string]any{"correlation": observation.Correlation, "labels": observation.Labels, "requester": observation.Requester})
+		t.Fatalf("unattributed Factory metadata = %s, want Work %s, Factory Session %s and labels %v", metadata, workID, sessionID, wantLabels)
+	}
+	if listed.Requester != nil || !reflect.DeepEqual(listed.Correlation, observation.Correlation) || !reflect.DeepEqual(listed.Labels, observation.Labels) {
+		t.Fatal("Factory list and CLI show disagree on admitted metadata")
+	}
+	assertRequesterFactoryListed(t, fixture, scenario, ctx, workID, sessionID, observation)
+	environment := requesterEnvironment(scenario.providerRunner.Requests()[0].Env)
+	requesterSourceToken(t, scenario.providerRunner.(*t7GatedProviderRunner), id)
+	assertRequesterEndpoint(t, environment, fixture.baseURL)
+	if environment["YOU_WORK_ID"] != workID || environment["YOU_FACTORY_SESSION_ID"] != sessionID {
+		t.Fatal("runner environment disagrees with admitted Factory correlation")
+	}
+	for _, key := range []string{"YOU_MESSAGE_TARGET", "YOU_MESSAGE_TARGET_WORK_ID"} {
+		if environment[key] != "" {
+			t.Fatal("unattributed Factory execution invented a message target")
+		}
+	}
+}
+
+func assertRequesterFactoryListed(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, workID, sessionID string, observation api.WorkerSessionObservation) {
+	t.Helper()
+	list := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "list", "--session", sessionID, "--work-id", workID)
+	if err := fixture.process.Execute(list.Input); err != nil {
+		t.Fatal(err)
+	}
+	var rows api.ListWorkerSessionsResponse
+	decodeDirectWorkerSessionResult(t, list.Stdout(), &rows)
+	if len(rows.Sessions) != 1 || rows.Sessions[0].WorkerSessionId != observation.WorkerSessionId || rows.Sessions[0].Requester != nil ||
+		!reflect.DeepEqual(rows.Sessions[0].Correlation, observation.Correlation) || !reflect.DeepEqual(rows.Sessions[0].Labels, observation.Labels) {
+		t.Fatal("CLI list lost exact Factory dispatch metadata")
+	}
+}
+
+func requesterCorrelationAgrees(observation api.WorkerSessionObservation, workID, sessionID string) bool {
+	return observation.Correlation != nil && observation.Correlation.WorkId != nil &&
+		*observation.Correlation.WorkId == workID && observation.Correlation.FactorySessionId != nil && *observation.Correlation.FactorySessionId == sessionID
+}
+
+func startRequesterFactoryChild(t *testing.T, fixture *invokeContinuePackageFixture, target *invokeContinueScenario, ctx context.Context, source *t7GatedProviderRunner, sourceID string) string {
+	t.Helper()
+	id := scenarioScopedID(target, "factory-requester-child")
+	invoke := t7RemoteCLIInputs(target, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, target, id), "--async")
+	invoke.Input.Env = append(invoke.Input.Env, "YOU_WORKER_SESSION_ID="+sourceID, "YOU_WORKER_SESSION_TOKEN="+requesterSourceToken(t, source, sourceID))
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("Factory caller's direct invocation failed: %v", err)
+	}
+	return id
+}
+
+func assertRequesterFactoryChild(t *testing.T, fixture *invokeContinuePackageFixture, target *invokeContinueScenario, ctx context.Context, id, sourceID, sourceToken, workID, sessionID string) {
+	t.Helper()
+	observation := requesterObservation(t, fixture, target, ctx, id)
+	if !requesterCorrelationAgrees(observation, workID, sessionID) || observation.Requester == nil || observation.Requester.WorkerSessionId != sourceID ||
+		observation.Requester.WorkId == nil || *observation.Requester.WorkId != workID || observation.Labels == nil || !reflect.DeepEqual(*observation.Labels, []string{"parent:" + sourceID}) {
+		t.Fatal("Factory caller's child lost verified requester/correlation or inherited source tags")
+	}
+	environment := requesterEnvironment(target.providerRunner.Requests()[0].Env)
+	assertRequesterSuccessorEnvironment(t, environment, id, sourceID, sourceToken)
+	if environment["YOU_MESSAGE_TARGET"] != sourceID || environment["YOU_MESSAGE_TARGET_WORK_ID"] != workID ||
+		environment["YOU_WORK_ID"] != workID || environment["YOU_FACTORY_SESSION_ID"] != sessionID {
+		t.Fatal("Factory caller's child environment disagrees with admitted metadata")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,52 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRuntimeDispatchMetadataKnownFacts(t *testing.T) {
+	t.Parallel()
+	request := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+	request.Execution.FactorySessionID = "factory-scope"
+	input := workers.WorkInput{WorkID: "lane", Tags: map[string]string{"project": "example", "role": "process"}, Lineage: workers.WorkLineage{ParentWorkID: "ambient-parent"}}
+	execution := workers.ExecuteRequest{Input: workers.ExecutionInput{Work: []workers.WorkInput{input, {Kind: string(workers.DataTypeResource), WorkID: "slot", Tags: map[string]string{"resource": "ignored"}}}}}
+	want := &workersessions.SessionMetadata{
+		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory-scope"},
+		Labels:      []string{"factory-session:factory-scope", "tag:project=example", "tag:role=process", "work:lane", "workstation:process"},
+	}
+	got := runtimeDispatchMetadata(request, execution)
+	if !reflect.DeepEqual(got, want) || got.Validate() != nil {
+		t.Fatalf("known dispatch metadata = %+v, want %+v", got, want)
+	}
+	input.Tags["project"] = "mutated"
+	if !reflect.DeepEqual(got, want) {
+		t.Fatal("input mutation changed detached admission metadata")
+	}
+	if empty := runtimeDispatchMetadata(workers.WorkstationDispatchRequest{}, workers.ExecuteRequest{}); empty.Requester != nil || empty.Correlation != nil || len(empty.Labels) != 0 {
+		t.Fatalf("unknown dispatch invented facts: %+v", empty)
+	}
+}
+
+func TestRuntimeDispatchMetadataMultipleWorksAndLimits(t *testing.T) {
+	t.Parallel()
+	request := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+	request.Execution.FactorySessionID = "factory-scope"
+	first, second := workers.WorkInput{WorkID: "first"}, workers.WorkInput{WorkID: "second"}
+	execution := workers.ExecuteRequest{Input: workers.ExecutionInput{Work: []workers.WorkInput{first, second, first}}}
+	got := runtimeDispatchMetadata(request, execution)
+	if got.Correlation.WorkID != "" || got.Requester != nil || !reflect.DeepEqual(got.Labels, []string{"factory-session:factory-scope", "work:first", "work:second", "workstation:process"}) {
+		t.Fatalf("multi-Work dispatch selected an arbitrary identity: %+v", got)
+	}
+	execution.Input.Work = []workers.WorkInput{second, first}
+	if !reflect.DeepEqual(got, runtimeDispatchMetadata(request, execution)) {
+		t.Fatal("input order or duplicate input changed metadata")
+	}
+	execution.Input.Work[0].Tags = make(map[string]string)
+	for i := range 32 {
+		execution.Input.Work[0].Tags[fmt.Sprintf("key-%02d", i)] = "value"
+	}
+	if err := runtimeDispatchMetadata(request, execution).Validate(); err == nil {
+		t.Fatal("oversized labels were silently dropped or admitted")
+	}
+}
 
 // blockingAssociationLedger pauses immediately after the canonical association
 // is committed, producing the exact control window that formerly exposed an

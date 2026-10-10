@@ -257,6 +257,8 @@
       "stableIds": [
         "cli/you.worker-sessions.cancel",
         "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.show",
         "rest/readWorkerSessionLogs"
       ]
     },

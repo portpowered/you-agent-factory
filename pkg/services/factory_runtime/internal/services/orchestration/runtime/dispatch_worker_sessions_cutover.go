@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,7 @@ func runtimeAttemptPreparation(
 				ID:                          sessionID,
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
+				Metadata:                    runtimeDispatchMetadata(admissionRequest, executeRequest),
 				BindEnvironment: func(environment []string) {
 					if executing != nil {
 						executing.Target.Environment.SupervisedEnvironment = append([]string(nil), environment...)
@@ -109,6 +111,47 @@ func runtimeAttemptPreparation(
 			return result, errors.Join(executeErr, completionErr)
 		}, nil
 	}
+}
+
+// Dispatch facts are descriptive. Work tags and parent hints cannot establish
+// requester authority; that requires the producing dispatch's scoped lineage.
+func runtimeDispatchMetadata(request workers.WorkstationDispatchRequest, execution workers.ExecuteRequest) *workersessions.SessionMetadata {
+	metadata := &workersessions.SessionMetadata{}
+	sessionID := strings.TrimSpace(request.Execution.FactorySessionID)
+	labels := make(map[string]struct{})
+	if sessionID != "" {
+		metadata.Correlation = &workersessions.Correlation{FactorySessionID: sessionID}
+		labels["factory-session:"+sessionID] = struct{}{}
+	}
+	if station := strings.TrimSpace(request.WorkstationName); station != "" {
+		labels["workstation:"+station] = struct{}{}
+	}
+	workIDs := make(map[string]struct{})
+	for _, input := range execution.Input.Work {
+		if input.Kind == string(workers.DataTypeResource) || input.WorkID == "" {
+			continue
+		}
+		workIDs[input.WorkID] = struct{}{}
+		labels["work:"+input.WorkID] = struct{}{}
+		for key, value := range input.Tags {
+			labels["tag:"+key+"="+value] = struct{}{}
+		}
+	}
+	// A multi-Work dispatch has no singular source Work. Preserve its labels
+	// rather than choosing one input's identity based on incidental ordering.
+	if len(workIDs) == 1 {
+		if metadata.Correlation == nil {
+			metadata.Correlation = &workersessions.Correlation{}
+		}
+		for id := range workIDs {
+			metadata.Correlation.WorkID = id
+		}
+	}
+	for label := range labels {
+		metadata.Labels = append(metadata.Labels, label)
+	}
+	sort.Strings(metadata.Labels)
+	return metadata
 }
 
 // Factory force must have an authored terminal destination for every input
