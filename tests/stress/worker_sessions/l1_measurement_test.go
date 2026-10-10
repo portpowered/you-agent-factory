@@ -165,17 +165,7 @@ func reportL1Capture(t *testing.T, results <-chan l1CaptureSamples, streams []*l
 	if len(durable) > 0 && durable[len(durable)-1] > time.Second {
 		t.Errorf("maximum durable upper bound=%s exceeds 1s", durable[len(durable)-1])
 	}
-	count, emittedInWindow := 0, 0
-	for _, stream := range streams {
-		stream.mu.Lock()
-		count += len(stream.emitted)
-		for _, emitted := range stream.emitted {
-			if !emitted.Before(started) && emitted.Before(started.Add(l1Window)) {
-				emittedInWindow++
-			}
-		}
-		stream.mu.Unlock()
-	}
+	count, emittedInWindow := countL1Emissions(streams, started, started.Add(l1Window))
 	rate := float64(committed) / l1Window.Seconds()
 	t.Logf("emissionsIncludingDrain=%d intervalEmissions=%d intervalCommits=%d window=%s observerElapsed=%s achievedCommittedRate=%.2f/s backlogUpperBoundBytes=%d (fixed workload only)", count, emittedInWindow, committed, l1Window, elapsed, rate, backlog)
 	if rate < 1000 {
@@ -184,6 +174,20 @@ func reportL1Capture(t *testing.T, results <-chan l1CaptureSamples, streams []*l
 	if backlog > 8<<20 {
 		t.Errorf("backlog bound=%d exceeds 8MiB", backlog)
 	}
+}
+
+func countL1Emissions(streams []*l1Stream, start, end time.Time) (total, inWindow int) {
+	for _, stream := range streams {
+		stream.mu.Lock()
+		total += len(stream.emitted)
+		for _, emitted := range stream.emitted {
+			if !emitted.Before(start) && emitted.Before(end) {
+				inWindow++
+			}
+		}
+		stream.mu.Unlock()
+	}
+	return total, inWindow
 }
 
 // Positions are session-local and monotonic. Only newly acknowledged workload
@@ -214,5 +218,14 @@ func TestL1MeasurementAccounting(t *testing.T) {
 	interval.observe(4, start.Add(11*time.Second), start.Add(12*time.Second))
 	if interval.count != 1 {
 		t.Fatalf("interval commits=%d want 1", interval.count)
+	}
+	streams := []*l1Stream{
+		{emitted: []time.Time{start.Add(-time.Second), start, start.Add(time.Second)}},
+		{emitted: []time.Time{interval.end.Add(-time.Nanosecond), interval.end, interval.end.Add(time.Second)}},
+		{},
+	}
+	total, inWindow := countL1Emissions(streams, interval.start, interval.end)
+	if total != 6 || inWindow != 3 {
+		t.Fatalf("emissions including drain=%d interval emissions=%d want 6 and 3", total, inWindow)
 	}
 }
