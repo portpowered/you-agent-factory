@@ -2,7 +2,6 @@ package wire
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -19,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	"go.uber.org/zap"
 )
 
 func provideWorkersWorktree(
@@ -62,127 +60,71 @@ func provideWorkersWorktreeRelease(
 	return releaser.Release
 }
 
-// provideStatelessWorkersService composes the process-scoped Execute owner.
-// It is deliberately independent of Factory Runtime and Factory Session
-// opening: a caller can execute one detached target before either lifecycle is
-// opened, while the legacy runtime root receives this same owner below.
-func provideStatelessWorkersService(
-	providersService providers.Service,
-	modelsService models.Service,
-	contentMaterializer work.ContentMaterializer,
-	mediaFiles platformfilesystem.ReadOpener,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	factoryDocsFileSystem platformfilesystem.ReadFileTree,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride providerOverrideService,
-	agentToolFileSystem workers.AgentToolFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-) (workers.Service, error) {
-	return provideStatelessWorkersServiceWithMock(
-		providersService,
-		modelsService,
-		contentMaterializer,
-		mediaFiles,
-		scriptCommandRunner,
-		factoryDocsFileSystem,
-		clock,
-		logger,
-		worktreePreparer,
-		worktreeRelease,
-		temporaryFiles,
-		providerOverride,
-		agentToolFileSystem,
-		decisionEnvelopes,
-		nil,
-	)
+// Distinct interface types give Wire each completed strategy edge without
+// wrapper instances or selection through a dependency container.
+type workersAgentRunner workers.Runner
+type workersScriptRunner workers.Runner
+type workersInferenceRunner workers.Runner
+type workersContextualScriptCommandRunner platformprocess.CommandRunner
+type workersLoggedScriptCommandRunner platformprocess.CommandRunner
+
+func provideWorkersContextualScriptCommandRunner(command factorysessionwire.ScriptCommandRunner) workersContextualScriptCommandRunner {
+	return workerswire.NewContextualMockWorkerCommandRunner(command, nil)
 }
 
-func provideStatelessWorkersServiceWithMock(
-	providersService providers.Service,
-	modelsService models.Service,
-	contentMaterializer work.ContentMaterializer,
-	mediaFiles platformfilesystem.ReadOpener,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	factoryDocsFileSystem platformfilesystem.ReadFileTree,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride providerOverrideService,
-	agentToolFileSystem workers.AgentToolFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	mockWorkers *workers.MockWorkersConfig,
-) (workers.Service, error) {
-	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
-	if err != nil {
-		return nil, fmt.Errorf("construct stateless Workers: %w", err)
-	}
-	scriptRunner := scriptCommandRunner
-	agentDependencies := workerswire.AgentDependencies{
-		Providers: providersService,
-		Publish:   func(workers.ProgressFragment) {},
-		// Decision-envelope interpretation belongs to Factory Definitions.
-		// The detached Execute path routes envelope output through this
-		// injected owner instead of re-implementing the contract.
-		DecisionEnvelopes: decisionEnvelopes,
-	}
-	scriptConfig := workerswire.ScriptConfig{RequestSelected: true}
-	scriptDependencies := workerswire.ScriptDependencies{
-		CommandRunner: scriptRunner,
-		FactoryDocs:   factoryDocs,
-		Now:           clock.Now,
-		Publish:       func(workers.ProgressFragment) {},
-		Record:        func(workers.ScriptEvent) {},
-	}
-	inferenceConfig := workerswire.InferenceConfig{
-		Worker: models.LocalWorker{
-			Name: "request-selected-inference",
-			Type: factorydefinitions.WorkerTypeInference,
-		},
-	}
-	inferenceDependencies := workerswire.InferenceDependencies{
-		Models: modelsService, ContentMaterializer: contentMaterializer, MediaFiles: mediaFiles,
-	}
-	loggerValue := logging.NewZapLogger(logger, false)
-	if mockWorkers != nil {
-		return workerswire.NewMockService(
-			agentDependencies,
-			scriptConfig,
-			scriptDependencies,
-			inferenceConfig,
-			inferenceDependencies,
-			mockWorkers,
-			workerswire.MockDependencies{},
-			nil,
-			loggerValue,
-			clock.Now,
-			worktreePreparer,
-			worktreeRelease,
-			temporaryFiles,
-			agentToolFileSystem,
-			providerOverride,
-		)
-	}
-	return workerswire.NewService(
-		agentDependencies,
-		scriptConfig,
-		scriptDependencies,
-		inferenceConfig,
-		inferenceDependencies,
-		nil,
-		loggerValue,
-		clock.Now,
-		worktreePreparer,
-		worktreeRelease,
-		temporaryFiles,
-		agentToolFileSystem,
-		providerOverride,
-	)
+func provideWorkersLoggedScriptCommandRunner(command workersContextualScriptCommandRunner,
+	logger logging.Logger, clock factoryruntime.Clock,
+) workersLoggedScriptCommandRunner {
+	return workerswire.NewLoggingCommandRunner(command, logger, clock.Now)
+}
+
+func provideWorkersHarness(files workers.AgentToolFileSystem) workerswire.Harness {
+	return workerswire.NewLibraryHarnessAdapter(files)
+}
+
+func provideWorkersFactoryDocs(files platformfilesystem.ReadFileTree) (workers.FactoryDocsLoader, error) {
+	return workerswire.NewFactoryDocsLoader(files)
+}
+
+func provideWorkersAgentRunner(service providers.Service,
+	envelopes factorydefinitions.DecisionEnvelopeService,
+) (workersAgentRunner, error) {
+	return workerswire.NewAgentRunner(service, func(workers.ProgressFragment) {}, envelopes)
+}
+
+func provideWorkersScriptRunner(command workersLoggedScriptCommandRunner,
+	docs workers.FactoryDocsLoader, clock factoryruntime.Clock,
+) (workersScriptRunner, error) {
+	return workerswire.NewScriptRunner(workerswire.ScriptConfig{RequestSelected: true},
+		command, docs, clock.Now, func(workers.ProgressFragment) {}, func(workers.ScriptEvent) {})
+}
+
+func provideWorkersInferenceRunner(service models.Service, agent workersAgentRunner,
+	content work.ContentMaterializer, media platformfilesystem.ReadOpener,
+) (workersInferenceRunner, error) {
+	return workerswire.NewInferenceRunner(workerswire.InferenceConfig{
+		Worker: models.LocalWorker{Name: "request-selected-inference", Type: factorydefinitions.WorkerTypeInference},
+	}, service, agent, content, media)
+}
+
+func provideWorkersRegistry(agent workersAgentRunner, script workersScriptRunner,
+	inference workersInferenceRunner,
+) (workerswire.Registry, error) {
+	return workerswire.NewProductionRegistry(agent, script, inference)
+}
+
+// provideWorkersExecute captures completed process behavior. Worktree leases,
+// command attempts, observations and cleanup remain owned by each Execute call.
+func provideWorkersExecute(registry workerswire.Registry, service providers.Service,
+	logger logging.Logger, clock factoryruntime.Clock,
+	worktree workers.FactoryWorktreePreparer,
+	release func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporary platformfilesystem.TemporaryFileSystem, override providerOverrideService,
+	harness workerswire.Harness, envelopes factorydefinitions.DecisionEnvelopeService,
+	docs workers.FactoryDocsLoader,
+) (workerswire.ExecuteCapability, error) {
+	return workerswire.NewExecute(registry, service, nil, logger, clock.Now,
+		worktree, release, temporary, override, harness, envelopes, docs)
 }
 
 func provideWorkersRetryRandomSource(edges serviceedges.Edges) platformrandom.Source {

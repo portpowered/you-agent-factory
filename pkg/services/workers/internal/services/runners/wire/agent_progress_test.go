@@ -1,18 +1,18 @@
 package wire
 
 import (
-	"reflect"
-	"testing"
-
 	"context"
 	"errors"
+	"reflect"
+	"sync"
+	"sync/atomic"
+	"testing"
+
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
-	"sync"
-	"sync/atomic"
 )
 
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
@@ -34,7 +34,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 
 	var published []workers.ProgressFragment
 	var observedOrder []string
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish: func(fragment workers.ProgressFragment) {
 			published = append(published, cloneProgressFragment(fragment))

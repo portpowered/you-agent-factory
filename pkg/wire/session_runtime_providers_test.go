@@ -11,10 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-
-	"go.uber.org/zap"
-
 	"github.com/portpowered/infinite-you/internal/testutil"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -34,7 +30,11 @@ import (
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
+	"go.uber.org/zap"
 )
 
 func codexWireTestOutput(content string) []byte {
@@ -500,7 +500,7 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 		t.Fatalf("provideWorkersWorktree() error = %v", err)
 	}
 	worktreeRelease := provideWorkersWorktreeRelease(worktreePreparer)
-	service, err := provideStatelessWorkersService(
+	service, err := newStatelessWorkersCompositionFixture(
 		providersService,
 		modelsService,
 		nil,
@@ -517,7 +517,7 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 		statelessDecisionEnvelopeService(t),
 	)
 	if err != nil {
-		t.Fatalf("provideStatelessWorkersService() error = %v", err)
+		t.Fatalf("newStatelessWorkersCompositionFixture() error = %v", err)
 	}
 
 	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
@@ -548,13 +548,6 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 func TestProvideWorkersWorktreeReleaseReturnsNilForPreparerWithoutRelease(t *testing.T) {
 	if release := provideWorkersWorktreeRelease(statelessPreparerOnly{}); release != nil {
 		t.Fatal("provideWorkersWorktreeRelease() returned a callback for a preparer without release support")
-	}
-}
-
-func TestProvideStatelessWorkersServiceRejectsMissingClock(t *testing.T) {
-	_, err := provideStatelessWorkersService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	if err == nil {
-		t.Fatal("provideStatelessWorkersService() error = nil, want missing clock error")
 	}
 }
 
@@ -637,7 +630,7 @@ func newProductionCleanupStatelessService(
 		t.Fatalf("provideWorkersWorktree() error = %v", err)
 	}
 	worktreeRelease := provideWorkersWorktreeRelease(worktreePreparer)
-	service, err := provideStatelessWorkersService(
+	service, err := newStatelessWorkersCompositionFixture(
 		providersService,
 		modelsService,
 		nil,
@@ -654,7 +647,7 @@ func newProductionCleanupStatelessService(
 		statelessDecisionEnvelopeService(t),
 	)
 	if err != nil {
-		t.Fatalf("provideStatelessWorkersService() error = %v", err)
+		t.Fatalf("newStatelessWorkersCompositionFixture() error = %v", err)
 	}
 	return service
 }
@@ -892,4 +885,42 @@ func (wireTestWorkersService) ValidateExecution(_ context.Context, request worke
 
 func (store unavailableWorkerControlStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}
+
+// Retained legacy composition coverage; public routing proof uses root.BuildProcess.
+func newStatelessWorkersCompositionFixture(service providers.Service, modelsService models.Service,
+	content work.ContentMaterializer, media platformfilesystem.ReadOpener,
+	command factorysessionwire.ScriptCommandRunner, files platformfilesystem.ReadFileTree,
+	clock factoryruntime.Clock, logger *zap.Logger, worktree workers.FactoryWorktreePreparer,
+	release func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporary platformfilesystem.TemporaryFileSystem, override providerOverrideService,
+	toolFiles workers.AgentToolFileSystem, envelopes factorydefinitions.DecisionEnvelopeService,
+) (workers.Service, error) {
+	docs, err := provideWorkersFactoryDocs(files)
+	if err != nil {
+		return nil, err
+	}
+	agent, err := provideWorkersAgentRunner(service, envelopes)
+	if err != nil {
+		return nil, err
+	}
+	scriptCommand := provideWorkersLoggedScriptCommandRunner(provideWorkersContextualScriptCommandRunner(command), provideOperatorSettingsLogger(logger), clock)
+	script, err := provideWorkersScriptRunner(scriptCommand, docs, clock)
+	if err != nil {
+		return nil, err
+	}
+	inference, err := provideWorkersInferenceRunner(modelsService, agent, content, media)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := provideWorkersRegistry(agent, script, inference)
+	if err != nil {
+		return nil, err
+	}
+	execute, err := provideWorkersExecute(registry, service, provideOperatorSettingsLogger(logger),
+		clock, worktree, release, temporary, override, workerswire.NewLibraryHarnessAdapter(toolFiles), envelopes, docs)
+	if err != nil {
+		return nil, err
+	}
+	return workerswire.NewService(execute)
 }

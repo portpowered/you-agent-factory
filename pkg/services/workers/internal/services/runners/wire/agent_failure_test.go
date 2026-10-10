@@ -253,7 +253,7 @@ func resolveAgentRunner(
 	publish workers.ProgressPublisher,
 ) workers.Runner {
 	t.Helper()
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: providersService,
 		Publish:   publish,
 	})

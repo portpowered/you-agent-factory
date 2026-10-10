@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -20,7 +21,7 @@ const agentFixtureExecutionFailure = "fixture execution failure"
 
 func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
@@ -86,7 +87,7 @@ func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing
 
 func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	fake := newAgentProvidersFake()
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
@@ -125,7 +126,7 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 		entered:            make(chan struct{}),
 		release:            make(chan struct{}),
 	}
-	registry, err := newTestAgentRegistry(runners.AgentDependencies{
+	registry, err := newTestAgentRegistry(agentTestInputs{
 		Providers: fake,
 		Publish:   agentNoopPublisher,
 	})
@@ -387,7 +388,7 @@ func assertAgentResult(t *testing.T, result workers.RunnerExecutionResult) {
 // newTestAgentRegistry constructs one inert Agent Runner over the singular
 // Providers root and publishes it through the immutable private registry.
 func newTestAgentRegistry(
-	dependencies runners.AgentDependencies,
+	dependencies agentTestInputs,
 ) (runners.Service, error) {
 	implementation, err := NewAgentRunner(dependencies.Providers, dependencies.Publish, dependencies.DecisionEnvelopes)
 	service, registryErr := NewService([]runners.Registration{{
@@ -401,4 +402,11 @@ func newTestAgentRegistry(
 		Runner: implementation,
 	}})
 	return service, errors.Join(err, registryErr)
+}
+
+// agentTestInputs retains the existing legacy registry fixtures.
+type agentTestInputs struct {
+	Providers         providers.Service
+	Publish           workers.ProgressPublisher
+	DecisionEnvelopes factorydefinitions.DecisionEnvelopeService
 }
