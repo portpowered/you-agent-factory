@@ -168,6 +168,7 @@ func (wrapped *invocationScheduleFactory) BindModelsRuntimeScope(scope modelprov
 func (wrapped *invocationScheduleFactory) BeginWorkerAttempt(
 	ctx context.Context,
 	request *workers.ExecuteRequest,
+	caller *workersessions.CallerIdentity,
 ) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if wrapped == nil {
 		return nil, factory.ErrNotRunning
@@ -176,12 +177,13 @@ func (wrapped *invocationScheduleFactory) BeginWorkerAttempt(
 		BeginWorkerAttempt(
 			context.Context,
 			*workers.ExecuteRequest,
+			*workersessions.CallerIdentity,
 		) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 	})
 	if provider == nil {
 		return nil, factory.ErrNotRunning
 	}
-	return provider.BeginWorkerAttempt(ctx, request)
+	return provider.BeginWorkerAttempt(ctx, request, caller)
 }
 
 func (wrapped *invocationScheduleFactory) ControlPause(ctx context.Context, request factory.PauseRequest) (factory.PauseResult, error) {

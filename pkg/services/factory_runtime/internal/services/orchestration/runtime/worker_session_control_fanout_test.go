@@ -578,8 +578,8 @@ func (s *workerSessionControlSpy) observedCanceledContext() bool {
 var _ workersessions.Service = (*workerSessionControlSpy)(nil)
 
 // synchronousFanOutWorkerSessions is an owner-local Worker Sessions seam for
-// this runtime test. It preserves the production effect under test—each
-// accepted child must cancel its exact Workers dispatch—without constructing
+// this runtime test. It preserves the production effect under testâ€”each
+// accepted child must cancel its exact Workers dispatchâ€”without constructing
 // sibling services or their wire packages in a runtime unit test.
 type synchronousFanOutWorkerSessions struct {
 	*fakeWorkerSessionsService
@@ -809,7 +809,7 @@ func TestRuntimeAttemptPreparationPreservesResolvedRouting(t *testing.T) {
 			execution.Correlation.RuntimeID = "resolved-runtime"
 			execution.Correlation.DispatchID = "logical-dispatch"
 			execution.Correlation.AttemptID = "physical-attempt"
-			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false, nil)
 			if _, err := prepare(context.Background(), &execution); err != nil {
 				t.Fatal(err)
 			}
@@ -880,7 +880,7 @@ func TestRuntimeAttemptPreparationInstallsExecutingControlObserver(t *testing.T)
 					forwarded = control
 				}
 			}
-			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false, nil)
 			if terminal, err := prepare(t.Context(), &execution); err != nil || terminal == nil {
 				t.Fatalf("preparation = %v, %v", terminal, err)
 			}
@@ -930,7 +930,7 @@ func TestRuntimeAttemptPreparationForceRequiresAuthoredFailedPlacement(t *testin
 			cfg := &runtimeConfig{workerAttempts: sessions, net: net}
 			request := workers.WorkstationDispatchRequest{WorkstationName: "process"}
 			execution := workers.ExecuteRequest{Input: workers.ExecutionInput{Work: inputs}}
-			prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+			prepare := runtimeAttemptPreparation(cfg, request, execution, false, nil)
 			if _, err := prepare(t.Context(), &execution); err != nil {
 				t.Fatal(err)
 			}
@@ -966,7 +966,7 @@ func TestWorkerAttemptPreparationCapturesSelectedEffects(t *testing.T) {
 		workerExecution: selectedExecution, workerAttemptScheduler: selectedScheduler}
 	request := workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{RuntimeID: "runtime-clock"}}
 	execution := workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{RuntimeID: "runtime-clock", DispatchID: "dispatch-clock", AttemptID: "physical-clock"}}
-	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false, nil)
 	cfg.clock = platformclock.Real{}
 	cfg.workerExecution = &testWorkstationBoundary{}
 	cfg.workerAttemptScheduler = platformclock.Real{}
@@ -993,6 +993,7 @@ type beginRuntimeAttemptService struct {
 	beginErr        error
 	existing        workersessions.Session
 	getErr          error
+	onGet           func()
 	closedRuntime   string
 	closeErr        error
 	execution       workers.Service
@@ -1009,6 +1010,9 @@ func (service *beginRuntimeAttemptService) CloseRuntimeAttempts(_ context.Contex
 }
 
 func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
+	if service.onGet != nil {
+		service.onGet()
+	}
 	if service.getErr != nil {
 		return workersessions.Session{}, service.getErr
 	}
@@ -1084,7 +1088,7 @@ func TestRuntimeForceCompletionSuppressesRetryAndPartialOutput(t *testing.T) {
 			Failure:      &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, Message: "signal exit"}}, nativeErr
 	}), func() string { return "physical" }, 1)
 	cfg.attempts = lifecycle
-	prepare := runtimeAttemptPreparation(cfg, request, execution, false)
+	prepare := runtimeAttemptPreparation(cfg, request, execution, false, nil)
 	var observed workers.ExecuteResult
 	var observedErr error
 	if err := lifecycle.startWithPreparation(t.Context(), execution, false,

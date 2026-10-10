@@ -27,9 +27,14 @@ import (
 func (f *factoryImpl) BeginWorkerAttempt(
 	ctx context.Context,
 	executeRequest *workers.ExecuteRequest,
+	caller *workersessions.CallerIdentity,
 ) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if executeRequest == nil {
 		return nil, workers.ErrInvalidExecuteRequest
+	}
+	if caller != nil {
+		detached := *caller
+		caller = &detached
 	}
 	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
 		return nil, factory.ErrNotRunning
@@ -42,7 +47,7 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	initialSessionID := runtimeWorkerSessionID(f.cfg, request, *executeRequest, false)
 	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID, executeRequest.Correlation.FactorySessionID)
 	sessionID := runtimeWorkerSessionID(f.cfg, request, *executeRequest, allowRetry)
-	prepare := runtimeAttemptPreparation(f.cfg, request, *executeRequest, allowRetry)
+	prepare := runtimeAttemptPreparation(f.cfg, request, *executeRequest, allowRetry, caller)
 	if prepare == nil {
 		return nil, factory.ErrNotRunning
 	}

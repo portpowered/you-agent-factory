@@ -21,6 +21,7 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -713,6 +714,7 @@ func (record *portableReplayRuntimeRecord) CloseArtifacts() error {
 func (*portableReplayRuntimeRecord) BeginWorkerAttempt(
 	context.Context,
 	*workers.ExecuteRequest,
+	*workersessions.CallerIdentity,
 ) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	return func(_ context.Context, result workers.ExecuteResult, err error) (workers.ExecuteResult, error) {
 		return result, err

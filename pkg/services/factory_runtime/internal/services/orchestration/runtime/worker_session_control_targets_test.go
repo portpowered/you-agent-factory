@@ -111,7 +111,7 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 	request := detachedTargetRequest()
 
-	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 	if err != nil {
 		t.Fatalf("BeginWorkerAttempt() error = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *
 	observerCalls := 0
 	request.Input.AttemptControlObserver = func(providers.AttemptControl) { observerCalls++ }
 
-	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 	request.Input.AttemptControlObserver(&projectedAttemptControl{})
 	if observerCalls != 1 {
 		t.Fatal("failed admission replaced the original observer")
@@ -217,7 +217,7 @@ func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
 			}
 
 			request := detachedTargetRequest()
-			terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+			terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 			if err != nil {
 				t.Fatalf("BeginWorkerAttempt() error = %v", err)
 			}
@@ -253,7 +253,7 @@ func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *
 	}
 	request := detachedTargetRequest()
 
-	if _, err := f.BeginWorkerAttempt(context.Background(), &request); err != nil {
+	if _, err := f.BeginWorkerAttempt(context.Background(), &request, nil); err != nil {
 		t.Fatalf("BeginWorkerAttempt() error = %v", err)
 	}
 	associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
@@ -979,7 +979,7 @@ func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *te
 	request := detachedTargetRequest()
 	request.Input.Work = []workers.WorkInput{{Kind: string(workers.DataTypeWork), WorkID: "source", WorkTypeID: "task"}}
 	request.Input.AttemptControlObserver = func(control providers.AttemptControl) { forwarded = control }
-	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1000,9 +1000,66 @@ func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *te
 func TestBeginWorkerAttemptRejectsNilRequest(t *testing.T) {
 	t.Parallel()
 	f := &factoryImpl{}
-	terminal, err := f.BeginWorkerAttempt(context.Background(), nil)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), nil, nil)
 	if terminal != nil || !errors.Is(err, workers.ErrInvalidExecuteRequest) {
 		t.Fatalf("terminal present = %v, error = %v; want invalid request", terminal != nil, err)
+	}
+}
+
+func TestBeginWorkerAttemptForwardsDetachedCallerOnlyToAdmission(t *testing.T) {
+	t.Parallel()
+	for _, refused := range []bool{false, true} {
+		t.Run(map[bool]string{false: "admitted", true: "refused"}[refused], func(t *testing.T) {
+			t.Parallel()
+			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+			if refused {
+				sessions.beginErr = workersessions.ErrCallerInvalid
+			}
+			f := &factoryImpl{
+				cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
+				eventHistory: ledger,
+			}
+			request := detachedTargetRequest()
+			before := request.Clone()
+			token := strings.Repeat("A", 43)
+			caller := workersessions.CallerIdentity{WorkerSessionID: "exact/caller", Token: token}
+			mutatedDuringPreparation := false
+			sessions.onGet = func() {
+				mutatedDuringPreparation = true
+				caller.WorkerSessionID, caller.Token = "changed", "changed"
+			}
+			complete, err := f.BeginWorkerAttempt(t.Context(), &request, &caller)
+			caller.WorkerSessionID, caller.Token = "changed", "changed"
+			if !mutatedDuringPreparation {
+				t.Fatal("preparation did not exercise caller detachment")
+			}
+			got := sessions.request.Caller
+			if got == nil || got.WorkerSessionID != "exact/caller" || got.Token != token {
+				t.Fatal("admission lost the detached exact caller")
+			}
+			if refused {
+				if !errors.Is(err, workersessions.ErrCallerInvalid) || complete != nil {
+					t.Fatalf("refused admission = %v, callback present = %v", err, complete != nil)
+				}
+				if !reflect.DeepEqual(before, request.Clone()) || len(ledger.DispatchWorkerSessionAssociationsSnapshot()) != 0 {
+					t.Fatal("refused admission changed execution or published an association")
+				}
+			} else if err != nil || complete == nil || len(ledger.DispatchWorkerSessionAssociationsSnapshot()) != 1 {
+				t.Fatalf("admitted opening = %v, callback present = %v", err, complete != nil)
+			}
+			assertCallerAbsentFromPublishedAdmission(t, token, request, sessions.request, ledger.Events)
+		})
+	}
+}
+
+func assertCallerAbsentFromPublishedAdmission(t *testing.T, token string, values ...any) {
+	t.Helper()
+	for _, value := range values {
+		encoded, err := json.Marshal(value)
+		if err != nil || strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "exact/caller") {
+			t.Fatal("caller credentials entered execution or published admission facts")
+		}
 	}
 }
 

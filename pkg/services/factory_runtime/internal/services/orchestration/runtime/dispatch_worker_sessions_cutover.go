@@ -27,6 +27,7 @@ func runtimeAttemptPreparation(
 	request workers.WorkstationDispatchRequest,
 	executeRequest workers.ExecuteRequest,
 	allowRetry bool,
+	caller *workersessions.CallerIdentity,
 ) attemptPreparation {
 	if cfg == nil || cfg.workerAttempts == nil {
 		return nil
@@ -71,6 +72,7 @@ func runtimeAttemptPreparation(
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
 				Metadata:                    metadata,
+				Caller:                      caller,
 				BindEnvironment: func(environment []string) {
 					if executing != nil {
 						executing.Target.Environment.SupervisedEnvironment = append([]string(nil), environment...)

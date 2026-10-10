@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -69,15 +70,19 @@ func (s *processDurableScope) ResumeRuntimeScope(projectRoot string) (factoryses
 
 func (s *processDurableScope) workerAttemptStarter(instance runtimebinding.RuntimeInstance) factorysessions.WorkerAttemptStarter {
 	type starter interface {
-		BeginWorkerAttempt(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
+		BeginWorkerAttempt(context.Context, *workers.ExecuteRequest, *workersessions.CallerIdentity) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 	}
-	if provider, ok := instance.(starter); ok {
-		return provider.BeginWorkerAttempt
+	provider, ok := instance.(starter)
+	if !ok {
+		provider, _ = instance.RuntimeService().(starter)
 	}
-	if provider, ok := instance.RuntimeService().(starter); ok {
-		return provider.BeginWorkerAttempt
+	if provider == nil {
+		return nil
 	}
-	return nil
+	// Reconstruction cannot restore a caller's former execution credentials.
+	return func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		return provider.BeginWorkerAttempt(ctx, request, nil)
+	}
 }
 
 func (s *processDurableScope) progressPublisher(instance runtimebinding.RuntimeInstance) workers.ProgressPublisher {

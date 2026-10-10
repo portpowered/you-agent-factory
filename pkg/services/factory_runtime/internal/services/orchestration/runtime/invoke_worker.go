@@ -204,7 +204,7 @@ func startStatelessAttemptWithRequestMode(
 	if allowRetry {
 		start = cfg.attempts.startRetry
 	}
-	prepare := runtimeAttemptPreparation(cfg, request, executeRequest, allowRetry)
+	prepare := runtimeAttemptPreparation(cfg, request, executeRequest, allowRetry, nil)
 	prepare = prepareDetachedModelRecording(cfg, prepare)
 	if prepare == nil {
 		return start(

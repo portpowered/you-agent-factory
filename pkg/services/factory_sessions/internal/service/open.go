@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -843,6 +844,7 @@ type runtimeWorkerAttemptStarterProvider interface {
 	BeginWorkerAttempt(
 		context.Context,
 		*workers.ExecuteRequest,
+		*workersessions.CallerIdentity,
 	) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 }
 
@@ -852,15 +854,17 @@ func runtimeWorkerAttemptStarter(
 	if runtime == nil {
 		return nil
 	}
-	if provider, ok := runtime.(runtimeWorkerAttemptStarterProvider); ok {
-		return provider.BeginWorkerAttempt
+	provider, ok := runtime.(runtimeWorkerAttemptStarterProvider)
+	if !ok && runtime.RuntimeService() != nil {
+		provider, _ = runtime.RuntimeService().(runtimeWorkerAttemptStarterProvider)
 	}
-	if service := runtime.RuntimeService(); service != nil {
-		if provider, ok := service.(runtimeWorkerAttemptStarterProvider); ok {
-			return provider.BeginWorkerAttempt
-		}
+	if provider == nil {
+		return nil
 	}
-	return nil
+	// Legacy and resumed starts have no invocation-local caller authority.
+	return func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		return provider.BeginWorkerAttempt(ctx, request, nil)
+	}
 }
 
 type historicalRecordingReader interface {

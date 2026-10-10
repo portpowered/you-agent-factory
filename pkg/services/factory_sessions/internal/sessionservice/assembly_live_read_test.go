@@ -897,7 +897,7 @@ type resumeScopeRuntime struct {
 	failure  error
 }
 
-func (r *resumeScopeRuntime) BeginWorkerAttempt(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+func (r *resumeScopeRuntime) BeginWorkerAttempt(context.Context, *workers.ExecuteRequest, *workersessions.CallerIdentity) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	r.attempts++
 	return nil, r.failure
 }
