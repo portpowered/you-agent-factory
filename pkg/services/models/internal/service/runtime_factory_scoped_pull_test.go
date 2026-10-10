@@ -22,17 +22,13 @@ import (
 func TestRootPullModelForScopeValidatesBeforeRuntimeResolution(t *testing.T) {
 	t.Parallel()
 
-	root := &Root{}
-	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{}); !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("empty pull request error = %v, want ErrNotFound", err)
-	}
-	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Name: "voice"}); !errors.Is(err, models.ErrUnsupportedOperation) {
-		t.Fatalf("unavailable scoped runtime error = %v, want ErrUnsupportedOperation", err)
-	}
 	args := newRootConstructionArgs(t)
 	root, err := args.build()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{}); !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("empty pull: %v", err)
 	}
 	if _, err := root.PullModelForScope(t.Context(), models.PullModelRequest{Name: "voice"}); !errors.Is(err, models.ErrRuntimeScopeInvalid) {
 		t.Fatalf("zero scope error = %v, want ErrRuntimeScopeInvalid", err)
@@ -169,6 +165,7 @@ func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]
 		assets:        assets,
 		pullModel:     runtime.PullModelForScope,
 		logger:        zap.NewNop(), now: time.Now,
+		resolveBackendArtifact: completedTestBackendResolver,
 	}
 	return root, scope, assets, runtime
 }
@@ -194,7 +191,7 @@ func TestRootRemoveModelAssetsRefusesAnInUseCacheBeforeMutation(t *testing.T) {
 	assets := &removeGuardAssets{
 		inspection: scopedassets.RuntimeCacheInspection{Installed: true},
 	}
-	root := &Root{
+	root := &Root{logger: zap.NewNop(), now: time.Now,
 		assets:      assets,
 		runtimeHost: &removeGuardHost{stopErr: models.ErrHostCapacityExhausted},
 	}
@@ -234,7 +231,7 @@ func TestRootRemoveModelAssetsSerializesCacheRemovalAgainstLeaseAcquisition(t *t
 		removalComplete: removalComplete,
 		acquireResult:   models.AcquireModelLeaseResult{},
 	}
-	root := &Root{assets: assets, runtimeHost: host}
+	root := &Root{logger: zap.NewNop(), now: time.Now, assets: assets, runtimeHost: host}
 	removeDone := make(chan error, 1)
 	go func() {
 		_, removeErr := root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
@@ -386,7 +383,7 @@ func (assets *removeGuardAssets) RemoveModelAssets(context.Context, models.Remov
 }
 
 func (assets *removeGuardAssets) ResolveRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheLayout, error) {
-	return scopedassets.RuntimeCacheLayout{}, models.ErrUnsupportedOperation
+	return scopedassets.RuntimeCacheLayout{CachePath: "test-cache", Files: []string{"test-cache/model.gguf"}, BackendCachePath: "test-backend", BackendFiles: []string{"test-backend/runtime"}}, nil
 }
 
 func (assets *removeGuardAssets) InspectRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheInspection, error) {
@@ -709,11 +706,12 @@ func newJoinedInvocationRootWithModel(
 	}
 	host := &joinedHostService{events: events}
 	assets := &joinedAssetsService{events: events, requests: assetRequests}
-	root := &Root{
-		runtimeScopes: scopes,
-		assets:        assets,
-		runtimeHost:   host,
-		inference:     inference,
+	root := &Root{logger: zap.NewNop(), now: time.Now,
+		resolveBackendArtifact: completedTestBackendResolver,
+		runtimeScopes:          scopes,
+		assets:                 assets,
+		runtimeHost:            host,
+		inference:              inference,
 	}
 	return root, scope, host
 }
@@ -771,11 +769,11 @@ func (joinedAssetsService) RemoveModelAssets(context.Context, models.RemoveModel
 }
 
 func (joinedAssetsService) ResolveRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheLayout, error) {
-	return scopedassets.RuntimeCacheLayout{}, models.ErrUnsupportedOperation
+	return scopedassets.RuntimeCacheLayout{CachePath: "test-cache", Files: []string{"test-cache/model.gguf"}, BackendCachePath: "test-backend", BackendFiles: []string{"test-backend/runtime"}}, nil
 }
 
 func (joinedAssetsService) InspectRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheInspection, error) {
-	return scopedassets.RuntimeCacheInspection{}, models.ErrUnsupportedOperation
+	return scopedassets.RuntimeCacheInspection{}, models.ErrModelCacheNotFound
 }
 
 type joinedHostService struct {
@@ -959,3 +957,16 @@ func cancelledPullScope(t *testing.T) models.RuntimeScopeRef {
 	}
 	return scope
 }
+
+func (host *joinedHostService) EnsureModelHostWithConfiguration(ctx context.Context, c modelseffects.ResolvedHostConfiguration) (models.EnsureModelHostResult, error) {
+	return host.EnsureModelHost(ctx, models.EnsureModelHostRequest{Scope: c.Scope, Name: c.ModelName})
+}
+func (*joinedHostService) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error {
+	return nil
+}
+func (*joinedHostService) Shutdown(context.Context) error { return nil }
+func (host *removeGuardHost) EnsureModelHostWithConfiguration(ctx context.Context, c modelseffects.ResolvedHostConfiguration) (models.EnsureModelHostResult, error) {
+	return host.EnsureModelHost(ctx, models.EnsureModelHostRequest{Scope: c.Scope, Name: c.ModelName})
+}
+func (*removeGuardHost) CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error { return nil }
+func (*removeGuardHost) Shutdown(context.Context) error                                  { return nil }

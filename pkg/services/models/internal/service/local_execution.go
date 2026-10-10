@@ -25,12 +25,6 @@ type scopedLocalExecution struct {
 }
 
 func NewScopedLocalExecution(scopes runtimescopes.Service, assets scopedassets.Service) (ScopedLocalExecution, error) {
-	if isNilDependency(scopes) {
-		return nil, missingDependencyError("model pull scopes")
-	}
-	if isNilDependency(assets) {
-		return nil, missingDependencyError("model pull assets")
-	}
 	return &scopedLocalExecution{scopes: scopes, assets: assets, closedScopes: make(map[models.RuntimeScopeRef]bool)}, nil
 }
 

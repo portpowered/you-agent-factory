@@ -912,7 +912,7 @@ func testFixedOpeningReads(t *testing.T, sessions factorysessions.Service, baseU
 		assertFixedCompletedWorkReads(t, sessions, baseURL, id)
 	}
 	for _, suffix := range []string{"/state", "/work", "/work/unknown-work"} {
-		assertFixedMissingRead(t, support.SessionWorkURL(baseURL, "unknown-fixed-observation", suffix), suffix)
+		assertFixedMissingRead(t, support.SessionWorkURL(baseURL, "unknown-fixed-observation", suffix))
 	}
 	_, err := sessions.ReadResult(t.Context(), factorysessions.SessionResultReadRequest{SessionID: "unknown-fixed-observation", Mode: factorysessions.SessionOperationModeLive})
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
@@ -985,7 +985,7 @@ func assertFixedPeerReplay(t *testing.T, sessions factorysessions.Service, proce
 	assertInitialOpeningReplay(t, process, filepath.Join(scenario.peerDir, "peer.jsonl"), scenario.peerID, history)
 }
 
-func assertFixedMissingRead(t *testing.T, endpoint, suffix string) {
+func assertFixedMissingRead(t *testing.T, endpoint string) {
 	t.Helper()
 	response, err := http.Get(endpoint)
 	if err != nil {
@@ -996,11 +996,7 @@ func assertFixedMissingRead(t *testing.T, endpoint, suffix string) {
 	if err := json.NewDecoder(response.Body).Decode(&diagnostic); err != nil {
 		t.Fatal(err)
 	}
-	wantStatus, wantCode := http.StatusNotFound, factoryapi.ErrorResponseCodeNOTFOUND
-	if strings.HasPrefix(suffix, "/work") {
-		wantStatus, wantCode = http.StatusInternalServerError, factoryapi.ErrorResponseCode("INTERNAL_ERROR")
-	}
-	if response.StatusCode != wantStatus || diagnostic.Code != wantCode {
+	if response.StatusCode != http.StatusNotFound || diagnostic.Code != factoryapi.ErrorResponseCodeNOTFOUND || diagnostic.Family != factoryapi.ErrorFamilyNotFound {
 		t.Fatalf("missing selected read = %d, %#v", response.StatusCode, diagnostic)
 	}
 	// Missing identities must not expose filesystem or provider credentials.

@@ -2918,7 +2918,6 @@ recording-read|pkg/services/factory_runtime/internal|pkg/services/factory_runtim
 recording-read|pkg/services/factory_sessions/internal/runtimebinding|pkg/services/factory_sessions/internal/runtimebinding/live_change_events.go#liveChangeEventLog.AppendLiveChangeEvent#CanonicalEvents::count=2
 recording-read|pkg/services/factory_sessions/internal/runtimebinding|pkg/services/factory_sessions/internal/runtimebinding/live_change_events.go#liveChangeEventLog.LiveChangeEvents#CanonicalEvents::count=1
 recording-read|pkg/services/factory_sessions/internal/service|pkg/services/factory_sessions/internal/service/open.go#lastCanonicalCursor#CanonicalEvents::count=1
-recording-read|pkg/services/factory_sessions/internal/sessionservice|pkg/services/factory_sessions/internal/sessionservice/work_runtime_adapter.go#annotateRuntimeWorkStateSequences#CanonicalEvents::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#QuerySimpleDashboard#QuerySimpleDashboard::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#ReconstructWorldState#ReconstructWorldState::count=1
 recording-read|pkg/services/factory_visualization/internal/recordingsqueries|pkg/services/factory_visualization/internal/recordingsqueries/queries.go#ValidateReconnectReplay#ValidateReconnectReplayFrom::count=1

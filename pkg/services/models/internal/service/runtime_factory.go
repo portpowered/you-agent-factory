@@ -67,42 +67,6 @@ func NewRoot(
 	resolveBackend modelseffects.BackendArtifactResolver,
 	platform models.AssetHostPlatform,
 ) (*Root, error) {
-	if resources == nil {
-		return nil, missingDependencyError("local model resource limiter")
-	}
-	if runtimeScopes == nil {
-		return nil, missingDependencyError("Models Runtime Scopes service")
-	}
-	if catalogService == nil {
-		return nil, missingDependencyError("Models Catalog service")
-	}
-	if assetService == nil {
-		return nil, missingDependencyError("Models Assets service")
-	}
-	if runtimeHostService == nil {
-		return nil, missingDependencyError("Models Runtime Host service")
-	}
-	if inferenceService == nil {
-		return nil, missingDependencyError("Models Inference service")
-	}
-	if logger == nil {
-		return nil, missingDependencyError("Models logger")
-	}
-	if now == nil {
-		return nil, missingDependencyError("Models process clock")
-	}
-	if pullModel == nil {
-		return nil, missingDependencyError("scoped model pull")
-	}
-	if closeScopedExecution == nil {
-		return nil, missingDependencyError("scoped execution close")
-	}
-	if closeExecution == nil {
-		return nil, missingDependencyError("execution close")
-	}
-	if resolveRevision == nil {
-		return nil, missingDependencyError("Models revision resolver")
-	}
 	return &Root{
 		resources: resources, pullModel: pullModel,
 		closeScopedExecution: closeScopedExecution, closeExecution: closeExecution,
@@ -119,9 +83,6 @@ func (o *Root) OpenRuntimeScope(
 	ctx context.Context,
 	request models.OpenRuntimeScopeRequest,
 ) (models.OpenRuntimeScopeResult, error) {
-	if o == nil || o.runtimeScopes == nil {
-		return models.OpenRuntimeScopeResult{}, models.ErrUnsupportedOperation
-	}
 	if err := ctx.Err(); err != nil {
 		return models.OpenRuntimeScopeResult{}, err
 	}
@@ -149,22 +110,13 @@ func (o *Root) OpenRuntimeScope(
 // Models root. This is an internal process-lifecycle hook; the public Models
 // contract remains focused on scoped customer operations.
 func (o *Root) Close(ctx context.Context) error {
-	if o == nil || o.runtimeHost == nil {
-		return nil
-	}
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	shutdown, ok := o.runtimeHost.(interface {
-		Shutdown(context.Context) error
-	})
-	if !ok {
-		return fmt.Errorf("Models runtime host does not support process shutdown")
 	}
 	// Retire admission before the external shutdown/join can block. A late
 	// resolution must not begin invocation while the host is stopping.
 	o.closeExecution()
-	if err := shutdown.Shutdown(ctx); err != nil {
+	if err := o.runtimeHost.Shutdown(ctx); err != nil {
 		return err
 	}
 	o.resources.Close()
@@ -175,9 +127,6 @@ func (o *Root) ListCatalog(
 	ctx context.Context,
 	request models.ListModelsRequest,
 ) (models.ListModelsResult, error) {
-	if o == nil || o.catalog == nil {
-		return models.ListModelsResult{}, models.ErrUnsupportedOperation
-	}
 	return o.catalog.ListCatalog(ctx, request)
 }
 
@@ -185,9 +134,6 @@ func (o *Root) GetCatalogModel(
 	ctx context.Context,
 	request models.GetModelRequest,
 ) (models.GetModelResult, error) {
-	if o == nil || o.catalog == nil {
-		return models.GetModelResult{}, models.ErrUnsupportedOperation
-	}
 	return o.catalog.GetCatalogModel(ctx, request)
 }
 
@@ -195,9 +141,6 @@ func (o *Root) GetModelReadiness(
 	ctx context.Context,
 	request models.GetModelReadinessRequest,
 ) (models.GetModelReadinessResult, error) {
-	if o == nil || o.catalog == nil {
-		return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
-	}
 	return o.catalog.GetModelReadiness(ctx, request)
 }
 
@@ -229,9 +172,6 @@ func (o *Root) PrepareModelAssets(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
-	if o == nil || o.assets == nil {
-		return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
-	}
 	o.cacheLifecycleMu.RLock()
 	defer o.cacheLifecycleMu.RUnlock()
 	return o.assets.PrepareModelAssets(ctx, request)
@@ -243,9 +183,6 @@ func (o *Root) PullModelForScope(
 ) (models.PullResult, error) {
 	if err := models.ValidatePullModelRequest(request); err != nil {
 		return models.PullResult{}, err
-	}
-	if o == nil || o.runtimeScopes == nil || o.pullModel == nil {
-		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
 	if request.Scope.IsZero() {
 		return models.PullResult{}, models.ErrRuntimeScopeInvalid
@@ -282,9 +219,6 @@ func (o *Root) InspectModelAssets(
 	ctx context.Context,
 	request models.InspectModelAssetsRequest,
 ) (models.InspectModelAssetsResult, error) {
-	if o == nil || o.assets == nil {
-		return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
-	}
 	return o.assets.InspectModelAssets(ctx, request)
 }
 
@@ -292,9 +226,6 @@ func (o *Root) RemoveModelAssets(
 	ctx context.Context,
 	request models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
-	if o == nil || o.assets == nil {
-		return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
-	}
 	if err := request.Validate(); err != nil {
 		return models.RemoveModelAssetsResult{}, err
 	}
@@ -322,26 +253,24 @@ func (o *Root) removeModelAssets(
 	// Runtime Host owns the live process and lease state. Stop it before the
 	// Assets service mutates the selected cache, while preserving the Assets
 	// service's no-cache classification for absent or unsupported models.
-	if o.runtimeHost != nil {
-		inspection, inspectErr := o.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+	inspection, inspectErr := o.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: request.Scope,
+		Name:  request.Name,
+	})
+	if inspectErr != nil && !isRemovableCacheAbsence(inspectErr) {
+		return models.RemoveModelAssetsResult{}, inspectErr
+	}
+	if inspectErr == nil && inspection.Installed {
+		if _, stopErr := o.runtimeHost.StopModelHost(ctx, models.StopModelHostRequest{
 			Scope: request.Scope,
 			Name:  request.Name,
-		})
-		if inspectErr != nil && !isRemovableCacheAbsence(inspectErr) {
-			return models.RemoveModelAssetsResult{}, inspectErr
-		}
-		if inspectErr == nil && inspection.Installed {
-			if _, stopErr := o.runtimeHost.StopModelHost(ctx, models.StopModelHostRequest{
-				Scope: request.Scope,
-				Name:  request.Name,
-			}); stopErr != nil {
-				if errors.Is(stopErr, models.ErrHostCapacityExhausted) {
-					return models.RemoveModelAssetsResult{}, fmt.Errorf(
-						"%w: %s", models.ErrModelCacheInUse, strings.TrimSpace(request.Name),
-					)
-				}
-				return models.RemoveModelAssetsResult{}, stopErr
+		}); stopErr != nil {
+			if errors.Is(stopErr, models.ErrHostCapacityExhausted) {
+				return models.RemoveModelAssetsResult{}, fmt.Errorf(
+					"%w: %s", models.ErrModelCacheInUse, strings.TrimSpace(request.Name),
+				)
 			}
+			return models.RemoveModelAssetsResult{}, stopErr
 		}
 	}
 	return o.assets.RemoveModelAssets(ctx, request)
@@ -359,46 +288,24 @@ func (o *Root) EnsureModelHost(
 	ctx context.Context,
 	request models.EnsureModelHostRequest,
 ) (models.EnsureModelHostResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
-	}
 	o.cacheLifecycleMu.RLock()
 	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.EnsureModelHost(ctx, request)
-}
-
-type resolvedHostConfigurationHandoff interface {
-	EnsureModelHostWithConfiguration(
-		context.Context,
-		modelseffects.ResolvedHostConfiguration,
-	) (models.EnsureModelHostResult, error)
 }
 
 func (o *Root) ensureModelHostWithConfiguration(
 	ctx context.Context,
 	configuration modelseffects.ResolvedHostConfiguration,
 ) (models.EnsureModelHostResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
-	}
 	o.cacheLifecycleMu.RLock()
 	defer o.cacheLifecycleMu.RUnlock()
-	if handoff, ok := o.runtimeHost.(resolvedHostConfigurationHandoff); ok {
-		return handoff.EnsureModelHostWithConfiguration(ctx, configuration.Clone())
-	}
-	return o.runtimeHost.EnsureModelHost(ctx, models.EnsureModelHostRequest{
-		Scope: configuration.Scope,
-		Name:  configuration.ModelName,
-	})
+	return o.runtimeHost.EnsureModelHostWithConfiguration(ctx, configuration.Clone())
 }
 
 func (o *Root) InspectModelHost(
 	ctx context.Context,
 	request models.InspectModelHostRequest,
 ) (models.InspectModelHostResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.InspectModelHostResult{}, models.ErrUnsupportedOperation
-	}
 	return o.runtimeHost.InspectModelHost(ctx, request)
 }
 
@@ -406,9 +313,6 @@ func (o *Root) StopModelHost(
 	ctx context.Context,
 	request models.StopModelHostRequest,
 ) (models.StopModelHostResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.StopModelHostResult{}, models.ErrUnsupportedOperation
-	}
 	o.cacheLifecycleMu.RLock()
 	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.StopModelHost(ctx, request)
@@ -418,9 +322,6 @@ func (o *Root) AcquireModelLease(
 	ctx context.Context,
 	request models.AcquireModelLeaseRequest,
 ) (models.AcquireModelLeaseResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
-	}
 	o.cacheLifecycleMu.RLock()
 	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.AcquireModelLease(ctx, request)
@@ -430,9 +331,6 @@ func (o *Root) GetModelLease(
 	ctx context.Context,
 	request models.GetModelLeaseRequest,
 ) (models.GetModelLeaseResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.GetModelLeaseResult{}, models.ErrUnsupportedOperation
-	}
 	return o.runtimeHost.GetModelLease(ctx, request)
 }
 
@@ -440,9 +338,6 @@ func (o *Root) ReleaseModelLease(
 	ctx context.Context,
 	request models.ReleaseModelLeaseRequest,
 ) (models.ReleaseModelLeaseResult, error) {
-	if o == nil || o.runtimeHost == nil {
-		return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
-	}
 	o.cacheLifecycleMu.RLock()
 	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.ReleaseModelLease(ctx, request)
@@ -452,9 +347,6 @@ func (o *Root) InvokeModelWithLease(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {
-	if o == nil || o.inference == nil {
-		return models.InvokeModelResult{}, models.ErrUnsupportedOperation
-	}
 	// The lease-backed inference owner keeps the live lease registered for the
 	// duration of the call. Removal can therefore inspect that state and return
 	// ErrModelCacheInUse instead of waiting for a long-running inference.
@@ -486,12 +378,7 @@ func (o *Root) InvokeModel(
 	ctx = modelseffects.WithRuntimeCorrelation(ctx, correlation)
 	ctx = modelseffects.WithRuntimeLeaseReleaseTracker(ctx)
 	started := joinedInvocationStart(o)
-	var invocationEvidence modelseffects.RuntimeEvidenceRecorder
-	if o != nil {
-		invocationEvidence = modelseffects.NewRuntimeEvidenceInvocation(
-			o.runtimeEvidence,
-		)
-	}
+	invocationEvidence := modelseffects.NewRuntimeEvidenceInvocation(o.runtimeEvidence)
 	stage := modelseffects.RuntimeStageArtifactResolve
 	modelName := ""
 	operationName := request.Operation
@@ -515,16 +402,12 @@ func (o *Root) InvokeModel(
 			diagnosticErr = modelseffects.WrapRuntimeFailure(stage, publicErr)
 		}
 		elapsed := joinedInvocationElapsed(o, started)
-		if o != nil && (diagnosticErr == nil || !runtimeHostEvidenceAlreadyRecorded(diagnosticErr)) {
+		if diagnosticErr == nil || !runtimeHostEvidenceAlreadyRecorded(diagnosticErr) {
 			modelseffects.RecordRuntimeEvidenceStage(
 				invocationEvidence, stage, diagnosticErr, elapsed,
 			)
 		}
-		if o != nil {
-			modelseffects.RecordRuntimeEvidenceTerminal(
-				invocationEvidence, stage, diagnosticErr, elapsed,
-			)
-		}
+		modelseffects.RecordRuntimeEvidenceTerminal(invocationEvidence, stage, diagnosticErr, elapsed)
 		joinedInvocationRecord(
 			o, modelName, operationName, invocation, backend, revision,
 			correlation, stage, publicErr, elapsed,
@@ -532,9 +415,6 @@ func (o *Root) InvokeModel(
 		return result.Clone(), publicErr
 	}
 
-	if err := validateJoinedRoot(o); err != nil {
-		return finish(models.InvokeModelResult{}, err)
-	}
 	plan, preparedStage, err := o.prepareJoinedInvocation(
 		ctx, request, correlation, started,
 	)
@@ -684,19 +564,13 @@ func (o *Root) enrichJoinedHostConfiguration(
 	ctx context.Context,
 	configuration *modelseffects.ResolvedHostConfiguration,
 ) error {
-	if configuration == nil || o == nil || o.assets == nil {
+	if configuration == nil {
 		return models.ErrUnsupportedOperation
 	}
 	layout, err := o.assets.ResolveRuntimeCache(ctx, models.InspectModelAssetsRequest{
 		Scope: configuration.Scope,
 		Name:  configuration.ModelName,
 	})
-	if errors.Is(err, models.ErrUnsupportedOperation) {
-		// Some parent-private component fakes intentionally stop at asset
-		// preparation. Production Assets supplies the cache bridge; the fake
-		// capability is not a host/cache result and is safe to leave empty.
-		return nil
-	}
 	if err != nil {
 		return err
 	}
@@ -886,8 +760,5 @@ func (o *Root) CancelInvocation(
 	ctx context.Context,
 	request models.CancelInvocationRequest,
 ) (models.CancelInvocationResult, error) {
-	if o == nil || o.inference == nil {
-		return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
-	}
 	return o.inference.CancelInvocation(ctx, request)
 }

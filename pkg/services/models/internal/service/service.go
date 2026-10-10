@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -23,26 +22,10 @@ func missingDependencyError(name string) error {
 	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
 }
 
-func isNilDependency(value any) bool {
-	if value == nil {
-		return true
-	}
-	reflected := reflect.ValueOf(value)
-	switch reflected.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return reflected.IsNil()
-	default:
-		return false
-	}
-}
-
 func (o *Root) CloseRuntimeScope(
 	ctx context.Context,
 	request models.CloseRuntimeScopeRequest,
 ) (models.CloseRuntimeScopeResult, error) {
-	if o == nil || o.runtimeScopes == nil {
-		return models.CloseRuntimeScopeResult{}, models.ErrUnsupportedOperation
-	}
 	if err := ctx.Err(); err != nil {
 		return models.CloseRuntimeScopeResult{}, err
 	}
@@ -55,12 +38,8 @@ func (o *Root) CloseRuntimeScope(
 	}
 	o.resources.CloseScope(request.Scope)
 	o.closeScopedExecution(request.Scope)
-	if closer, ok := o.runtimeHost.(interface {
-		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
-	}); ok {
-		if err := closer.CloseRuntimeScope(context.WithoutCancel(ctx), request.Scope); err != nil {
-			return models.CloseRuntimeScopeResult{}, err
-		}
+	if err := o.runtimeHost.CloseRuntimeScope(context.WithoutCancel(ctx), request.Scope); err != nil {
+		return models.CloseRuntimeScopeResult{}, err
 	}
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
@@ -79,9 +58,6 @@ func (o *Root) ResolveModelReference(
 	ctx context.Context,
 	request models.ResolveModelReferenceRequest,
 ) (models.ResolveModelReferenceResult, error) {
-	if o == nil || o.runtimeScopes == nil {
-		return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
-	}
 	if err := request.Validate(); err != nil {
 		return models.ResolveModelReferenceResult{}, err
 	}
@@ -112,9 +88,6 @@ func (o *Root) PreflightModelAssets(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
 ) (models.PreflightModelAssetsResult, error) {
-	if o == nil || o.assets == nil {
-		return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
-	}
 	if err := request.Validate(); err != nil {
 		return models.PreflightModelAssetsResult{}, err
 	}
@@ -210,13 +183,6 @@ func runtimeHostEvidenceAlreadyRecorded(err error) bool {
 	default:
 		return false
 	}
-}
-
-func validateJoinedRoot(o *Root) error {
-	if o == nil || o.runtimeScopes == nil || o.assets == nil || o.runtimeHost == nil || o.inference == nil {
-		return models.ErrUnsupportedOperation
-	}
-	return nil
 }
 
 func resolveModelReference(
@@ -417,9 +383,6 @@ func resolveImmutableRevision(
 ) (string, error) {
 	if isImmutableRevision(source.Revision) {
 		return source.Revision, nil
-	}
-	if revisionResolver == nil {
-		return "", revisionFailure()
 	}
 	resolved, err := revisionResolver(ctx, source.SafeSource)
 	if err != nil {
