@@ -76,13 +76,27 @@ and recursive return paths remain incompletely analyzed. Known required origins
 still retain existing unresolved diagnostics; unsupported identity is unproved,
 not lawful. No analysis limit permits an allowance or exemption.
 
-Work's applicationService still guards its receiver and injected RuntimeResolver
-in runtime, and its injected SubmittedFileReader in SubmitFileForSession
-(work/internal/service.go). NewService stores both directly; canonical
-provideWorkService supplies the completed inputs and provideWorkSubmittedFileReader
-selects the host override or os.ReadFile. This is BLOCKED for original-owner
-T05 correction, not resource validation. Preserve the separate nil runtime
-returned by ResolveWorkRuntime, operation errors and request/domain checks.
+Work PR #3152 (merge `fe39a4375b053882fe4875ea95066b777beb92f4`) removes
+the named applicationService receiver/resolver and direct submission reader
+guards. NewService stores both inputs directly; canonical provideWorkService
+supplies them and provideWorkSubmittedFileReader selects the host override or
+os.ReadFile. However, SubmitFileForSession still forwards its required reader
+to submitFile, which checks readFile == nil. Public SubmitFile shares that
+helper and must preserve caller validation. This remains FAIL/BLOCKED for a
+smallest T05 delta separating public validation from the completed reader path.
+The controlled typed TestConstructionRequiredReaderThroughSharedValidator proves
+the helper-provenance distinction, not production-registry/plugin coverage or
+runtime behavior. Preserve the separate nil runtime returned by ResolveWorkRuntime,
+read/parse/submit errors and request/domain checks.
+
+Runtime's active buildRuntimeSubsystems still calls NewTerminationCheckWithRuntime,
+which defaults nil now to time.Now and constructs scheduler.NewEnablementEvaluator.
+Its supplied cfg.clock.Now does not retire either prohibited path. The compatibility
+NewTerminationCheck wrapper selects time.Now and has no handwritten production
+caller found. This remains FAIL/BLOCKED for T15/T23 to inject the completed
+evaluator and settle wrapper retirement; empty-mode configuration defaults and
+finite-runtime domain checks remain valid. See the exact superseding inventory
+rows. T29 cannot repair these production owners or introduce an allowance.
 
 The maintained typed analyzer now recognizes unlisted constructor declarations
 and references with the existing `New`/`Build`/`Create`/`Ensure`/`Open`/`Provide`
