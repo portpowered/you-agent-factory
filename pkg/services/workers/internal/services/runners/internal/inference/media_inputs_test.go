@@ -153,6 +153,117 @@ type mediaReadOpener struct {
 	open func(string) (io.ReadCloser, error)
 }
 
+// The runner owns rejection and cleanup before Models admission. Controlled
+// materialization and reader failures localize this component contract; they
+// do not prove public Work terminalization or real filesystem permissions.
+func TestManagedInferenceMediaFailurePreservesCauseAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		stage          string
+		opened, closed int
+	}{{"materialize", 0, 0}, {"open", 1, 0}, {"read", 1, 1}} {
+		t.Run(scenario.stage, func(t *testing.T) {
+			t.Parallel()
+			fixture := &mediaFailureFixture{t: t, stage: scenario.stage, reject: true, failure: errors.New("selected media unavailable")}
+			model := &captureModelsService{result: models.InvokeModelResult{
+				Status:  models.ModelInvocationStatusCompleted,
+				Outputs: []models.InferenceOutput{{Name: "text", Modality: models.ModalityText, Content: "ok"}},
+			}}
+			runner, err := New(validConfig(), Dependencies{Models: model, ContentMaterializer: work.ContentMaterializeFunc(fixture.materialize), MediaFiles: mediaReadOpener{open: fixture.open}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := validRequest()
+			request.ModelBindings = append(request.ModelBindings, workers.ResolvedModelOperationBinding{
+				Slot: "image", Source: workers.ModelOperationBindingSourceInput,
+				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeImage, URL: "file:///selected-image", ContentType: "image/png"}},
+			})
+			_, err = runner.Execute(t.Context(), request)
+			assertMediaRejection(t, err, fixture.failure)
+			fixture.assertCounts(model, 0, 1, scenario.opened, scenario.closed)
+			// Retry the same component and request after repairing only its edge.
+			fixture.reject = false
+			if _, err := runner.Execute(t.Context(), request); err != nil {
+				t.Fatalf("healthy retry: %v", err)
+			}
+			fixture.assertCounts(model, 1, 2, scenario.opened+1, scenario.closed+1)
+			inputs := model.Request().Inputs
+			if len(inputs) != 2 || inputs[1].Content != "complete image bytes" || inputs[1].MediaType != "image/png" {
+				t.Fatalf("retry Models inputs = %#v", inputs)
+			}
+			if request.ModelBindings[len(request.ModelBindings)-1].Content[0].URL != "file:///selected-image" {
+				t.Fatal("media loading mutated the caller's input URL")
+			}
+		})
+	}
+}
+
+func assertMediaRejection(t *testing.T, err, cause error) {
+	t.Helper()
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) || !errors.Is(err, cause) ||
+		providerErr.Type != workers.WorkFailureTypePermanentBadRequest ||
+		!strings.Contains(providerErr.Message, "cannot be read") {
+		t.Fatalf("error = %#v, want typed media rejection preserving cause", err)
+	}
+}
+
+type mediaFailureFixture struct {
+	t                       *testing.T
+	stage                   string
+	reject                  bool
+	failure                 error
+	cleaned, opened, closed int
+}
+
+func (f *mediaFailureFixture) materialize(_ context.Context, url string) (string, work.ContentCleanup, error) {
+	if url != "file:///selected-image" {
+		f.t.Fatalf("materialization URL = %q", url)
+	}
+	cleanup := func() { f.cleaned++ }
+	if f.reject && f.stage == "materialize" {
+		return "", cleanup, f.failure
+	}
+	return "selected-image", cleanup, nil
+}
+
+func (f *mediaFailureFixture) open(path string) (io.ReadCloser, error) {
+	if path != "selected-image" {
+		f.t.Fatalf("opened path = %q", path)
+	}
+	f.opened++
+	if f.reject && f.stage == "open" {
+		return nil, f.failure
+	}
+	var reader io.Reader = strings.NewReader("complete image bytes")
+	if f.reject && f.stage == "read" {
+		reader = io.MultiReader(strings.NewReader("partial image bytes"), mediaFailureReader{err: f.failure})
+	}
+	return mediaTrackedReader{Reader: reader, close: func() { f.closed++ }}, nil
+}
+
+func (f *mediaFailureFixture) assertCounts(model *captureModelsService, calls, cleaned, opened, closed int) {
+	f.t.Helper()
+	if model.Calls() != calls || f.cleaned != cleaned || f.opened != opened || f.closed != closed {
+		f.t.Fatalf("Models calls/cleanup/open/close = %d/%d/%d/%d, want %d/%d/%d/%d",
+			model.Calls(), f.cleaned, f.opened, f.closed, calls, cleaned, opened, closed)
+	}
+}
+
+type mediaFailureReader struct{ err error }
+
+func (r mediaFailureReader) Read([]byte) (int, error) { return 0, r.err }
+
+type mediaTrackedReader struct {
+	io.Reader
+	close func()
+}
+
+func (r mediaTrackedReader) Close() error {
+	r.close()
+	return nil
+}
+
 func TestMediaMaterializationFailureStillCleansUp(t *testing.T) {
 	for _, canceled := range []bool{false, true} {
 		t.Run(map[bool]string{false: "effect error", true: "canceled during materialization"}[canceled], func(t *testing.T) {
