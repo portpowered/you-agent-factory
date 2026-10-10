@@ -123,6 +123,9 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
+	if err := appendRequesterMCPScenarios(rootDir, &setup); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	for _, test := range remoteInterruptParityCases() {
 		runner := testutil.NewProviderCommandRunner()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "parity-"+test.name, runner, runner, nil, nil, nil, nil); err != nil {

@@ -417,6 +417,17 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+      "stableIds": [
+        "cli/you.server.mcp",
+        "mcp/mcp.tool.you.subagent",
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/terminateFactorySession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
       "stableIds": [
         "cli/you.worker-sessions.cancel",

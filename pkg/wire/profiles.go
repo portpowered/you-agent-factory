@@ -610,9 +610,11 @@ func provideMCPServerBuilder(
 			factorysessions.SessionIDGenerator(uuid.NewString),
 			subagentProviderIdentityResolver(providerService),
 		)
-		runSubagent := factorysessionmcp.BindSubagentOperation(func(ctx context.Context, input factorysessionmcp.SubagentInput) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
-			return factorysessionmcp.Subagent(ctx, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString), subagentProviderIdentityResolver(providerService), input)
-		}, intent.WorkerSessionID, intent.WorkerSessionToken)
+		runHost, err := factorysessionwire.NewMCPSubagentOperation(intent.ServerURL, &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString), subagentProviderIdentityResolver(providerService))
+		if err != nil {
+			return nil, fmt.Errorf("construct subagent MCP host operation: %w", err)
+		}
+		runSubagent := factorysessionmcp.BindSubagentOperation(runHost, intent.WorkerSessionID, intent.WorkerSessionToken)
 		return mcpserver.New(mcpserver.Options{
 			Skills:    skills,
 			Resources: resources,
