@@ -299,6 +299,15 @@ func NewService(logger logging.Logger) (events.Service, error) {
  return service.NewWithRetention(0, logger), nil
 }
 `,
+		module + "/pkg/services/events/internal/consumer/consumer.go": `package consumer
+import "github.com/portpowered/infinite-you/pkg/services/events/internal/service"
+type View struct { *service.Store }
+func Use(view *View) {
+ view.Peer() // want "service-getter-locator:.*Use.*\\(Store\\).Peer"
+ view.PeerView("scope")
+}
+func Escape(view *View) any { return view.Peer } // want "unresolved-service-getter-reference:.*Escape.*\\(Store\\).Peer"
+`,
 		module + "/pkg/services/other/consumer.go": `package other
 import "github.com/portpowered/infinite-you/pkg/platform/logging"
 import eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
@@ -313,5 +322,5 @@ func Operation(logger logging.Logger) {
 	}
 	t.Cleanup(cleanup)
 	analysistest.Run(t, dir, registeredConstructionAnalyzer(RepositoryConstructionRegistry()), owner,
-		module+"/pkg/services/events/wire", module+"/pkg/services/other")
+		module+"/pkg/services/events/wire", module+"/pkg/services/events/internal/consumer", module+"/pkg/services/other")
 }

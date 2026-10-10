@@ -765,6 +765,14 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
           "func NewService(logger logging.Logger) (events.Service, error) {\n" +
           (" if logger == nil { return nil, nil }\n" if seeded else "") +
           " return service.NewWithRetention(0, logger), nil\n}\n")
+    # The consumer sees compiler object facts, including promoted method
+    # identity; it must not need the owning package's source-body index.
+    write(root, events + "/internal/consumer/consumer.go", "package consumer\n" +
+          f'import service "{module}/{store}"\n' +
+          "type View struct { *service.Store }\n"
+          "func Scoped(view *View) { view.PeerView(\"scope\") }\n" +
+          ("func Use(view *View) { view.Peer() }\n"
+           "func Escape(view *View) any { return view.Peer }\n" if seeded else ""))
     # Keep the operational caller in the existing private consumer package;
     # public service roots own contracts rather than floating operations.
     write(root, "pkg/services/unrelated/internal/consumer/events.go", "package consumer\n" +
@@ -786,6 +794,8 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
         ("repolint", f"{module}/{store}.(Store).UsePeer->{module}/{store}.NewPeer"),
         ("repolint", f"service-getter-locator: {store} -> {module}/{store}.(Store).UsePeer->{module}/{store}.(Store).Peer"),
         ("repolint", f"unresolved-service-getter-reference: {store} -> {module}/{store}.(Store).EscapePeer->{module}/{store}.(Store).Peer"),
+        ("repolint", f"service-getter-locator: {events}/internal/consumer -> {module}/{events}/internal/consumer.Use->{module}/{store}.(Store).Peer"),
+        ("repolint", f"unresolved-service-getter-reference: {events}/internal/consumer -> {module}/{events}/internal/consumer.Escape->{module}/{store}.(Store).Peer"),
     ]
 
 

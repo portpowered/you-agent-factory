@@ -118,7 +118,9 @@ unclassified repository owners conform.
 Events fixtures also trace an unlisted constructor's required `events.Service`
 parameter into stored peer state. Seeds exercise the parameter guard, stored
 guard, zero-argument getter call and escaped getter reference. A parameterized
-peer view remains lawful. The fixture adds no production constructor or owner
+peer view remains lawful, including through an imported embedded Store. The
+consumer's promoted getter call and escape must retain the original qualified
+Store method identity through compiler object facts. The fixture adds no production constructor or owner
 classification; it proves the existing registry's typed guard/getter rules.
 
 Final inventory auditing must distinguish retired construction paths from
