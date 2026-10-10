@@ -162,8 +162,11 @@ func selectedAwaitRetry(t *testing.T, scheduler *selectedOperationScheduler, run
 }
 
 type selectedInvocation struct {
-	done   chan error
-	stdout func() string
+	done      chan error
+	stdout    func() string
+	inputs    *support.CapturedInputs
+	sessionID string
+	dir       string
 }
 
 func startSelectedInvocation(t *testing.T, process support.Process, ctx context.Context) selectedInvocation {
@@ -173,10 +176,26 @@ func startSelectedInvocation(t *testing.T, process support.Process, ctx context.
 
 func startSelectedConfiguredInvocation(t *testing.T, process support.Process, ctx context.Context, config string) selectedInvocation {
 	t.Helper()
+	return startSelectedOutputInvocation(t, process, ctx, config, []string{"--json"}, "selected operation")
+}
+
+func startSelectedOutputInvocation(t *testing.T, process support.Process, ctx context.Context, config string, flags []string, prompt string) selectedInvocation {
+	t.Helper()
+	return startSelectedWriterInvocation(t, process, ctx, config, flags, prompt, nil)
+}
+
+func startSelectedWriterInvocation(t *testing.T, process support.Process, ctx context.Context, config string, flags []string, prompt string, output io.Writer) selectedInvocation {
+	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)
 	dir := scaffoldSelectedFactory(t, config)
 	home := t.TempDir()
-	input := support.FakeInputs(ctx, []string{"you", "--json", "run", "--factory", filepath.Join(dir, interfaces.FactoryConfigFile), "--session", uuid.NewString(), "--no-record", "selected operation"})
+	sessionID := uuid.NewString()
+	args := append([]string{"you", "run"}, flags...)
+	args = append(args, "--factory", filepath.Join(dir, interfaces.FactoryConfigFile), "--session", sessionID, "--no-record", prompt)
+	input := support.FakeInputs(ctx, args)
+	if output != nil {
+		input.Input.Stdout = output
+	}
 	input.WorkingDirectory = dir
 	input.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"), "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
 	done := make(chan error, 1)
@@ -189,7 +208,7 @@ func startSelectedConfiguredInvocation(t *testing.T, process support.Process, ct
 		defer close(joined)
 		done <- process.Execute(input.Input)
 	}()
-	return selectedInvocation{done: done, stdout: input.Stdout}
+	return selectedInvocation{done: done, stdout: input.Stdout, inputs: input, sessionID: sessionID, dir: dir}
 }
 
 func scaffoldSelectedFactory(t *testing.T, config string) string {
