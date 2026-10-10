@@ -781,9 +781,9 @@ func TestRecordedForceObservationRetainsCapturedTerminalTruth(t *testing.T) {
 	service.ledger = service.ledger.(*preparedScopedTestLedger).RuntimeLedger
 	prepareScopedTestFacts(service)
 	cause := "OPERATOR_KILL"
-	service.Service = &capturedForceService{observation: workersessions.Observation{WorkerSessionID: fixture.workerSessionID, FactorySessionID: "factory", AttemptID: "physical", State: workersessions.StateTerminated, TerminalCause: &cause}}
+	service.Service = &capturedForceService{observation: workersessions.Observation{WorkerSessionID: fixture.workerSessionID, FactorySessionID: "factory", AttemptID: "dispatch-recorded-exact", State: workersessions.StateTerminated, TerminalCause: &cause}}
 	got, err := service.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.workerSessionID, FactorySessionID: "factory"})
-	if err != nil || got.State != workersessions.StateTerminated || got.TerminalCause == nil || *got.TerminalCause != cause || got.AttemptID != "physical" {
+	if err != nil || got.State != workersessions.StateTerminated || got.TerminalCause == nil || *got.TerminalCause != cause || got.AttemptID != "dispatch-recorded-exact" {
 		t.Fatalf("recorded force truth = %+v, %v", got, err)
 	}
 	listed, err := service.ListObservations(t.Context(), workersessions.ListObservationsRequest{WorkID: fixture.workID})
@@ -818,16 +818,16 @@ func TestScopedWorkRestoredCaptureRetainsOriginalScope(t *testing.T) {
 			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary(fixture.workerSessionID, 4)}
 			reader.summary.Capture.Catalog.FactorySessionID = scope
 			reader.summary.Capture.Health = recordings.WorkerRecordingStatusComplete
-			reader.summary.Capture.Opening = events.Record{Payload: []byte(fmt.Sprintf(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":%q}}`, fixture.workerSessionID))}
+			reader.summary.Capture.Opening = events.Record{Payload: []byte(fmt.Sprintf(`{"kind":"SESSION","phase":"STARTED","payload":{"workerSessionId":%q,"factorySessionId":%q,"dispatchId":"attempt"}}`, fixture.workerSessionID, scope))}
 			service.recordingID, service.recordingReader = "new-runtime-recording", reader
-			got, err := service.withSelectedCapturedIdentity(t.Context(), workersessions.Observation{WorkerSessionID: fixture.workerSessionID, State: workersessions.StateCompleted})
+			got, err := service.withSelectedCapturedIdentity(t.Context(), workersessions.Observation{WorkerSessionID: fixture.workerSessionID, AttemptID: "attempt", State: workersessions.StateCompleted})
 			if scope == "foreign" {
 				if !errors.Is(err, workersessions.ErrObservationRecordingCorrupt) {
 					t.Fatalf("foreign restored capture = %+v, %v", got, err)
 				}
 				return
 			}
-			if err != nil || got.TokenUsage == nil || *got.TokenUsage.OutputTokens != 4 || got.RecordingHealth != recordings.WorkerRecordingStatusComplete {
+			if err != nil || got.FactorySessionID != "original" || got.TokenUsage == nil || *got.TokenUsage.OutputTokens != 4 || got.RecordingHealth != recordings.WorkerRecordingStatusComplete {
 				t.Fatalf("restored selected capture = %+v, %v", got, err)
 			}
 			if len(reader.ids) != 1 || reader.ids[0] != fixture.workerSessionID {
@@ -846,7 +846,7 @@ func (service restoredCanceledCaptureService) GetCapturedObservation(_ context.C
 	return service.read(request), nil
 }
 
-func TestScopedWorkRestoredCancellationKeepsCommittedKillAndReboundScope(t *testing.T) {
+func TestScopedWorkRestoredCancellationKeepsCommittedKillAndOriginalScope(t *testing.T) {
 	t.Parallel()
 	cause, usage := "OPERATOR_KILL", 4
 	service := &recordedWorkerSessionObservation{restoredWorkerScopes: map[string]string{"worker": "original"},
@@ -858,7 +858,7 @@ func TestScopedWorkRestoredCancellationKeepsCommittedKillAndReboundScope(t *test
 				TerminalCause: &cause, TokenUsage: &workersessions.TokenUsage{OutputTokens: &usage}}
 		}}}
 	got, found, err := service.selectedCapturedCancellation(t.Context(), workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "rebound", State: workersessions.StateCanceled})
-	if err != nil || !found || got.FactorySessionID != "rebound" || got.State != workersessions.StateTerminated || got.TerminalCause == nil || *got.TerminalCause != cause || got.TokenUsage == nil || *got.TokenUsage.OutputTokens != usage {
+	if err != nil || !found || got.FactorySessionID != "original" || got.State != workersessions.StateTerminated || got.TerminalCause == nil || *got.TerminalCause != cause || got.TokenUsage == nil || *got.TokenUsage.OutputTokens != usage {
 		t.Fatalf("restored cancellation = %+v, %t, %v", got, found, err)
 	}
 }

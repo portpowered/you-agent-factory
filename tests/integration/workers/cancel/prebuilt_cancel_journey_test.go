@@ -20,7 +20,7 @@ import (
 )
 
 // A real host death and joined restart prove the delivered transport repair.
-// Default CLI control remains excluded at LEAD-CLI-BLOCKER; no synthetic
+// Default CLI control has its own owner-placement cases below; no synthetic
 // capture or provider files stand in for this read/restart witness.
 func TestPrebuiltRecordedReadControlParity(t *testing.T) {
 	binary := resolveCancelArtifact(t)
@@ -653,4 +653,151 @@ func stopAndCensusCancelJourney(t *testing.T, journey *cancelJourney) {
 func logCancelEvidence(t *testing.T, manifest cancelEvidenceManifest) {
 	t.Helper()
 	t.Logf("compiled cancel evidence: binary_sha256=%s fixture_sha256=%s target=%s/%s dispatch=%s gone_ms=%d resource_releases=%d unrelated=%s/%s samples=%d head=%s", manifest.BinarySHA256, manifest.FixtureSHA256, manifest.TargetWorkID, manifest.TargetWorkerSessionID, manifest.TargetDispatchID, manifest.TargetGoneAfterAPIMillis, manifest.ResourceReleaseCount, manifest.UnrelatedWorkID, manifest.UnrelatedWorkerSessionID, len(manifest.Samples), manifest.GitHead)
+}
+
+// Two small delivered-artifact scenarios cross real CLI/host process boundaries.
+// Declarative gates supply worker effects without provider calls or scripts.
+func TestPrebuiltDefaultWorkerSessionCancelOwner(t *testing.T) {
+	binary := resolveCancelArtifact(t)
+	artifact, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("artifact sha256=%x OS=%s", sha256.Sum256(artifact), runtime.GOOS)
+	for _, scenario := range []string{"terminal-restart", "owner-loss"} {
+		t.Run(scenario, func(t *testing.T) {
+			f := writeRecordedParityFixture(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+			defer cancel()
+			initialize := exec.CommandContext(ctx, binary, "init", "--provider", "codex")
+			initialize.Dir, initialize.Env = f.factoryDir, f.environment
+			if output, err := initialize.CombinedOutput(); err != nil {
+				t.Fatalf("init: %v %s", err, output)
+			}
+			host := startCancelDaemon(t, ctx, binary, f)
+			waitForCancelFactorySession(t, ctx, f.serverURL, host)
+			admitRecordedParityWorker(t, ctx, f, "lost")
+			waitRecordedParityState(t, ctx, f, "lost", "RUNNING")
+			admitRecordedParityWorker(t, ctx, f, "peer")
+			waitRecordedParityState(t, ctx, f, "peer", "RUNNING")
+			if scenario == "terminal-restart" {
+				result := runDefaultOwnerCancel(ctx, binary, f, "lost", false)
+				assertDefaultOwnerCancelResult(t, result, "APPLIED")
+				assertDefaultOwnerPeer(t, ctx, f)
+				cleanupCancelDaemon(host)
+				select {
+				case <-host.done:
+				case <-ctx.Done():
+					t.Fatal("host not joined")
+				}
+			} else {
+				if err := host.cmd.Process.Kill(); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case <-host.done:
+				case <-ctx.Done():
+					t.Fatal("lost owner not joined")
+				}
+				assertDefaultOwnerUnreachable(t, ctx, binary, f)
+			}
+			host = startCancelDaemon(t, ctx, binary, f)
+			waitForCancelFactorySession(t, ctx, f.serverURL, host)
+			assertDefaultOwnerAfterRestart(t, ctx, binary, f, scenario)
+		})
+	}
+}
+
+func assertDefaultOwnerAfterRestart(t *testing.T, ctx context.Context, binary string, f cancelFixture, scenario string) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		result := runDefaultOwnerCancel(ctx, binary, f, "lost", remote)
+		if scenario == "terminal-restart" {
+			assertDefaultOwnerCancelResult(t, result, "NOOP")
+		} else if exitCode(result.err) != 1 || firstErrorCode(result.stdout, result.stderr) != "WORKER_SESSION_CONTROL_FAILED" || strings.TrimSpace(result.stdout) != "" {
+			t.Fatalf("owner-loss fabricated success: %+v", result)
+		}
+	}
+	if scenario == "terminal-restart" {
+		assertDefaultOwnerTransportParity(t, ctx, binary, f)
+	}
+}
+
+func runDefaultOwnerCancel(ctx context.Context, binary string, f cancelFixture, id string, remote bool) cancelCommandResult {
+	args := []string{"--server", f.serverURL, "--json", "worker-sessions", "cancel", id}
+	if remote {
+		args = append(args, "--remote")
+	}
+	command := exec.CommandContext(ctx, binary, args...)
+	command.Dir, command.Env = f.factoryDir, f.environment
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	err := command.Run()
+	return cancelCommandResult{stdout: stdout.String(), stderr: stderr.String(), err: err}
+}
+
+func assertDefaultOwnerCancelResult(t *testing.T, result cancelCommandResult, outcome string) {
+	t.Helper()
+	var response factoryapi.WorkerSessionControlResponse
+	if result.err != nil || json.Unmarshal([]byte(result.stdout), &response) != nil || response.WorkerSessionId != "lost" || string(response.Action) != "CANCEL" || string(response.Outcome) != outcome || string(response.State) != "CANCELED" || response.DispatchId != "attempt-lost" {
+		t.Fatalf("cancel want %s/CANCELED/attempt-lost: %+v %+v", outcome, result, response)
+	}
+}
+
+func assertDefaultOwnerPeer(t *testing.T, ctx context.Context, f cancelFixture) {
+	t.Helper()
+	row, err := getJSON[factoryapi.WorkerSessionObservation](ctx, http.DefaultClient, f.serverURL+"/worker-sessions/peer")
+	if err != nil || string(row.State) != "RUNNING" || row.AttemptId != "attempt-peer" {
+		t.Fatalf("peer changed: %+v %v", row, err)
+	}
+}
+
+func assertDefaultOwnerTransportParity(t *testing.T, ctx context.Context, binary string, f cancelFixture) {
+	t.Helper()
+	status, body, err := postWorkerSessionCancel(ctx, f.serverURL, "lost")
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("HTTP repeat=%d/%s/%v", status, body, err)
+	}
+	assertDefaultOwnerCancelResult(t, cancelCommandResult{stdout: string(body)}, "NOOP")
+	command := exec.CommandContext(ctx, binary, "--server", f.serverURL, "server", "mcp")
+	command.Dir, command.Env = f.factoryDir, f.environment
+	client := mcp.NewClient(&mcp.Implementation{Name: "default-owner", Version: "test"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := session.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "CONTROL", "workerSessionId": "lost", "operation": "CANCEL"}})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("MCP repeat: %+v %v", result, err)
+	}
+	content, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("MCP content=%T", result.Content[0])
+	}
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(content.Text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	assertDefaultOwnerCancelResult(t, cancelCommandResult{stdout: string(envelope.Result)}, "NOOP")
+}
+
+func assertDefaultOwnerUnreachable(t *testing.T, ctx context.Context, binary string, f cancelFixture) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		result := runDefaultOwnerCancel(ctx, binary, f, "lost", remote)
+		code := "NOT_FOUND"
+		if remote {
+			code = "FACTORY_UNREACHABLE"
+		}
+		if exitCode(result.err) != 1 || firstErrorCode(result.stdout, result.stderr) != code {
+			t.Fatalf("unreachable remote=%v: %+v", remote, result)
+		}
+	}
 }

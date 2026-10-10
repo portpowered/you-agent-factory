@@ -6,6 +6,7 @@ import "testing"
 func TestCLIOutputJourneys(t *testing.T) {
 	t.Parallel()
 	initializeOutputFixture(t)
+	t.Run("TestPrivateUsefulInvocationDiagnostics", testOutputPrivateUsefulInvocationDiagnostics)
 	t.Run("TestConcurrentQuietAndVerboseInvocationsKeepOwnFraming", testOutputConcurrentQuietAndVerboseInvocationsKeepOwnFraming)
 	t.Run("TestInjectedInvocationSelectedEffectsAndOutputPolicy", testOutputInjectedInvocationSelectedEffectsAndOutputPolicy)
 	t.Run("TestSelectedProcessClockDatesRecordingAndCLIRunFacts", testOutputSelectedProcessClockDatesRecordingAndCLIRunFacts)

@@ -21,7 +21,7 @@ import (
 	"go.uber.org/goleak"
 )
 
-func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.T) {
+func TestRecordedWorkerSessionLiveIdentityPreservesPhysicalAttribution(t *testing.T) {
 	t.Parallel()
 	const (
 		workerSessionID   = "worker-live-identity"
@@ -47,8 +47,8 @@ func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.
 	}
 	live.getByWorkerResult.FactorySessionID = historicalSession
 	observation, err = restored.GetObservationByWorkerSessionID(context.Background(), request)
-	if err != nil || observation.FactorySessionID != successorSession {
-		t.Fatalf("restored observation = %#v, %v; want successor Factory Session", observation, err)
+	if err != nil || observation.FactorySessionID != historicalSession {
+		t.Fatalf("restored observation = %#v, %v; want historical Factory Session", observation, err)
 	}
 }
 
@@ -891,13 +891,13 @@ func TestRecordedWorkerSessionObservationBindsPreparedRestorationBeforeFirstRead
 			reader := runtime.WorkerSessionsObservationForSession(scope)
 			request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-restored"}
 			first, err := reader.GetObservationByWorkerSessionID(context.Background(), request)
-			if err != nil || first.FactorySessionID != scope {
-				t.Fatalf("first restored read = %#v, %v; want scope %q", first, err, scope)
+			if err != nil || first.FactorySessionID != historical {
+				t.Fatalf("first restored read = %#v, %v; want physical scope %q", first, err, historical)
 			}
 			first.FactorySessionID = "poison"
 			second, err := reader.GetObservationByWorkerSessionID(context.Background(), request)
-			if err != nil || second.FactorySessionID != scope {
-				t.Fatalf("subsequent restored read = %#v, %v; want scope %q", second, err, scope)
+			if err != nil || second.FactorySessionID != historical {
+				t.Fatalf("subsequent restored read = %#v, %v; want physical scope %q", second, err, historical)
 			}
 		})
 	}

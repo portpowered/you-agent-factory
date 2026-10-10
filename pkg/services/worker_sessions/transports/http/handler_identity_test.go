@@ -45,9 +45,15 @@ func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSessi
 
 type sessionObservationServiceStub struct {
 	workersessions.Service
+	getResult       workersessions.Observation
+	getErr          error
 	result          workersessions.ListObservationsResult
 	listCalls       int
 	lastListRequest workersessions.ListObservationsRequest
+}
+
+func (stub *sessionObservationServiceStub) GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return stub.getResult, stub.getErr
 }
 
 // hostAdmissionResolver keeps immutable selections shared by concurrent hosts.
@@ -505,6 +511,67 @@ func TestListWorkerSessionsBySessionIDMapsMismatchedObservationScopeToNotFound(t
 	}
 	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("error code = %q, want NOT_FOUND", response.Code)
+	}
+}
+
+func TestScopedRuntimePreservesValidatedCapturedIdentity(t *testing.T) {
+	t.Parallel()
+	original := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "original", AttemptID: "attempt", WorkIDs: []string{"work-1"}, State: workersessions.StateCompleted}
+	service := &sessionObservationServiceStub{getResult: original, result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{original}}}
+	resolver := &decoratedSessionScopeResolverStub{sessionScopeResolverStub: sessionScopeResolverStub{scope: SessionScope{EffectiveID: "reopened", IsDefault: true}}, observations: service}
+	adapter := NewAdapter(service, workServiceStub{}, resolver)
+	got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "~default", "worker")
+	if err != nil || got.FactorySessionId == nil || *got.FactorySessionId != "original" || got.AttemptId != "attempt" {
+		t.Fatalf("validated restored summary = %+v, %v", got, err)
+	}
+	list, err := adapter.ListWorkerSessions(t.Context(), "~default", "work-1")
+	if err != nil || len(list.Sessions) != 1 || list.Sessions[0].FactorySessionId == nil || *list.Sessions[0].FactorySessionId != "original" || resolver.observationSessionID != "reopened" {
+		t.Fatalf("validated restored list = %+v, %v", list, err)
+	}
+	service.getErr = workersessions.ErrObservationSessionNotFound
+	if _, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "~default", "foreign"); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("selected source denial lost: %v", err)
+	}
+	resolver.observations = nil
+	if _, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "~default", "worker"); err == nil {
+		t.Fatal("missing selected source fell back to retained observations")
+	}
+}
+
+func TestScopedRuntimeTranscriptIdentityUsesExactAttempt(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"original", "foreign-attempt", "denied", "corrupt", "canceled"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			service := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker", AttemptID: "attempt", FactorySessionID: "original"}}
+			if name == "foreign-attempt" {
+				service.getByWorkerResult.AttemptID = "other"
+			}
+			if name == "denied" {
+				service.getByWorkerErr = workersessions.ErrObservationSessionNotFound
+			}
+			if name == "corrupt" {
+				service.getByWorkerErr = workersessions.ErrObservationRecordingCorrupt
+			}
+			if name == "canceled" {
+				service.getByWorkerErr = context.Canceled
+			}
+			adapter := NewAdapter(service, workServiceStub{})
+			got, err := adapter.scopedTranscriptIdentity(t.Context(), service, workerSessionScope{effectiveID: "reopened", defaultScope: true, validatedSource: true}, workersessions.ReadTranscriptResult{WorkerSessionID: "worker", AttemptID: "attempt"}, factoryapi.WorkerSessionTranscriptResponse{WorkerSessionId: "worker", AttemptId: "attempt"})
+			if name == "original" {
+				if err != nil || got.FactorySessionId == nil || *got.FactorySessionId != "original" || service.getWorkerFactorySessionID != "~default" {
+					t.Fatalf("restored transcript attribution = %+v, %v", got, err)
+				}
+			} else {
+				want := service.getByWorkerErr
+				if name == "foreign-attempt" {
+					want = workersessions.ErrObservationSessionNotFound
+				}
+				if !errors.Is(err, want) || got.WorkerSessionId != "" {
+					t.Fatalf("invalid capture disclosed transcript: %+v, %v", got, err)
+				}
+			}
+		})
 	}
 }
 

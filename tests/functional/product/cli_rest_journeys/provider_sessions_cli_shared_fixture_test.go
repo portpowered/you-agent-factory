@@ -2,6 +2,7 @@ package cli_rest_journeys_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -297,6 +299,38 @@ func newWorkerSessionsCLISharedRouteRunner(
 	}
 	addSuccessRoute("worker-session-scoped-default", "session_fixture_codex_scoped_default")
 	addSuccessRoute("worker-session-scoped-fresh", "session_fixture_codex_scoped_fresh")
+	for _, name := range []string{"success", "business", "live", "peer"} {
+		stdout := bytesReplaceAll(successStdout, workerSessionsCodexSuccessID, "session_fixture_physical_"+name)
+		if name == "business" {
+			data, err := os.ReadFile(testutil.MustRepoPath(t, "docs/examples/mock-workers-result-body-business-invalid.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var config struct {
+				MockWorkers []struct {
+					ResultBody json.RawMessage `json:"resultBody"`
+				} `json:"mockWorkers"`
+			}
+			if err := json.Unmarshal(data, &config); err != nil || len(config.MockWorkers) != 1 {
+				t.Fatalf("business result fixture: %v", err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(config.MockWorkers[0].ResultBody, &body); err != nil {
+				t.Fatal(err)
+			}
+			body["output"] = fmt.Sprint(body["output"]) + " COMPLETE"
+			declared, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			answer, err := json.Marshal(string(declared))
+			if err != nil {
+				t.Fatal(err)
+			}
+			stdout = bytesReplaceAll(stdout, `"Codex fixture answer COMPLETE"`, string(answer))
+		}
+		routes["worker-session-physical-"+name] = platformprocess.CommandResult{Stdout: stdout}
+	}
 	for _, kind := range []string{"cancel", "corrupt", "unavailable"} {
 		addSuccessRoute("worker-session-selected-read-"+kind, "session_fixture_codex_selected_read_"+kind)
 	}
@@ -317,10 +351,12 @@ func newWorkerSessionsCLISharedRouteRunner(
 
 	fleetGate := newProviderCommandRouteGate()
 	fleetRoutes := map[string]*providerCommandRouteGate{
-		"worker-session-scoped-fresh": newProviderCommandRouteGate(),
-		"worker-session-fleet-alpha":  fleetGate,
-		"worker-session-fleet-beta":   fleetGate,
-		"worker-session-fleet-gamma":  fleetGate,
+		"worker-session-physical-live": newProviderCommandRouteGate(),
+		"worker-session-physical-peer": newProviderCommandRouteGate(),
+		"worker-session-scoped-fresh":  newProviderCommandRouteGate(),
+		"worker-session-fleet-alpha":   fleetGate,
+		"worker-session-fleet-beta":    fleetGate,
+		"worker-session-fleet-gamma":   fleetGate,
 	}
 	return newProviderCommandRouteRunnerWithDynamicGates(routes, fleetRoutes), fleetGate
 }
