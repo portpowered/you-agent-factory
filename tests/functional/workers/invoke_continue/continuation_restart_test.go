@@ -255,6 +255,75 @@ func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	}
 }
 
+// Restart requires sequential processes over the same isolated profile. The
+// runner is controlled at the public command edge; no executable is built.
+func TestDurableRevivalFactorySourceAfterHostRestart(t *testing.T) {
+	t.Parallel()
+	root, dir := t.TempDir(), t.TempDir()
+	host, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "initial COMPLETE")},
+		continuationRestartCommandResult(false),
+	)
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+	first := startContinuationRestartHost(t, root, host, home, route)
+	t7WriteFactorySibling(t, dir)
+	opened := support.OpenFactorySessionAt(t, first.baseURL, dir)
+	work := support.SubmitSessionWorkAt(t, first.baseURL, opened.Session.Id, factoryapi.SubmitWorkRequest{
+		WorkTypeName: "task", Payload: "durable Factory source input",
+	})
+	// Runtime result processing follows provider completion. Its public terminal
+	// status is the only customer barrier covering both Work and Worker capture.
+	support.WaitForSessionTerminalStatus(t, first.baseURL, opened.Session.Id, 30*time.Second)
+	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t,
+		first.baseURL+"/factory-sessions/"+opened.Session.Id+"/worker-sessions?workId="+*work.WorkId)
+	if len(rows.Sessions) != 1 || rows.Sessions[0].State != "COMPLETED" || rows.Sessions[0].Direct {
+		t.Fatalf("Factory source: %#v", rows)
+	}
+	sourceID := rows.Sessions[0].WorkerSessionId
+	awaitContinuationRestartLogs(t, first, home, dir, sourceID)
+	support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+	if err := first.command.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := startContinuationRestartHost(t, root, host, home, route)
+	request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", sourceID,
+		"--session", opened.Session.Id, "--request-id", "factory-revival-request",
+		"--successor-worker-session-id", "factory-revival-successor", "--user-message", "fresh host follow-up"})
+	request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	if err := fresh.process.Execute(request.Input); err != nil {
+		observation := support.GetJSON[factoryapi.WorkerSessionObservation](t, fresh.baseURL+"/worker-sessions/factory-revival-successor")
+		t.Fatalf("Factory revival: %v %s %s failure=%+v providerCalls=%d", err, request.Stdout(), request.Stderr(), observation.Failure, runner.CallCount())
+	}
+	assertFactoryRevivalResult(t, fresh, runner, request.Stdout(), dir, sourceID)
+}
+
+func assertFactoryRevivalResult(t *testing.T, host invokeContinueStartedProcess, runner *testutil.ProviderCommandRunner, stdout, dir, sourceID string) {
+	t.Helper()
+	var result directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, stdout, &result)
+	requests := runner.Requests()
+	if !result.Accepted || result.State != "COMPLETED" || result.SuccessorWorkerSessionID != "factory-revival-successor" || len(requests) != 2 {
+		t.Fatalf("Factory revival result=%#v calls=%d", result, len(requests))
+	}
+	command := requests[1]
+	if command.WorkDir != dir || !strings.Contains(strings.Join(command.Args, " "), "resume opaque-restart-thread") ||
+		!strings.Contains(strings.Join(command.Args, " "), "opaque-factory-model") ||
+		!strings.Contains(strings.Join(command.Args, " ")+string(command.Stdin), "fresh host follow-up") {
+		t.Fatalf("Factory revival lost exact execution: %#v", command)
+	}
+	observation := support.GetJSON[factoryapi.WorkerSessionObservation](t, host.baseURL+"/worker-sessions/factory-revival-successor")
+	if !observation.Direct || observation.PredecessorWorkerSessionId == nil || *observation.PredecessorWorkerSessionId != sourceID {
+		t.Fatalf("Factory revival did not create direct lineage: %#v", observation)
+	}
+}
+
 func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	failed := name == "failed"
 	requestID := continuationRestartRequestID(name)

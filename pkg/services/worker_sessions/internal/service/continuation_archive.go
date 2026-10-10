@@ -26,9 +26,16 @@ func (r *registry) readArchivedContinuationSource(req workersessions.ContinueReq
 		return nil, nil
 	}
 	ctx := r.serverOwnedContext()
-	page, err := r.logs.reader.ReadWorkerCapturedActivity(ctx, recordings.WorkerCapturedActivityRequest{
-		WorkerSessionID: req.SourceWorkerSessionID, Limit: 1,
-	})
+	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
+	if !supported {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, req.SourceWorkerSessionID)
+	capture := summary.Capture
+	page := recordings.WorkerCapturedActivityPage{
+		Catalog: capture.Catalog, Opening: capture.Opening, Terminal: capture.Terminal,
+		Health: capture.Health, SuccessorWorkerSessionID: capture.SuccessorWorkerSessionID,
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, workersessions.ErrContinuationSourceNotFound
 	}
@@ -80,8 +87,8 @@ func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, ta
 	if !source.Terminal() || validateContinuationSourceAssociation(source) != nil {
 		return nil, workersessions.ErrContinuationProviderSessionInvalid
 	}
-	// Only direct admission saves this recipe. Factory correlation in the
-	// opening is retained scope, rather than evidence of Runtime ownership.
+	// Historical Factory correlation is retained scope, never restored Runtime
+	// ownership. Every revived source is admitted by the direct Workers path.
 	return &archivedContinuationSource{target: target, snapshot: continuationSourceSnapshot{
 		session: source, execution: captured.Execution, dispatchID: target.ExpectedAttemptID,
 		turnID: captured.TurnID, direct: true, archived: true,

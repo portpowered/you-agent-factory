@@ -19,17 +19,18 @@ func (writer *FileWriter) ReadWorkerContinuationSource(ctx context.Context, targ
 	if err != nil {
 		return recordings.WorkerContinuationSource{}, err
 	}
-	snapshot, err := writer.LoadWorkerRecording(ctx, target.RecordingID)
+	summary, err := writer.LookupWorkerSessionSummary(ctx, target.WorkerSessionID)
 	if err != nil {
 		return recordings.WorkerContinuationSource{}, err
 	}
-	for _, session := range snapshot.Sessions {
-		if session.WorkerSessionID != target.WorkerSessionID {
-			continue
-		}
-		return capturedContinuationSource(session, target, execution)
+	capture := summary.Capture
+	if capture.Catalog.RecordingID != target.RecordingID || capture.Catalog.FactorySessionID != target.FactorySessionID {
+		return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
 	}
-	return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+	return capturedContinuationSource(recordings.WorkerSessionRecordingSnapshot{
+		RecordingGenerationID: capture.Catalog.RecordingGenerationID, OwnerEpoch: capture.Catalog.OwnerEpoch,
+		Status: capture.Health, ExecutionTerminal: capture.Terminal, Records: capture.MetadataRecords,
+	}, target, execution)
 }
 
 func capturedContinuationSource(session recordings.WorkerSessionRecordingSnapshot, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) (recordings.WorkerContinuationSource, error) {
@@ -89,7 +90,11 @@ func (writer *FileWriter) ReadWorkerRestartRecipe(ctx context.Context, target re
 		return workers.WorkstationDispatchRequest{}, err
 	}
 	var recipe workerRestartRecipe
-	if json.Unmarshal(input, &recipe) != nil || recipe.Version != 1 || recipe.Target != target {
+	decoder := json.NewDecoder(bytes.NewReader(input))
+	// Factory input tokens can contain integer facts beyond float64 precision.
+	// Preserve their JSON numbers through canonical validation and continuation.
+	decoder.UseNumber()
+	if decoder.Decode(&recipe) != nil || recipe.Version != 1 || recipe.Target != target {
 		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
 	}
 	canonical, err := encodeWorkerRestartRecipe(target, recipe.Execution)
@@ -165,7 +170,20 @@ func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution 
 	if execution.Execution.Dispatch.InputTokens == nil {
 		execution.Execution.Dispatch.InputTokens = []any{}
 	}
-	input, err := json.Marshal(workerRestartRecipe{Version: 1, Target: target, Execution: execution})
+	// Dynamic dispatch inputs may be structs in a live Factory attempt and JSON
+	// objects after recovery. Normalize their representation before persistence
+	// so strict canonical readback remains independent of Go struct field order.
+	detached, err := json.Marshal(execution)
+	if err != nil {
+		return nil, recordings.ErrInvalidWorkerControlOperation
+	}
+	decoder := json.NewDecoder(bytes.NewReader(detached))
+	decoder.UseNumber()
+	var normalized workers.WorkstationDispatchRequest
+	if decoder.Decode(&normalized) != nil {
+		return nil, recordings.ErrInvalidWorkerControlOperation
+	}
+	input, err := json.Marshal(workerRestartRecipe{Version: 1, Target: target, Execution: normalized})
 	if err != nil {
 		return nil, recordings.ErrInvalidWorkerControlOperation
 	}

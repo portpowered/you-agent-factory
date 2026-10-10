@@ -41,6 +41,9 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			if err != nil {
 				t.Fatal(err)
 			}
+			if err := reopened.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
+				t.Fatal(err)
+			}
 			if cell == "wrong-generation" {
 				target.RecordingGenerationID = "foreign-generation"
 			}
@@ -136,6 +139,37 @@ func TestRestartRecipePersistsImmutableDetachedInputAcrossReopen(t *testing.T) {
 	execution.Execution.Model = "changed-model"
 	if err := fresh.SaveWorkerRestartRecipe(t.Context(), target, execution); !errors.Is(err, recordings.ErrWorkerControlConflict) {
 		t.Fatalf("changed recipe = %v, want conflict", err)
+	}
+}
+
+func TestRestartRecipePreservesStructuredFactoryInputsAcrossReopen(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	target := controlIntent(t, writer, "recording", "worker", "request").Target
+	execution := workers.WorkstationDispatchRequest{WorkstationName: "process"}
+	execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+	execution.Execution.Dispatch.WorkstationName = execution.WorkstationName
+	// Struct order differs from JSON map order; the integer also exceeds the
+	// exact range of float64. Neither may make a saved recipe unrecoverable.
+	token := struct {
+		Z string `json:"z"`
+		A int64  `json:"a"`
+	}{Z: "source input", A: 9007199254740993}
+	execution.Execution.Dispatch.InputTokens = []any{&token}
+	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := newTestFileWriter(platformreplay.NewLocal(runtime.GOOS), writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := reopened.ReadWorkerRestartRecipe(t.Context(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := json.Marshal(decoded.Execution.Dispatch.InputTokens)
+	if err != nil || string(input) != `[{"a":9007199254740993,"z":"source input"}]` {
+		t.Fatalf("Factory input lost during recipe recovery: %s, %v", input, err)
 	}
 }
 

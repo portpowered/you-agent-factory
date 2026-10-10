@@ -90,16 +90,23 @@ func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, targ
 // under test decides whether one direct execution has reconstructible input.
 func TestDirectRestartRecipePreservesInputOrSkipsUnsafeInput(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"safe", "store-failure", "owner-refused", "factory", "env-override", "workflow-context", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-key", "non-json-token"} {
+	for _, cell := range []string{"safe", "store-failure", "owner-refused", "factory", "factory-context", "factory-context-env", "env-override", "workflow-context", "sensitive-prompt", "fail-closed", "secret-argument", "escaped-secret-token", "secret-key", "non-json-token"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			r, plan, _ := newDurableInterruptFixture(t)
 			store := &restartRecipeStore{}
 			r.restart = store
-			r.observations["worker"] = &observation{direct: cell != "factory"}
+			r.observations["worker"] = &observation{direct: !strings.HasPrefix(cell, "factory")}
 			plan.execution.Execution.Model = "captured-model"
 			plan.execution.Execution.ReasoningEffort = "high"
-			if cell != "safe" && cell != "store-failure" && cell != "factory" {
+			if strings.HasPrefix(cell, "factory-context") {
+				plan.execution.Execution.RuntimeID = "ended-runtime"
+				plan.execution.Execution.WorkflowContext = &workers.Context{SessionID: "factory"}
+				if cell == "factory-context-env" {
+					plan.execution.Execution.WorkflowContext.EnvVars = map[string]string{"API_KEY": "private"}
+				}
+			}
+			if cell != "safe" && cell != "store-failure" && !strings.HasPrefix(cell, "factory") {
 				configureUnsafeInterruptRecipe(&plan, cell)
 			}
 			if cell == "store-failure" {
@@ -108,9 +115,12 @@ func TestDirectRestartRecipePreservesInputOrSkipsUnsafeInput(t *testing.T) {
 			if cell == "owner-refused" {
 				store.err = recordings.ErrInvalidRecordingRedactionRequest
 			}
-			err := r.saveDirectRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{ID: "worker", Execution: plan.execution})
-			if cell == "safe" || cell == "store-failure" {
+			err := r.saveRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{ID: "worker", Execution: plan.execution})
+			if cell == "safe" || cell == "store-failure" || cell == "factory" || cell == "factory-context" {
 				assertDirectRestartRecipeStored(t, store, plan.dispatchID, err)
+				if cell == "factory-context" && (store.execution.Execution.RuntimeID != "" || store.execution.Execution.WorkflowContext != nil || plan.execution.Execution.WorkflowContext == nil) {
+					t.Fatal("Factory restart restored Runtime ownership or changed the source input")
+				}
 			} else if cell == "owner-refused" {
 				if store.calls != 1 || err != nil {
 					t.Fatalf("owner refusal blocked ordinary invocation: calls=%d error=%v", store.calls, err)

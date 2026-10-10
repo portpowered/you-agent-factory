@@ -348,6 +348,9 @@ func (r *registry) buildContinuationExecutionLocked(
 		req.FollowUpInput,
 		snapshot.session.ProviderSessionAssociation.Reference,
 	)
+	// A continuation is an independent direct attempt. Retain Factory Session
+	// scope for addressing, while dropping live Runtime dispatch ownership.
+	continuation.Execution.RuntimeID = ""
 	if _, exists := r.dispatchOwners[continuation.Execution.Dispatch.DispatchID]; exists {
 		return workers.WorkstationDispatchRequest{}, workersessions.ErrContinuationSuccessorConflict
 	}
@@ -395,7 +398,7 @@ func (r *registry) storeContinuationReservationLocked(
 			sourceAddress: address, executor: snapshot.executor, clock: snapshot.clock, scheduler: snapshot.scheduler,
 			request:   req,
 			execution: continuation,
-			direct:    snapshot.direct,
+			direct:    true,
 			archived:  snapshot.archived,
 			lineage: &workers.SessionLineage{
 				PredecessorWorkerSessionID: req.SourceWorkerSessionID,

@@ -147,10 +147,17 @@ func runtimeAttemptAdmissionRequest(
 	request workers.WorkstationDispatchRequest,
 	executeRequest workers.ExecuteRequest,
 ) workers.WorkstationDispatchRequest {
-	request.Execution = workers.CloneWorkstationExecutionRequest(request.Execution)
-	request.Execution.Model = strings.TrimSpace(executeRequest.Target.Model.Name)
-	request.Execution.ModelProvider = strings.TrimSpace(executeRequest.Target.Model.Provider)
-	request.Execution.ReasoningEffort = strings.TrimSpace(executeRequest.Target.Model.ReasoningEffort)
+	// The planned dispatch is not an executable restart recipe: model operation,
+	// provider, prompt and working root are selected by the execution resolver.
+	// Capture those resolved facts while preserving the original admission scope.
+	planned := workers.CloneWorkstationExecutionRequest(request.Execution)
+	request.Execution = workstationDispatchRequestFromExecute(executeRequest).Execution
+	request.Execution.Dispatch = planned.Dispatch
+	request.Execution.FactorySessionID = firstRuntimeValue(planned.FactorySessionID, request.Execution.FactorySessionID)
+	request.Execution.RuntimeID = firstRuntimeValue(planned.RuntimeID, request.Execution.RuntimeID)
+	request.Execution.RecordingID = firstRuntimeValue(planned.RecordingID, request.Execution.RecordingID)
+	request.Execution.GenerationID = firstRuntimeValue(planned.GenerationID, request.Execution.GenerationID)
+	request.Execution.OriginatingArtifact = planned.OriginatingArtifact
 	return request
 }
 

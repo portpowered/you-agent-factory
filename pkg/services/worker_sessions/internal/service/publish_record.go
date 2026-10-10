@@ -304,11 +304,11 @@ func (r *registry) prepareInvocation(
 			failure:  workersessions.ErrStartServerStopping,
 		}, nil
 	}
+	if err := r.saveRestartRecipe(ctx, req); err != nil {
+		return r.rejectOpening(ctx, req.ID, attemptID, "save_restart_recipe", err, workersessions.ErrStartOpeningPublication), nil
+	}
 	if options.runtimeOwned {
 		return invocationPreparation{}, nil
-	}
-	if err := r.saveDirectRestartRecipe(ctx, req); err != nil {
-		return r.rejectOpening(ctx, req.ID, attemptID, "save_restart_recipe", err, workersessions.ErrStartOpeningPublication), nil
 	}
 
 	return r.registerInvocationSupervision(ctx, req, options, executor, clock, scheduler)

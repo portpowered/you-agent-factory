@@ -24,9 +24,21 @@ func (r *registry) bindDirectRecording(req *workersessions.StartRequest) {
 
 // Unreconstructible requests remain invocable. Only an actual artifact-store
 // failure rejects admission; unsafe settings never become a changed recipe.
-func (r *registry) saveDirectRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
-	if _, metadata, ok := r.loadObservationState(req.ID); !ok || !metadata.direct {
+func (r *registry) saveRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
+	_, metadata, ok := r.loadObservationState(req.ID)
+	if !ok {
 		return nil
+	}
+	if !metadata.direct {
+		// Factory revival resumes the provider independently. A context containing
+		// explicit environment overrides cannot be reconstructed safely; retain
+		// normal invocation but do not grant restart eligibility for that case.
+		if workflow := req.Execution.Execution.WorkflowContext; workflow != nil && len(workflow.EnvVars) != 0 {
+			return nil
+		}
+		req.Execution = cloneWorkstationDispatchRequest(req.Execution)
+		req.Execution.Execution.WorkflowContext = nil
+		req.Execution.Execution.RuntimeID = ""
 	}
 	pub := r.publicationFor(req.ID)
 	if pub == nil {
