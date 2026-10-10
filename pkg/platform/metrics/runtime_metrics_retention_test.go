@@ -868,11 +868,159 @@ func TestRuntimeMetricsRetentionPreservesFailureReportsDuringInventoryAndRemoval
 
 type retentionFailureFileSystem struct {
 	platformfilesystem.Local
-	removeErr error
+	removeErr  error
+	failPath   string
+	lstatErr   error
+	readDirErr error
 }
 
-func (filesystem *retentionFailureFileSystem) Remove(string) error {
-	return filesystem.removeErr
+func (filesystem *retentionFailureFileSystem) Remove(path string) error {
+	if filesystem.removeErr != nil {
+		return filesystem.removeErr
+	}
+	return filesystem.Local.Remove(path)
+}
+
+func (filesystem *retentionFailureFileSystem) Lstat(path string) (fs.FileInfo, error) {
+	if path == filesystem.failPath && filesystem.lstatErr != nil {
+		return nil, filesystem.lstatErr
+	}
+	return filesystem.Local.Lstat(path)
+}
+
+func (filesystem *retentionFailureFileSystem) ReadDir(path string) ([]fs.DirEntry, error) {
+	if path == filesystem.failPath && filesystem.readDirErr != nil {
+		return nil, filesystem.readDirErr
+	}
+	return filesystem.Local.ReadDir(path)
+}
+
+func TestRuntimeMetricsRetentionPreservesOrphanMarkerOnFailureAndReapsAfterRecovery(t *testing.T) {
+	for _, failure := range []string{"busy", "claim", "nil lock", "close", "marker inspection", "directory inspection", "directory read"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			root, artifact, marker, unknown := installOrphanMarkerRecoveryFixture(t)
+			claimsDirectory := filepath.Dir(marker)
+			cause := errors.New("selected marker operation failed")
+			rootLock := &metricsTestCloser{}
+			markerLock := &metricsTestCloser{}
+			coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaimMarker: markerLock}
+			filesystem := &retentionFailureFileSystem{Local: platformfilesystem.Local{}}
+			configureOrphanMarkerFailure(failure, cause, marker, filesystem, coordination, markerLock)
+			retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
+				return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+			}, coordination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1}}
+			report, err := retention.Sweep(t.Context(), request)
+			if err != nil {
+				t.Fatalf("Sweep(failed marker cleanup): %v", err)
+			}
+			assertOrphanMarkerFailureReport(t, failure, report, marker, claimsDirectory, cause)
+			wantClosed := 0
+			if failure == "close" {
+				wantClosed = 1
+			}
+			if rootLock.closed != 1 || markerLock.closed != wantClosed {
+				t.Fatalf("released locks: root=%d marker=%d, want 1/%d", rootLock.closed, markerLock.closed, wantClosed)
+			}
+			assertRetentionPathExists(t, marker, "marker after rejected cleanup")
+
+			// Recover the selected effect on the same retention owner. No retry
+			// may erase the healthy artifact or unrelated customer content.
+			filesystem.failPath = ""
+			coordination.tryClaimMarkerErr = nil
+			recoveredLock := &metricsTestCloser{}
+			coordination.tryClaimMarker = recoveredLock
+			report, err = retention.Sweep(t.Context(), request)
+			if err != nil || len(report.Failures) != 0 || report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) {
+				t.Fatalf("Sweep(recovered cleanup) = %#v, %v", report, err)
+			}
+			if rootLock.closed != 2 || recoveredLock.closed != 1 {
+				t.Fatalf("recovery releases: root=%d marker=%d, want 2/1", rootLock.closed, recoveredLock.closed)
+			}
+			assertRetentionPathAbsent(t, marker, "recovered orphan marker")
+			assertRetentionPreservedContent(t, artifact, "mmmmmmmmm")
+			assertRetentionPreservedContent(t, unknown, "preserve customer content")
+		})
+	}
+}
+
+func installOrphanMarkerRecoveryFixture(t *testing.T) (root, artifact, marker, unknown string) {
+	t.Helper()
+	root = t.TempDir()
+	artifact = writeRetentionArtifact(t, root, "2026/08/24", "010000.000000000", "retained-runtime-retained", 9)
+	claimsDirectory := filepath.Join(root, runtimeMetricsClaimsDirectory)
+	if err := os.MkdirAll(claimsDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker = filepath.Join(claimsDirectory, strings.Repeat("a", sha256HexLength)+runtimeMetricsClaimSuffix)
+	if err := os.WriteFile(marker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unknown = filepath.Join(root, "customer-note.txt")
+	if err := os.WriteFile(unknown, []byte("preserve customer content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return root, artifact, marker, unknown
+}
+
+func configureOrphanMarkerFailure(
+	failure string, cause error, marker string,
+	filesystem *retentionFailureFileSystem,
+	coordination *metricsTestCoordination,
+	markerLock *metricsTestCloser,
+) {
+	switch failure {
+	case "busy":
+		coordination.tryClaimMarkerErr = ErrRuntimeMetricsArtifactBusy
+	case "claim":
+		coordination.tryClaimMarkerErr = cause
+	case "nil lock":
+		coordination.tryClaimMarker = nil
+	case "close":
+		markerLock.err = cause
+	case "marker inspection":
+		filesystem.failPath, filesystem.lstatErr = marker, cause
+	case "directory inspection":
+		filesystem.failPath, filesystem.lstatErr = filepath.Dir(marker), cause
+	case "directory read":
+		filesystem.failPath, filesystem.readDirErr = filepath.Dir(marker), cause
+	}
+}
+
+func assertOrphanMarkerFailureReport(
+	t *testing.T, failure string, report RuntimeMetricsRetentionReport,
+	marker, claimsDirectory string, cause error,
+) {
+	t.Helper()
+	wantFailures := 1
+	if failure == "busy" {
+		wantFailures = 0
+	}
+	if len(report.Failures) != wantFailures || report.Removed.Files != 0 || report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 9}) {
+		t.Fatalf("failed cleanup report = %#v, want preserved artifact and %d failures", report, wantFailures)
+	}
+	if wantFailures == 0 {
+		return
+	}
+	wantPath := marker
+	if strings.HasPrefix(failure, "directory") {
+		wantPath = claimsDirectory
+	}
+	if report.Failures[0].Path != wantPath || (failure != "nil lock" && !errors.Is(report.Failures[0].Error, cause)) {
+		t.Fatalf("failure = %#v, want selected path and original cause", report.Failures[0])
+	}
+}
+
+func assertRetentionPreservedContent(t *testing.T, path, want string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != want {
+		t.Fatalf("preserved file %q = %q, %v, want %q", path, got, err, want)
+	}
 }
 
 type incompleteRetentionFileSystem struct {
