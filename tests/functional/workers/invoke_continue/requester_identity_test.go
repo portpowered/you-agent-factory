@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
@@ -69,6 +72,91 @@ func TestRequesterDirectInvokeFromRunningCaller(t *testing.T) {
 	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.show", "rest/startWorkerSession")
 }
 
+// M7 requires a separate root lifetime: both hosts use the same isolated
+// profile and real capture storage; only the native provider process is fake.
+func TestRequesterContinuationAfterHostRestart(t *testing.T) {
+	t.Parallel()
+	root, parentDir, childDir := t.TempDir(), t.TempDir(), t.TempDir()
+	host, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentRunner := &t7GatedProviderRunner{}
+	parentRunner.reset()
+	result := platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-requester-child", t7ObservationReport)}
+	childRunner := testutil.NewProviderCommandRunner(result, result, result, result)
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{
+		{workingDirectory: parentDir, runner: parentRunner}, {workingDirectory: childDir, runner: childRunner},
+	}}
+	first := startContinuationRestartHost(t, root, host, home, route)
+	fixture := &invokeContinuePackageFixture{process: first.process, baseURL: first.baseURL, hostDir: host}
+	parent := &invokeContinueScenario{fixture: fixture, name: "requester-restart-parent", runNumber: 1, workingDirectory: parentDir, homeDirectory: home, providerRunner: parentRunner, session: fixture.openSession(t)}
+	child := &invokeContinueScenario{fixture: fixture, name: "requester-restart-child", runNumber: 1, workingDirectory: childDir, homeDirectory: home, providerRunner: childRunner, session: fixture.openSession(t)}
+	defer t7ReleaseAndJoin(t, t.Context(), parentRunner)()
+	parentID, sourceID := scenarioScopedID(parent, "requester-source"), scenarioScopedID(child, "requester-child")
+	start := t7RemoteCLIInputs(parent, t.Context(), first.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := first.process.Execute(start.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, t.Context(), parentRunner.started, "restart caller running")
+	parentToken := requesterSourceToken(t, parentRunner, parentID)
+	invoke := t7RemoteCLIInputs(child, t.Context(), first.baseURL, "invoke", "--execution", requesterExecutionPath(t, child, sourceID))
+	invoke.Input.Env = append(invoke.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+parentToken)
+	if err := first.process.Execute(invoke.Input); err != nil {
+		t.Fatal(err)
+	}
+	assertRequesterChild(t, fixture, child, t.Context(), sourceID, parentID, parentToken)
+	assertRequesterContinuations(t, fixture, parent, child, t.Context(), sourceID, parentID)
+	before := requesterObservation(t, fixture, child, t.Context(), sourceID)
+	awaitContinuationRestartLogs(t, first, home, childDir, scenarioScopedID(child, "requester-head"), "t7-thread-requester-child")
+	parent.close(t)
+	child.close(t)
+	if err := first.command.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := startContinuationRestartHost(t, root, host, home, route)
+	fixture.process, fixture.baseURL = fresh.process, fresh.baseURL
+	child.session = fixture.openSession(t)
+	defer child.close(t)
+	assertRequesterRestoredChain(t, fixture, child, sourceID, parentID, parentToken, before)
+	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.show", "cli/you.worker-sessions.continue", "rest/startWorkerSession")
+}
+
+func assertRequesterRestoredChain(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, sourceID, parentID, parentToken string, before api.WorkerSessionObservation) {
+	t.Helper()
+	after := requesterObservation(t, fixture, child, t.Context(), sourceID)
+	if !reflect.DeepEqual(before.Requester, after.Requester) || !reflect.DeepEqual(before.Correlation, after.Correlation) || !reflect.DeepEqual(before.Labels, after.Labels) || after.ContinuationHeadWorkerSessionId == nil || *after.ContinuationHeadWorkerSessionId != scenarioScopedID(child, "requester-head") {
+		t.Fatal("reconstruction lost retained metadata or the exact chain head")
+	}
+	assertRequesterRefusal(t, fixture, child, t.Context(), "restart-parent", parentID, parentToken)
+	for index, request := range child.providerRunner.Requests() {
+		environment := requesterEnvironment(request.Env)
+		assertRequesterRefusal(t, fixture, child, t.Context(), "restart-token-"+string(rune('a'+index)), environment["YOU_WORKER_SESSION_ID"], environment["YOU_WORKER_SESSION_TOKEN"])
+	}
+	successorID := scenarioScopedID(child, "requester-rebuilt")
+	input := t7RemoteCLIInputs(child, t.Context(), fixture.baseURL, "continue", sourceID, "--head", "--request-id", successorID+"-request", "--successor-worker-session-id", successorID, "--user-message", "requester rebuilt follow-up")
+	if err := fixture.process.Execute(input.Input); err != nil {
+		t.Fatalf("restored requester continuation: %v: %s", err, input.Stderr())
+	}
+	var continued directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, input.Stdout(), &continued)
+	if continued.SourceWorkerSessionID != scenarioScopedID(child, "requester-head") || continued.State != "COMPLETED" || child.providerRunner.CallCount() != 4 {
+		t.Fatal("reconstructed continuation did not advance the exact retained head once")
+	}
+	requests := child.providerRunner.Requests()
+	environment := requesterEnvironment(requests[3].Env)
+	for _, request := range requests[:3] {
+		assertRequesterSuccessorEnvironment(t, environment, successorID, parentID, requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"])
+	}
+	restored := requesterObservation(t, fixture, child, t.Context(), successorID)
+	if !reflect.DeepEqual(before.Requester, restored.Requester) || !reflect.DeepEqual(before.Correlation, restored.Correlation) || !reflect.DeepEqual(before.Labels, restored.Labels) {
+		t.Fatal("rebuilt successor lost retained requester metadata")
+	}
+}
+
 func requesterSourceToken(t *testing.T, runner *t7GatedProviderRunner, parentID string) string {
 	t.Helper()
 	parentEnv := requesterEnvironment(runner.Requests()[0].Env)
@@ -111,6 +199,7 @@ func assertRequesterChild(t *testing.T, fixture *invokeContinuePackageFixture, c
 
 func assertRequesterRefusal(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, name, callerID, token string) {
 	t.Helper()
+	before := child.providerRunner.CallCount()
 	id := scenarioScopedID(child, "requester-refusal-"+name)
 	path := requesterExecutionPath(t, child, id)
 	input := t7RemoteCLIInputs(child, ctx, fixture.baseURL, "invoke", "--execution", path, "--async")
@@ -122,12 +211,103 @@ func assertRequesterRefusal(t *testing.T, fixture *invokeContinuePackageFixture,
 		t.Fatal("invalid requester was admitted")
 	}
 	assertDirectWorkerSessionCLIError(t, input, "WORKER_SESSION_CALLER_INVALID")
-	if child.providerRunner.CallCount() != 1 {
+	if child.providerRunner.CallCount() != before {
 		t.Fatal("refused requester launched a provider")
 	}
 	if token != "" && strings.Contains(input.Stdout()+input.Stderr(), token) {
 		t.Fatal("caller refusal disclosed credentials")
 	}
+}
+
+// M6/M8: public continuation copies the attributed source's metadata rather
+// than retargeting to its predecessor. Replaying the tuple cannot advance the
+// chain or launch another provider; the original running caller stays intact.
+func assertRequesterContinuations(t *testing.T, fixture *invokeContinuePackageFixture, parent, child *invokeContinueScenario, ctx context.Context, sourceID, parentID string) {
+	t.Helper()
+	source := requesterObservation(t, fixture, child, ctx, sourceID)
+	if source.ProviderSession == nil {
+		t.Fatal("attributed source did not retain its native provider identity")
+	}
+	host := invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}
+	awaitContinuationRestartLogs(t, host, child.homeDirectory, child.workingDirectory, sourceID, source.ProviderSession.Id)
+	parentBefore := requesterObservation(t, fixture, parent, ctx, parentID)
+	previousID := sourceID
+	previousToken := requesterEnvironment(child.providerRunner.Requests()[0].Env)["YOU_WORKER_SESSION_TOKEN"]
+	for index, name := range []string{"first", "head"} {
+		successorID := scenarioScopedID(child, "requester-"+name)
+		args := []string{"continue", sourceID, "--request-id", successorID + "-request", "--successor-worker-session-id", successorID, "--user-message", "requester follow-up"}
+		if index > 0 {
+			args = append(args, "--head")
+		}
+		assertRequesterContinuationReplay(t, child, ctx, args, previousID, successorID, index+2)
+		awaitContinuationRestartLogs(t, host, child.homeDirectory, child.workingDirectory, successorID, source.ProviderSession.Id)
+		observation := requesterObservation(t, fixture, child, ctx, successorID)
+		if !reflect.DeepEqual(observation.Requester, source.Requester) || !reflect.DeepEqual(observation.Correlation, source.Correlation) || !reflect.DeepEqual(observation.Labels, source.Labels) {
+			t.Fatal("successor changed retained requester metadata")
+		}
+		command := child.providerRunner.Requests()[index+1]
+		environment := requesterEnvironment(command.Env)
+		assertRequesterSuccessorEnvironment(t, environment, successorID, parentID, previousToken)
+		if !strings.Contains(strings.Join(command.Args, " "), "resume "+source.ProviderSession.Id) {
+			t.Fatal("successor did not resume the exact captured provider session")
+		}
+		assertRequesterRefusal(t, fixture, child, ctx, "terminal-"+name, successorID, environment["YOU_WORKER_SESSION_TOKEN"])
+		previousID, previousToken = successorID, environment["YOU_WORKER_SESSION_TOKEN"]
+	}
+	parentAfter := requesterObservation(t, fixture, parent, ctx, parentID)
+	// Elapsed active time advances while the independent caller remains running.
+	if parentBefore.DurationMillis == nil || parentAfter.DurationMillis == nil || *parentAfter.DurationMillis < *parentBefore.DurationMillis {
+		t.Fatal("running caller lost its active-clock duration")
+	}
+	parentBefore.DurationMillis, parentAfter.DurationMillis = nil, nil
+	if !reflect.DeepEqual(parentBefore, parentAfter) || parent.providerRunner.CallCount() != 1 {
+		t.Fatalf("direct continuation mutated the independent running caller: before=%+v after=%+v", parentBefore, parentAfter)
+	}
+}
+
+func assertRequesterContinuationReplay(t *testing.T, child *invokeContinueScenario, ctx context.Context, args []string, sourceID, successorID string, calls int) {
+	t.Helper()
+	for index := range 2 {
+		input := t7RemoteCLIInputs(child, ctx, child.fixture.baseURL, args...)
+		if index == 0 {
+			input = support.FakeInputs(ctx, append([]string{"you", "--json", "worker-sessions"}, args...))
+			input.Input.Env, input.Input.WorkingDirectory = child.environment(), child.workingDirectory
+		}
+		if err := child.fixture.process.Execute(input.Input); err != nil {
+			t.Fatalf("attributed continuation: %v: %s", err, input.Stderr())
+		}
+		var result directWorkerSessionCLIResult
+		decodeDirectWorkerSessionResult(t, input.Stdout(), &result)
+		if result.SourceWorkerSessionID != sourceID || result.SuccessorWorkerSessionID != successorID || result.State != "COMPLETED" || child.providerRunner.CallCount() != calls {
+			t.Fatal("continuation/replay changed the exact chain or launched a duplicate")
+		}
+	}
+}
+
+func assertRequesterSuccessorEnvironment(t *testing.T, environment map[string]string, id, requester, previousToken string) {
+	t.Helper()
+	token := environment["YOU_WORKER_SESSION_TOKEN"]
+	decoded, err := base64.RawURLEncoding.Strict().DecodeString(token)
+	if err != nil || len(decoded) != 32 || token == previousToken || environment["YOU_WORKER_SESSION_ID"] != id || environment["YOU_MESSAGE_TARGET"] != requester {
+		t.Fatal("successor did not receive a fresh credential and its retained exact target")
+	}
+}
+
+func requesterObservation(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, id string) api.WorkerSessionObservation {
+	t.Helper()
+	show := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "show", "--worker-session-id", id)
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatal(err)
+	}
+	var observation api.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, show.Stdout(), &observation)
+	for _, request := range scenario.providerRunner.Requests() {
+		token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+		if token != "" && strings.Contains(show.Stdout()+show.Stderr(), token) {
+			t.Fatal("public observation disclosed an execution credential")
+		}
+	}
+	return observation
 }
 
 func requesterExecutionPath(t *testing.T, scenario *invokeContinueScenario, id string) string {

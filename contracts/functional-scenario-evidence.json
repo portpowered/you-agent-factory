@@ -295,6 +295,15 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
       "stableIds": [
         "cli/you.worker-sessions.invoke",

@@ -640,6 +640,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+          "boundary": "cli"
         }
       ]
     },
@@ -717,6 +721,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
@@ -816,6 +824,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
@@ -1833,6 +1845,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "rest"
         }
       ]
