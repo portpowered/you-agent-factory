@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
@@ -24,6 +26,16 @@ import (
 func prepareCanonicalSessionIDForRun(cfg RunConfig) (RunConfig, error) {
 	if !usesCanonicalRecording(cfg) || strings.TrimSpace(cfg.CanonicalSessionID) != "" {
 		return cfg, nil
+	}
+	// An explicit UUID already identifies the recorded Factory Session. Using
+	// another UUID in metadata conflicts with that session's canonical events
+	// when the customer resumes the recording.
+	selectedID := strings.TrimSpace(cfg.FactorySessionID)
+	if factorysessions.SessionIdentity(selectedID).Valid() {
+		if _, err := uuid.Parse(selectedID); err == nil {
+			cfg.CanonicalSessionID = selectedID
+			return cfg, nil
+		}
 	}
 	generator := cfg.CanonicalSessionIDGenerator
 	if generator == nil {

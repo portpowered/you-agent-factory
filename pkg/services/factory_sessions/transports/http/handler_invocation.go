@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"net/http"
+	"net/url"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -16,6 +17,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
+	// The HTTP router retains escaped invocation selectors as one segment so
+	// malformed identities reach admission rather than a different route.
+	if decodedID, err := url.PathUnescape(string(sessionID)); err == nil {
+		sessionID = factoryapi.SessionID(decodedID)
+	}
 	decoded, err := decodeJSONWithDiagnostics[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")

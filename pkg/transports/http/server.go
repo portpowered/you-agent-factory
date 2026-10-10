@@ -499,7 +499,25 @@ var noModTime = time.Time{}
 
 // Handler returns the http.Handler for testing and composition.
 func (s *Server) Handler() http.Handler {
-	return s.router
+	return http.HandlerFunc(s.serveHTTP)
+}
+
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	// Preserve an encoded invocation selector as one route segment. Otherwise
+	// the router cleans a decoded ../escape before Sessions can reject it.
+	const prefix, suffix = "/factory-sessions/", "/invocations"
+	escaped := r.URL.EscapedPath()
+	if r.Method == http.MethodPost && r.URL.RawPath != "" && strings.HasPrefix(escaped, prefix) && strings.HasSuffix(escaped, suffix) {
+		selector := strings.TrimSuffix(strings.TrimPrefix(escaped, prefix), suffix)
+		if selector != "" && !strings.Contains(selector, "/") {
+			request := r.Clone(r.Context())
+			requestURL := *r.URL
+			requestURL.Path, requestURL.RawPath = escaped, ""
+			request.URL = &requestURL
+			r = request
+		}
+	}
+	s.router.ServeHTTP(w, r)
 }
 
 // GetProviderSessionDetails forwards the generated operation to the Provider

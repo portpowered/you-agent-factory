@@ -34,7 +34,7 @@ func TestProcessExecuteRuntimeOpeningThroughReusableRootProcess(t *testing.T) {
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		APIServerStarter: router.start,
 		FactorySessionIDGenerator: func() string {
-			return fmt.Sprintf("process-execute-session-%d", identities.session.Add(1))
+			return fmt.Sprintf("00000000-0000-4000-8000-%012x", identities.session.Add(1))
 		},
 		FactorySessionRuntimeInstanceIDGenerator: func() string {
 			return fmt.Sprintf("process-execute-runtime-%d", identities.runtime.Add(1))
@@ -336,8 +336,13 @@ func postSessionsJSON[T any](t *testing.T, endpoint string, request any, failure
 // process boundary. Each parallel cell owns its profile, Factory and streams.
 func TestRunSessionIdentityAdmission(t *testing.T) {
 	t.Parallel()
+	t.Run("valid dispatch and parity", testRunSessionIdentityJourneys)
 	var providerCalls atomic.Int32
-	edges := serviceedges.Edges{}
+	var sessionAllocations atomic.Int32
+	edges := serviceedges.Edges{FactorySessionIDGenerator: func() string {
+		sessionAllocations.Add(1)
+		return "00000000-0000-4000-8000-000000000001"
+	}}
 	support.ConfigureWorkerCommands(t, &edges, identityAdmissionRunner{calls: &providerCalls}, nil)
 	process := support.BuildProcess(t, edges)
 	support.CleanupProcess(t, process)
@@ -346,7 +351,11 @@ func TestRunSessionIdentityAdmission(t *testing.T) {
 			t.Parallel()
 			dir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
 			home := t.TempDir()
-			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--listen", "127.0.0.1:0", "--session", id})
+			batchPath := filepath.Join(dir, "startup-work.json")
+			if err := os.WriteFile(batchPath, []byte(`{"requestId":"invalid-identity","type":"FACTORY_REQUEST_BATCH","works":[{"workId":"startup-work","name":"startup","workTypeName":"task","state":"init","content":[{"type":"text","text":"must not dispatch"}]}]}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--work", batchPath, "--continuously", "--with-server", "--listen", "127.0.0.1:0", "--session", id})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = dir
 			err := process.Execute(inputs.Input)
@@ -365,6 +374,9 @@ func TestRunSessionIdentityAdmission(t *testing.T) {
 			}
 			if providerCalls.Load() != 0 {
 				t.Fatal("invalid identity reached provider")
+			}
+			if sessionAllocations.Load() != 0 {
+				t.Fatal("invalid identity allocated a session")
 			}
 		})
 	}

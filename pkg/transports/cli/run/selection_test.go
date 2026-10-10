@@ -28,6 +28,29 @@ func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) 
 	}
 }
 
+func TestPrepareCanonicalSessionIDPreservesExplicitSessionUUID(t *testing.T) {
+	t.Parallel()
+	const id = "00000000-0000-4000-8000-000000000001"
+	cfg, err := prepareCanonicalSessionIDForRun(RunConfig{FactorySessionID: id, RecordPath: "source.jsonl", CanonicalSessionIDGenerator: func() string {
+		t.Fatal("explicit UUID must not allocate a second recording identity")
+		return ""
+	}})
+	if err != nil || cfg.CanonicalSessionID != id {
+		t.Fatalf("recording identity = %q err=%v", cfg.CanonicalSessionID, err)
+	}
+}
+
+func TestMapCurrentFactoryFailurePreservesSessionIdentityDiagnostic(t *testing.T) {
+	t.Parallel()
+	err := ValidateRunSessionIdentity(RunConfig{FactorySessionID: "validation-factory"})
+	if got := MapCurrentFactoryFailure(err); got != err {
+		t.Fatalf("mapped identity diagnostic = %v, want original %v", got, err)
+	}
+	if got := MapInvocationFailure(err); got != err {
+		t.Fatalf("mapped invocation diagnostic = %v, want original %v", got, err)
+	}
+}
+
 func TestSplitFlagTerminatorPreservesCanonicalRunTokenization(t *testing.T) {
 	args := []string{"--named", "alpha", "input", "--", "--named", "positional"}
 	flagArgs, positional, terminated := SplitFlagTerminator(args)
