@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -74,6 +75,7 @@ func provideStatelessWorkersService(
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
+	scheduler platformclock.TimerSource,
 	logger *zap.Logger,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
@@ -90,6 +92,7 @@ func provideStatelessWorkersService(
 		scriptCommandRunner,
 		factoryDocsFileSystem,
 		clock,
+		scheduler,
 		logger,
 		worktreePreparer,
 		worktreeRelease,
@@ -109,6 +112,7 @@ func provideStatelessWorkersServiceWithMock(
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
+	scheduler platformclock.TimerSource,
 	logger *zap.Logger,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
@@ -164,6 +168,7 @@ func provideStatelessWorkersServiceWithMock(
 			nil,
 			loggerValue,
 			clock.Now,
+			scheduler,
 			worktreePreparer,
 			worktreeRelease,
 			temporaryFiles,
@@ -180,6 +185,7 @@ func provideStatelessWorkersServiceWithMock(
 		nil,
 		loggerValue,
 		clock.Now,
+		scheduler,
 		worktreePreparer,
 		worktreeRelease,
 		temporaryFiles,

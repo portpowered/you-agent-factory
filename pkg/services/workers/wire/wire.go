@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -66,6 +67,7 @@ func NewService(
 	observe workers.ObservationSink,
 	logger logging.Logger,
 	clock func() time.Time,
+	scheduler platformclock.TimerSource,
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
@@ -102,6 +104,7 @@ func NewService(
 		observe,
 		logger,
 		clock,
+		scheduler,
 		worktree,
 		worktreeRelease,
 		temporaryFiles,
@@ -132,6 +135,7 @@ func NewMockService(
 	observe workers.ObservationSink,
 	logger logging.Logger,
 	clock func() time.Time,
+	scheduler platformclock.TimerSource,
 	worktree workers.FactoryWorktreePreparer,
 	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
 	temporaryFiles workers.TemporaryFileSystem,
@@ -176,6 +180,7 @@ func NewMockService(
 		observe,
 		logger,
 		clock,
+		scheduler,
 		worktree,
 		worktreeRelease,
 		temporaryFiles,

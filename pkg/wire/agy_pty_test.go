@@ -144,7 +144,7 @@ type recordingPTYNow struct{ calls atomic.Int32 }
 func TestProviderClockSelectionKeepsDurationAndSchedulingCapabilitiesSeparate(t *testing.T) {
 	t.Parallel()
 	override := &recordingPTYNow{}
-	nowOnly := serviceedges.Edges{Clock: override}
+	nowOnly := serviceedges.Edges{Clock: override, ProcessScheduler: platformclock.Real{}}
 	if effectiveProviderCommandClock(nowOnly) != override || override.calls.Load() != 0 {
 		t.Fatal("duration clock must preserve the inert Now-only override")
 	}
@@ -152,7 +152,7 @@ func TestProviderClockSelectionKeepsDurationAndSchedulingCapabilitiesSeparate(t 
 		t.Fatal("Now-only override must retain the canonical host scheduler")
 	}
 	scheduler := &watchWaitScheduler{timer: &watchWaitTimer{ticks: make(chan time.Time)}}
-	if effectiveProviderScheduler(serviceedges.Edges{Clock: scheduler}) != scheduler || scheduler.calls != 0 {
+	if effectiveProviderScheduler(serviceedges.Edges{Clock: override, ProcessScheduler: scheduler}) != scheduler || scheduler.calls != 0 {
 		t.Fatal("timer-capable override must retain the same inert scheduler")
 	}
 }

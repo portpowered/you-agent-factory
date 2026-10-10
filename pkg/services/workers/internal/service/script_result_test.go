@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -105,7 +106,7 @@ func TestExecuteScriptEnvelopeDoesNotParseProcessFailuresOrRawScripts(t *testing
 func scriptEnvelopeService(t *testing.T, runner *stubRunner, parser factorydefinitions.DecisionEnvelopeService) *executeservice.Service {
 	t.Helper()
 	service, err := executeservice.NewWithProviderOverride(
-		&staticRunners{runner: runner}, nil, nil, logging.NoopLogger{}, func() time.Time { return time.Unix(10, 0) },
+		&staticRunners{runner: runner}, nil, nil, logging.NoopLogger{}, func() time.Time { return time.Unix(10, 0) }, platformclock.Real{},
 		nil, nil, nil, nil, nil, parser,
 	)
 	if err != nil {

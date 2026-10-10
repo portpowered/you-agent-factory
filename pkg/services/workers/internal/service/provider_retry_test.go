@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -15,7 +17,8 @@ import (
 func TestExecuteProviderWithRetryCarriesSessionAndBoundsAttempts(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{}
+	clock := newThrottleClock()
+	service := &Service{clock: clock.Now, scheduler: clock}
 	request := workers.RunnerExecutionRequest{}
 	var attempts []workers.RunnerExecutionRequest
 	providerErr := workers.NewProviderError(
@@ -54,7 +57,8 @@ func TestExecuteProviderWithRetryCarriesSessionAndBoundsAttempts(t *testing.T) {
 func TestExecuteProviderWithRetryStopsAtMaximumAndHonorsCancellation(t *testing.T) {
 	t.Parallel()
 
-	service := &Service{}
+	clock := newThrottleClock()
+	service := &Service{clock: clock.Now, scheduler: clock}
 	request := workers.RunnerExecutionRequest{}
 	providerErr := workers.NewProviderError(
 		workers.WorkFailureTypeInternalServerError,
@@ -470,10 +474,12 @@ func newThrottleClock() *throttleClock {
 
 func (c *throttleClock) Now() time.Time { return c.now }
 
-func (c *throttleClock) Sleep(_ context.Context, d time.Duration) error {
+func (c *throttleClock) NewTimer(d time.Duration) platformclock.Timer {
 	c.sleeps = append(c.sleeps, d)
 	c.now = c.now.Add(d)
-	return nil
+	channel := make(chan time.Time, 1)
+	channel <- c.now
+	return &selectedRetryTimer{ticks: channel}
 }
 
 func (c *throttleClock) slept() time.Duration {
@@ -492,7 +498,7 @@ func TestExecuteProviderWithRetryOutlastsLongCapacityEventThenSucceeds(t *testin
 	t.Parallel()
 
 	clock := newThrottleClock()
-	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	service := &Service{clock: clock.Now, scheduler: clock}
 	// More overloads than the old 3-attempt budget allowed, but recoverable
 	// inside the 30 minute window (waits of ~30s, 1m, 2m, 4m, then 5m each).
 	const overloads = 8
@@ -534,7 +540,7 @@ func TestExecuteProviderWithRetryPersistentCapacityStopsAtWindow(t *testing.T) {
 	t.Parallel()
 
 	clock := newThrottleClock()
-	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	service := &Service{clock: clock.Now, scheduler: clock}
 	providerErr := throttledProviderError()
 	attempts := 0
 	_, err := service.executeProviderWithRetry(
@@ -560,7 +566,7 @@ func TestExecuteProviderWithRetryNonThrottleFailuresKeepShortBudget(t *testing.T
 	t.Parallel()
 
 	clock := newThrottleClock()
-	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	service := &Service{clock: clock.Now, scheduler: clock}
 	providerErr := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary", nil)
 	providerErr.ProviderFailureKind = providers.ExecuteFailureKindDependency
 	attempts := 0
@@ -585,10 +591,9 @@ func TestExecuteProviderWithRetryCapacityWaitHonorsCancellation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service := &Service{retrySleep: func(ctx context.Context, _ time.Duration) error {
-		cancel()
-		return ctx.Err()
-	}}
+	defer cancel()
+	scheduler := &selectedRetryScheduler{registered: make(chan *selectedRetryTimer, 1), cancel: cancel}
+	service := &Service{scheduler: scheduler}
 	attempts := 0
 	_, err := service.executeProviderWithRetry(
 		ctx,
@@ -637,7 +642,7 @@ func TestExecuteProviderWithRetryOutlastsLongDependencyEventThenSucceeds(t *test
 	t.Parallel()
 
 	clock := newThrottleClock()
-	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	service := &Service{clock: clock.Now, scheduler: clock}
 	// More overloads than the old 3-attempt budget allowed, but recoverable
 	// inside the 30 minute window (waits of ~30s, 1m, 2m, 4m, then 5m each).
 	const overloads = 8
@@ -679,7 +684,7 @@ func TestExecuteProviderWithRetryPersistentDependencyStopsAtWindow(t *testing.T)
 	t.Parallel()
 
 	clock := newThrottleClock()
-	service := &Service{clock: clock.Now, retrySleep: clock.Sleep}
+	service := &Service{clock: clock.Now, scheduler: clock}
 	providerErr := dependencyProviderError()
 	attempts := 0
 	_, err := service.executeProviderWithRetry(
@@ -713,10 +718,9 @@ func TestExecuteProviderWithRetryDependencyWaitHonorsCancellation(t *testing.T) 
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	service := &Service{retrySleep: func(ctx context.Context, _ time.Duration) error {
-		cancel()
-		return ctx.Err()
-	}}
+	defer cancel()
+	scheduler := &selectedRetryScheduler{registered: make(chan *selectedRetryTimer, 1), cancel: cancel}
+	service := &Service{scheduler: scheduler}
 	attempts := 0
 	_, err := service.executeProviderWithRetry(
 		ctx,
@@ -738,4 +742,98 @@ func dependencyProviderError() error {
 		ResponseMetadata: map[string]string{providers.ExecuteDiagnosticMetadataUpstreamOutage: "true"},
 	}}
 	return err
+}
+
+func (c *throttleClock) After(d time.Duration) <-chan time.Time { return c.NewTimer(d).C() }
+
+type selectedRetryTimer struct {
+	ticks   chan time.Time
+	stopped atomic.Bool
+	delay   time.Duration
+}
+
+func (timer *selectedRetryTimer) C() <-chan time.Time { return timer.ticks }
+func (timer *selectedRetryTimer) Stop() bool          { return !timer.stopped.Swap(true) }
+
+type selectedRetryScheduler struct {
+	registered chan *selectedRetryTimer
+	cancel     context.CancelFunc
+}
+
+func (*selectedRetryScheduler) Now() time.Time { return time.Unix(0, 0) }
+func (scheduler *selectedRetryScheduler) NewTimer(delay time.Duration) platformclock.Timer {
+	timer := &selectedRetryTimer{ticks: make(chan time.Time, 1), delay: delay}
+	scheduler.registered <- timer
+	if scheduler.cancel != nil {
+		scheduler.cancel()
+	}
+	return timer
+}
+func (scheduler *selectedRetryScheduler) After(d time.Duration) <-chan time.Time {
+	return scheduler.NewTimer(d).C()
+}
+
+func TestSelectedRetryWaitCarriesContinuationAndStopsTimer(t *testing.T) {
+	t.Parallel()
+	for _, canceled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "advance", true: "cancel"}[canceled], func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			scheduler := &selectedRetryScheduler{registered: make(chan *selectedRetryTimer, 1)}
+			service := &Service{clock: scheduler.Now, scheduler: scheduler}
+			var attempts atomic.Int32
+			done := make(chan error, 1)
+			failed := workers.NewProviderError(workers.WorkFailureTypeInternalServerError, "temporary", nil)
+			failed.Continuation = (&providers.SessionMetadata{Provider: "codex", ID: "selected-continuation"}).ContinuationRef()
+			go func() {
+				result, err := service.executeProviderWithRetry(ctx, workers.RunnerExecutionRequest{}, func(request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+					if attempts.Add(1) == 1 {
+						return workers.RunnerExecutionResult{}, failed
+					}
+					if request.SessionID != "selected-continuation" {
+						return workers.RunnerExecutionResult{}, errors.New("continuation lost")
+					}
+					return workers.RunnerExecutionResult{Content: "accepted"}, nil
+				})
+				if err == nil && result.Content != "accepted" {
+					err = errors.New("result lost")
+				}
+				done <- err
+			}()
+			var timer *selectedRetryTimer
+			select {
+			case timer = <-scheduler.registered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("retry timer not registered")
+			}
+			if timer.delay != detachedProviderInitialBackoff || attempts.Load() != 1 {
+				t.Fatal("retry advanced before selected backoff")
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("held wait returned: %v", err)
+			default:
+			}
+			if canceled {
+				cancel()
+			} else {
+				timer.ticks <- scheduler.Now().Add(timer.delay)
+			}
+			select {
+			case err := <-done:
+				if canceled && (!errors.Is(err, context.Canceled) || attempts.Load() != 1) {
+					t.Fatalf("cancel = %v, attempts = %d", err, attempts.Load())
+				}
+				if !canceled && (err != nil || attempts.Load() != 2) {
+					t.Fatalf("advance = %v, attempts = %d", err, attempts.Load())
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("retry did not join")
+			}
+			if !timer.stopped.Load() {
+				t.Fatal("owned retry timer not stopped")
+			}
+		})
+	}
 }

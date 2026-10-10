@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -346,7 +347,7 @@ func TestExecuteServiceRendersDetachedPromptWithoutRuntimeLookup(t *testing.T) {
 		nil,
 		nil,
 		logging.NoopLogger{},
-		func() time.Time { return time.Unix(10, 0) },
+		func() time.Time { return time.Unix(10, 0) }, platformclock.Real{},
 		nil,
 		nil,
 		nil,
@@ -716,7 +717,7 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 			return nil
 		},
 		capture,
-		func() time.Time { return time.Unix(10, 0) },
+		func() time.Time { return time.Unix(10, 0) }, platformclock.Real{},
 		workspace,
 		workspace.Release,
 		nil,
@@ -726,7 +727,7 @@ func TestExecuteConstructionIsInert(t *testing.T) {
 	}
 	_, overrideErr := executeservice.NewWithProviderOverride(&staticRunners{runner: runner}, nil,
 		func(context.Context, workers.ExecutionObservation) error { observationCalls.Add(1); return nil },
-		capture, func() time.Time { return time.Unix(10, 0) }, workspace, workspace.Release, nil, nil, nil, nil)
+		capture, func() time.Time { return time.Unix(10, 0) }, platformclock.Real{}, workspace, workspace.Release, nil, nil, nil, nil)
 	if overrideErr != nil {
 		t.Fatal(overrideErr)
 	}
