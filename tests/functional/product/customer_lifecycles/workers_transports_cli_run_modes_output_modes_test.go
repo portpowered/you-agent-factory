@@ -63,7 +63,7 @@ func testTypedWorkersPreserveNativeStructuredResult(t *testing.T) {
 	}
 }
 
-func configureModesTypedWorker(t testing.TB, factoryPath, mode string) {
+func configureModesTypedWorker(t testing.TB, factoryPath, mode, timeout string) {
 	t.Helper()
 	data, err := os.ReadFile(factoryPath)
 	if err != nil {
@@ -74,11 +74,15 @@ func configureModesTypedWorker(t testing.TB, factoryPath, mode string) {
 		t.Fatal(err)
 	}
 	workerType, workstationType := "INFERENCE_WORKER", "INFERENCE_RUN"
-	if mode == "agent" {
+	if mode == "agent" || mode == "denied" {
 		workerType, workstationType = "AGENT_WORKER", "AGENT_RUN"
 	}
+	provider, model := "CODEX", "gpt-5-codex"
+	if mode == "denied" {
+		provider, model = "CLAUDE", "claude-test-model"
+	}
 	worker := factory["workers"].([]any)[0].(map[string]any)
-	worker["type"], worker["modelProvider"], worker["model"], worker["executorProvider"] = workerType, "CODEX", "gpt-5-codex", "SCRIPT_WRAP"
+	worker["type"], worker["modelProvider"], worker["model"], worker["executorProvider"] = workerType, provider, model, "SCRIPT_WRAP"
 	station := factory["workstations"].([]any)[0].(map[string]any)
 	station["type"], station["outputSchema"] = workstationType, typedWorkersResultSchema
 	if mode == "inference" {
@@ -94,10 +98,15 @@ func configureModesTypedWorker(t testing.TB, factoryPath, mode string) {
 		t.Fatal(err)
 	}
 	dir := filepath.Dir(factoryPath)
+	workstationConfig := "---\ntype: " + workstationType + "\n"
+	if timeout != "" {
+		workstationConfig += "limits:\n  maxRetries: 1\n  maxExecutionTime: " + timeout + "\n"
+	}
+	workstationConfig += "---\nProcess the requested Work.\n"
 	files := map[string][]byte{
 		factoryPath: data,
-		filepath.Join(dir, "workers", "worker-a", "AGENTS.md"):     []byte("---\ntype: " + workerType + "\nmodelProvider: CODEX\nmodel: gpt-5-codex\nexecutorProvider: SCRIPT_WRAP\n---\nPreserve the structured result.\n"),
-		filepath.Join(dir, "workstations", "process", "AGENTS.md"): []byte("---\ntype: " + workstationType + "\n---\nProcess the requested Work.\n"),
+		filepath.Join(dir, "workers", "worker-a", "AGENTS.md"):     []byte("---\ntype: " + workerType + "\nmodelProvider: " + provider + "\nmodel: " + model + "\nexecutorProvider: SCRIPT_WRAP\n---\nPreserve the structured result.\n"),
+		filepath.Join(dir, "workstations", "process", "AGENTS.md"): []byte(workstationConfig),
 	}
 	for path, contents := range files {
 		if err := os.WriteFile(path, contents, 0o600); err != nil {

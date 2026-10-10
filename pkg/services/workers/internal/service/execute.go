@@ -30,7 +30,7 @@ func (s *Service) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
-	if s == nil || s.runners == nil {
+	if s == nil {
 		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
 	}
 	if ctx == nil {

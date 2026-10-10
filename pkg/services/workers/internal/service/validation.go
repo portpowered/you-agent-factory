@@ -11,7 +11,7 @@ import (
 
 // ValidateExecution leaves workspace, process, and observation effects to Execute.
 func (s *Service) ValidateExecution(ctx context.Context, request workers.ExecuteRequest) error {
-	if s == nil || s.runners == nil {
+	if s == nil {
 		return workers.ErrExecuteUnavailable
 	}
 	if ctx == nil {
