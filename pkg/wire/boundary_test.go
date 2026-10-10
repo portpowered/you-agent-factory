@@ -105,7 +105,7 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}
-	eventsService, err := eventswire.NewService()
+	eventsService, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("construct events service: %v", err)
 	}

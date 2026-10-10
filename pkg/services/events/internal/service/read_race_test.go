@@ -21,7 +21,7 @@ func TestRead_ConcurrentIndependentReadersObserveContiguousHistory(t *testing.T)
 	const totalAppends = 200
 	const readers = 20
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/concurrent-read/events")
 

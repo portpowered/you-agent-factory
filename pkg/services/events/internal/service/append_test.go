@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -23,7 +24,7 @@ func validAppendRequest() events.AppendRequest {
 }
 
 func TestAppend_AcceptsAndAssignsFirstPosition(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	result, err := st.Append(context.Background(), validAppendRequest())
 	if err != nil {
 		t.Fatalf("Append() error = %v", err)
@@ -40,7 +41,7 @@ func TestAppend_AcceptsAndAssignsFirstPosition(t *testing.T) {
 }
 
 func TestAppend_AssignsContiguousPositionsInCallOrder(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	for i := 1; i <= 3; i++ {
@@ -58,7 +59,7 @@ func TestAppend_AssignsContiguousPositionsInCallOrder(t *testing.T) {
 }
 
 func TestAppend_DifferentTopicsHaveIndependentOrdering(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	reqA := validAppendRequest()
@@ -80,8 +81,76 @@ func TestAppend_DifferentTopicsHaveIndependentOrdering(t *testing.T) {
 	}
 }
 
+func TestAppend_ConcurrentTopicsPreserveDetachedHistoryAndPeerSubscription(t *testing.T) {
+	t.Parallel()
+	st := NewWithRetention(0, logging.NoopLogger{})
+	t.Cleanup(func() { _ = st.Close(context.Background()) })
+	topics := []events.Topic{"chat-session/a/events", "chat-session/b/events"}
+	ctx := t.Context()
+	canceled, cancel := context.WithCancel(ctx)
+	subA, err := st.Subscribe(canceled, events.SubscribeRequest{Topic: topics[0], From: events.Cursor{Topic: topics[0]}, Limit: 1})
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	subB, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: topics[1], From: events.Cursor{Topic: topics[1]}, Limit: 3})
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	cancel()
+	if got := subA.Next(canceled); got.Kind != events.DeliveryCanceled {
+		t.Fatalf("canceled topic delivery = %+v", got)
+	}
+	var producers sync.WaitGroup
+	start := make(chan struct{})
+	for _, topic := range topics {
+		producers.Go(func() {
+			<-start
+			appendAndReadDetachedTopicHistory(t, st, ctx, topic)
+		})
+	}
+	close(start)
+	producers.Wait()
+	if t.Failed() {
+		return
+	}
+	for position := 1; position <= 3; position++ {
+		got := subB.Next(ctx)
+		if got.Kind != events.DeliveryRecord || got.Record.ID.Topic != topics[1] || got.Record.ID.Position != events.AggregateSequence(position) || string(got.Record.Payload) != string(validAppendRequest().Payload) {
+			t.Fatalf("peer delivery = %+v", got)
+		}
+	}
+}
+
+func appendAndReadDetachedTopicHistory(t *testing.T, st *Store, ctx context.Context, topic events.Topic) {
+	t.Helper()
+	for sequence := 1; sequence <= 3; sequence++ {
+		req := validAppendRequest()
+		req.Topic = topic
+		req.SourceSequence = events.SourceSequence(sequence)
+		appended, err := st.Append(ctx, req)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		appended.Record.Payload[0] = 'X'
+		read, err := st.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 3})
+		if err != nil || len(read.Records) != sequence {
+			t.Errorf("Read(%s) = %+v, %v", topic, read, err)
+			return
+		}
+		for i, record := range read.Records {
+			if record.ID.Topic != topic || record.ID.Position != events.AggregateSequence(i+1) || string(record.Payload) != string(req.Payload) {
+				t.Errorf("topic %s record = %+v", topic, record)
+			}
+		}
+		read.Records[0].Payload[0] = 'Y'
+	}
+}
+
 func TestAppend_DuplicateIdentityReturnsOriginalRecordWithoutAdvancingHead(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 
@@ -123,7 +192,7 @@ func TestAppend_DuplicateIdentityReturnsOriginalRecordWithoutAdvancingHead(t *te
 }
 
 func TestAppend_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 	req.Payload = nil // malformed: empty payload
@@ -145,7 +214,7 @@ func TestAppend_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestAppend_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -164,7 +233,7 @@ func TestAppend_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestAppend_RejectedAfterCloseBeforeAnyStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -181,7 +250,7 @@ func TestAppend_RejectedAfterCloseBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestAppend_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -196,7 +265,7 @@ func TestAppend_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
 }
 
 func TestAppend_CallerMutationOfRequestPayloadCannotAlterStoredRecord(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	payload := json.RawMessage(`{"tool":"grep"}`)
@@ -216,7 +285,7 @@ func TestAppend_CallerMutationOfRequestPayloadCannotAlterStoredRecord(t *testing
 }
 
 func TestAppend_CallerMutationOfReturnedRecordCannotAlterLaterObservations(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 

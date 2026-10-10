@@ -227,7 +227,7 @@ func TestProvideApplicationProcessLifecycle_ComposesOwnersClose(t *testing.T) {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 
-	eventsService, err := eventswire.NewService()
+	eventsService, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("construct events service: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestProvideApplicationProcessLifecycle_ComposesOwnersClose(t *testing.T) {
 		t.Fatal("composed ProcessLifecycle.Close() did not close the Factory Sessions lifecycle")
 	}
 
-	secondEventsService, err := eventswire.NewService()
+	secondEventsService, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("construct second events service: %v", err)
 	}
@@ -799,7 +799,7 @@ func TestRuntimeRunnerAndWorkerSessionFactoriesUseInjectedPorts(t *testing.T) {
 		t.Fatalf("script runtime command runner = %T, error %v", scriptRunner, err)
 	}
 
-	eventsService, err := eventswire.NewService()
+	eventsService, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("events service = %v", err)
 	}

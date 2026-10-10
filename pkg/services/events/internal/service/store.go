@@ -14,8 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/events"
 )
 
-// defaultMaxRetainedPerTopic bounds retained records per topic when New is
-// constructed without an explicit policy.
+// defaultMaxRetainedPerTopic bounds retained records per topic when
+// NewWithRetention receives a non-positive policy.
 const defaultMaxRetainedPerTopic = 10_000
 
 // errClosed reports that Store.Close has taken effect and the Store no
@@ -29,7 +29,7 @@ var errClosed = fmt.Errorf("events: service is closed: %w", events.ErrOperationF
 // It grows one topicState per distinct events.Topic on first use; every
 // topic-scoped read/write goes through that topic's own mutex so unrelated
 // topics never contend with each other. The zero value is not usable;
-// construct with New or NewWithRetention.
+// construct with NewWithRetention.
 type Store struct {
 	mu                  sync.RWMutex
 	topics              map[events.Topic]*topicState
@@ -67,11 +67,9 @@ var _ closer = (*Store)(nil)
 // earliest retained position plus i. identity maps each accepted append's
 // (sourceType, sourceID, sourceSequence, sourceEventID) tuple to its
 // originally accepted Record so a repeated append resolves to the same
-// Record; identity is pruned in lockstep with records eviction (see
-// topicState.commitLocked), so idempotency detection is bounded by the same
-// retention policy as retained records and does not grow without bound --
-// once a position has been evicted, repeating its identity is accepted as a
-// new record rather than resolved as a duplicate. subscribers
+// Record for the life of the topic, including after retention evicts that
+// record's position. Repeating an evicted identity still resolves as a
+// duplicate without advancing head. subscribers
 // holds every currently live registration keyed by an opaque per-topic id;
 // attachments holds every topic currently attached to this one as a
 // forwarding destination, keyed by that destination Topic (at most one
@@ -99,12 +97,6 @@ func (ts *topicState) earliestLocked() events.AggregateSequence {
 		return 0
 	}
 	return ts.records[0].ID.Position
-}
-
-// New constructs an empty Store using the default bounded-retention policy
-// (defaultMaxRetainedPerTopic records per topic). The owner supplies the selected logger.
-func New(logger logging.Logger) *Store {
-	return NewWithRetention(defaultMaxRetainedPerTopic, logger)
 }
 
 // NewWithRetention constructs an empty Store bounded to at most

@@ -30,22 +30,21 @@ func validAppendRequest() events.AppendRequest {
 
 func TestNewServiceLoggerModesPreserveObservations(t *testing.T) {
 	t.Parallel()
-	core, captured := observer.New(zapcore.DebugLevel)
-	logger := logging.NewZapLogger(zap.New(core), true)
 	for _, test := range []struct {
-		name    string
-		loggers []logging.Logger
-		logged  bool
+		name   string
+		logged bool
 	}{
-		{"omitted", nil, false},
-		{"nil", []logging.Logger{nil}, false},
-		{"noop", []logging.Logger{logging.NoopLogger{}}, false},
-		{"first nil stays quiet", []logging.Logger{nil, logger}, false},
-		{"supplied", []logging.Logger{logger, logging.NoopLogger{}}, true},
+		{"noop", false},
+		{"supplied", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			captured.TakeAll()
-			service, err := NewService(test.loggers...)
+			t.Parallel()
+			core, captured := observer.New(zapcore.DebugLevel)
+			var logger logging.Logger = logging.NoopLogger{}
+			if test.logged {
+				logger = logging.NewZapLogger(zap.New(core), true)
+			}
+			service, err := NewService(logger)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -128,7 +127,7 @@ func assertOwnerObservations(t *testing.T, service events.Service) {
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := NewService()
+	service, err := NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -151,7 +150,7 @@ func TestNewServiceReturnsAFunctionalIndependentRoot(t *testing.T) {
 
 	ctx := context.Background()
 
-	first, err := NewService()
+	first, err := NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -159,7 +158,7 @@ func TestNewServiceReturnsAFunctionalIndependentRoot(t *testing.T) {
 		t.Fatalf("Append() on first root error = %v", err)
 	}
 
-	second, err := NewService()
+	second, err := NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() second call error = %v", err)
 	}
@@ -189,7 +188,7 @@ func TestNewServiceSatisfiesCloseWithoutWideningService(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	service, err := NewService()
+	service, err := NewService(logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
