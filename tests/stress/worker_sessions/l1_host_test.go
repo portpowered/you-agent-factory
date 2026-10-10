@@ -3,9 +3,11 @@ package workersessions_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type l1Script struct {
@@ -27,6 +30,7 @@ type l1Script struct {
 }
 
 type l1Stream struct {
+	id      string
 	mu      sync.Mutex
 	emitted []time.Time
 }
@@ -40,7 +44,7 @@ func (runner *l1Script) RunStreaming(ctx context.Context, _ platformprocess.Comm
 		return platformprocess.CommandResult{}, errors.New("L1 requires streaming output")
 	}
 	stream := &l1Stream{}
-	observe(platformprocess.OutputStreamStdout, []byte("initial committed progress\n"))
+	observe(platformprocess.OutputStreamStdout, fmt.Appendf(nil, "initial stream=%p\n", stream))
 	runner.entered <- stream
 	select {
 	case <-runner.release:
@@ -49,8 +53,8 @@ func (runner *l1Script) RunStreaming(ctx context.Context, _ platformprocess.Comm
 	}
 	// This clock is the declared load generator (11/s/session), not a readiness
 	// sleep. Record every actual emission; missed ticks cannot count as workload.
-	// Slight headroom ensures the measured achieved rate, including query drain,
-	// must still meet 1,000/s rather than rounding a nominal 10/s into a pass.
+	// Slight headroom permits >=1,000 acknowledged commits/s in the fixed window;
+	// generator ticks and post-window drain never establish committed throughput.
 	ticker := time.NewTicker(time.Second / 11)
 	defer ticker.Stop()
 	for {
@@ -82,7 +86,13 @@ func startL1Host(t *testing.T, ctx context.Context, dir string, runner platformp
 	process, err := root.BuildProcess(ctx, edges.Edges{
 		WorkerRecordingWriter: writer,
 		ScriptCommandRunner:   runner, FactorySessionsWorkingDirectory: evictionWorkingDirectory(dir),
-		WorkerRecordingStoreObserver: func(value recordings.WorkerRecordingStore) { store = value },
+		WorkerRecordingStoreObserver: func(value recordings.WorkerRecordingStore) {
+			store = value
+			if pressure, ok := writer.(*pressureWriter); ok {
+				pressure.WorkerRecordingStore = value
+			}
+		},
+		ProviderCommandRunner: l1ForbiddenProvider{},
 		APIServerStarter: func(hostCtx context.Context, request platformhttpserver.StartRequest) error {
 			server := httptest.NewServer(request.Handler)
 			defer server.Close()
@@ -135,4 +145,56 @@ func startL1Host(t *testing.T, ctx context.Context, dir string, runner platformp
 		t.Fatal(ctx.Err())
 	}
 	return "", nil
+}
+
+// Factory admission lets Runtime resolve the authored SCRIPT_WORKER command.
+// The public direct-start envelope intentionally has no script command field.
+func admitL1FactoryScript(t *testing.T, ctx context.Context, endpoint, dir string, count int) []string {
+	t.Helper()
+	body := fleetProfileHTTP(t, ctx, http.MethodPost, endpoint+"/factory-sessions", map[string]any{"folderPath": dir})
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(body, &opened); err != nil || opened.Session == nil {
+		t.Fatalf("open L1 Factory: %v %s", err, body)
+	}
+	scope := opened.Session.Id
+	t.Logf("Factory fixture scope=%s", scope)
+	works := make([]map[string]any, count)
+	for index := range works {
+		works[index] = map[string]any{"name": fmt.Sprintf("l1-work-%03d", index), "workTypeName": "task", "payload": map[string]any{"title": "controlled L1 script"}}
+	}
+	fleetProfileHTTP(t, ctx, http.MethodPut, endpoint+"/factory-sessions/"+scope+"/work-requests/l1", map[string]any{"requestId": "l1", "type": "FACTORY_REQUEST_BATCH", "works": works})
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	logged := false
+	for {
+		body = fleetProfileHTTP(t, ctx, http.MethodGet, endpoint+"/worker-sessions?history=active&maxResults=100", nil)
+		var fleet factoryapi.ListWorkerSessionsResponse
+		if err := json.Unmarshal(body, &fleet); err != nil {
+			t.Fatal(err)
+		}
+		ids := make([]string, 0, count)
+		for _, row := range fleet.Sessions {
+			if row.FactorySessionId != nil && *row.FactorySessionId == scope {
+				ids = append(ids, row.WorkerSessionId)
+			}
+		}
+		if !logged {
+			logged = true
+			t.Logf("waiting for script admissions: observed=%d want=%d", len(ids), count)
+		}
+		if len(ids) == count {
+			return ids
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("INCONCLUSIVE: Factory admitted %d/%d scripts: %v", len(ids), count, ctx.Err())
+		}
+	}
+}
+
+type l1ForbiddenProvider struct{}
+
+func (l1ForbiddenProvider) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("L1 forbids provider execution")
 }

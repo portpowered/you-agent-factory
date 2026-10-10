@@ -753,7 +753,7 @@ test-stress:
 
 .PHONY: test-worker-sessions-l1
 test-worker-sessions-l1:
-	$(GO) test ./tests/stress/worker_sessions -run '^TestL1' -count=1 -timeout 15m -v
+	$(GO) test ./tests/stress/worker_sessions -run '^(TestL1FleetDiscoveryAndCapture|TestL1CaptureBytePressure|TestL1CapturedOversizedOutput)$$' -count=1 -timeout 15m -v
 
 .PHONY: test-stress-fixtures test-unit-monolith test-unit-monolith-prepare test-unit-monolith-prebuilt test-wiring-integration
 test-stress-fixtures:
