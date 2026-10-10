@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -173,6 +174,7 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 	}
 	for index, worker := range input.MockWorkers {
 		converted := workers.MockWorkerConfig{
+			ResultBody:      append(json.RawMessage(nil), worker.ResultBody...),
 			ID:              worker.ID,
 			WorkerName:      worker.WorkerName,
 			WorkstationName: worker.WorkstationName,
@@ -456,7 +458,13 @@ func ensureDefaultCanonicalSessionID(
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
+	if !factorysessions.SessionIdentity(sessionID).Valid() {
+		return &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+	}
 	selection := sessionRuntimeSelection(session)
+	if canonical := strings.TrimSpace(selection.CanonicalSessionID); canonical != "" && !factorysessions.SessionIdentity(canonical).Valid() {
+		return fmt.Errorf("open Factory Session: invalid canonical session identity")
+	}
 	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(selection.CanonicalSessionID) != "" {
 		return nil
 	}
@@ -464,8 +472,8 @@ func ensureDefaultCanonicalSessionID(
 		return fmt.Errorf("open Factory Session: canonical session ID generator is required")
 	}
 	canonicalID := strings.TrimSpace(generateID())
-	if canonicalID == "" {
-		return fmt.Errorf("open Factory Session: canonical session ID generator returned an empty identity")
+	if !factorysessions.SessionIdentity(canonicalID).Valid() {
+		return fmt.Errorf("open Factory Session: canonical session ID generator returned an invalid identity")
 	}
 	selection.CanonicalSessionID = canonicalID
 	return nil
@@ -595,6 +603,7 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 	}
 	for index, worker := range input.MockWorkers {
 		converted := factoryruntime.RuntimeActivationMockWorker{
+			ResultBody:      append(json.RawMessage(nil), worker.ResultBody...),
 			ID:              worker.ID,
 			WorkerName:      worker.WorkerName,
 			WorkstationName: worker.WorkstationName,

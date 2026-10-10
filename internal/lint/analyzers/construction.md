@@ -7,7 +7,7 @@ baseline growth. The temporary `make repolint` dependency retains compiler
 ownership checking until its analyzer migration. T20/T29 consumers use these analyzers. The former
 `internal/contractguard` construction Scan APIs and durable command are removed.
 
-## Metadata and staged policy
+## Metadata and composition
 
 `RepositoryConstructionRegistry()` supplies immutable metadata from
 `construction_registry.go`. Each compilation unit validates the declarations
@@ -17,25 +17,39 @@ parameter indices count individual parameters, including grouped names;
 parameter type expressions use qualified names. Constructor results require
 matching construction-kind classifications in the same capability set.
 
-Allowances name one caller, callee, and repository-relative file, plus a
-semantic kind, owner, and reason. Malformed, duplicate, stale, and mismatched
-metadata fails as `construction-metadata`. A focused-provider allowance permits
-only synchronous construction in the approved body. Constructors invoked by
-`defer`, `go`, or closures remain prohibited. Arguments evaluated before a
-deferred or asynchronous operation retain synchronous ownership.
+For compiled handwritten references and declarations, constructor names
+(`New`, `Build`, `Create`, `Ensure`, `Open`, `Provide`) returning an already
+classified behavior/effect also inherit that policy without another constructor
+entry. Compiler identities preserve generic origins and named aliases. Typed
+classified behavior/effect parameters become required inputs; explicit
+constructor metadata takes precedence. A multi-result constructor inherits
+enforcement if any classified result is enforced. This does not classify a new
+owner or turn domain/state/resource results into services.
 
-The `chat-target-catalog` capability set remains report-only. The analyzer
-returns `[]ConstructionFinding` with mode, set, caller, callee, file, line, and
-rule. Report observations do not emit blocking diagnostics or enter the
-baseline. Enforced findings and conservative unresolved debt use the shared
+Composition uses compiler-resolved free-function identities in `pkg/wire` or
+an exact owning service's `wire` package, with a constructor/provider name.
+Methods, ordinary operations and package initializers remain prohibited.
+Only synchronous, acyclic construction with resolved dispatch is lawful;
+`defer`, `go`, closures and unresolved callable dispatch still fail. Arguments
+evaluated before a deferred or asynchronous operation retain synchronous
+ownership. Exact `github.com/google/wire.NewSet` and `Build` declarations may
+retain direct provider references at those composition boundaries; shadowed
+or unrelated callables receive no such treatment. No caller/callee/file
+migration allowance schema remains.
+
+The `chat-target-catalog` capability set enforces. The analyzer returns
+`[]ConstructionFinding` with mode, set, caller, callee, file, line and rule.
+Report mode remains available to controlled analyzer fixtures, without enabling
+an owner or entering the baseline. Enforced findings and conservative unresolved debt use the shared
 exact `baseline.txt`; stale entries fail and the `baselinegrowth` analyzer rejects
-growth. No owner is enabled by this migration.
+growth. Other owner classifications remain final-enforcement obligations; this
+checker increment does not prove repository coverage.
 
 ## Bounded typed rules
 
 | Rule | Observation |
 | --- | --- |
-| `registered-construction` | Classified behavior/effect construction outside an exact allowance, indirect provider construction, or a proved provider recursion path. |
+| `registered-construction` | Classified behavior/effect construction outside typed composition, indirect provider construction, or a proved provider recursion path. |
 | `unresolved-construction-reference` | Escaped, unused, stored, or mutated constructor references. |
 | `required-dependency-bag` | Required records or containers that contain classified collaborators, including nested/embedded fields and map keys. Explicit domain/state/resource classifications remain allowed. |
 | `required-dependency-guard` | Nil comparisons of required constructor parameters or their traced storage/helper origins. |
@@ -80,6 +94,38 @@ excluded; compiled `servertests` helpers remain in scope. The canonical tags
 are `functionallong,backendconformance,factoryartifact,managed_process_integration`.
 Excluded import edges alone may use `parser.ImportsOnly`; no excluded call-body
 proof is claimed. Native platform execution owns platform-dependent bodies.
+
+Unlisted constructor discovery is bounded by the existing constructor-name
+vocabulary and exact named result classifications. Arbitrarily named factories,
+structural/erased results, distinct defined-type ancestry, callable variables,
+and opaque cross-package factories are not proved by this inference. Parameter
+requiredness is inferred only for exact classified named collaborators, not
+unclassified callbacks or containers. These limits remain inventory obligations;
+they authorize no new baseline or exemption. Repository coverage remains incomplete while only the Chat catalog is
+classified. Composition identity does not prove upstream graph reachability,
+unused-provider absence, or imported helper bodies. Those properties retain
+their existing Wire, deadcode and independent review gates.
+
+The maintained `ci-smoke` cohort uses the production registry with minimal,
+compiler-valid declarations for the Chat catalog and its exact inputs. Its
+clean/seeded/recovered plugin invocations distinguish lawful owning Wire
+construction and scoped map allocation from same-owner construction,
+cross-owner construction, and an unlisted constructor returning the classified
+type. These fixtures prove diagnostics and qualified symbols for that set;
+they do not prove that unclassified repository owners conform.
+
+Final owner enablement must stop at unresolved production findings. Events
+still selects an optional logger in `events/wire.NewService`, and
+`events/internal/service.New` delegates to `NewWithRetention` outside Wire.
+Those sites require an owner delta before strict Events enablement; neither
+domain retention defaults nor per-topic state allocation justify a logger
+fallback or an internal service-construction exception.
+
+The Events prerequisite belongs to `fi-events-strict-construction-20261010`.
+The checker increment can ship independently; final owner classifications,
+terminal inventory reconciliation and repository-wide enforcement still require
+the lead's remaining final-enforcement slice after that prerequisite delivers.
+Neither the increment nor its fixture results satisfy those obligations.
 
 Compiler-invalid historical examples are rejected before lint analysis:
 initialization cycles, ambiguous selectors, recursive aliases, and undefined

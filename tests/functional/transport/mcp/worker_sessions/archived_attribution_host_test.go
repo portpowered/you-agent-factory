@@ -762,7 +762,9 @@ func runArchivedWorkAttributionStartupProfile(t *testing.T, process support.Proc
 	if replayReads.Load() == 0 {
 		t.Fatal("explicit replay skipped recording read")
 	}
-	historyParityPage(t, ctx, connection, reopened, "archived", "factory", "")
+	// Replay must leave the same captured, warmed and absent attribution
+	// available through every public read and list surface.
+	assertStartupAttribution(t, ctx, connection, reopened, expected)
 	if reads.Load() != 0 {
 		t.Fatalf("post-replay presentation recording reads=%d", reads.Load())
 	}

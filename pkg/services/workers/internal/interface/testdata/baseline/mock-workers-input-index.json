@@ -113,6 +113,22 @@
       }
     },
     {
+      "id": "docs-example-mock-workers-result-body",
+      "category": "parse-docs-example",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "accept",
+      "fixture": "docs/examples/mock-workers-result-body.json",
+      "description": "accept mock declares a successful JSON result without external execution",
+      "expectedConfig": {
+        "mockWorkerCount": 1,
+        "mockWorkers": [
+          {
+            "runType": "accept"
+          }
+        ]
+      }
+    },
+    {
       "id": "docs-example-mock-workers",
       "category": "parse-docs-example",
       "entrypoint": "ParseMockWorkersConfig",

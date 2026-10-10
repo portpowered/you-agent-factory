@@ -58,92 +58,34 @@ func validCreateRequest() chatsessions.CreateSessionRequest {
 	}
 }
 
-func TestNewService_RequiresIDGenerator(t *testing.T) {
-	service, err := NewService(nil, fixedClock(time.Now()), stubEventsAppender{}, stubEventsReader{})
-	if err == nil || service != nil {
-		t.Fatalf("NewService(nil id generator) = (%v, %v), want construction failure", service, err)
-	}
-	if err.Error() != "construct chat sessions: id generator is required" {
-		t.Fatalf("changed construction error: %v", err)
-	}
-}
-
-func TestNewService_RequiresClock(t *testing.T) {
-	service, err := NewService(sequentialIDs("session"), nil, stubEventsAppender{}, stubEventsReader{})
-	if err == nil || service != nil {
-		t.Fatalf("NewService(nil clock) = (%v, %v), want construction failure", service, err)
-	}
-	if err.Error() != "construct chat sessions: clock is required" {
-		t.Fatalf("changed construction error: %v", err)
-	}
-}
-
-func TestNewService_RequiresEventsAppender(t *testing.T) {
-	service, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), nil, stubEventsReader{})
-	if err == nil || service != nil {
-		t.Fatalf("NewService(nil events appender) = (%v, %v), want construction failure", service, err)
-	}
-	if err.Error() != "construct chat sessions: events appender is required" {
-		t.Fatalf("changed construction error: %v", err)
-	}
-}
-
-func TestNewService_RequiresEventsReader(t *testing.T) {
-	service, err := NewService(sequentialIDs("session"), fixedClock(time.Now()), stubEventsAppender{}, nil)
-	if err == nil || service != nil {
-		t.Fatalf("NewService(nil events reader) = (%v, %v), want construction failure", service, err)
-	}
-	if err.Error() != "construct chat sessions: events reader is required" {
-		t.Fatalf("changed construction error: %v", err)
-	}
-}
-
 // TestNewService_ConstructsAWorkingService proves the canonically
 // constructed Service round-trips a session create/get through the public
 // chatsessions.Service interface, without depending on any Store-internal
 // detail.
 func TestNewService_ConstructsAWorkingService(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"omitted", "nil", "noop", "capture", "capture-first", "nil-first"} {
+	for _, mode := range []string{"noop", "capture"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
-			first, later := &serviceCaptureLogger{}, &serviceCaptureLogger{}
-			var loggers []logging.Logger
-			switch mode {
-			case "nil":
-				loggers = []logging.Logger{nil}
-			case "noop":
-				loggers = []logging.Logger{logging.NoopLogger{}}
-			case "capture":
-				loggers = []logging.Logger{first}
-			case "capture-first":
-				loggers = []logging.Logger{first, later}
-			case "nil-first":
-				loggers = []logging.Logger{nil, later}
+			first := &serviceCaptureLogger{}
+			var logger logging.Logger = logging.NoopLogger{}
+			if mode == "capture" {
+				logger = first
 			}
 			idCalls, clockCalls, eventCalls := 0, 0, 0
 			ids := sequentialIDs("session")
-			service, err := NewService(func() string { idCalls++; return ids() }, func() time.Time { clockCalls++; return at }, stubEventsAppender{calls: &eventCalls}, stubEventsReader{calls: &eventCalls}, loggers...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if idCalls != 0 || clockCalls != 0 || eventCalls != 0 || len(first.calls) != 0 || len(later.calls) != 0 {
+			service := NewService(func() string { idCalls++; return ids() }, func() time.Time { clockCalls++; return at }, stubEventsAppender{calls: &eventCalls}, stubEventsReader{calls: &eventCalls}, logger)
+			if idCalls != 0 || clockCalls != 0 || eventCalls != 0 || len(first.calls) != 0 {
 				t.Fatal("construction invoked effects")
 			}
 			got := exerciseServiceLoggerOperations(t, service)
-			quiet, err := NewService(sequentialIDs("session"), fixedClock(at), stubEventsAppender{}, stubEventsReader{})
-			if err != nil {
-				t.Fatal(err)
-			}
+			quiet := NewService(sequentialIDs("session"), fixedClock(at), stubEventsAppender{}, stubEventsReader{}, logging.NoopLogger{})
 			want := exerciseServiceLoggerOperations(t, quiet)
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("%s changed operation facts: %+v / %+v", mode, got, want)
 			}
-			if len(later.calls) != 0 {
-				t.Fatalf("later logger selected: %+v", later.calls)
-			}
-			if mode == "capture" || mode == "capture-first" {
+			if mode == "capture" {
 				if len(first.calls) != 18 {
 					t.Fatalf("selected logger received %d calls, want 18", len(first.calls))
 				}
@@ -170,14 +112,8 @@ func TestNewService_InstancesShareNoState(t *testing.T) {
 	t.Parallel()
 	a, b := &serviceCaptureLogger{}, &serviceCaptureLogger{}
 	at := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
-	first, err := NewService(sequentialIDs("first"), fixedClock(at), stubEventsAppender{}, stubEventsReader{}, a)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := NewService(sequentialIDs("second"), fixedClock(at.Add(time.Hour)), stubEventsAppender{}, stubEventsReader{}, b)
-	if err != nil {
-		t.Fatal(err)
-	}
+	first := NewService(sequentialIDs("first"), fixedClock(at), stubEventsAppender{}, stubEventsReader{}, a)
+	second := NewService(sequentialIDs("second"), fixedClock(at.Add(time.Hour)), stubEventsAppender{}, stubEventsReader{}, b)
 	ctx := context.Background()
 	one, err := first.CreateSession(ctx, validCreateRequest())
 	if err != nil {
@@ -255,11 +191,11 @@ func (s stubFactoryDefinitionsService) ListEffectiveFactories(context.Context, f
 // Existing provider witness: retained wiring integration, not a unit test.
 func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"nil", "noop", "capture"} {
+	for _, mode := range []string{"noop", "capture"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			capture := &serviceCaptureLogger{}
-			var logger logging.Logger
+			var logger logging.Logger = logging.NoopLogger{}
 			if mode == "noop" {
 				logger = logging.NoopLogger{}
 			}
@@ -267,10 +203,7 @@ func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T
 				logger = capture
 			}
 			profileCalls, catalogCalls, installed := 0, 0, true
-			service, err := NewFactoryTargetCatalogService(stubOperatorSettingsService{calls: &profileCalls}, stubFactoryDefinitionsService{calls: &catalogCalls, installed: &installed}, logger)
-			if err != nil {
-				t.Fatal(err)
-			}
+			service := NewFactoryTargetCatalogService(stubOperatorSettingsService{calls: &profileCalls}, stubFactoryDefinitionsService{calls: &catalogCalls, installed: &installed}, logger)
 			if profileCalls != 0 || catalogCalls != 0 || len(capture.calls) != 0 {
 				t.Fatal("construction invoked effects")
 			}
@@ -300,36 +233,6 @@ func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T
 			}
 			if !reflect.DeepEqual(capture.calls, wantLogs) {
 				t.Fatalf("%s diagnostics: %+v, want %+v", mode, capture.calls, wantLogs)
-			}
-		})
-	}
-}
-
-func TestNewFactoryTargetCatalogService_RejectsMissingPeers(t *testing.T) {
-	t.Parallel()
-	for _, missing := range []string{"settings", "definitions", "both"} {
-		t.Run(missing, func(t *testing.T) {
-			t.Parallel()
-			calls, installed := 0, true
-			var settings operatorsettings.Service = stubOperatorSettingsService{calls: &calls}
-			var definitions factorydefinitions.CatalogPathsService = stubFactoryDefinitionsService{calls: &calls, installed: &installed}
-			want := "construct chat sessions factory target catalog: operator settings root is required"
-			if missing != "definitions" {
-				settings = nil
-			}
-			if missing != "settings" {
-				definitions = nil
-			}
-			if missing == "definitions" {
-				want = "construct chat sessions factory target catalog: factory definitions catalog/path capability is required"
-			}
-			capture := &serviceCaptureLogger{}
-			service, err := NewFactoryTargetCatalogService(settings, definitions, capture)
-			if service != nil || err == nil || err.Error() != want {
-				t.Fatalf("missing %s: %v, %v", missing, service, err)
-			}
-			if calls != 0 || len(capture.calls) != 0 {
-				t.Fatal("rejected construction invoked effects")
 			}
 		})
 	}

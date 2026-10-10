@@ -1,0 +1,11 @@
+{
+  "mockWorkers": [
+    {
+      "runType": "accept",
+      "resultBody": {
+        "decision": "ACCEPTED",
+        "output": "declared mock output"
+      }
+    }
+  ]
+}

@@ -244,6 +244,59 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	assertAdmittedWorkEventIsolation(t, canceled, survivor)
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
 	assertStoppedQueuedWork(t, canceled, queued, queuedBefore)
+	assertRepeatedAdmittedWorkStop(t, canceled, first, queued)
+}
+
+func assertRepeatedAdmittedWorkStop(t *testing.T, session *concurrencySession, running, queued factoryapi.SubmitWorkResponse) {
+	t.Helper()
+	beforeRunning := concurrencyWorkByID(t, session, running.WorkId)
+	beforeQueued := concurrencyWorkByID(t, session, queued.WorkId)
+	beforeEvents := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	terminals := 0
+	for _, event := range beforeEvents {
+		if event.Type == factoryapi.FactoryEventTypeSessionCompleted {
+			terminals++
+		}
+	}
+	if terminals != 1 {
+		t.Fatalf("stopped session terminal events = %d, want one", terminals)
+	}
+	// Repeat the supported selected-session control after command return and
+	// terminal publication, before deleting the session.
+	assertTerminalSessionCancel(t, session)
+	if !reflect.DeepEqual(beforeRunning, concurrencyWorkByID(t, session, running.WorkId)) ||
+		!reflect.DeepEqual(beforeQueued, concurrencyWorkByID(t, session, queued.WorkId)) ||
+		!reflect.DeepEqual(beforeEvents, concurrencySessionEvents(t, session.fixture.baseURL, session.id)) {
+		t.Fatal("repeated stop changed retained Work or published another event")
+	}
+	if session.runner.callCount() != 1 || session.runner.canceledCount() != 1 {
+		t.Fatal("repeated stop executed or cancelled another command")
+	}
+}
+
+func assertTerminalSessionCancel(t *testing.T, session *concurrencySession) {
+	t.Helper()
+	endpoint := session.fixture.baseURL + "/factory-sessions/" + session.id + "/cancel"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var control factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(response.Body).Decode(&control); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusConflict || control.SessionId != session.id ||
+		control.Operation != factoryapi.FactorySessionLifecycleControlKindCancel ||
+		control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession ||
+		control.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("repeat stop = %d, %#v, want typed terminal-session conflict", response.StatusCode, control)
+	}
 }
 
 func assertStoppedQueuedWork(t *testing.T, session *concurrencySession, queued factoryapi.SubmitWorkResponse, before factoryapi.Work) {

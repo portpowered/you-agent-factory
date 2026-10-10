@@ -48,12 +48,13 @@ when it matches.
 | `workstationName` | No | Matches the workstation currently executing. |
 | `workInputs` | No | Filters on consumed work input fields (see below). |
 | `runType` | Yes | One of `accept`, `reject`, or `script`. |
+| `resultBody` | No; `accept` only | Non-null JSON object returned as the successful mock result. |
 | `scriptConfig` | When `runType` is `script` | Command, args, env, and related script fields. |
 | `rejectConfig` | When `runType` is `reject` | Observable stdout, stderr, and exit code. |
 | `gateConfig` | No | Signals dispatch arrival, waits for an explicit release file, then applies the configured run type. |
 | `usage` | No | Provider/model identity and token counts for a matched dispatch. |
 
-Unknown JSON fields are rejected at load time.
+Unrecognized configuration fields are ignored with a diagnostic that names their JSON paths. The diagnostic does not include their values.
 
 ### Work Input Selectors
 
@@ -402,3 +403,50 @@ live-provider QA.
 - `you docs config` — brief run-flag summary with pointers to this topic
 - `you docs authoring-factories` — full factory authoring workflow
 - `you docs workers` — worker types and configuration
+
+## Declare a Successful Mock Result
+
+Set `resultBody` on an `accept` entry to return a specific JSON object.
+Omit it to preserve the default accepted mock result.
+The object is returned unchanged through the existing provider framing.
+It cannot be `null`, an array, or a scalar, and cannot accompany `script` or `reject`.
+
+```json
+{"mockWorkers":[{"runType":"accept","resultBody":{"decision":"ACCEPTED","output":"declared mock output"}}]}
+```
+
+See [the reusable result-body example](../examples/mock-workers-result-body.json).
+Run it with your Factory:
+
+```bash
+you run --dir <factory> --with-mock-workers docs/examples/mock-workers-result-body.json
+```
+
+A successful mock execution can still produce a business-invalid result.
+Factory Runtime validates the declared output using the workstation's existing outcome contract.
+Inspect Worker Session logs for captured execution output and Work for its business outcome.
+Payload keys inside `resultBody` are opaque and do not produce ignored-field diagnostics.
+This example uses only `accept` mocks and does not launch scripts or live providers.
+
+### Completed execution with failed Work
+
+Use [the business-invalid result example](../examples/mock-workers-result-body-business-invalid.json) to test this distinction.
+Its `ACCEPTED` envelope proposes output Work with the undeclared type `undeclared-output`.
+
+1. Configure the target workstation with `"outcomeFormat": "decision-envelope"` in `factory.json`.
+2. Configure its input Work type with a `FAILED` state and route `onFailure` to that state.
+3. Keep `undeclared-output` absent from the Factory's `workTypes`.
+4. Submit input Work to the target workstation with the example configuration:
+
+   ```bash
+   you run --dir <factory> --work <work.json> --with-mock-workers docs/examples/mock-workers-result-body-business-invalid.json
+   ```
+
+5. Inspect the associated Worker Session and its captured logs.
+   The execution completes and the captured result contains `business-invalid mock output` and the unchanged proposal.
+6. Inspect the input Work and its dispatch result.
+   The Work enters the configured failure state because Factory Runtime cannot materialize the undeclared output Work type.
+
+The proposed output Work is not created.
+The Worker Session's completed execution remains separate from the Work failure.
+This fixture uses only `accept` mocks and launches no scripts or live providers.

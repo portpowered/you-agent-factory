@@ -297,6 +297,10 @@ type mockInterruptFaultStore struct {
 	beforeRaceIntent func()
 }
 
+func (store *mockInterruptFaultStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
 func (store *mockInterruptFaultStore) BeginWorkerControlOperation(ctx context.Context, record recordings.WorkerControlOperationRecord) (recordings.WorkerControlOperationRecord, bool, error) {
 	if record.Operation.RequestID == "completion-race-interrupt" {
 		store.beforeRaceIntent()

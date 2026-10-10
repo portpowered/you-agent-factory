@@ -42,6 +42,13 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
+For `you run --session <session-id>`, use `~default`, a lowercase hyphenated
+UUID, or `dur-sess-` followed by 32 lowercase hexadecimal digits. Omission or
+blank input selects `~default` locally. Unsupported names such as
+`validation-factory` fail before Work starts with `BAD_REQUEST` and exit code 1.
+Local runs open the selected session. Remote runs target an already-open
+session. For example, use `--session 12345678-1234-1234-1234-1234567890ab`.
+
 ## List recorded history
 
 Run `you --json session list --history-only` to inspect retained Factory Session
@@ -72,6 +79,12 @@ and encrypted content are absent.
 Recorded associated sessions remain readable after a host restart. The existing
 `--provider`, `--kind`, and `--id` tuple selects an associated session within a
 Factory Session. Use `--session <factory-session-id>` to select that scope.
+
+Completed summaries retain captured associations, transcript availability, usage,
+and failure details across restart. Their `endedAt` uses the committed terminal
+`capturedAt`: host capture completion, not provider execution completion.
+The duration uses that timestamp and the recorded start. Missing timestamps
+leave end and duration unavailable, including legacy and incomplete captures.
 
 An active session returns `WORKER_SESSION_TRANSCRIPT_ACTIVE`. Missing
 associations and incomplete captures return `WORKER_SESSION_TRANSCRIPT_UNAVAILABLE`.

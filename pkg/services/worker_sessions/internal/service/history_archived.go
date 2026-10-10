@@ -143,6 +143,9 @@ func capturedHistoryIdentity(item recordings.WorkerCapturedCatalogItem, owners m
 			applyCapturedUsageFacts(&observation, draft)
 		}
 	}
+	if err := applyCapturedTerminalFacts(&observation, item); err != nil {
+		return nil, err
+	}
 	applyCapturedTiming(&observation, item.Terminal, item.Catalog.CommittedPosition, item.CapturedAt)
 	if item.SuccessorWorkerSessionID != "" {
 		if observation.SuccessorWorkerSessionID != "" && observation.SuccessorWorkerSessionID != item.SuccessorWorkerSessionID {

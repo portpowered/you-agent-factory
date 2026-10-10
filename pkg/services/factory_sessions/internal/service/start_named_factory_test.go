@@ -409,7 +409,7 @@ func TestActivationOnlyStartAllocatesDistinctSessionIdentities(t *testing.T) {
 	generated := 0
 	root := &runtimeOpeningTestRoot{opening: &RuntimeOpening{generateSessionID: func() string {
 		generated++
-		return "chat-session-" + string(rune('0'+generated))
+		return "12345678-1234-1234-1234-1234567890a" + string(rune('0'+generated))
 	}}}
 	request := factorysessions.SessionStartRequest{ActivationOnly: true}
 	first, err := root.opening.sessionIDForStart(request)
@@ -480,5 +480,27 @@ func assertOpeningFactsDetachedAndCleared(t *testing.T, name string, opening *se
 		selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" ||
 		len(selected.SkippedBoardRecordings) != 0 || len(selected.ReplayMetadataWarnings) != 0 {
 		t.Fatal("empty opening retained stale facts")
+	}
+}
+
+func TestSessionIdentityAdmissionBeforeOpening(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"validation-factory", "../escape"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			opening := &RuntimeOpening{assembly: &legacyservice.Assembly{}}
+			_, err := opening.Start(t.Context(), factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, SessionID: id, InitNewFactory: true})
+			var invalid *factorysessions.DetachedRequestError
+			if !errors.As(err, &invalid) || invalid.Field != "sessionId" || !strings.Contains(invalid.Message, factorysessions.SessionIdentityForm) {
+				t.Fatalf("Start() = %v, want typed identity error", err)
+			}
+		})
+	}
+}
+func TestSessionIdentityGeneratedBeforeOpening(t *testing.T) {
+	t.Parallel()
+	opening := &RuntimeOpening{generateSessionID: func() string { return "invalid-generated" }}
+	if _, err := opening.sessionIDForStart(factorysessions.SessionStartRequest{ActivationOnly: true}); err == nil {
+		t.Fatal("accepted malformed generated identity")
 	}
 }

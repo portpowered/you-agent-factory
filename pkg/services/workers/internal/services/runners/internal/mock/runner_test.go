@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -102,4 +103,23 @@ type mockCommandEffect func(context.Context, workerprocess.CommandRequest) (work
 
 func (effect mockCommandEffect) Run(ctx context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	return effect(ctx, request)
+}
+
+func TestMockRunnerDeclaredBodyIsDetachedAndUnchanged(t *testing.T) {
+	t.Parallel()
+	body := json.RawMessage(`{ "decision":"ACCEPTED", "output":{"invalid":"business"} }`)
+	cfg := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeAccept, ResultBody: body}}}
+	r, err := New(Config{WorkersConfig: cfg}, Dependencies{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := string(body)
+	body[1] = 'x'
+	result, err := r.Execute(t.Context(), workers.RunnerExecutionRequest{RunnerID: Identity})
+	if err != nil || result.Content != want {
+		t.Fatalf("Execute = %#v, %v", result, err)
+	}
+	if result.Diagnostics.Metadata[workers.ProviderResponseMetadataCompletionEvidence] != "provider_response" {
+		t.Fatal("completion evidence missing")
+	}
 }

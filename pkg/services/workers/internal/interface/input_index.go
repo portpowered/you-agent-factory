@@ -129,6 +129,15 @@ func parseValidFixtureInputCases() []InputCase {
 func parseValidDocsExampleInputCases() []InputCase {
 	return []InputCase{
 		{
+			ID:             "docs-example-mock-workers-result-body",
+			Category:       categoryParseDocsExample,
+			Entrypoint:     entrypointParseMockWorkersConfig,
+			Outcome:        outcomeAccept,
+			Fixture:        "docs/examples/mock-workers-result-body.json",
+			Description:    "accept mock declares a successful JSON result without external execution",
+			ExpectedConfig: &MockWorkersConfigExpectation{MockWorkerCount: 1, MockWorkers: []MockWorkerExpectation{{RunType: string(MockWorkerRunTypeAccept)}}},
+		},
+		{
 			ID:          "docs-example-mock-workers",
 			Category:    categoryParseDocsExample,
 			Entrypoint:  entrypointParseMockWorkersConfig,

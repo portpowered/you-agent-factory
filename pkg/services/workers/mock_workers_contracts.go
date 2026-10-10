@@ -47,6 +47,7 @@ type MockWorkerConfig struct {
 	RejectConfig    *MockWorkerRejectConfig `json:"rejectConfig,omitempty"`
 	GateConfig      *MockWorkerGateConfig   `json:"gateConfig,omitempty"`
 	Usage           *MockWorkerUsageConfig  `json:"usage,omitempty"`
+	ResultBody      json.RawMessage         `json:"resultBody,omitempty"`
 }
 
 type MockWorkInputSelector struct {
@@ -135,6 +136,7 @@ func (config *MockWorkersConfig) Clone() *MockWorkersConfig {
 			clone.MockWorkers[index].GateConfig = &gate
 		}
 		clone.MockWorkers[index].Usage = worker.Usage.Clone()
+		clone.MockWorkers[index].ResultBody = append(json.RawMessage(nil), worker.ResultBody...)
 	}
 	return clone
 }
@@ -422,6 +424,15 @@ func (config *MockWorkersConfig) Validate() error {
 }
 
 func (config MockWorkerConfig) Validate() error {
+	if len(config.ResultBody) > 0 {
+		if config.RunType != MockWorkerRunTypeAccept {
+			return fmt.Errorf("resultBody is only allowed when runType is %q", MockWorkerRunTypeAccept)
+		}
+		body := bytes.TrimSpace(config.ResultBody)
+		if !json.Valid(body) || len(body) == 0 || body[0] != '{' {
+			return fmt.Errorf("resultBody must be a non-null JSON object")
+		}
+	}
 	if config.Usage != nil {
 		if err := config.Usage.Validate(); err != nil {
 			return fmt.Errorf("usage: %w", err)

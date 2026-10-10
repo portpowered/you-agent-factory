@@ -74,12 +74,20 @@ func WriteIncompleteDrainError(w io.Writer, err error) bool {
 // MapCurrentFactoryFailure classifies failures from the exact Current Factory
 // selection before they cross the public run-command error boundary.
 func MapCurrentFactoryFailure(err error) error {
+	var coded clidiag.CodedError
+	if errors.As(err, &coded) {
+		return err
+	}
 	return factoryruntimecli.MapCurrentFactoryFailure(err)
 }
 
 // MapInvocationFailure preserves authored invocation errors and classifies
 // pre-terminal failures that occurred before an InvocationResponse existed.
 func MapInvocationFailure(err error) error {
+	var coded clidiag.CodedError
+	if errors.As(err, &coded) {
+		return err
+	}
 	return factoryruntimecli.MapInvocationFailure(err)
 }
 

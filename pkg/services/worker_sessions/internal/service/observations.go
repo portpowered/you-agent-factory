@@ -488,6 +488,9 @@ func (r *registry) projectObservation(ctx context.Context, id string, factorySes
 }
 
 func (r *registry) completeObservation(ctx context.Context, projected workersessions.Observation) (workersessions.Observation, error) {
+	if r.publicationFor(r.workerAddress(projected.WorkerSessionID, projected.FactorySessionID)) != nil {
+		return projected, observationContextError(ctx)
+	}
 	if r.logs != nil && projected.State.Terminal() && projected.ProviderSessionAvailable {
 		_, transcriptErr := r.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: projected.WorkerSessionID, FactorySessionID: projected.FactorySessionID})
 		if transcriptErr == nil {
@@ -517,6 +520,9 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string, 
 	applyObservationTiming(&projected, session, metadata, r.clock)
 	projected.Failure = observedTerminalCause(session)
 	projected.TerminalCause = r.observationTerminalCause(ctx, r.workerAddress(id, factorySessionIDs...), projected.State)
+	if session.Terminal() && r.publicationFor(r.workerAddress(id, factorySessionIDs...)) != nil {
+		projected = r.withCapturedTerminalObservation(ctx, projected)
+	}
 	return projected, nil
 }
 

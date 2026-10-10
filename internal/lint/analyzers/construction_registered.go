@@ -47,6 +47,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 		pass.Reportf(pass.Files[0].Package, "construction-metadata: %s", err)
 		return findings, nil
 	}
+	registry = registeredUnlistedConstructors(pass, registry)
 	values := registeredConstructionValues(pass)
 	var blocking []violation
 	add := func(caller, callee ConstructionSymbol, constructor ConstructionConstructor, rule string, pos token.Pos) {
@@ -82,10 +83,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 			if fn, ok := decl.(*ast.FuncDecl); ok {
 				caller = registeredConstructionSymbol(pass.TypesInfo.Defs[fn.Name])
 			}
-			filename := unit + "/" + filepath.Base(pass.Fset.Position(file.Pos()).Filename)
-			approved := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
-				return a.Caller == caller && a.FilePath == filename && a.Kind == "focused-provider"
-			})
+			approved := registeredCompositionCaller(caller, caller)
 			recursive, debt := false, false
 			var indirect map[*ast.CallExpr]bool
 			if approved {
@@ -93,7 +91,8 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 				indirect = registeredIndirectProviderCalls(decl)
 			}
 			called := map[ast.Expr]bool{}
-			scanRegisteredCalls(pass, registry, values, getters, decl, caller, filename, called, indirect, recursive, debt, add)
+			markRegisteredWireProviders(pass, values, decl, caller, called)
+			scanRegisteredCalls(pass, registry, values, getters, decl, caller, called, indirect, recursive, debt, add)
 			scanRegisteredReferences(pass, registry, values, getters, decl, caller, called, add)
 		}
 	}
@@ -104,7 +103,7 @@ func runRegisteredConstruction(pass *analysis.Pass, registry ConstructionRegistr
 }
 
 func scanRegisteredCalls(pass *analysis.Pass, registry ConstructionRegistry, values registeredValues,
-	getters map[ConstructionSymbol]registeredGetterFact, decl ast.Decl, caller ConstructionSymbol, filename string,
+	getters map[ConstructionSymbol]registeredGetterFact, decl ast.Decl, caller ConstructionSymbol,
 	called map[ast.Expr]bool, indirect map[*ast.CallExpr]bool, recursive, debt bool,
 	add func(ConstructionSymbol, ConstructionSymbol, ConstructionConstructor, string, token.Pos),
 ) {
@@ -122,9 +121,7 @@ func scanRegisteredCalls(pass *analysis.Pass, registry ConstructionRegistry, val
 			if constructor.Symbol != callee || !registeredProhibitedKind(constructor, registry.Types) {
 				continue
 			}
-			allowed := slices.ContainsFunc(registry.Allowances, func(a ConstructionAllowance) bool {
-				return a.Caller == caller && a.Callee == callee && a.FilePath == filename
-			})
+			allowed := registeredCompositionCaller(caller, callee)
 			rule := registeredCallRule(allowed, indirect[call], recursive, debt)
 			if rule == "" {
 				continue

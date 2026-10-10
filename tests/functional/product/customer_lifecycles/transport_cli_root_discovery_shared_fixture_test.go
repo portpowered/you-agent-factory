@@ -279,7 +279,7 @@ func (router *rootDiscoveryEdgeRouter) browser(context.Context, string) error {
 }
 
 func (router *rootDiscoveryEdgeRouter) sessionID() string {
-	return fmt.Sprintf("root-discovery-session-%d", router.nextSessionID.Add(1))
+	return fmt.Sprintf("00000000-0000-4000-8000-%012x", router.nextSessionID.Add(1))
 }
 
 func (router *rootDiscoveryEdgeRouter) runtimeHost(factorysessions.RuntimeHostBinding) {

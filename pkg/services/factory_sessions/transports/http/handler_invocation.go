@@ -3,7 +3,9 @@ package http
 import (
 	"errors"
 	"net/http"
+	"net/url"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -15,6 +17,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
+	// The HTTP router retains escaped invocation selectors as one segment so
+	// malformed identities reach admission rather than a different route.
+	if decodedID, err := url.PathUnescape(string(sessionID)); err == nil {
+		sessionID = factoryapi.SessionID(decodedID)
+	}
 	decoded, err := decodeJSONWithDiagnostics[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
@@ -28,6 +35,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 
 	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req)
 	if err != nil {
+		var identityError *factorysessions.DetachedRequestError
+		if errors.As(err, &identityError) {
+			s.writeError(w, http.StatusBadRequest, identityError.Error(), "BAD_REQUEST")
+			return
+		}
 		var payloadSize *work.PayloadSizeError
 		if errors.As(err, &payloadSize) {
 			s.writeError(w, http.StatusBadRequest, payloadSize.Error(), "BAD_REQUEST")

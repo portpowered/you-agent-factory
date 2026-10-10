@@ -6,7 +6,6 @@ import (
 	"go/token"
 	"go/types"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -24,43 +23,11 @@ func validateRegisteredConstruction(pass *analysis.Pass, registry ConstructionRe
 	if err != nil {
 		return err
 	}
-	constructors, err := validateRegisteredConstructors(pass, registry, sets, classified)
+	_, err = validateRegisteredConstructors(pass, registry, sets, classified)
 	if err != nil {
 		return err
 	}
-	return validateRegisteredAllowances(pass, registry, constructors)
-}
-
-func validateRegisteredAllowance(pass *analysis.Pass, allowance ConstructionAllowance) error {
-	values := registeredConstructionValues(pass)
-	for _, file := range pass.Files {
-		filename := pass.Fset.Position(file.Pos()).Filename
-		if ast.IsGenerated(file) || strings.HasSuffix(filename, "_test.go") {
-			continue
-		}
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || registeredConstructionSymbol(pass.TypesInfo.Defs[fn.Name]) != allowance.Caller {
-				continue
-			}
-			unit, _ := unitKey(pass)
-			if fn.Body == nil || unit+"/"+filepath.Base(filename) != allowance.FilePath {
-				break
-			}
-			found := false
-			ast.Inspect(fn.Body, func(node ast.Node) bool {
-				if call, ok := node.(*ast.CallExpr); ok {
-					found = found || values.resolve(pass, call.Fun, map[types.Object]bool{}) == allowance.Callee
-				}
-				return true
-			})
-			if !found {
-				return fmt.Errorf("stale allowance callee %s", allowance.Callee)
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("stale allowance caller/path %s", allowance.Caller)
+	return nil
 }
 
 func registeredConstructorDeclaration(pkg *types.Package, symbol ConstructionSymbol) *types.Func {
@@ -186,34 +153,83 @@ func validateRegisteredConstructors(pass *analysis.Pass, registry ConstructionRe
 	return constructors, nil
 }
 
-func validateRegisteredAllowances(pass *analysis.Pass, registry ConstructionRegistry, constructors map[ConstructionSymbol]bool) error {
-	seen := map[string]bool{}
-	for _, a := range registry.Allowances {
-		key := a.FilePath + "|" + a.Caller.String() + "|" + a.Callee.String()
-		if seen[key] {
-			return fmt.Errorf("duplicate allowance %s", key)
+// A classified result stays governed when an owner adds another constructor.
+// Inspect compiler objects in the selected source, never dependency source or
+// a second repository inventory. Explicit signatures remain authoritative.
+func registeredUnlistedConstructors(pass *analysis.Pass, registry ConstructionRegistry) ConstructionRegistry {
+	registry.Constructors = slices.Clone(registry.Constructors)
+	seen := map[ConstructionSymbol]bool{}
+	for _, constructor := range registry.Constructors {
+		seen[constructor.Symbol] = true
+	}
+	for _, file := range pass.Files {
+		if ast.IsGenerated(file) || strings.HasSuffix(pass.Fset.Position(file.Pos()).Filename, "_test.go") {
+			continue
 		}
-		seen[key] = true
-		if invalidRegisteredAllowance(a, constructors) {
-			return fmt.Errorf("invalid exact allowance %s", key)
+		ast.Inspect(file, func(node ast.Node) bool {
+			id, ok := node.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			fn, ok := pass.TypesInfo.ObjectOf(id).(*types.Func)
+			if !ok || !serviceConstructorName(fn.Name()) {
+				return true
+			}
+			fn = fn.Origin()
+			symbol := registeredConstructionSymbol(fn)
+			if seen[symbol] {
+				return true
+			}
+			seen[symbol] = true
+			if constructor, ok := registeredResultConstructor(fn, registry); ok {
+				registry.Constructors = append(registry.Constructors, constructor)
+			}
+			return true
+		})
+	}
+	return registry
+}
+
+func registeredResultConstructor(fn *types.Func, registry ConstructionRegistry) (ConstructionConstructor, bool) {
+	constructor := ConstructionConstructor{Symbol: registeredConstructionSymbol(fn)}
+	enforced := map[string]bool{}
+	for _, set := range registry.CapabilitySets {
+		enforced[set.Name] = set.Mode == ConstructionEnforce
+	}
+	sig := fn.Type().(*types.Signature)
+	for i := 0; i < sig.Results().Len(); i++ {
+		if typ, ok := registeredClassifiedType(sig.Results().At(i).Type(), registry.Types); ok &&
+			(typ.Kind == ConstructionBehavior || typ.Kind == ConstructionEffect) {
+			if constructor.CapabilitySet == "" || enforced[typ.CapabilitySet] {
+				constructor.CapabilitySet = typ.CapabilitySet
+			}
+			constructor.Results = append(constructor.Results, typ.Symbol)
 		}
-		switch a.Kind {
-		case "focused-provider", "boundary-normalization", "leaf-effect", "scoped-view":
-		default:
-			return fmt.Errorf("invalid allowance kind %s", key)
+	}
+	for i := 0; i < sig.Params().Len(); i++ {
+		param := sig.Params().At(i)
+		if typ, ok := registeredClassifiedType(param.Type(), registry.Types); ok &&
+			(typ.Kind == ConstructionBehavior || typ.Kind == ConstructionEffect) {
+			constructor.RequiredParameters = append(constructor.RequiredParameters, ConstructionParameter{
+				Index: i, TypeExpr: types.TypeString(param.Type(), func(pkg *types.Package) string { return pkg.Path() }),
+			})
 		}
-		if a.Caller.ImportPath == pass.Pkg.Path() {
-			if err := validateRegisteredAllowance(pass, a); err != nil {
-				return err
+	}
+	return constructor, constructor.CapabilitySet != ""
+}
+
+func registeredClassifiedType(typ types.Type, classified []ConstructionType) (ConstructionType, bool) {
+	typ = types.Unalias(typ)
+	if pointer, ok := typ.(*types.Pointer); ok {
+		typ = types.Unalias(pointer.Elem())
+	}
+	if named, ok := typ.(*types.Named); ok {
+		symbol := registeredConstructionSymbol(named.Origin().Obj())
+		for _, entry := range classified {
+			if entry.Symbol == symbol {
+				return entry, true
 			}
 		}
 	}
-	return nil
-}
-
-func invalidRegisteredAllowance(a ConstructionAllowance, constructors map[ConstructionSymbol]bool) bool {
-	return !validRegisteredSymbol(a.Caller) || !validRegisteredSymbol(a.Callee) || !constructors[a.Callee] ||
-		a.FilePath == "." || path.IsAbs(a.FilePath) || path.Clean(a.FilePath) != a.FilePath ||
-		strings.ContainsAny(a.FilePath, "*?\\:") || strings.HasPrefix(a.FilePath, "../") ||
-		strings.TrimSpace(a.OwnerTask) == "" || strings.TrimSpace(a.Reason) == ""
+	return ConstructionType{}, false
 }

@@ -359,7 +359,7 @@ func TestEnsureDefaultCanonicalSessionIDOnlyAllocatesForNewDefault(t *testing.T)
 	if err := ensureDefaultCanonicalSessionID(request, "recording.json", nil); err != nil {
 		t.Fatalf("replay allocated a new identity: %v", err)
 	}
-	request.SessionID = "named-session"
+	request.SessionID = "12345678-1234-1234-1234-1234567890ab"
 	if err := ensureDefaultCanonicalSessionID(request, "", nil); err != nil {
 		t.Fatalf("named session required a default identity: %v", err)
 	}
@@ -370,7 +370,7 @@ func TestEnsureDefaultCanonicalSessionIDOnlyAllocatesForNewDefault(t *testing.T)
 	if err := ensureDefaultCanonicalSessionID(request, "", func() string { return "  " }); err == nil {
 		t.Fatal("default session accepted empty generated identity")
 	}
-	if err := ensureDefaultCanonicalSessionID(request, "", func() string { return "canonical-1" }); err != nil || request.RuntimeSelection.CanonicalSessionID != "canonical-1" {
+	if err := ensureDefaultCanonicalSessionID(request, "", func() string { return "12345678-1234-1234-1234-1234567890ac" }); err != nil || request.RuntimeSelection.CanonicalSessionID != "12345678-1234-1234-1234-1234567890ac" {
 		t.Fatalf("default canonical ID = %+v, error = %v", request.RuntimeSelection, err)
 	}
 	if err := ensureDefaultCanonicalSessionID(request, "", nil); err != nil {

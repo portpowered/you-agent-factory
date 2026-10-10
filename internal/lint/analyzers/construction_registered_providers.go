@@ -3,7 +3,62 @@ package analyzers
 import (
 	"go/ast"
 	"go/types"
+	"strings"
+
+	"golang.org/x/tools/go/analysis"
 )
+
+// Wire registers direct declarations as data for generated composition. A
+// similarly named local callable has no authority to retain constructors.
+func markRegisteredWireProviders(pass *analysis.Pass, values registeredValues, decl ast.Decl,
+	caller ConstructionSymbol, marked map[ast.Expr]bool,
+) {
+	ast.Inspect(decl, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		wire := values.resolve(pass, call.Fun, map[types.Object]bool{})
+		if wire.ImportPath != "github.com/google/wire" || wire.Receiver != "" ||
+			(wire.Name != "NewSet" && wire.Name != "Build") {
+			return true
+		}
+		boundary := caller
+		boundary.Name = "Provide"
+		for _, arg := range call.Args {
+			provider := values.resolve(pass, arg, map[types.Object]bool{})
+			if provider != (ConstructionSymbol{}) && registeredCompositionCaller(boundary, provider) {
+				markRegisteredCallee(marked, arg)
+			}
+		}
+		return true
+	})
+}
+
+// Composition belongs to free functions in the canonical Wire package or the
+// callee's owning service Wire package. Compare compiler declaration identities,
+// not filenames, import aliases, or a list of exempt callers. The body must also
+// pass the synchronous, acyclic, resolved-dispatch checks below.
+func registeredCompositionCaller(caller, callee ConstructionSymbol) bool {
+	providerName := serviceConstructorName(caller.Name) ||
+		(strings.HasPrefix(caller.Name, "provide") && serviceConstructorName("Provide"+strings.TrimPrefix(caller.Name, "provide")))
+	if caller.Receiver != "" || !providerName {
+		return false
+	}
+	prefix, remainder, ok := strings.Cut(caller.ImportPath, "/pkg/")
+	if !ok {
+		return false
+	}
+	if remainder == "wire" {
+		return true
+	}
+	parts := strings.Split(remainder, "/")
+	if len(parts) != 3 || parts[0] != "services" || parts[2] != "wire" {
+		return false
+	}
+	owner := prefix + "/pkg/services/" + parts[1]
+	return callee.ImportPath == owner || strings.HasPrefix(callee.ImportPath, owner+"/")
+}
 
 // Provider paths contain only compiled same-package bodies. Closure declarations
 // are not edges until invoked; recursion takes precedence over dispatch debt.

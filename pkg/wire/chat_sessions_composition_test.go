@@ -43,17 +43,11 @@ func TestProvideChatSessionsServiceConstructsAnIndependentServiceDirectly(t *tes
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
 
-	first, err := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
-	if err != nil {
-		t.Fatalf("provideChatSessionsService() error = %v", err)
-	}
+	first := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	if first == nil {
 		t.Fatal("provideChatSessionsService() = nil, want a constructed chat_sessions.Service")
 	}
-	second, err := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
-	if err != nil {
-		t.Fatalf("provideChatSessionsService() second call error = %v", err)
-	}
+	second := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 
 	ctx := context.Background()
 	created, err := first.CreateSession(ctx, chatsessions.CreateSessionRequest{
@@ -169,10 +163,7 @@ func TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonic
 		},
 	}
 
-	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions, logger)
-	if err != nil {
-		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
-	}
+	catalog := provideChatSessionsFactoryTargetCatalogService(operatorSettings, factoryDefinitions, logger)
 
 	path := filepath.Join(t.TempDir(), "config.json")
 	req := chatsessions.ResolveFactoryTargetCatalogRequest{OperatorSettingsPath: path}
@@ -268,10 +259,7 @@ func TestProvideChatSessionsFactoryTargetCatalogServicePreservesCancelledContext
 	logger := logging.NoopLogger{}
 	operatorSettings := newTestOperatorSettingsService(t, logger)
 
-	catalog, err := provideChatSessionsFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
-	if err != nil {
-		t.Fatalf("provideChatSessionsFactoryTargetCatalogService() error = %v", err)
-	}
+	catalog := provideChatSessionsFactoryTargetCatalogService(operatorSettings, catalogPaths, logger)
 
 	// No operator.json exists at this path, so profile resolution falls back
 	// to DefaultACPAgentProfile, whose default/allowed target is exactly
@@ -332,10 +320,7 @@ func newChatSessionsIdentityTestServices(t *testing.T) (chatsessions.Service, ev
 	if err != nil {
 		t.Fatalf("provideEventsService() error = %v", err)
 	}
-	chatSessionsService, err := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
-	if err != nil {
-		t.Fatalf("provideChatSessionsService() error = %v", err)
-	}
+	chatSessionsService := provideChatSessionsService(eventsService, logger, selectedTestTimeEdges(serviceedges.Edges{}).Clock)
 	return chatSessionsService, eventsService
 }
 
@@ -817,10 +802,7 @@ func TestChatSessionTurnFactsUseSelectedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := provideChatSessionsService(eventsService, logger, source)
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := provideChatSessionsService(eventsService, logger, source)
 	identity := chatsessions.RequestIdentity{Kind: chatsessions.RequestIdentityKindJSONRPCString, ConnectionID: "selected-clock", JSONRPCStringID: "create"}
 	created, err := service.CreateSession(t.Context(), chatsessions.CreateSessionRequest{RequestID: identity, WorkingRoot: "/workspace/project", InitialTarget: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/goal"}})
 	if err != nil {

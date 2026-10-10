@@ -23,6 +23,9 @@ func (r *Root) Invoke(ctx context.Context, request factorysessions.SessionInvoke
 		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
 	sessionID := strings.TrimSpace(request.SessionID)
+	if sessionID != "" && !factorysessions.SessionIdentity(sessionID).Valid() {
+		return factorysessions.InvocationResult{}, &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+	}
 	projection, err := r.GetFactorySession(ctx, sessionID)
 	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		return r.Assembly.Invoke(ctx, request)
@@ -38,6 +41,9 @@ func (r *Root) InvokeFactorySession(ctx context.Context, sessionID string, reque
 		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
 	sessionID = strings.TrimSpace(sessionID)
+	if !factorysessions.SessionIdentity(sessionID).Valid() {
+		return factorysessions.InvocationResult{}, &factorysessions.DetachedRequestError{Field: "sessionId", Message: "must be " + factorysessions.SessionIdentityForm}
+	}
 	projection, err := r.GetFactorySession(ctx, sessionID)
 	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		return r.Assembly.InvokeFactorySession(ctx, sessionID, request)
