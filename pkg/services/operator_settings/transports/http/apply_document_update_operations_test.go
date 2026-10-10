@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -14,6 +15,7 @@ func TestAdapter_ApplyDocumentUpdateInvokesFakeRootAndEncodesSuccess(t *testing.
 	configPath := "/home/operator/.you-agent-factory/config.json"
 	scopeID := "local-00000000-0000-4000-8000-000000000010"
 	nextModel := "gpt-5.2"
+	provider := " codex "
 	var invoked bool
 	fake := &rootFake{
 		applyDocumentUpdate: func(
@@ -27,6 +29,9 @@ func TestAdapter_ApplyDocumentUpdateInvokesFakeRootAndEncodesSuccess(t *testing.
 					configPath,
 					scopeID,
 				)
+			}
+			if request.ProviderModel.Provider == nil || *request.ProviderModel.Provider != "codex" {
+				t.Errorf("provider = %#v, want codex", request.ProviderModel.Provider)
 			}
 			if request.ProviderModel.Model == nil || *request.ProviderModel.Model != nextModel {
 				t.Fatalf("ApplyDocumentUpdateRequest.ProviderModel = %#v, want model %q", request.ProviderModel, nextModel)
@@ -48,8 +53,9 @@ func TestAdapter_ApplyDocumentUpdateInvokesFakeRootAndEncodesSuccess(t *testing.
 	adapter := NewAdapter(fake)
 
 	response, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{
-		Path:                 configPath,
-		ExpectedBackendScope: scopeID,
+		Path:                 " " + configPath + " ",
+		ExpectedBackendScope: " " + scopeID + " ",
+		Provider:             &provider,
 		Model:                &nextModel,
 	})
 	if !invoked {
@@ -122,6 +128,45 @@ func TestAdapter_ApplyDocumentUpdatePropagatesTypedRootFailures(t *testing.T) {
 			})
 			if err == nil || !errors.Is(err, test.err) {
 				t.Fatalf("ApplyDocumentUpdate error = %v, want %v", err, test.err)
+			}
+		})
+	}
+}
+
+func TestAdapter_ApplyDocumentUpdateForwardsOptionalFields(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name                    string
+		provider, model         *string
+		wantProvider, wantModel *string
+	}{
+		{"provider only", stringPointer(" codex "), nil, stringPointer("codex"), nil},
+		{"model only", nil, stringPointer(" gpt-5 "), nil, stringPointer("gpt-5")},
+		{"explicit clear", stringPointer(" "), stringPointer(" "), stringPointer(""), stringPointer("")},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			requests := make(chan operatorsettings.ApplyDocumentUpdateRequest, 1)
+			adapter := NewAdapter(&rootFake{
+				applyDocumentUpdate: func(request operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error) {
+					requests <- request
+					return operatorsettings.ApplyDocumentUpdateResult{}, nil
+				},
+			})
+			_, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{
+				Path: " /tmp/config.json ", ExpectedBackendScope: " scope ",
+				Provider: test.provider, Model: test.model,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := operatorsettings.ApplyDocumentUpdateRequest{
+				Path: "/tmp/config.json", ExpectedBackendScope: "scope",
+				ProviderModel: operatorsettings.DocumentProviderModelUpdate{Provider: test.wantProvider, Model: test.wantModel},
+			}
+			if got := <-requests; !reflect.DeepEqual(got, want) {
+				t.Fatalf("owner request = %#v, want %#v", got, want)
 			}
 		})
 	}
