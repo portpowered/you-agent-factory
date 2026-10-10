@@ -432,9 +432,10 @@ func emitContinueCLIError(config ContinueConfig, jsonOutput bool, err error) err
 }
 
 // LocalControlBoundary is the exact local Worker Sessions seam used by the
-// pause, resume, cancel, and terminate commands. Local placement never turns
-// a control into HTTP; production wiring supplies the already-composed root.
+// pause, resume, cancel, and terminate commands. Registry lookup selects stop
+// placement; the actual owner retains validation and mutation authority.
 type LocalControlBoundary interface {
+	Get(context.Context, workersessions.GetRequest) (workersessions.Session, error)
 	Pause(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
 	Resume(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
 	Cancel(context.Context, workersessions.ControlRequest) (workersessions.ControlResult, error)
@@ -554,32 +555,25 @@ func validControlAction(action workersessions.ControlAction) bool {
 	}
 }
 
-// controlLocal applies the control through the in-process Worker Sessions root
-// and, when that root does not own the addressed session, re-addresses the
-// exact same stable Worker Session ID to the configured factory server.
-//
-// The inspection commands (list, show, read, stream) are server-addressed only,
-// so every Worker Session an operator can observe is owned by that server while
-// the CLI process builds its own empty root per invocation. Resolving a control
-// solely against the local root therefore reported NOT_FOUND for every
-// observable session, including a RUNNING one, regardless of whether it had
-// published a Provider Session yet.
-//
-// This is deliberately the opposite direction from the remote path, which never
-// falls back to the local boundary: a remote answer is authoritative and must
-// not be masked by a different root. A local ErrSessionNotFound is not an
-// answer about the session at all -- it only reports that this process never
-// ran it -- so continuing to its owner resolves the same identity rather than
-// substituting a different one.
-//
-// Re-addressing may only replace the local answer when a factory server
-// actually answered. --server always defaults to the shared local URI, so an
-// address exists even when nothing is listening there; a direct-mode process
-// owns its own Worker Sessions, and an unknown identity is genuinely NOT_FOUND
-// rather than a transport failure. When the re-addressed request reaches no
-// server, the local owner's answer therefore stands.
+// controlLocal queries the unscoped registry before stop placement. Only registry
+// absence proves local nonownership; capture errors and mutation races do not.
+// Pause/resume retain their existing mutation-first routing. The selected host's
+// answer is authoritative, while an unreachable host preserves local not-found.
 func controlLocal(config ControlConfig, jsonOutput bool) error {
-	result, localErr := applyLocalControl(config)
+	var result workersessions.ControlResult
+	var localErr error
+	if config.Action == workersessions.ControlActionCancel || config.Action == workersessions.ControlActionTerminate {
+		_, localErr = config.Local.Get(config.Context, workersessions.GetRequest{ID: strings.TrimSpace(config.WorkerSessionID)})
+		if localErr == nil {
+			result, err := applyLocalControl(config)
+			if err != nil {
+				return emitControlCLIError(config, jsonOutput, mapControlServiceError(err))
+			}
+			return writeControlResult(config, jsonOutput, controlResultFromService(result))
+		}
+	} else {
+		result, localErr = applyLocalControl(config)
+	}
 	if localErr == nil {
 		return writeControlResult(config, jsonOutput, controlResultFromService(result))
 	}
@@ -736,6 +730,9 @@ func controlResultFromService(result workersessions.ControlResult) factoryapi.Wo
 }
 
 func mapControlServiceError(err error) error {
+	if ambiguous := ambiguityCLIError(err, ""); ambiguous != nil {
+		return ambiguous
+	}
 	if errors.Is(err, workersessions.ErrForceTerminationUnconfirmed) {
 		return newCLIError("WORKER_SESSION_CONTROL_FAILED", "force termination was not confirmed", err)
 	}

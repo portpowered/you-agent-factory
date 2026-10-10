@@ -160,7 +160,7 @@ func TestControlRemoteUsesExactActionRouteAndDoesNotFallback(t *testing.T) {
 			if err != nil {
 				t.Fatalf("remote control error = %v", err)
 			}
-			if local.calls != 0 {
+			if local.calls != 0 || local.getCalls != 0 {
 				t.Fatalf("remote control local calls = %d, want 0", local.calls)
 			}
 			var result factoryapi.WorkerSessionControlResponse
@@ -192,7 +192,7 @@ func TestControlRemoteFailureDoesNotFallbackAndMapsStableError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "control conflicts") {
 		t.Fatalf("remote control error = %v, want server conflict", err)
 	}
-	if local.calls != 0 {
+	if local.calls != 0 || local.getCalls != 0 {
 		t.Fatalf("remote failure local calls = %d, want 0", local.calls)
 	}
 	var payload struct {
@@ -229,7 +229,7 @@ func TestControlRemoteCancelFailureDoesNotFallbackOrReportApplied(t *testing.T) 
 	if err == nil || !strings.Contains(err.Error(), "could not apply the Worker Session control") {
 		t.Fatalf("remote cancel error = %v, want actionable server failure", err)
 	}
-	if local.calls != 0 {
+	if local.calls != 0 || local.getCalls != 0 {
 		t.Fatalf("remote cancel failure local calls = %d, want no fallback", local.calls)
 	}
 	var payload factoryapi.ErrorResponse
@@ -252,7 +252,7 @@ func TestControlLocalNotFoundReAddressesTheSameWorkerSessionIDToTheFactoryServer
 		workersessions.ControlActionPause, workersessions.ControlActionResume,
 	} {
 		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
-			local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+			local := &controlLocalFake{getErr: workersessions.ErrSessionNotFound, errs: map[workersessions.ControlAction]error{
 				action: workersessions.ErrSessionNotFound,
 			}}
 			var requestedPath string
@@ -278,8 +278,15 @@ func TestControlLocalNotFoundReAddressesTheSameWorkerSessionIDToTheFactoryServer
 			if err != nil {
 				t.Fatalf("control after local not-found error = %v; output=%q", err, output.String())
 			}
-			if local.calls != 1 || local.request.ID != "worker-1" {
-				t.Fatalf("local calls = %d request = %#v, want one local attempt for worker-1", local.calls, local.request)
+			wantCalls := 1
+			if action == workersessions.ControlActionCancel || action == workersessions.ControlActionTerminate {
+				wantCalls = 0
+				if local.getCalls != 1 || local.getRequest.ID != "worker-1" || local.getRequest.FactorySessionID != "" {
+					t.Fatalf("unscoped ownership lookup=%#v calls=%d", local.getRequest, local.getCalls)
+				}
+			}
+			if local.calls != wantCalls {
+				t.Fatalf("local mutation calls = %d, want %d for worker-1", local.calls, wantCalls)
 			}
 			wantPath := "/worker-sessions/worker-1/" + strings.ToLower(string(action))
 			if requestedPath != wantPath {
@@ -302,7 +309,7 @@ func TestControlLocalNotFoundReAddressesTheSameWorkerSessionIDToTheFactoryServer
 // re-address must still report the honest NOT_FOUND rather than inventing a
 // success.
 func TestControlLocalNotFoundWithoutAFactoryServerStillReportsNotFound(t *testing.T) {
-	local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+	local := &controlLocalFake{getErr: workersessions.ErrSessionNotFound, errs: map[workersessions.ControlAction]error{
 		workersessions.ControlActionCancel: workersessions.ErrSessionNotFound,
 	}}
 	var output bytes.Buffer
@@ -324,7 +331,7 @@ func TestControlLocalNotFoundKeepsNotFoundWhenTheDefaultServerIsUnreachable(t *t
 		workersessions.ControlActionPause, workersessions.ControlActionResume,
 	} {
 		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
-			local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+			local := &controlLocalFake{getErr: workersessions.ErrSessionNotFound, errs: map[workersessions.ControlAction]error{
 				action: workersessions.ErrSessionNotFound,
 			}}
 			var output bytes.Buffer
@@ -363,7 +370,7 @@ func TestControlLocalNotFoundReportsTheAnsweringServerRefusal(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			local := &controlLocalFake{errs: map[workersessions.ControlAction]error{
+			local := &controlLocalFake{getErr: workersessions.ErrSessionNotFound, errs: map[workersessions.ControlAction]error{
 				workersessions.ControlActionCancel: workersessions.ErrSessionNotFound,
 			}}
 			serverCalls := 0
@@ -427,11 +434,20 @@ func TestControlLocalConflictIsNotReAddressedToTheFactoryServer(t *testing.T) {
 }
 
 type controlLocalFake struct {
-	results map[workersessions.ControlAction]workersessions.ControlResult
-	errs    map[workersessions.ControlAction]error
-	action  workersessions.ControlAction
-	request workersessions.ControlRequest
-	calls   int
+	getErr     error
+	getRequest workersessions.GetRequest
+	getCalls   int
+	results    map[workersessions.ControlAction]workersessions.ControlResult
+	errs       map[workersessions.ControlAction]error
+	action     workersessions.ControlAction
+	request    workersessions.ControlRequest
+	calls      int
+}
+
+func (f *controlLocalFake) Get(_ context.Context, request workersessions.GetRequest) (workersessions.Session, error) {
+	f.getCalls++
+	f.getRequest = request
+	return workersessions.Session{ID: request.ID}, f.getErr
 }
 
 func (f *controlLocalFake) control(action workersessions.ControlAction, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
@@ -517,5 +533,41 @@ func assertCLIErrorCode(t *testing.T, err error, want string) {
 	}
 	if cliErr.Code != want {
 		t.Fatalf("CLI error code = %q, want %q", cliErr.Code, want)
+	}
+}
+
+func TestControlStopOwnershipFailuresNeverForward(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name             string
+		lookup, mutation error
+		code             string
+	}{
+		{"invalid registry query", workersessions.ErrInvalidSessionID, nil, "WORKER_SESSION_CONTROL_INVALID"},
+		{"ambiguous ownership", &workersessions.AmbiguousAddressError{}, nil, "WORKER_SESSION_AMBIGUOUS"},
+		{"projection unavailable", workersessions.ErrObservationProjectionUnavailable, nil, "WORKER_SESSION_CONTROL_FAILED"},
+		{"query unavailable", errors.New("registry unavailable"), nil, "WORKER_SESSION_CONTROL_FAILED"},
+		{"query canceled", context.Canceled, nil, "WORKER_SESSION_CONTROL_INTERRUPTED"},
+		{"ownership race", nil, workersessions.ErrSessionNotFound, "NOT_FOUND"},
+		{"stale attempt", nil, workersessions.ErrProviderSessionAssociationAttemptMismatch, "WORKER_SESSION_CONTROL_CONFLICT"},
+		{"capture failure", nil, recordings.ErrWorkerRecordingPersistence, "WORKER_SESSION_CONTROL_FAILED"},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			for _, action := range []workersessions.ControlAction{workersessions.ControlActionCancel, workersessions.ControlActionTerminate} {
+				protocol := &invokeProtocolStub{err: errors.New("unexpected forwarding")}
+				local := &controlLocalFake{getErr: cell.lookup, errs: map[workersessions.ControlAction]error{action: cell.mutation}}
+				var output bytes.Buffer
+				err := NewControl(protocol, local)(ControlConfig{Context: t.Context(), Server: "http://owner", WorkerSessionID: "worker-1", Action: action, OutputFormat: "json", Output: &output})
+				assertCLIErrorCode(t, err, cell.code)
+				wantMutations := 0
+				if cell.lookup == nil {
+					wantMutations = 1
+				}
+				if protocol.requestURL != "" || local.calls != wantMutations || local.getCalls != 1 {
+					t.Fatalf("query/mutation/remote=%d/%d/%q", local.getCalls, local.calls, protocol.requestURL)
+				}
+			}
+		})
 	}
 }
