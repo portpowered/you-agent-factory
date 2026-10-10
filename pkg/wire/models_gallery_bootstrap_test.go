@@ -182,3 +182,85 @@ func TestDownloadLocalAIBinaryCancellationDoesNotUseSelectedClient(t *testing.T)
 		t.Fatalf("cancelled download = %q, %v", path, err)
 	}
 }
+
+// The downloader owns release validation and atomic cache publication. Each
+// scenario controls only HTTP responses and its cache; no model host is started.
+func TestDownloadLocalAIBinaryRejectsUnsafeReleaseAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		name string
+		path string
+		body string
+		want string
+	}{
+		{"escaping_release_tag", "/latest", `{"tag_name":"../outside"}`, "invalid LocalAI release tag"},
+		{"missing_checksum_asset", "/latest", `{"tag_name":"v1","assets":[{"name":"local-ai-v1-linux-amd64","browser_download_url":"https://selected.invalid/binary","size":4}]}`, "lacks a bounded Linux amd64 binary or checksums asset"},
+		{"invalid_checksum", "/checksums", strings.Repeat("z", 64) + "  local-ai-v1-linux-amd64\n", "lack SHA256"},
+		{"truncated_binary", "/binary", "tes", "size or SHA256"},
+		{"interrupted_binary", "/binary", "", "write LocalAI binary"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			cache := t.TempDir()
+			customerPath := filepath.Join(cache, "customer-notes.txt")
+			if err := os.WriteFile(customerPath, []byte("keep customer bytes"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			readFailure := errors.New("selected binary stream interrupted")
+			failed := true
+			client := localAISelectedHTTPClient{do: func(request *http.Request) (*http.Response, error) {
+				response := localAISelectedReleaseResponse(request.URL.Path)
+				if request.URL.Path == "/binary" {
+					response.Body = io.NopCloser(strings.NewReader("test"))
+				}
+				if failed && request.URL.Path == scenario.path {
+					response.Body = io.NopCloser(strings.NewReader(scenario.body))
+					if scenario.name == "interrupted_binary" {
+						response.Body = io.NopCloser(io.MultiReader(strings.NewReader("te"), localAIFailedBody{err: readFailure}))
+					}
+				}
+				return response, nil
+			}}
+			path, err := downloadLocalAIBinary(t.Context(), client, cache, "https://selected.invalid/latest")
+			if path != "" || err == nil || !strings.Contains(err.Error(), scenario.want) {
+				t.Fatalf("rejected release = %q, %v, want %q", path, err, scenario.want)
+			}
+			if scenario.name == "interrupted_binary" && !errors.Is(err, readFailure) {
+				t.Fatalf("binary read failure lost cause: %v", err)
+			}
+			installed := filepath.Join(cache, "v1", "local-ai-v1-linux-amd64")
+			if _, err := os.Stat(installed); !os.IsNotExist(err) {
+				t.Fatalf("rejected binary was published: %v", err)
+			}
+			assertLocalAIStagingRemoved(t, cache)
+			assertLocalAIFileContent(t, customerPath, "keep customer bytes")
+			failed = false
+			path, err = downloadLocalAIBinary(t.Context(), client, cache, "https://selected.invalid/latest")
+			if err != nil || path != installed {
+				t.Fatalf("healthy retry = %q, %v, want %q", path, err, installed)
+			}
+			assertLocalAIFileContent(t, path, "test")
+			assertLocalAIFileContent(t, customerPath, "keep customer bytes")
+			assertLocalAIStagingRemoved(t, cache)
+		})
+	}
+}
+
+type localAIFailedBody struct{ err error }
+
+func (body localAIFailedBody) Read([]byte) (int, error) { return 0, body.err }
+
+func assertLocalAIFileContent(t *testing.T, path, want string) {
+	t.Helper()
+	if content, err := os.ReadFile(path); err != nil || string(content) != want {
+		t.Fatalf("file %q content = %q, %v, want %q", path, content, err, want)
+	}
+}
+
+func assertLocalAIStagingRemoved(t *testing.T, cache string) {
+	t.Helper()
+	staged, err := filepath.Glob(filepath.Join(cache, "v1", ".local-ai-*"))
+	if err != nil || len(staged) != 0 {
+		t.Fatalf("staged binary files = %v, %v, want none", staged, err)
+	}
+}
