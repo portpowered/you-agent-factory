@@ -17,7 +17,7 @@ flowchart TB
     s_services_factory_sessions["factory sessions<br/>60058 LOC · 3 subservices"]
   end
   subgraph execution["Execution"]
-    s_services_models["models<br/>38584 LOC · 5 subservices"]
+    s_services_models["models<br/>38385 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>1283 LOC · 0 subservices"]
     s_services_providers["providers<br/>15321 LOC · 3 subservices"]
     s_services_worker_sessions["worker sessions<br/>26443 LOC · 0 subservices"]
@@ -130,7 +130,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`factory_runtime`](services/factory_runtime.md) | (subservice) checkpoint recovery (982 LOC)<br/>(subservice) dispatch planning (857 LOC)<br/>(subservice) instance host (714 LOC)<br/>(subservice) orchestration (34546 LOC) |
 | [`factory_sessions`](services/factory_sessions.md) | (subservice) durable execution (94 LOC)<br/>(subservice) identity (142 LOC)<br/>(subservice) response stream (402 LOC) |
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (439 LOC)<br/>(subservice) live view projection (502 LOC)<br/>(subservice) response event presentation (329 LOC) |
-| [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
+| [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3342 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (703 LOC)<br/>(subservice) resolution (298 LOC) |
 | [`provider_sessions`](services/provider_sessions.md) | — |
 | [`providers`](services/providers.md) | (subservice) acp (2751 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5906 LOC) |
