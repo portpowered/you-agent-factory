@@ -1693,6 +1693,14 @@
         {
           "test": "tests/functional/work/admission/recovery_manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "rest"
         }
       ]
     },

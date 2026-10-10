@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +18,62 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
+
+// M2: revisiting the same produced Work recomputes lineage from its original
+// admission, rather than making its last physical attempt the requester.
+func assertRequesterProducedRedispatch(t *testing.T, fixture *invokeContinuePackageFixture, lead, lane *invokeContinueScenario, ctx context.Context, source api.WorkerSessionObservation, originalEnv map[string]string) {
+	t.Helper()
+	runner := lane.providerRunner.(*t7GatedProviderRunner)
+	previousEnv := requesterEnvironment(runner.Requests()[0].Env)
+	previous := requesterObservation(t, fixture, lane, ctx, previousEnv["YOU_WORKER_SESSION_ID"])
+	sourceBefore := requesterObservation(t, fixture, lane, ctx, source.WorkerSessionId)
+	producer := requesterObservation(t, fixture, lead, ctx, source.Requester.WorkerSessionId)
+	runner.reset() // The direct continuation has joined before the next visit.
+	workURL := support.SessionWorkURL(fixture.baseURL, *source.Correlation.FactorySessionId, "/work/"+*source.Correlation.WorkId)
+	status, body := t7HTTP(t, ctx, http.MethodPost, workURL+"/move", map[string]any{"stateName": "init", "requestId": source.WorkerSessionId + "-revisit"})
+	if status != http.StatusOK {
+		t.Fatalf("produced Work revisit: %d %s", status, body)
+	}
+	t19AwaitSignal(t, ctx, runner.started, "produced Work redispatched")
+	environment := requesterEnvironment(runner.Requests()[0].Env)
+	id := environment["YOU_WORKER_SESSION_ID"]
+	if id == source.WorkerSessionId || id == previous.WorkerSessionId {
+		t.Fatal("Work revisit reused a prior physical identity")
+	}
+	current := requesterObservation(t, fixture, lane, ctx, id)
+	if current.State != "RUNNING" || current.AttemptId == source.AttemptId {
+		t.Fatal("Work revisit did not admit a new running dispatch/attempt")
+	}
+	assertRequesterCopiedMetadata(t, source, current)
+	assertRequesterFactoryListed(t, fixture, lane, ctx, *source.Correlation.WorkId, *source.Correlation.FactorySessionId, current)
+	for _, prior := range []map[string]string{originalEnv, previousEnv} {
+		assertRequesterSuccessorEnvironment(t, environment, id, producer.WorkerSessionId, prior["YOU_WORKER_SESSION_TOKEN"])
+	}
+	assertRequesterEndpoint(t, environment, fixture.baseURL)
+	for _, key := range []string{"YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID"} {
+		if environment[key] != originalEnv[key] {
+			t.Fatalf("Work revisit changed %s", key)
+		}
+	}
+	assertRequesterRefusal(t, fixture, lane, ctx, "redispatch-source", source.WorkerSessionId, originalEnv["YOU_WORKER_SESSION_TOKEN"])
+	assertRequesterRefusal(t, fixture, lane, ctx, "redispatch-direct-head", previous.WorkerSessionId, previousEnv["YOU_WORKER_SESSION_TOKEN"])
+	if !reflect.DeepEqual(sourceBefore, requesterObservation(t, fixture, lane, ctx, source.WorkerSessionId)) {
+		t.Fatal("Work revisit mutated its original physical source or continuation head")
+	}
+	if !reflect.DeepEqual(previous, requesterObservation(t, fixture, lane, ctx, previous.WorkerSessionId)) ||
+		!reflect.DeepEqual(producer, requesterObservation(t, fixture, lead, ctx, producer.WorkerSessionId)) || lead.providerRunner.CallCount() != 1 || runner.CallCount() != 1 {
+		t.Fatal("Work revisit mutated the direct chain/producer or launched duplicate execution")
+	}
+	t7ReleaseAndJoin(t, ctx, runner)()
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, lane.homeDirectory, lane.workingDirectory, id, "requester-lineage-thread")
+	_, err := support.WaitForObservation(30*time.Second, func() (api.Work, error) {
+		return support.GetJSON[api.Work](t, workURL), nil
+	}, func(item api.Work) bool { return support.WorkItemCustomerLocation(item) == "task:done" })
+	if err != nil {
+		t.Fatalf("revisited Work did not complete: %v", err)
+	}
+	assertRequesterDurableTokenPrivacy(t, fixture, ctx, id, environment["YOU_WORKER_SESSION_TOKEN"])
+}
 
 // The public CLI forwards credentials learned only at the controlled native
 // provider edge. The running source and the child own independent routes and

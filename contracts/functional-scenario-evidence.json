@@ -259,7 +259,8 @@
         "cli/you.worker-sessions.invoke",
         "cli/you.worker-sessions.list",
         "cli/you.worker-sessions.read",
-        "cli/you.worker-sessions.show"
+        "cli/you.worker-sessions.show",
+        "rest/moveWorkBySessionId"
       ]
     },
     {
@@ -269,7 +270,8 @@
         "cli/you.worker-sessions.invoke",
         "cli/you.worker-sessions.list",
         "cli/you.worker-sessions.read",
-        "cli/you.worker-sessions.show"
+        "cli/you.worker-sessions.show",
+        "rest/moveWorkBySessionId"
       ]
     },
     {

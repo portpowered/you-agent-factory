@@ -674,13 +674,13 @@ func assertActiveHeadRefusal(t *testing.T, started invokeContinueStartedProcess,
 // controlled command edge, independently of the producer's terminal lifetime.
 func TestRequesterFactoryProducingDispatch(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "rest/moveWorkBySessionId")
 	runRequesterFactoryProducingDispatch(t, false)
 }
 
 func TestRequesterFactoryGeneratedBatch(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "rest/moveWorkBySessionId")
 	runRequesterFactoryProducingDispatch(t, true)
 }
 
@@ -712,7 +712,10 @@ func runRequesterFactoryProducingDispatch(t *testing.T, batch bool) {
 	t19AwaitSignal(t, ctx, runner.started, "produced lane started")
 
 	assertRequesterProducedLineage(t, fixture, lead, lane, ctx, opened.Session.Id, *submitted.WorkId)
+	environment := requesterEnvironment(runner.Requests()[0].Env)
+	source := requesterObservation(t, fixture, lane, ctx, environment["YOU_WORKER_SESSION_ID"])
 	assertRequesterProducedContinuation(t, fixture, lead, lane, ctx, opened.Session.Id)
+	assertRequesterProducedRedispatch(t, fixture, lead, lane, ctx, source, environment)
 }
 
 // The batch producer completes its seed without also propagating a task.
