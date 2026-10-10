@@ -75,6 +75,120 @@ func Provide(peer sessions.Service, logger *zap.Logger) *transport.Handler {
 		root+"/internal/service", root+"/wire", root+"/transports/http", module+"/pkg/services/new_caller", module+"/pkg/wire")
 }
 
+func TestConstructionWorkRootProductionPolicy(t *testing.T) {
+	useFixtures(t)
+	const module = "github.com/portpowered/infinite-you"
+	modulePrefix = module + "/"
+	const root = module + "/pkg/services/work"
+	const private = root + "/internal"
+	params := "runtimes work.RuntimeResolver, read work.SubmittedFileReader, inspect work.SubmittedFilePathInspector, staging work.ContentStagingService, materializer work.ContentMaterializer, state stateaccess.Service, preparation work.RequestPreparationService, invocation work.InvocationInputPreparation"
+	args := "runtimes, read, inspect, staging, materializer, state, preparation, invocation"
+	imports := fmt.Sprintf("import work %q\nimport stateaccess %q\n", root, private+"/services/state_access")
+	files := map[string]string{
+		root + "/contract.go": `package work
+type Service interface { Submit(string) }
+type FileSubmissionService interface { Service }
+type Runtime interface { Submit(string) }
+type RuntimeResolver interface { Resolve(string) Runtime }
+type SubmittedFileReader func(string) ([]byte, error)
+type SubmittedFilePathInspector func(string) (any, error)
+type ContentStagingService interface { Stage() }
+type ContentMaterializer interface { Materialize() }
+type RequestPreparationService interface { Prepare() }
+type InvocationInputPreparation interface { PrepareInput() }
+`,
+		private + "/services/state_access/contract.go": "package state_access\ntype Service interface { Submit() }\n",
+		private + "/service.go": "package internal\n" + imports + `
+type applicationService struct { runtimes work.RuntimeResolver; read work.SubmittedFileReader }
+func NewService(` + params + `) work.FileSubmissionService {
+ if read == nil { return nil } // want "required-dependency-guard:.*NewService.*NewService"
+ return &applicationService{runtimes: runtimes, read: read}
+}
+func (s *applicationService) Submit(path string) {
+ runtime := s.runtimes.Resolve(path)
+ if runtime == nil { return } // Selected runtime absence is lawful.
+ submitted(path, s.read)
+ runtime.Submit(path)
+}
+func submitted(path string, read work.SubmittedFileReader) {
+ if read == nil { return } // want "required-dependency-guard:.*submitted.*NewService"
+ _, _ = read(path)
+}
+func PublicSubmit(path string, read work.SubmittedFileReader) {
+ if read == nil { return } // Separate public boundary validation is lawful.
+ _, _ = read(path)
+}
+func Operation(` + params + `) { NewService(` + args + `) } // want "registered-construction:.*Operation.*internal.NewService"
+`,
+		root + "/wire/provider.go": "package wire\n" + imports + fmt.Sprintf("import service %q\n", private) +
+			"type StateAccess = stateaccess.Service\n" +
+			"func NewRuntimeService(" + strings.ReplaceAll(params, "stateaccess.Service", "StateAccess") + ") work.Service { return service.NewService(" + args + ") }\n",
+		module + "/pkg/services/new_work_caller/caller.go": "package new_work_caller\n" +
+			fmt.Sprintf("import work %q\n", root) + `
+func NewUnlisted(peer work.Service) work.Service { return peer }
+func Operation(peer work.Service) { NewUnlisted(peer) } // want "registered-construction:.*Operation.*NewUnlisted"
+`,
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(RepositoryConstructionRegistry()),
+		private, root+"/wire", module+"/pkg/services/new_work_caller")
+}
+
+func TestConstructionRuntimeEnablementProductionPolicy(t *testing.T) {
+	useFixtures(t)
+	const module = "github.com/portpowered/infinite-you"
+	modulePrefix = module + "/"
+	const root = module + "/pkg/services/factory_runtime"
+	const scheduler = root + "/internal/services/orchestration/scheduler"
+	const subsystems = root + "/internal/services/orchestration/subsystems"
+	imports := fmt.Sprintf(`import "time"
+import logging %q
+import definitions %q
+import state %q
+import scheduler %q
+`, module+"/pkg/platform/logging", module+"/pkg/services/factory_definitions", root+"/internal/services/orchestration/state", scheduler)
+	files := map[string]string{
+		module + "/pkg/platform/logging/logger.go":               "package logging\ntype Logger interface { Info(string) }\n",
+		module + "/pkg/services/factory_definitions/contract.go": "package factory_definitions\ntype RuntimeMode string\ntype RuntimeDefinitionLookup interface { Lookup() }\n",
+		root + "/internal/services/orchestration/state/net.go":   "package state\ntype Net struct{}\n",
+		scheduler + "/enablement.go": `package scheduler
+type Enablement interface { Evaluate() }
+type EnablementEvaluator struct{}
+func NewEnablementEvaluator() *EnablementEvaluator { return &EnablementEvaluator{} }
+func (*EnablementEvaluator) Evaluate() {}
+func Operation() { NewEnablementEvaluator() } // want "registered-construction:.*Operation.*NewEnablementEvaluator"
+`,
+		subsystems + "/termination.go": "package subsystems\n" + imports + `
+type TerminationCheckSubsystem struct { state *state.Net; logger logging.Logger; now func() time.Time; evaluator scheduler.Enablement }
+func NewTerminationCheckWithRuntime(n *state.Net, logger logging.Logger, mode definitions.RuntimeMode, config definitions.RuntimeDefinitionLookup, now func() time.Time, evaluator scheduler.Enablement) *TerminationCheckSubsystem {
+ if mode == "" { mode = "batch" }
+ if now == nil { now = time.Now } // want "required-dependency-guard:.*NewTerminationCheckWithRuntime.*NewTerminationCheckWithRuntime"
+ if evaluator == nil { return nil } // want "required-dependency-guard:.*NewTerminationCheckWithRuntime.*NewTerminationCheckWithRuntime"
+ return &TerminationCheckSubsystem{state: n, logger: logger, now: now, evaluator: evaluator}
+}
+func (s *TerminationCheckSubsystem) Execute() {
+ if s.state == nil { return } // Selected topology remains scoped state.
+ if s.evaluator != nil { s.evaluator.Evaluate() } // want "required-dependency-guard:.*Execute.*NewTerminationCheckWithRuntime"
+}
+func Allocate(n *state.Net, logger logging.Logger, mode definitions.RuntimeMode, config definitions.RuntimeDefinitionLookup, now func() time.Time, evaluator scheduler.Enablement) {
+ NewTerminationCheckWithRuntime(n, logger, mode, config, now, evaluator)
+}
+`,
+		root + "/wire/provider.go": "package wire\n" + fmt.Sprintf("import scheduler %q\n", scheduler) +
+			"func NewEnablement() scheduler.Enablement { return scheduler.NewEnablementEvaluator() }\n",
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(RepositoryConstructionRegistry()), scheduler, subsystems, root+"/wire")
+}
+
 func registeredFixtureRegistry(mode ConstructionMode) ConstructionRegistry {
 	const owner = "m/pkg/registeredowner"
 	service := ConstructionSymbol{ImportPath: owner, Name: "Service"}

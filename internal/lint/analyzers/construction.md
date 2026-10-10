@@ -46,7 +46,9 @@ checker increment does not prove repository coverage. The repository set current
 classifies Provider Sessions' public Service, private inspectionService and HTTP
 Adapter/Handler. Its explicit New/NewService inputs require the captured reader;
 NewAdapter requires the root; NewHandler requires the adapter and Zap logger.
-Adding this set does not classify the remaining repository owners.
+It also classifies the delivered Work root and Runtime enablement boundaries
+described below. Other owner, effect and transport classifications remain
+incomplete; this set is not a repository-coverage claim.
 
 ## Bounded typed rules
 
@@ -157,25 +159,28 @@ supplies them, with `provideWorkSubmittedFileReader` selecting the host override
 or `os.ReadFile`. The runtime returned by `ResolveWorkRuntime` may legitimately
 be unavailable for a session; its resource/domain absence check must remain.
 
-The stored reader still reaches the `readFile == nil` check in `submitFile`.
-That helper is shared with public `SubmitFile`, whose caller validation must
-remain. Same-package required provenance does not become optional because a
-helper also has a public caller. `TestConstructionRequiredReaderThroughSharedValidator`
-rejects this shared check while accepting separate public validation, direct
-reader use and selected-resource absence. Its controlled metadata is analyzer
-evidence only, not production-registry or plugin coverage for Work. The smallest
-T05 delta separates public validation from the completed reader path. T29 cannot
-suppress it, classify it as scoped state or edit production in this lane.
+PR #3160 (merge `a7eff522072cdbac99e6dfb8eac601558cf5035a`) moved reader
+validation into public `SubmitFile`; the constructed `SubmitFileForSession`
+path uses `submitFile` without checking its required reader. Work's public
+`Service`/`FileSubmissionService` and private `applicationService` are behavior.
+Exact `internal.NewService` and `wire.NewRuntimeService` metadata require all
+eight completed inputs, including the named filesystem functions and private
+state-access interface. Returned session runtimes remain selected resources;
+their absence is legitimate. Work's other private/effect/transport roles still
+need source-audited classification. The production-policy typed and smoke
+fixtures reject reintroduced reader guards through the shared helper while
+accepting separate public validation and selected-runtime absence.
 
-The current Runtime termination owner also remains nonterminal:
-`subsystems.NewTerminationCheckWithRuntime` defaults a nil `now` to `time.Now`
-and constructs `scheduler.NewEnablementEvaluator`. The active `buildRuntimeSubsystems`
-caller supplies `cfg.clock.Now`; that caller does not remove the fallback or
-nested construction. `NewTerminationCheck` is a compatibility wrapper selecting
-`time.Now`, with no handwritten production caller found. T15/T23 must supply
-the completed evaluator through focused composition and settle wrapper retirement.
-The mode default and finite-runtime domain checks remain lawful. These findings
-block terminal inventory and repository enablement; no allowance follows.
+PR #3162 (merge `390b4ebb71e6142005a2e2a8e69ccebda4a91fc1`) injects the
+completed `scheduler.Enablement` into Runtime termination and retires
+`NewTerminationCheck`. `Enablement` and `EnablementEvaluator` are reusable
+behavior; `factory_runtime/wire.NewRuntimeFactory` selects the evaluator once.
+`TerminationCheckSubsystem` retains per-runtime topology and mode and is scoped
+state. Its explicit constructor requires logger, time function and evaluator,
+so their constructor/storage guards remain rejected without prohibiting scoped
+allocation. Empty mode, missing topology, snapshot/marking/token/resource
+absence remain domain checks. The typed and smoke fixtures protect this
+distinction; other Runtime roles remain unaudited and unclassified.
 
 The Provider Sessions smoke extension uses the unchanged full production
 registry. Both tag configurations add same-owner and new cross-owner construction,

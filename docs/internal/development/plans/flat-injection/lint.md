@@ -64,7 +64,8 @@ logger signatures. It preserves Chat/Events enforcement and adds no allowance.
 Its production-registry smoke controls cover same-owner and a new cross-owner
 caller, captured-reader/logger guards and getter calls/escapes in both tag modes.
 This is partial classification, not repository-wide PASS or the complete S1-S9
-witness. Other owners, Platform effects and transport roles remain unclassified.
+witness. Work root and Runtime enablement classifications are described below;
+other owners, Platform effects and transport roles remain incompletely classified.
 
 PR #3132 removed Provider Sessions' named requiredness findings. PR #3133 removed
 the Settings root findings; PR #3137 removed the private document and Providers
@@ -84,26 +85,30 @@ still retain existing unresolved diagnostics; unsupported identity is unproved,
 not lawful. No analysis limit permits an allowance or exemption.
 
 Work PR #3152 (merge `fe39a4375b053882fe4875ea95066b777beb92f4`) removes
-the named applicationService receiver/resolver and direct submission reader
-guards. NewService stores both inputs directly; canonical provideWorkService
-supplies them and provideWorkSubmittedFileReader selects the host override or
-os.ReadFile. However, SubmitFileForSession still forwards its required reader
-to submitFile, which checks readFile == nil. Public SubmitFile shares that
-helper and must preserve caller validation. This remains FAIL/BLOCKED for a
-smallest T05 delta separating public validation from the completed reader path.
-The controlled typed TestConstructionRequiredReaderThroughSharedValidator proves
-the helper-provenance distinction, not production-registry/plugin coverage or
-runtime behavior. Preserve the separate nil runtime returned by ResolveWorkRuntime,
-read/parse/submit errors and request/domain checks.
+the named root receiver/resolver guards. PR #3160 (merge
+`a7eff522072cdbac99e6dfb8eac601558cf5035a`) subsequently moved reader
+validation into public SubmitFile. The shared helper now directly invokes its
+reader. Exact internal.NewService/wire.NewRuntimeService metadata require all
+eight completed inputs; Service/FileSubmissionService and applicationService
+are behavior. Production-registry typed and maintained smoke controls reject
+reintroduced constructor/helper reader guards, same-owner and new-service
+classified-result construction, and accept separate public validation plus
+absent selected runtimes. Other Work roles still require source audit. This is
+static evidence only; read/parse/submit behavior remains runtime-owned.
 
-Runtime's active buildRuntimeSubsystems still calls NewTerminationCheckWithRuntime,
-which defaults nil now to time.Now and constructs scheduler.NewEnablementEvaluator.
-Its supplied cfg.clock.Now does not retire either prohibited path. The compatibility
-NewTerminationCheck wrapper selects time.Now and has no handwritten production
-caller found. This remains FAIL/BLOCKED for T15/T23 to inject the completed
-evaluator and settle wrapper retirement; empty-mode configuration defaults and
-finite-runtime domain checks remain valid. See the exact superseding inventory
-rows. T29 cannot repair these production owners or introduce an allowance.
+PR #3162 (merge `390b4ebb71e6142005a2e2a8e69ccebda4a91fc1`) removed Runtime's
+nil-now fallback and compatibility NewTerminationCheck and injected enablement
+through buildRuntimeSubsystems. Enablement/EnablementEvaluator are reusable
+behavior selected once by factory_runtime/wire.NewRuntimeFactory.
+TerminationCheckSubsystem retains scoped topology/mode; its constructor
+explicitly requires logger, now and enablement. Typed and maintained smoke
+controls reject evaluator construction outside composition and required
+constructor/storage guards while accepting scoped allocation, absent topology
+and empty-mode defaults. This does not classify all Runtime roles or close full
+S1-S9, inventory, plugin or independent gates. Function-valued clock origins are
+explicit constructor metadata here; arbitrary callables, distinct defined types,
+erased results, opaque cross-package summaries, inactive tags and other native
+platform bodies retain the limits below, without an allowance or baseline growth.
 
 The maintained typed analyzer now recognizes unlisted constructor declarations
 and references with the existing `New`/`Build`/`Create`/`Ensure`/`Open`/`Provide`

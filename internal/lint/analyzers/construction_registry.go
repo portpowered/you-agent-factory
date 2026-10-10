@@ -102,7 +102,81 @@ func RepositoryConstructionRegistry() ConstructionRegistry {
 			{Symbol: ConstructionSymbol{ImportPath: store, Name: "topicState"}, CapabilitySet: "events", Kind: ConstructionState},
 		},
 	}
-	return registerProviderSessionsConstruction(registry)
+	registry = registerProviderSessionsConstruction(registry)
+	registry = registerWorkRootConstruction(registry)
+	return registerRuntimeEnablementConstruction(registry)
+}
+
+// NewService stores completed inputs; SubmitFile alone validates its public
+// reader argument after PR #3160. RuntimeResolver results are selected session
+// resources, not fixed injected peers, and are deliberately not required types.
+func registerWorkRootConstruction(registry ConstructionRegistry) ConstructionRegistry {
+	const root = "github.com/portpowered/infinite-you/pkg/services/work"
+	const private = root + "/internal"
+	for _, symbol := range []ConstructionSymbol{
+		{ImportPath: root, Name: "Service"},
+		{ImportPath: root, Name: "FileSubmissionService"},
+		{ImportPath: private, Name: "applicationService"},
+	} {
+		registry.Types = append(registry.Types, ConstructionType{
+			Symbol: symbol, CapabilitySet: "repository", Kind: ConstructionBehavior,
+		})
+	}
+	parameters := []ConstructionParameter{
+		{Index: 0, TypeExpr: root + ".RuntimeResolver"},
+		{Index: 1, TypeExpr: root + ".SubmittedFileReader"},
+		{Index: 2, TypeExpr: root + ".SubmittedFilePathInspector"},
+		{Index: 3, TypeExpr: root + ".ContentStagingService"},
+		{Index: 4, TypeExpr: root + ".ContentMaterializer"},
+		{Index: 5, TypeExpr: root + "/internal/services/state_access.Service"},
+		{Index: 6, TypeExpr: root + ".RequestPreparationService"},
+		{Index: 7, TypeExpr: root + ".InvocationInputPreparation"},
+	}
+	wireParameters := append([]ConstructionParameter(nil), parameters...)
+	wireParameters[5].TypeExpr = root + "/wire.StateAccess"
+	registry.Constructors = append(registry.Constructors, ConstructionConstructor{
+		Symbol:        ConstructionSymbol{ImportPath: private, Name: "NewService"},
+		CapabilitySet: "repository", RequiredParameters: parameters,
+		Results: []ConstructionSymbol{{ImportPath: root, Name: "FileSubmissionService"}},
+	}, ConstructionConstructor{
+		Symbol:        ConstructionSymbol{ImportPath: root + "/wire", Name: "NewRuntimeService"},
+		CapabilitySet: "repository", RequiredParameters: wireParameters,
+		Results: []ConstructionSymbol{{ImportPath: root, Name: "Service"}},
+	})
+	return registry
+}
+
+// PR #3162 injects reusable enablement into per-runtime termination state.
+// Net absence, snapshot/marking/resource facts and empty-mode defaults remain
+// domain checks; only the selected logger, time function and evaluator are fixed.
+func registerRuntimeEnablementConstruction(registry ConstructionRegistry) ConstructionRegistry {
+	const root = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	const scheduler = root + "/internal/services/orchestration/scheduler"
+	const subsystems = root + "/internal/services/orchestration/subsystems"
+	for _, name := range []string{"Enablement", "EnablementEvaluator"} {
+		registry.Types = append(registry.Types, ConstructionType{
+			Symbol:        ConstructionSymbol{ImportPath: scheduler, Name: name},
+			CapabilitySet: "repository", Kind: ConstructionBehavior,
+		})
+	}
+	termination := ConstructionSymbol{ImportPath: subsystems, Name: "TerminationCheckSubsystem"}
+	registry.Types = append(registry.Types, ConstructionType{
+		Symbol: termination, CapabilitySet: "repository", Kind: ConstructionState,
+	})
+	registry.Constructors = append(registry.Constructors, ConstructionConstructor{
+		Symbol:        ConstructionSymbol{ImportPath: scheduler, Name: "NewEnablementEvaluator"},
+		CapabilitySet: "repository",
+		Results:       []ConstructionSymbol{{ImportPath: scheduler, Name: "EnablementEvaluator"}},
+	}, ConstructionConstructor{
+		Symbol:        ConstructionSymbol{ImportPath: subsystems, Name: "NewTerminationCheckWithRuntime"},
+		CapabilitySet: "repository", Results: []ConstructionSymbol{termination},
+		RequiredParameters: []ConstructionParameter{
+			{Index: 1, TypeExpr: "github.com/portpowered/infinite-you/pkg/platform/logging.Logger"},
+			{Index: 4, TypeExpr: "func() time.Time"},
+			{Index: 5, TypeExpr: scheduler + ".Enablement"},
+		},
+	})
+	return registry
 }
 
 // The captured-only owner and its HTTP roles were corrected in PR #3132.

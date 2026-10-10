@@ -895,6 +895,123 @@ def provider_sessions_smoke_sources(root: Path, seeded: bool) -> list[tuple[str,
     ]
 
 
+def work_root_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]]:
+    """The delivered root keeps public reader checks off its injected path."""
+    module = "github.com/portpowered/infinite-you"
+    owner = "pkg/services/work"
+    private = owner + "/internal"
+    caller = "pkg/services/new_work_caller/internal/consumer"
+    # Preserve named interface identities without inventing service-root shape
+    # debt in this minimal module. The ports supply controlled method signatures;
+    # defined interface types retain the registered root declaration identities.
+    write(root, private + "/fixtureports/ports.go", """package fixtureports
+type Runtime interface { Submit(string) }
+type RuntimeResolver interface { Resolve(string) Runtime }
+type ContentStagingService interface { Stage() }
+type ContentMaterializer interface { Materialize() }
+type RequestPreparationService interface { Prepare() }
+type InvocationInputPreparation interface { PrepareInput() }
+""")
+    write(root, owner + "/contract.go",
+          f'package work\nimport ports "{module}/{private}/fixtureports"\n' + """
+type Service interface { Submit(string) }
+type FileSubmissionService Service
+type Runtime ports.Runtime
+type RuntimeResolver ports.RuntimeResolver
+type SubmittedFileReader func(string) ([]byte, error)
+type SubmittedFilePathInspector func(string) (any, error)
+type ContentStagingService ports.ContentStagingService
+type ContentMaterializer ports.ContentMaterializer
+type RequestPreparationService ports.RequestPreparationService
+type InvocationInputPreparation ports.InvocationInputPreparation
+""")
+    write(root, private + "/services/state_access/contract.go",
+          "package state_access\ntype Service interface { Submit() }\n")
+    params = ("runtimes work.RuntimeResolver, read work.SubmittedFileReader, "
+              "inspect work.SubmittedFilePathInspector, staging work.ContentStagingService, "
+              "materializer work.ContentMaterializer, state stateaccess.Service, "
+              "preparation work.RequestPreparationService, invocation work.InvocationInputPreparation")
+    args = "runtimes, read, inspect, staging, materializer, state, preparation, invocation"
+    imports = (f'import work "{module}/{owner}"\n'
+               f'import stateaccess "{module}/{private}/services/state_access"\n')
+    write(root, private + "/service.go", "package internal\n" + imports +
+          "type applicationService struct { runtimes work.RuntimeResolver; read work.SubmittedFileReader }\n"
+          "func NewService(" + params + ") work.FileSubmissionService {\n" +
+          (" if read == nil { return nil }\n" if seeded else "") +
+          " return &applicationService{runtimes: runtimes, read: read}\n}\n"
+          "func (s *applicationService) Submit(path string) {\n"
+          " runtime := s.runtimes.Resolve(path)\n if runtime == nil { return }\n"
+          " submitted(path, s.read)\n runtime.Submit(path)\n}\n"
+          "func submitted(path string, read work.SubmittedFileReader) {\n" +
+          (" if read == nil { return }\n" if seeded else "") +
+          " _, _ = read(path)\n}\n"
+          "func PublicSubmit(path string, read work.SubmittedFileReader) {\n"
+          " if read == nil { return }\n _, _ = read(path)\n}\n" +
+          ("func Operation(" + params + ") { NewService(" + args + ") }\n" if seeded else ""))
+    write(root, owner + "/wire/provider.go", "package wire\n" + imports +
+          f'import service "{module}/{private}"\n' +
+          "type StateAccess = stateaccess.Service\n" +
+          "func NewRuntimeService(" + params.replace("stateaccess.Service", "StateAccess") + ") work.Service { return service.NewService(" + args + ") }\n")
+    write(root, caller + "/caller.go", "package consumer\n" +
+          (f'import work "{module}/{owner}"\n'
+           "func NewUnlisted(peer work.Service) work.Service { return peer }\n"
+           "func Operation(peer work.Service) { NewUnlisted(peer) }\n" if seeded else ""))
+    return [
+        ("repolint", f"registered-construction: {private} -> {module}/{private}.Operation->{module}/{private}.NewService"),
+        ("repolint", f"registered-construction: {caller} -> {module}/{caller}.Operation->{module}/{caller}.NewUnlisted"),
+        ("repolint", f"required-dependency-guard: {private} -> {module}/{private}.NewService->{module}/{private}.NewService"),
+        ("repolint", f"required-dependency-guard: {private} -> {module}/{private}.submitted->{module}/{private}.NewService"),
+    ]
+
+
+def runtime_enablement_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]]:
+    """Reusable enablement is behavior; termination retains runtime state."""
+    module = "github.com/portpowered/infinite-you"
+    owner = "pkg/services/factory_runtime"
+    scheduler = owner + "/internal/services/orchestration/scheduler"
+    subsystems = owner + "/internal/services/orchestration/subsystems"
+    write(root, "pkg/services/factory_definitions/runtime.go",
+          "package factory_definitions\ntype RuntimeMode string\ntype RuntimeDefinitionLookup CatalogPathsService\n")
+    write(root, owner + "/internal/services/orchestration/state/net.go",
+          "package state\ntype Net struct{}\n")
+    write(root, scheduler + "/enablement.go", """package scheduler
+type Enablement interface { Evaluate() }
+type EnablementEvaluator struct{}
+func NewEnablementEvaluator() *EnablementEvaluator { return &EnablementEvaluator{} }
+func (*EnablementEvaluator) Evaluate() {}
+""" + ("func Operation() { NewEnablementEvaluator() }\n" if seeded else ""))
+    write(root, subsystems + "/termination.go", "package subsystems\n" +
+          'import "time"\n' +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          f'import definitions "{module}/pkg/services/factory_definitions"\n' +
+          f'import state "{module}/{owner}/internal/services/orchestration/state"\n' +
+          f'import scheduler "{module}/{scheduler}"\n' + """
+type TerminationCheckSubsystem struct { state *state.Net; logger logging.Logger; now func() time.Time; evaluator scheduler.Enablement }
+func NewTerminationCheckWithRuntime(n *state.Net, logger logging.Logger, mode definitions.RuntimeMode, config definitions.RuntimeDefinitionLookup, now func() time.Time, evaluator scheduler.Enablement) *TerminationCheckSubsystem {
+ if mode == "" { mode = "batch" }
+""" + (" if now == nil { now = time.Now }\n if evaluator == nil { return nil }\n" if seeded else "") + """
+ return &TerminationCheckSubsystem{state: n, logger: logger, now: now, evaluator: evaluator}
+}
+func (s *TerminationCheckSubsystem) Execute() {
+ if s.state == nil { return }
+""" + (" if s.evaluator != nil { s.evaluator.Evaluate() }\n" if seeded else " s.evaluator.Evaluate()\n") + """
+}
+func Allocate(n *state.Net, logger logging.Logger, mode definitions.RuntimeMode, config definitions.RuntimeDefinitionLookup, now func() time.Time, evaluator scheduler.Enablement) {
+ NewTerminationCheckWithRuntime(n, logger, mode, config, now, evaluator)
+}
+""")
+    write(root, owner + "/wire/provider.go", "package wire\n" +
+          f'import scheduler "{module}/{scheduler}"\n' +
+          "func NewEnablement() scheduler.Enablement { return scheduler.NewEnablementEvaluator() }\n")
+    return [
+        ("repolint", f"registered-construction: {scheduler} -> {module}/{scheduler}.Operation->{module}/{scheduler}.NewEnablementEvaluator"),
+        ("repolint", f"required-dependency-guard: {subsystems} -> {module}/{subsystems}.NewTerminationCheckWithRuntime->{module}/{subsystems}.NewTerminationCheckWithRuntime"),
+        ("repolint", f"required-dependency-guard: {subsystems} -> {module}/{subsystems}.NewTerminationCheckWithRuntime->{module}/{subsystems}.NewTerminationCheckWithRuntime"),
+        ("repolint", "NewTerminationCheckWithRuntime#clock#time.Now::count=1"),
+        ("repolint", f"required-dependency-guard: {subsystems} -> {module}/{subsystems}.(TerminationCheckSubsystem).Execute->{module}/{subsystems}.NewTerminationCheckWithRuntime"),
+    ]
+
+
 def ci_smoke(tool: list[str], artifacts: Path) -> None:
     """Clean/seeded/recovered real plugin checks share one warm module."""
     started = time.monotonic()
@@ -915,6 +1032,8 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
           "package recordings\ntype Recording struct{}\n")
     construction_smoke_sources(root, False)
     provider_sessions_smoke_sources(root, False)
+    work_root_smoke_sources(root, False)
+    runtime_enablement_smoke_sources(root, False)
     complete_tags = "integration,functionallong,backendconformance,factoryartifact,managed_process_integration"
 
     try:
@@ -926,6 +1045,8 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         write(root, "pkg/wire/wire.go", 'package wire\nimport "github.com/portpowered/infinite-you/pkg/services/recordings"\nfunc forbidden(reader recordings.WorkerCapturedActivityReader) { _ = reader.QueryHistoricalRecording() }\n')
         construction = construction_smoke_sources(root, True)
         construction += provider_sessions_smoke_sources(root, True)
+        construction += work_root_smoke_sources(root, True)
+        construction += runtime_enablement_smoke_sources(root, True)
         expected_issues = [
             ("repolint", "recording-read:"),
             ("repolint", "cli-manifest-authority:"),
@@ -935,9 +1056,9 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         issues = fixtures.lint(root, "seeded", expected_issues)
         complete_issues = fixtures.lint(root, "seeded-complete", expected_issues, tags=complete_tags)
         construction_issues = [issue for issue in issues if "registered-construction:" in issue["Text"]]
-        assert len(construction_issues) == 9, construction_issues
+        assert len(construction_issues) == 12, construction_issues
         complete_construction = [issue for issue in complete_issues if "registered-construction:" in issue["Text"]]
-        assert len(complete_construction) == 9, complete_construction
+        assert len(complete_construction) == 12, complete_construction
         expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
         for name, diagnostic in expected.items():
             assert any((issue["Pos"]["Filename"].replace("\\", "/") == name
@@ -949,6 +1070,8 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
         write(root, "cmd/vetfixture/source.go", "package fixture\n")
         construction_smoke_sources(root, False)
         provider_sessions_smoke_sources(root, False)
+        work_root_smoke_sources(root, False)
+        runtime_enablement_smoke_sources(root, False)
         fixtures.lint(root, "recovered", [])
         fixtures.lint(root, "recovered-complete", [], tags=complete_tags)
     finally:
