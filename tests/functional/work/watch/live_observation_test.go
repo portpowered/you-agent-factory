@@ -74,10 +74,9 @@ func runLiveProviderCohort(t *testing.T, host *selectedWatchHost) {
 	s.awaitCommand(t)
 	close(s.command.release)
 	s.awaitDispatches(t, 2)
-	// Dispatch output alone is not a canonical marking transition.
-	if s.out.String() != "" {
-		t.Fatalf("dispatch invented transitions: %s", s.out.String())
-	}
+	// Actual dispatch relocations precede operator moves; the dispatch event
+	// itself still emits no line.
+	waitForLedgerLines(t, s.out, 2, "automatic review relocations")
 	s.move(t, first, "processing")
 	s.move(t, second, "processing")
 	s.move(t, first, "complete")
@@ -128,10 +127,10 @@ func runLiveProviderPeer(t *testing.T, host *selectedWatchHost) {
 	bLater := b.submit(t, "after-peer-cancel")
 	b.awaitDispatches(t, 1)
 	b.move(t, bLater, "complete")
-	events := support.GetFactoryEventsAfterForSessionAt(t, host.endpoint, b.session, support.FactoryEventReadCursor{AfterEventID: bLines[1].EventID})
+	events := support.GetFactoryEventsAfterForSessionAt(t, host.endpoint, b.session, support.FactoryEventReadCursor{AfterEventID: bLines[len(bLines)-1].EventID})
 	found := false
 	for _, event := range events {
-		if int64(event.Context.Sequence) <= bLines[1].Sequence {
+		if int64(event.Context.Sequence) <= bLines[len(bLines)-1].Sequence {
 			t.Fatalf("peer cursor regressed: %+v", event.Context)
 		}
 		if event.Type == factoryapi.FactoryEventTypeWorkStateChange {
@@ -153,7 +152,7 @@ func runUnstructuredFollow(t *testing.T, a *liveObservation, aWork string) {
 	a.awaitDispatches(t, 1)
 	a.move(t, aWork, "processing")
 	a.move(t, aWork, "failed")
-	waitForLedgerLines(t, a.out, 2, "unstructured failed Work")
+	waitForLedgerLines(t, a.out, 3, "unstructured failed Work")
 	select {
 	case <-a.watch.Done():
 		t.Fatal("follow stopped at failed terminal Work")
@@ -162,9 +161,9 @@ func runUnstructuredFollow(t *testing.T, a *liveObservation, aWork string) {
 	aLater := a.submit(t, "follow-later")
 	a.awaitDispatches(t, 1)
 	a.move(t, aLater, "complete")
-	waitForLedgerLines(t, a.out, 1, "later followed transition")
+	waitForLedgerLines(t, a.out, 2, "later followed transition")
 	aLines := decodeWatchLines(t, a.out.String())
-	if len(aLines) != 3 || !aLines[1].Terminal || aLines[1].ToState != "failed" || aLines[2].WorkID != aLater || !aLines[2].Terminal {
+	if len(aLines) != 5 || !aLines[2].Terminal || aLines[2].ToState != "failed" || aLines[4].WorkID != aLater || !aLines[4].Terminal {
 		t.Fatalf("follow/failed transitions=%+v", aLines)
 	}
 	for _, line := range aLines {
@@ -187,22 +186,9 @@ func runUnstructuredFollow(t *testing.T, a *liveObservation, aWork string) {
 
 func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follow bool) *liveObservation {
 	t.Helper()
-	config := workWatchFactoryConfig()
-	states := config["workTypes"].([]map[string]any)[0]["states"].([]map[string]any)
-	config["workTypes"].([]map[string]any)[0]["states"] = append(states, map[string]any{"name": "review", "type": "PROCESSING"})
-	config["workers"] = []map[string]any{{"name": "processor", "type": "AGENT_WORKER", "modelProvider": "CODEX", "model": "controlled"}}
-	station := map[string]any{"name": "process", "type": "AGENT_RUN", "worker": "processor",
-		"inputs":    []map[string]any{{"workType": "task", "state": "init"}},
-		"outputs":   []map[string]any{{"workType": "task", "state": "review"}},
-		"onFailure": []map[string]any{{"workType": "task", "state": "failed"}}}
-	output := "controlled unstructured output"
-	if structured {
-		station["outputSchema"] = `{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}`
-		output = `{"message":"owned result"}`
-	}
-	config["workstations"] = []map[string]any{station}
+	config := observationFactoryConfig(structured, "review")
 	dir := support.ScaffoldFactory(t, config)
-	command := &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(output)}
+	command := &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(structured))}
 	observationCommands.routes.Store(filepath.Clean(dir), command)
 	t.Cleanup(func() { observationCommands.routes.Delete(filepath.Clean(dir)) })
 	var opened factoryapi.OpenFactorySessionResponse
@@ -212,8 +198,13 @@ func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follo
 	if opened.Session == nil || opened.Session.Id == "" {
 		t.Fatal("missing selected session")
 	}
-	s := &liveObservation{host: host, session: opened.Session.Id, command: command, out: newLedgerOutput(), diagnostics: newLedgerOutput()}
-	t.Cleanup(func() { host.execute(t, "session", "terminate", s.session) })
+	t.Cleanup(func() { host.execute(t, "session", "terminate", opened.Session.Id) })
+	return attachLiveObservation(t, host, opened.Session.Id, command, follow)
+}
+
+func attachLiveObservation(t *testing.T, host *selectedWatchHost, session string, command *observationCommand, follow bool) *liveObservation {
+	t.Helper()
+	s := &liveObservation{host: host, session: session, command: command, out: newLedgerOutput(), diagnostics: newLedgerOutput()}
 	ctx, cancel := context.WithCancel(t.Context())
 	s.cancel = cancel
 	t.Cleanup(cancel)
@@ -235,7 +226,10 @@ func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follo
 	t.Cleanup(func() { _ = s.response.Body.Close() })
 	gate := newSelectedWatchDisconnectGate(t, host.endpoint, s.session)
 	input := controlledWatchInput(t, ctx, gate.server.URL, follow, s.out, s.diagnostics)
-	input.Args = []string{"you", "--server", gate.server.URL, "work", "watch", "--session", s.session}
+	input.Args = []string{"you", "--server", gate.server.URL, "work", "watch"}
+	if session != "~default" {
+		input.Args = append(input.Args, "--session", session)
+	}
 	if follow {
 		input.Args = append(input.Args, "--follow")
 	}
@@ -313,8 +307,8 @@ func (s *liveObservation) finish(t *testing.T) {
 
 func assertLiveObservationLines(t *testing.T, lines []workWatchLine, session string, works []string) {
 	t.Helper()
-	if len(lines) != 2*len(works) {
-		t.Fatalf("transitions=%+v want two per Work", lines)
+	if len(lines) != 3*len(works) {
+		t.Fatalf("transitions=%+v want three per Work", lines)
 	}
 	for _, work := range works {
 		var selected []workWatchLine
@@ -323,13 +317,13 @@ func assertLiveObservationLines(t *testing.T, lines []workWatchLine, session str
 				selected = append(selected, line)
 			}
 		}
-		assertWorkWatchTransitionLines(t, selected, session, work, [][2]string{{"review", "processing"}, {"processing", "complete"}})
-		if string(selected[0].StructuredResult) != `{"message":"owned result"}` || len(selected[1].StructuredResult) != 0 {
+		assertWorkWatchTransitionLines(t, selected, session, work, [][2]string{{"init", "review"}, {"review", "processing"}, {"processing", "complete"}})
+		if string(selected[0].StructuredResult) != `{"message":"owned result"}` || len(selected[1].StructuredResult) != 0 || len(selected[2].StructuredResult) != 0 {
 			t.Fatalf("first-transition native result=%s later=%s", selected[0].StructuredResult, selected[1].StructuredResult)
 		}
 	}
 	for i, line := range lines {
-		if line.Source != "api" || (i > 0 && line.Sequence <= lines[i-1].Sequence) {
+		if (line.Source != "api" && line.Source != "dispatch") || (i > 0 && line.Sequence <= lines[i-1].Sequence) {
 			t.Fatalf("canonical order/source=%+v", lines)
 		}
 	}
@@ -372,5 +366,108 @@ func (s *liveObservation) assertTerminalWorkStates(t *testing.T, lines []workWat
 		if selected.State == nil || selected.State.Name != line.ToState {
 			t.Fatalf("Work/transition disagreement: %+v %+v", selected, line)
 		}
+	}
+}
+
+func observationFactoryConfig(structured bool, destination string) map[string]any {
+	config := workWatchFactoryConfig()
+	states := config["workTypes"].([]map[string]any)[0]["states"].([]map[string]any)
+	config["workTypes"].([]map[string]any)[0]["states"] = append(states, map[string]any{"name": "review", "type": "PROCESSING"})
+	config["workers"] = []map[string]any{{"name": "processor", "type": "AGENT_WORKER", "modelProvider": "CODEX", "model": "controlled"}}
+	station := map[string]any{"name": "process", "type": "AGENT_RUN", "worker": "processor",
+		"inputs":    []map[string]any{{"workType": "task", "state": "init"}},
+		"outputs":   []map[string]any{{"workType": "task", "state": destination}},
+		"onFailure": []map[string]any{{"workType": "task", "state": "failed"}}}
+	if structured {
+		station["outputSchema"] = `{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}`
+	}
+	config["workstations"] = []map[string]any{station}
+	return config
+}
+
+func observationOutput(structured bool) string {
+	if structured {
+		return `{"message":"owned result"}`
+	}
+	return "controlled unstructured output"
+}
+
+// Compatibility default ownership is serialized across real stop/resume. The
+// same process and command edge serve every host; explicit peers remain parallel.
+func TestWorkWatchDefaultAutomaticFreshAndResumed(t *testing.T) {
+	ensureWatchFixture(t)
+	dir := support.ScaffoldFactory(t, observationFactoryConfig(true, "complete"))
+	command := &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(true))}
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	t.Cleanup(func() { observationCommands.routes.Delete(filepath.Clean(dir)) })
+	source := filepath.Join(t.TempDir(), "empty-default.json")
+	host, run := startWatchHost(t, observationWatchProcess, dir, "--record", source)
+	t.Run("empty default and explicit peer before recovery", func(t *testing.T) {
+		s := attachLiveObservation(t, host, "~default", command, false)
+		// An empty default never borrows an explicit peer's terminal history.
+		peer := newLiveObservation(t, host, true, false)
+		peerWork := peer.submit(t, "peer")
+		peer.awaitCommand(t)
+		close(peer.command.release)
+		peer.awaitDispatches(t, 1)
+		peer.move(t, peerWork, "complete")
+		peer.finish(t)
+		if s.out.String() != "" {
+			t.Fatalf("default borrowed peer output: %s", s.out.String())
+		}
+		select {
+		case <-s.watch.Done():
+			t.Fatal("empty default completed from peer")
+		default:
+		}
+		// Stop with an empty recorded cohort, then attach before resumed admission.
+		s.cancel()
+		s.watch.Stop(t)
+		s.watch.AcceptError()
+		assertExpectedWatchCancellationDiagnostic(t, s.diagnostics.String())
+	})
+	// The peer cleanup runs while its host is alive.
+	run.Stop(t)
+	resumed, resumedRun := startWatchHost(t, observationWatchProcess, dir, "--resume", source, "--record", filepath.Join(t.TempDir(), "successor.json"))
+	runAutomaticDefaultWatch(t, resumed, command)
+	resumedRun.Stop(t)
+	// A separate fresh recorded host proves the omitted selector without replay.
+	command = &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(true))}
+	observationCommands.routes.Store(filepath.Clean(dir), command)
+	fresh, freshRun := startWatchHost(t, observationWatchProcess, dir, "--record", filepath.Join(t.TempDir(), "fresh.json"))
+	runAutomaticDefaultWatch(t, fresh, command)
+	freshRun.Stop(t)
+}
+
+func runAutomaticDefaultWatch(t *testing.T, host *selectedWatchHost, command *observationCommand) {
+	t.Helper()
+	s := attachLiveObservation(t, host, "~default", command, false)
+	id := s.submit(t, "automatic")
+	s.awaitCommand(t)
+	close(command.release)
+	s.finish(t)
+	lines := decodeWatchLines(t, s.out.String())
+	assertWorkWatchTransitionLines(t, lines, "~default", id, [][2]string{{"init", "complete"}})
+	if lines[0].Source != "dispatch" || string(lines[0].StructuredResult) != observationOutput(true) {
+		t.Fatalf("automatic native transition=%+v", lines)
+	}
+	s.assertCanonicalParity(t, lines)
+	events := support.GetFactoryEventsForSessionAt(t, host.endpoint, "~default")
+	var responseSequence int64 = -1
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			responseSequence = int64(event.Context.Sequence)
+		}
+	}
+	if responseSequence < 0 || responseSequence >= lines[0].Sequence {
+		t.Fatalf("result/relocation order: response=%d transition=%d", responseSequence, lines[0].Sequence)
+	}
+	out, diagnostics := newLedgerOutput(), newLedgerOutput()
+	input := controlledWatchInput(t, t.Context(), host.endpoint, false, out, diagnostics)
+	input.Args = []string{"you", "--server", host.endpoint, "work", "watch"}
+	retained := support.StartProcessCommand(t, host.process, input)
+	waitForLedgerCommand(t, retained, out, diagnostics)
+	if out.String() != s.out.String() {
+		t.Fatalf("retained default differs: live=%s retained=%s", s.out.String(), out.String())
 	}
 }

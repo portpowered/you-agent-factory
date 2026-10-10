@@ -908,6 +908,9 @@ func TestReduceReplayEvents_OperatorWorkStateChanges(t *testing.T) {
 		t,
 		replayWorkStateChangeEvent(t, "work-recover", "failed", "init", "task:failed", "task:init", factoryapi.WorkStateChangeSourceAPI, 4),
 		replayWorkStateChangeEvent(t, "work-cascade", "failed", "init", "task:failed", "task:init", factoryapi.WorkStateChangeSourceCascadingFailure, 5),
+		// Dispatch routing is rebuilt from its response, never applied again as
+		// an operator move. Old recordings without this event follow the same path.
+		replayWorkStateChangeEvent(t, "work-dispatch", "init", "complete", "task:init", "task:complete", factoryapi.WorkStateChangeSourceDispatch, 6),
 	)
 
 	reduced, err := reduceReplayEvents(artifact, testFactorySnapshotDecoder, testRuntimeConfigDecoder)

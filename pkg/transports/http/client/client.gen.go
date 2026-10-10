@@ -1413,6 +1413,7 @@ const (
 	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
 	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
 	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
+	WorkStateChangeSourceDispatch         WorkStateChangeSource = "dispatch"
 )
 
 // Defines values for WorkStateType.

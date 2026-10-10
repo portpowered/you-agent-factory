@@ -26,6 +26,13 @@ type selectedWatchHost struct {
 
 func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *selectedWatchHost {
 	t.Helper()
+	dir := support.ScaffoldFactory(t, workWatchFactoryConfig())
+	host, _ := startWatchHost(t, process, dir, "--no-record")
+	return host
+}
+
+func startWatchHost(t *testing.T, process support.ApplicationProcess, dir string, args ...string) (*selectedWatchHost, *support.ProcessCommand) {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -35,9 +42,9 @@ func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *s
 	watchHostListeners.Store(port, entry)
 	t.Cleanup(func() { watchHostListeners.Delete(port); _ = listener.Close() })
 	host := &selectedWatchHost{process: process, endpoint: "http://" + listener.Addr().String()}
-	dir := support.ScaffoldFactory(t, workWatchFactoryConfig())
 	inputs := workWatchInputs(t, []string{"you", "run", "--listen", listener.Addr().String(), "--dir", dir,
-		"--continuously", "--with-server", "--quiet", "--no-record"})
+		"--continuously", "--with-server", "--quiet"})
+	inputs.Input.Args = append(inputs.Input.Args, args...)
 	// The process retains its runtime log sink until Close. Its host profile
 	// therefore shares the package process lifetime, rather than t.TempDir.
 	profile, err := os.MkdirTemp(watchProfileRoot, "host-")
@@ -45,7 +52,7 @@ func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *s
 		t.Fatal(err)
 	}
 	inputs.Input.Env = isolatedHomeEnvironment(profile)
-	inputs.Input.WorkingDirectory = profile
+	inputs.Input.WorkingDirectory = dir
 
 	inputs.Input.Context = context.Background()
 	command := support.StartProcessCommand(t, process, inputs.Input)
@@ -54,7 +61,7 @@ func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *s
 		case timer := <-selectedWatchScheduler.startup:
 			timer.wake(selectedWatchScheduler.Now())
 		case <-entry.ready:
-			return host
+			return host, command
 		case <-command.Done():
 			t.Fatalf("host ended before readiness: %v\n%s", command.Err(), inputs.Stderr())
 		case <-time.After(selectedWatchCeiling):

@@ -5105,7 +5105,8 @@
       "enum": [
         "api",
         "cli",
-        "cascading-failure"
+        "cascading-failure",
+        "dispatch"
       ],
       "type": "string"
     },
