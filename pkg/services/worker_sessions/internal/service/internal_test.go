@@ -256,7 +256,7 @@ func (reader *perRuntimeSummaryReader) LookupWorkerSessionCapture(_ context.Cont
 	return recordings.WorkerSessionCatalogEntry{}, recordings.ErrMissingWorkerRecordingReader
 }
 
-func (reader *perRuntimeSummaryReader) LookupWorkerSessionSummary(_ context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+func (reader *perRuntimeSummaryReader) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
 	reader.capture.delegate.mu.Lock()
 	handle := reader.capture.delegate.handles[id]
 	reader.capture.delegate.mu.Unlock()
@@ -267,7 +267,7 @@ func (reader *perRuntimeSummaryReader) LookupWorkerSessionSummary(_ context.Cont
 	terminals := append([]recordings.WorkerRecordingTerminal(nil), handle.terminals...)
 	handle.mu.Unlock()
 	var item recordings.WorkerCapturedCatalogItem
-	entry, err := reader.LookupWorkerSessionCapture(context.Background(), id)
+	entry, err := reader.LookupWorkerSessionCapture(ctx, id)
 	if err != nil {
 		return recordings.WorkerCapturedSummary{}, err
 	}
