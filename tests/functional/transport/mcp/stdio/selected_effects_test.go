@@ -77,11 +77,14 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	support.CleanupProcess(t, process)
+	// Register the join after connection-owned directories have been registered,
+	// so cleanup stops all remaining sessions before removing their artifacts.
+	defer support.CleanupProcess(t, process)
+	cohort := t
 	for _, name := range []string{"completion", "timeout keeps session running", "timeout cancels owned session"} {
 		t.Run(name, func(t *testing.T) {
 			cancelOnTimeout := name == "timeout cancels owned session"
-			server := startComposedMemoryMCP(t, process)
+			server := startComposedMemoryMCPWithLifetime(t, cohort, process)
 			initializeMCPClient(t, server.client)
 			gate := runner.gate(t, server.root)
 			reply := make(chan mcpJSONRPCResponse, 1)
@@ -130,11 +133,72 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 			server.closeInput(t)
 		})
 	}
+	t.Run("request cancellation leaves live peer held", func(t *testing.T) {
+		assertSelectedSyncRequestCancellation(t, cohort, process, runner, scheduler)
+	})
 	// A peer invocation remains usable after the timed-out connection closes.
 	peer := startComposedMemoryMCP(t, process)
 	initializeMCPClient(t, peer.client)
 	assertComposedMCPSync(t, peer, "selected-peer")
 	peer.closeInput(t)
+}
+
+func assertSelectedSyncRequestCancellation(t, lifetime *testing.T, process support.Process, runner *mcpRootResultRunner, scheduler *selectedSyncScheduler) {
+	t.Helper()
+	caller, peer := startComposedMemoryMCPWithLifetime(t, lifetime, process), startComposedMemoryMCPWithLifetime(t, lifetime, process)
+	initializeMCPClient(t, caller.client)
+	initializeMCPClient(t, peer.client)
+	callerGate, peerGate := runner.gate(t, caller.root), runner.gate(t, peer.root)
+	callerReply, peerReply := make(chan mcpJSONRPCResponse, 1), make(chan mcpJSONRPCResponse, 1)
+	requestID := caller.client.nextID + 1
+	go func() { callerReply <- selectedSyncCall(caller.client, 3600000, false) }()
+	go func() { peerReply <- selectedSyncCall(peer.client, 3600000, false) }()
+	awaitComposedSignal(t, callerGate.entered)
+	awaitComposedSignal(t, peerGate.entered)
+	callerPoll, peerPoll := scheduler.poll(t), scheduler.poll(t)
+	notification, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "method": "notifications/cancelled",
+		"params": map[string]any{"requestId": requestID, "reason": "caller canceled held wait"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := caller.input.Write(append(notification, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	// Cancellation must release the waiter without driving either selected poll.
+	var response mcpJSONRPCResponse
+	select {
+	case response = <-callerReply:
+	//nolint:testsleep // The protocol reply is the signal; host time bounds missing cancellation handling.
+	case <-time.After(30 * time.Second):
+		t.Fatal("canceled sync request did not reply while selected time was held")
+	}
+	envelope := decodeComposedEnvelope[factoryapi.FactorySessionSyncExecutionResponse](t, response)
+	if envelope.Result != nil || envelope.Error == nil || envelope.Error.Code != "factory_session.request.canceled" {
+		t.Fatalf("canceled sync request = %#v", envelope)
+	}
+	select {
+	case <-callerPoll.ticks:
+		t.Fatal("request cancellation advanced selected time")
+	case <-peerPoll.ticks:
+		t.Fatal("request cancellation released peer poll")
+	case reply := <-peerReply:
+		t.Fatalf("request cancellation ended held peer: %#v", reply)
+	default:
+	}
+	close(callerGate.release)
+	close(peerGate.release)
+	// Both initial registrations were consumed above to prove the held state.
+	// Release them before waiting for subsequent public-waiter polls.
+	scheduler.advance()
+	result := decodeComposedTool[factoryapi.FactorySessionSyncExecutionResponse](t, advanceSelectedSyncToReply(t, scheduler, peerReply))
+	if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted || result.SessionId == "" {
+		t.Fatalf("peer after caller cancellation = %#v", result)
+	}
+	caller.closeInput(t)
+	peer.closeInput(t)
+	t.Log("S04: public request cancellation returns the existing cancellation error without advancing selected waits or canceling the live peer")
 }
 
 func assertSelectedSyncStillRunning(t *testing.T, server *composedMemoryMCP, result factoryapi.FactorySessionSyncExecutionResponse) {

@@ -104,11 +104,17 @@ type composedMemoryMCP struct {
 }
 
 func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemoryMCP {
+	return startComposedMemoryMCPWithLifetime(t, t, process)
+}
+
+// A non-canceling sync timeout can outlive its request. Its directories and
+// connection context belong to the cohort that joins the reusable process.
+func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.Process) *composedMemoryMCP {
 	t.Helper()
-	projectRoot := support.ScaffoldSingleStepFactory(t, "composed-mcp")
+	projectRoot := support.ScaffoldSingleStepFactory(lifetime, "composed-mcp")
 	stdin, input := io.Pipe()
 	output, stdout := io.Pipe()
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	ctx, cancel := context.WithTimeout(lifetime.Context(), time.Minute)
 	done := make(chan error, 1)
 	t.Cleanup(func() {
 		cancel()
@@ -117,7 +123,7 @@ func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemo
 		_ = stdout.Close()
 		_ = output.Close()
 	})
-	home := t.TempDir()
+	home := lifetime.TempDir()
 	go func() {
 		err := process.Execute(root.Input{
 			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
