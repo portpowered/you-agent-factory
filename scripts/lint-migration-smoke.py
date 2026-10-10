@@ -735,12 +735,40 @@ def construction_smoke_sources(root: Path, seeded: bool) -> list[tuple[str, str]
     write(root, "pkg/services/unrelated/internal/consumer/consumer.go", "package consumer\n" +
           (f'import catalog "{module}/pkg/services/chat_sessions/wire"\n'
            "func Operation() { catalog.NewCatalog(nil, nil, nil) }\n" if seeded else ""))
+    events = "pkg/services/events"
+    store = events + "/internal/service"
+    write(root, events + "/service.go", "package events\ntype Service interface { Observe() }\n")
+    write(root, store + "/store.go", "package service\n" +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          "type topicState struct { Values map[string]string }\n"
+          "type Store struct { logger logging.Logger; topics map[string]*topicState }\n"
+          "func NewWithRetention(retention int, logger logging.Logger) *Store {\n" +
+          (" if logger == nil { return nil }\n" if seeded else "") +
+          " if retention <= 0 { retention = 10000 }; _ = retention\n"
+          " return &Store{logger: logger, topics: make(map[string]*topicState)}\n}\n"
+          "func (s *Store) Observe() { s.logger.Observe() }\n"
+          "func (s *Store) Topic() { s.topics[\"topic\"] = &topicState{Values: make(map[string]string)} }\n" +
+          ("func Operation(logger logging.Logger) { NewWithRetention(0, logger) }\n" if seeded else ""))
+    write(root, events + "/wire/provider.go", "package wire\n" +
+          f'import logging "{module}/pkg/platform/logging"\n' +
+          f'import events "{module}/{events}"\n' +
+          f'import service "{module}/{store}"\n' +
+          "func NewService(logger logging.Logger) (events.Service, error) {\n" +
+          (" if logger == nil { return nil, nil }\n" if seeded else "") +
+          " return service.NewWithRetention(0, logger), nil\n}\n")
+    write(root, "pkg/services/unrelated/events.go", "package unrelated\n" +
+          (f'import eventswire "{module}/{events}/wire"\n'
+           "func Operation() { eventswire.NewService(nil) }\n" if seeded else ""))
     return [] if not seeded else [
         ("repolint", f"{module}/{owner}.Operation->{module}/{owner}.New"),
         ("repolint", f"{module}/pkg/services/chat_sessions/internal/consumer.Operation->{module}/{owner}.NewAlternate"),
         ("repolint", f"{module}/pkg/services/unrelated/internal/consumer.Operation->{module}/pkg/services/chat_sessions/wire.NewCatalog"),
         ("repolint", "service-construction: pkg/services/unrelated/internal/consumer -> pkg/services/chat_sessions/wire.NewCatalog"),
         ("repolint", "service-subpackage: pkg/services/unrelated/internal/consumer -> pkg/services/chat_sessions/wire"),
+        ("repolint", f"{module}/{store}.Operation->{module}/{store}.NewWithRetention"),
+        ("repolint", f"{module}/pkg/services/unrelated.Operation->{module}/{events}/wire.NewService"),
+        ("repolint", f"required-dependency-guard: {store} -> {module}/{store}.NewWithRetention->{module}/{store}.NewWithRetention"),
+        ("repolint", f"required-dependency-guard: {events}/wire -> {module}/{events}/wire.NewService->{module}/{events}/wire.NewService"),
     ]
 
 
@@ -777,7 +805,7 @@ def ci_smoke(tool: list[str], artifacts: Path) -> None:
             ("govet", "wrong type"),
         ] + construction)
         construction_issues = [issue for issue in issues if "registered-construction:" in issue["Text"]]
-        assert len(construction_issues) == 3, construction_issues
+        assert len(construction_issues) == 5, construction_issues
         expected = {manifest: "cli-manifest-authority:", consumer: "packaged-factory-direct-publication:"}
         for name, diagnostic in expected.items():
             assert any((issue["Pos"]["Filename"].replace("\\", "/") == name

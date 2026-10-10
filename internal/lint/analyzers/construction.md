@@ -37,7 +37,7 @@ retain direct provider references at those composition boundaries; shadowed
 or unrelated callables receive no such treatment. No caller/callee/file
 migration allowance schema remains.
 
-The `chat-target-catalog` capability set enforces. The analyzer returns
+The `chat-target-catalog` and `events` capability sets enforce. The analyzer returns
 `[]ConstructionFinding` with mode, set, caller, callee, file, line and rule.
 Report mode remains available to controlled analyzer fixtures, without enabling
 an owner or entering the baseline. Enforced findings and conservative unresolved debt use the shared
@@ -101,31 +101,29 @@ structural/erased results, distinct defined-type ancestry, callable variables,
 and opaque cross-package factories are not proved by this inference. Parameter
 requiredness is inferred only for exact classified named collaborators, not
 unclassified callbacks or containers. These limits remain inventory obligations;
-they authorize no new baseline or exemption. Repository coverage remains incomplete while only the Chat catalog is
-classified. Composition identity does not prove upstream graph reachability,
+they authorize no new baseline or exemption. Repository coverage remains incomplete: Chat and Events classifications do
+not cover the remaining owner, Platform effect and transport capabilities. Composition identity does not prove upstream graph reachability,
 unused-provider absence, or imported helper bodies. Those properties retain
 their existing Wire, deadcode and independent review gates.
 
 The maintained `ci-smoke` cohort uses the production registry with minimal,
-compiler-valid declarations for the Chat catalog and its exact inputs. Its
+compiler-valid declarations for the Chat catalog and Events. Its
 clean/seeded/recovered plugin invocations distinguish lawful owning Wire
 construction and scoped map allocation from same-owner construction,
-cross-owner construction, and an unlisted constructor returning the classified
-type. These fixtures prove diagnostics and qualified symbols for that set;
-they do not prove that unclassified repository owners conform.
+cross-owner construction, and an unlisted constructor returning a classified
+type. Events also checks required logger guards independently of the legitimate
+non-positive retention default and topic-state allocation. These fixtures prove
+diagnostics and qualified symbols for those sets; they do not prove that
+unclassified repository owners conform.
 
-Final owner enablement must stop at unresolved production findings. Events
-still selects an optional logger in `events/wire.NewService`, and
-`events/internal/service.New` delegates to `NewWithRetention` outside Wire.
-Those sites require an owner delta before strict Events enablement; neither
-domain retention defaults nor per-topic state allocation justify a logger
-fallback or an internal service-construction exception.
-
-The Events prerequisite belongs to `fi-events-strict-construction-20261010`.
-The checker increment can ship independently; final owner classifications,
-terminal inventory reconciliation and repository-wide enforcement still require
-the lead's remaining final-enforcement slice after that prerequisite delivers.
-Neither the increment nor its fixture results satisfy those obligations.
+Events classifies the public `events.Service`, private `service.Store` and
+private `topicState` as behavior, behavior and scoped state respectively.
+`NewWithRetention` requires its logger at parameter index 1, and the exact
+`events/wire.NewService` signature requires logger parameter 0; retention is
+domain policy. The owning Wire provider calls it directly. The retired private `New`
+wrapper and Wire logger fallback were removed by PR #3126. No construction or
+requiredness allowance is introduced. Final owner classifications, terminal
+inventory reconciliation and repository-wide enforcement remain T29 work.
 
 Compiler-invalid historical examples are rejected before lint analysis:
 initialization cycles, ambiguous selectors, recursive aliases, and undefined

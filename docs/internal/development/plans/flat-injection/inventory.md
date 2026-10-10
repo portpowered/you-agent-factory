@@ -234,6 +234,19 @@ The audit found no issues in these areas:
 - **ACP transport composition.** `pkg/wire/acp_transport.go:181-213` injects Chat Sessions, Factory Sessions and Events directly into `acpwire.NewServer`, with no Sessions getters.
 - **Owner wire constructors for Chat Sessions, Events, Costs and Worker Sessions.** Each is a single flat constructor.
 
+Events' later requiredness findings have terminal dispositions in
+[PR #3126](https://github.com/portpowered/you-agent-factory/pull/3126), merged as
+`146c8f41d1706980063c7a1c57b87932b94e3d5f`: the logger fallback in
+`pkg/services/events/wire/wire.go:NewService` is removed; that provider directly
+injects its logger into
+`pkg/services/events/internal/service/store.go:NewWithRetention`. The private
+`service.New` compatibility wrapper is retired. `service.Store` remains reusable
+behavior; `service.topicState` and its maps remain legitimate per-topic state.
+The non-positive retention default in `NewWithRetention` remains domain policy.
+These dispositions close only the Events additions recorded in lint section 4;
+the other inventory rows and validation additions still require their own
+terminal source and delivered-PR reconciliation under T29.
+
 **Clock capability gap affecting T01.** `platformclock.TimerSource` (`pkg/platform/clock/clock.go:30`) provides only `Now` and `NewTimer`. Several consumers need more:
 - `Now` + `After`: `factory_sessions/internal/execution/service.go:84` `SyncWaitScheduler`, `pkg/platform/process/command.go:24`, `hosted_sources/internal/linear/contracts.go:29`, and `webhooks/wire/wire.go:21-24`.
 - A full `clockwork.Clock`: Automations, which asserts it at `automations/internal/service.go:274`.
