@@ -3,6 +3,7 @@ package subsystems_test
 import (
 	"context"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"testing"
 	"time"
 
@@ -64,7 +65,7 @@ func TestNoOpDispatcher_NoEnabledTransitions(t *testing.T) {
 
 	sched := &mockScheduler{}
 	tp := newTestPipeline(n)
-	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID)
+	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID, scheduler.NewEnablementEvaluator())
 
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
@@ -121,7 +122,7 @@ func TestNoOpDispatcher_MultipleTransitions(t *testing.T) {
 	}
 
 	tp := newTestPipeline(n)
-	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID)
+	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID, scheduler.NewEnablementEvaluator())
 
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"tok1": {ID: "tok1", PlaceID: "p-init-a", Color: factorytoken.Color{WorkID: "w1"}},
@@ -204,7 +205,7 @@ func TestNoOpDispatcher_PreservesInputHistory(t *testing.T) {
 	}
 
 	tp := newTestPipeline(n)
-	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID)
+	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID, scheduler.NewEnablementEvaluator())
 
 	// Input token with existing history.
 	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
@@ -294,7 +295,7 @@ func TestNoOpDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(
 	}
 
 	tp := newTestPipeline(n)
-	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID)
+	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results, time.Now, testDispatchID, scheduler.NewEnablementEvaluator())
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok1": {
@@ -350,7 +351,7 @@ func checkExplicitQuietAcceptance(t *testing.T, enabled bool) {
 	results := buffers.NewTypedBuffer[workerexecution.WorkResult](2)
 	now := func() time.Time { return time.Unix(100, 0) }
 	next := 0
-	dispatcher := subsystems.NewNoOpDispatcher(n, sched, results, now, func() string { next++; return fmt.Sprintf("dispatch-%d", next) })
+	dispatcher := subsystems.NewNoOpDispatcher(n, sched, results, now, func() string { next++; return fmt.Sprintf("dispatch-%d", next) }, scheduler.NewEnablementEvaluator())
 	marking := makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"first":  {ID: "first", PlaceID: "input", Color: factorytoken.Color{WorkID: "work-first"}},
 		"second": {ID: "second", PlaceID: "input", Color: factorytoken.Color{WorkID: "work-second"}},

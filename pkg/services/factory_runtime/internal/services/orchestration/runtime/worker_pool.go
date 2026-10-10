@@ -1027,6 +1027,7 @@ func buildRuntimeSubsystems(
 			cfg.runtimeConfig,
 			cfg.clock.Now,
 			newID,
+			cfg.enablement,
 			replayIDs,
 			seededRestoredWorkIDs,
 		),
@@ -1034,7 +1035,7 @@ func buildRuntimeSubsystems(
 		transitioner,
 		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
 		subsystems.NewTerminationCheckWithRuntime(
-			cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now,
+			cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now, cfg.enablement,
 		),
 	}
 }

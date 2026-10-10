@@ -425,8 +425,8 @@ func TestNew_RestoredTransitionCreatedChildDoesNotStrandSameNameJoinAfterRework(
 	snapshot.Marking.Tokens[reworked.ID] = &reworked
 	snapshot.Marking.PlaceTokens["review:init"] = []string{reworked.ID}
 
-	eval := scheduler.NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return base }, nil)
-	enabled := eval.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot)
+	eval := scheduler.NewEnablementEvaluator()
+	enabled := eval.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot, logging.NoopLogger{}, func() time.Time { return base }, nil)
 	if len(enabled) != 1 || enabled[0].TransitionID != "review" {
 		t.Fatalf("enabled transitions after rework = %#v, want review", enabled)
 	}

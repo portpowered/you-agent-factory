@@ -194,12 +194,9 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	workerAttempts, _ := workerSessionsService.(factory.WorkerAttemptOpener)
 	opening := cfg.engineOpening
 	if opening == nil {
-		opening = NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil,
-			interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
-				return interfaces.WorkPropagationModeOutputAsPayload
-			}), testRuntimeWorkService{},
-			func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
-			func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening())
+		opening = NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
+			return interfaces.WorkPropagationModeOutputAsPayload
+		}), testRuntimeWorkService{}, func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) }, func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator())
 	}
 	runtime, err := opening.Open(
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil,

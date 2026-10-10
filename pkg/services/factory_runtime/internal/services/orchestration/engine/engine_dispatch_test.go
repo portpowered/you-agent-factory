@@ -28,10 +28,17 @@ func TestEngine_SameWorkObserveAndConsumeDispatchesInOneTick(t *testing.T) {
 	marking.AddToken(testDispatchToken("work-token", "task:init", factorytoken.DataTypeWork, now))
 	marking.AddToken(testDispatchToken("slot-token", "slot:available", factorytoken.DataTypeResource, now))
 
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		net,
 		scheduler.NewWorkInQueueScheduler(2, nil),
-		nil, logging.NoopLogger{}, nil, func() time.Time { return now }, nextTestDispatchID(),
+		nil,
+		logging.NoopLogger{},
+		nil,
+		func() time.Time { return now },
+		nextTestDispatchID(),
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
 	)
 	var forwarded []work.WorkDispatch
 	var records []interfaces.FactoryDispatchRecord
@@ -89,10 +96,17 @@ func TestEngine_SameTickCancellationResultRestoresResources(t *testing.T) {
 	marking.AddToken(testDispatchToken("work-token", "task:init", factorytoken.DataTypeWork, now))
 	marking.AddToken(testDispatchToken("slot-token", "slot:available", factorytoken.DataTypeResource, now))
 
-	dispatcher := subsystems.NewDispatcher(
+	dispatcher := subsystems.NewDispatcherWithSeededReplay(
 		net,
 		scheduler.NewWorkInQueueScheduler(2, nil),
-		nil, logging.NoopLogger{}, nil, func() time.Time { return now }, nextTestDispatchID(),
+		nil,
+		logging.NoopLogger{},
+		nil,
+		func() time.Time { return now },
+		nextTestDispatchID(),
+		scheduler.NewEnablementEvaluator(),
+		nil,
+		nil,
 	)
 	transitioner := subsystems.NewTransitioner(
 		net,

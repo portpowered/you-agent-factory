@@ -68,8 +68,14 @@ func TestEnablementEvaluator_CronTimeEnablementUsesSharedTimePlace(t *testing.T)
 				tokens[token.ID] = token
 			}
 			snapshot := makeTestSnapshot(tokens)
-			enabled := NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return now }, nil).
-				FindEnabledTransitions(context.Background(), net, &snapshot)
+			enabled := NewEnablementEvaluator().FindEnabledTransitionsWithSnapshot(
+				context.Background(),
+				net,
+				&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: snapshot, Topology: net},
+				logging.NoopLogger{},
+				func() time.Time { return now },
+				nil,
+			)
 			cron := findEnabledTransition(enabled, "daily-refresh")
 			if (cron != nil) != tt.want {
 				t.Fatalf("cron enabled = %v, want %v; transitions=%+v", cron != nil, tt.want, enabled)
@@ -97,8 +103,14 @@ func TestEnablementEvaluator_DefaultExpiryTargetsExpiredTokenCronCannotUse(t *te
 		tokenMap[token.ID] = token
 	}
 	snapshot := makeTestSnapshot(tokenMap)
-	enabled := NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return now }, nil).
-		FindEnabledTransitions(context.Background(), schedulerCronNet(), &snapshot)
+	enabled := NewEnablementEvaluator().FindEnabledTransitionsWithSnapshot(
+		context.Background(),
+		schedulerCronNet(),
+		&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: snapshot, Topology: schedulerCronNet()},
+		logging.NoopLogger{},
+		func() time.Time { return now },
+		nil,
+	)
 
 	if cron := findEnabledTransition(enabled, "daily-refresh"); cron != nil {
 		t.Fatalf("cron transition should reject expired time token, got %+v", cron)
@@ -185,4 +197,31 @@ func findEnabledTransition(
 // otherwise surfaces as teardown hangs and cross-test interference.
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+func TestEnablementEvaluator_CronScopesAdvanceIndependently(t *testing.T) {
+	t.Parallel()
+	evaluator := NewEnablementEvaluator()
+	due := time.Date(2001, time.January, 2, 3, 0, 0, 0, time.UTC)
+	net := schedulerCronNet()
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Topology: net,
+		Marking: makeTestSnapshot(map[string]*factorytoken.Token{
+			"work": schedulerWorkToken("work"), "time": schedulerCronTimeToken("time", "daily-refresh", due, due.Add(time.Minute)),
+		}),
+	}
+	for _, test := range []struct {
+		at           time.Time
+		cron, expiry bool
+	}{
+		{due.Add(-time.Second), false, false}, {due, true, false},
+		{due.Add(time.Minute), false, true}, {due, true, false},
+	} {
+		enabled := evaluator.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot, logging.NoopLogger{}, func() time.Time { return test.at }, nil)
+		if (findEnabledTransition(enabled, "daily-refresh") != nil) != test.cron || (findEnabledTransition(enabled, interfaces.SystemTimeExpiryTransitionID) != nil) != test.expiry {
+			t.Fatalf("at %s: transitions = %+v, want cron=%t expiry=%t", test.at, enabled, test.cron, test.expiry)
+		}
+	}
+	if len(snapshot.Marking.Tokens) != 2 {
+		t.Fatal("scope evaluation changed tokens")
+	}
 }

@@ -2,6 +2,7 @@ package subsystems_test
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 
 func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -47,7 +48,14 @@ func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 
 func TestTerminationCheck_DoesNotTerminateWithImmediatelyRunnableWork(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(
+		n,
+		logging.NoopLogger{},
+		interfaces.RuntimeModeBatch,
+		nil,
+		func() time.Time { return time.Unix(100, 0) },
+		terminationEnablement{enabled: []interfaces.EnabledTransition{{TransitionID: "tr1"}}},
+	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -67,7 +75,7 @@ func TestTerminationCheck_DoesNotTerminateWithImmediatelyRunnableWork(t *testing
 
 func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -90,7 +98,7 @@ func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 
 func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -113,7 +121,7 @@ func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 
 func TestTerminationCheck_ClassifiesDrainedNonTerminalWorkByDistinctCustomerWorkID(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -144,7 +152,7 @@ func TestTerminationCheck_ClassifiesDrainedNonTerminalWorkByDistinctCustomerWork
 
 func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
@@ -165,7 +173,7 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 
 func TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
@@ -193,7 +201,7 @@ func TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement(
 
 func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 	n := buildTerminationNet()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -212,7 +220,7 @@ func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 
 func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeBatch, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -234,7 +242,7 @@ func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 
 func TestTerminationCheck_ServiceModeDoesNotTerminateIdleRuntime(t *testing.T) {
 	n := buildTerminationNetNoTransitions()
-	tc := subsystems.NewTerminationCheck(n, logging.NoopLogger{}, interfaces.RuntimeModeService)
+	tc := subsystems.NewTerminationCheckWithRuntime(n, logging.NoopLogger{}, interfaces.RuntimeModeService, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
@@ -299,15 +307,151 @@ func makeTerminationSnapshot(tokens map[string]*factorytoken.Token) petri.Markin
 	placeTokens := make(map[string][]string)
 	for id, tok := range tokens {
 		if tok.CreatedAt.IsZero() {
-			tok.CreatedAt = time.Now()
+			tok.CreatedAt = time.Unix(100, 0)
 		}
 		if tok.EnteredAt.IsZero() {
-			tok.EnteredAt = time.Now()
+			tok.EnteredAt = time.Unix(100, 0)
 		}
 		placeTokens[tok.PlaceID] = append(placeTokens[tok.PlaceID], id)
 	}
 	return petri.MarkingSnapshot{
 		Tokens:      tokens,
 		PlaceTokens: placeTokens,
+	}
+}
+
+// terminationEnablement controls runnable decisions independently of guard evaluation.
+type terminationEnablement struct {
+	enabled []interfaces.EnabledTransition
+}
+
+func (e terminationEnablement) FindEnabledTransitionsWithSnapshot(
+	context.Context,
+	*state.Net,
+	*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	logging.Logger,
+	func() time.Time,
+	interfaces.RuntimeDefinitionLookup,
+) []interfaces.EnabledTransition {
+	return e.enabled
+}
+
+func (e terminationEnablement) ExpandRepeatedBindings(
+	_ *state.Net,
+	_ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	enabled []interfaces.EnabledTransition,
+	_ logging.Logger,
+	_ func() time.Time,
+	_ interfaces.RuntimeDefinitionLookup,
+) []interfaces.EnabledTransition {
+	return enabled
+}
+
+type scopedTerminationEnablement struct {
+	terminationEnablement
+	evaluate func(context.Context, *state.Net, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], logging.Logger, func() time.Time, interfaces.RuntimeDefinitionLookup) []interfaces.EnabledTransition
+}
+
+func (e scopedTerminationEnablement) FindEnabledTransitionsWithSnapshot(
+	ctx context.Context,
+	net *state.Net,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	logger logging.Logger,
+	now func() time.Time,
+	lookup interfaces.RuntimeDefinitionLookup,
+) []interfaces.EnabledTransition {
+	return e.evaluate(ctx, net, snapshot, logger, now, lookup)
+}
+
+func TestTerminationCheck_ForwardsIndependentScopesToCompletedEnablement(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	evaluator := scopedTerminationEnablement{}
+	snapshots := make([]*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], 2)
+	nets := []*state.Net{buildTerminationNet(), buildTerminationNet()}
+	clocks := []time.Time{time.Unix(100, 0), time.Unix(200, 0)}
+	lookups := []*runtimefixtures.RuntimeDefinitionLookupFixture{{}, {}}
+	checks := make([]*subsystems.TerminationCheckSubsystem, 2)
+	calls := [2]int{}
+	evaluator.evaluate = func(gotCtx context.Context, net *state.Net, snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], logger logging.Logger, now func() time.Time, lookup interfaces.RuntimeDefinitionLookup) []interfaces.EnabledTransition {
+		for i := range nets {
+			if net != nets[i] {
+				continue
+			}
+			calls[i]++
+			if gotCtx != ctx || snap != snapshots[i] || logger != (logging.NoopLogger{}) || lookup != lookups[i] || !now().Equal(clocks[i]) {
+				t.Fatal("enablement received another scope")
+			}
+			if now().Unix() >= 200 {
+				return []interfaces.EnabledTransition{{TransitionID: "t1"}}
+			}
+			return nil
+		}
+		t.Fatal("enablement received unknown topology")
+		return nil
+	}
+	for i := range checks {
+		snapshots[i] = &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"work":     {ID: "work", PlaceID: "wt:init", Color: factorytoken.Color{WorkID: "w1"}},
+			"resource": {ID: "resource", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		})}
+		checks[i] = subsystems.NewTerminationCheckWithRuntime(nets[i], logging.NoopLogger{}, interfaces.RuntimeModeBatch, lookups[i], func() time.Time { return clocks[i] }, evaluator)
+	}
+	for _, i := range []int{0, 1, 0} {
+		result, err := checks[i].Execute(ctx, snapshots[i])
+		assertTerminationScopeResult(t, i, result, err)
+	}
+	clocks[0] = time.Unix(200, 0)
+	if result, err := checks[0].Execute(ctx, snapshots[0]); err != nil || result != nil {
+		t.Fatalf("advanced scope result = %+v, %v", result, err)
+	}
+	if calls != [2]int{3, 1} {
+		t.Fatalf("evaluation calls = %v", calls)
+	}
+}
+
+func assertTerminationScopeResult(t *testing.T, scope int, result *interfaces.TickResult, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope == 0 && (result == nil || result.Termination.Classification != interfaces.TerminationClassificationIncomplete) {
+		t.Fatalf("scope 0 result = %+v", result)
+	}
+	if scope == 1 && result != nil {
+		t.Fatalf("scope 1 runnable result = %+v", result)
+	}
+}
+
+func TestTerminationCheck_DefaultServiceAndDispatchOnlyWaiting(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		mode     interfaces.RuntimeMode
+		dispatch bool
+		complete bool
+	}{
+		{"empty mode defaults to batch", "", false, true},
+		{"service remains live", interfaces.RuntimeModeService, false, false},
+		{"dispatch alone prevents completion", interfaces.RuntimeModeBatch, true, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{})}
+			net := buildTerminationNet()
+			net.Resources = nil
+			if test.dispatch {
+				snapshot.Dispatches = map[string]*interfaces.DispatchEntry{"active": {}}
+			}
+			checker := subsystems.NewTerminationCheckWithRuntime(net, logging.NoopLogger{}, test.mode, nil, func() time.Time { return time.Unix(100, 0) }, terminationEnablement{})
+			result, err := checker.Execute(context.Background(), snapshot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (result != nil && result.ShouldTerminate) != test.complete {
+				t.Fatalf("result = %+v, want complete=%t", result, test.complete)
+			}
+		})
 	}
 }

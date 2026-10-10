@@ -26,30 +26,12 @@ type DispatcherSubsystem struct {
 	sched               scheduler.Scheduler
 	wfCtx               *factory_context.FactoryContext
 	logger              logging.Logger
-	evaluator           *scheduler.EnablementEvaluator
+	evaluator           scheduler.Enablement
 	runtimeConfig       interfaces.RuntimeDefinitionLookup
 	now                 func() time.Time
 	newID               factoryruntime.IDGenerator
 	replayIDs           factoryruntime.ReplayDispatchIDResolver
 	seededReplayWorkIDs map[string]struct{}
-}
-
-// NewDispatcher creates a new DispatcherSubsystem.
-func NewDispatcher(
-	n *state.Net,
-	sched scheduler.Scheduler,
-	wfCtx *factory_context.FactoryContext,
-	logger logging.Logger,
-	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	now func() time.Time,
-	newID factoryruntime.IDGenerator,
-	replayIDs ...factoryruntime.ReplayDispatchIDResolver,
-) *DispatcherSubsystem {
-	var replayIDResolver factoryruntime.ReplayDispatchIDResolver
-	if len(replayIDs) > 0 {
-		replayIDResolver = replayIDs[0]
-	}
-	return newDispatcher(n, sched, wfCtx, logger, runtimeConfig, now, newID, replayIDResolver, nil)
 }
 
 // NewDispatcherWithSeededReplay creates a dispatcher that preserves restored
@@ -64,26 +46,10 @@ func NewDispatcherWithSeededReplay(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
 	now func() time.Time,
 	newID factoryruntime.IDGenerator,
+	enablement scheduler.Enablement,
 	replayIDs factoryruntime.ReplayDispatchIDResolver,
 	seededRestoredWorkIDs map[string]struct{},
 ) *DispatcherSubsystem {
-	return newDispatcher(n, sched, wfCtx, logger, runtimeConfig, now, newID, replayIDs, seededRestoredWorkIDs)
-}
-
-func newDispatcher(
-	n *state.Net,
-	sched scheduler.Scheduler,
-	wfCtx *factory_context.FactoryContext,
-	logger logging.Logger,
-	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	now func() time.Time,
-	newID factoryruntime.IDGenerator,
-	replayIDs factoryruntime.ReplayDispatchIDResolver,
-	seededRestoredWorkIDs map[string]struct{},
-) *DispatcherSubsystem {
-	if now == nil {
-		panic("Factory Runtime dispatcher clock is required")
-	}
 	if newID == nil {
 		panic("Factory Runtime dispatcher ID generator is required")
 	}
@@ -92,17 +58,13 @@ func newDispatcher(
 		sched:               sched,
 		wfCtx:               wfCtx,
 		logger:              logger,
+		evaluator:           enablement,
 		runtimeConfig:       runtimeConfig,
 		now:                 now,
 		newID:               newID,
 		replayIDs:           replayIDs,
 		seededReplayWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
 	}
-	dispatcher.evaluator = scheduler.NewEnablementEvaluator(
-		logger,
-		dispatcher.now,
-		dispatcher.runtimeConfig)
-
 	return dispatcher
 }
 
@@ -141,12 +103,12 @@ func (d *DispatcherSubsystem) Execute(ctx context.Context, snapshot *interfaces.
 }
 
 func (d *DispatcherSubsystem) dispatchDecisions(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []interfaces.FiringDecision {
-	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, d.schedulerSnapshot(snapshot))
+	enabled := d.evaluator.FindEnabledTransitionsWithSnapshot(ctx, d.state, d.schedulerSnapshot(snapshot), d.logger, d.now, d.runtimeConfig)
 	if len(enabled) == 0 {
 		return nil
 	}
 	if scheduler.SupportsRepeatedTransitionBindings(d.sched) {
-		expanded := d.evaluator.ExpandRepeatedBindings(d.state, d.schedulerSnapshot(snapshot), enabled)
+		expanded := d.evaluator.ExpandRepeatedBindings(d.state, d.schedulerSnapshot(snapshot), enabled, d.logger, d.now, d.runtimeConfig)
 		if len(expanded) != len(enabled) {
 			d.logger.Debug("dispatcher: expanded repeated transition bindings", "enabled", len(enabled), "expanded", len(expanded))
 		}
