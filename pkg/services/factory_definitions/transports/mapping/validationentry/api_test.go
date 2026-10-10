@@ -1,7 +1,9 @@
 package validationentry_test
 
 import (
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
@@ -11,6 +13,80 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
+
+func TestPersistenceEntryMapsDetachedCanonicalRequest(t *testing.T) {
+	t.Parallel()
+	payload := []byte(`{"name":"alpha","workers":[{"name":"executor","type":"MODEL_WORKER"}],"workstations":[{"name":"execute","worker":"executor","type":"AGENT_RUN"}]}`)
+	snapshot := interfaces.FactorySnapshot(append([]byte(nil), payload...))
+	request, err := validationentry.MapFactoryJSONForPersistence(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	editable, err := validationentry.MapEditableFactorySnapshot(&snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range []interfaces.DefinitionValidationRequest{request, editable} {
+		if got.Config == nil || got.Config.Name != "alpha" || len(got.SubmittedTaxonomy.Workers) != 1 || got.SubmittedTaxonomy.Workers[0].Type != "MODEL_WORKER" || len(got.SubmittedTaxonomy.Workstations) != 1 || got.SubmittedTaxonomy.Workstations[0].Worker != "executor" {
+			t.Fatalf("mapped request = %#v", got)
+		}
+		assertCanonicalPayload(t, got.CanonicalPayload, payload)
+	}
+	payload[0] = 'x'
+	snapshot[0] = 'x'
+	if request.CanonicalPayload[0] != '{' || editable.CanonicalPayload[0] != '{' {
+		t.Fatal("mapped canonical payload aliases submitted bytes")
+	}
+	request.Config.Name = "changed"
+	if editable.Config.Name != "alpha" {
+		t.Fatal("mapped config aliases another request")
+	}
+}
+
+func assertCanonicalPayload(t *testing.T, canonicalPayload, submittedPayload []byte) {
+	t.Helper()
+	var canonical, submitted any
+	if err := json.Unmarshal(canonicalPayload, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(submittedPayload, &submitted); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(canonical, submitted) {
+		t.Fatalf("canonical payload = %s, want %s", canonicalPayload, submittedPayload)
+	}
+}
+
+func TestSubmittedValidationEntryPreservesOperationResult(t *testing.T) {
+	t.Parallel()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := validationResult("controlled.finding")
+	got, err := validationentry.ValidateFactoryAPI(t.Context(), factory, testFactoryDefinitionValidator(want))
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("validation = %#v, %v; want %#v", got, err, want)
+	}
+	if _, err := validationentry.ValidateFactoryAPI(t.Context(), factory, nil); err == nil || err.Error() != "Factory Definition validation operation is required" {
+		t.Fatalf("missing operation = %v", err)
+	}
+}
+
+func TestPersistenceEntriesClassifyMalformedAndMissingPayloads(t *testing.T) {
+	t.Parallel()
+	malformed := interfaces.FactorySnapshot(`{"name":`)
+	for _, snapshot := range []*interfaces.FactorySnapshot{nil, &malformed} {
+		got, err := validationentry.MapEditableFactorySnapshot(snapshot, nil)
+		if !errors.Is(err, interfaces.ErrInvalidNamedFactory) || got.Config != nil {
+			t.Fatalf("editable mapping = %#v, %v; want invalid Factory and no request", got, err)
+		}
+	}
+	got, err := validationentry.MapFactoryJSONForPersistence([]byte(malformed))
+	if !errors.Is(err, interfaces.ErrInvalidNamedFactory) || got.Config != nil {
+		t.Fatalf("persistence mapping = %#v, %v; want invalid Factory and no request", got, err)
+	}
+}
 
 const (
 	codeDuplicateIdentifier                              = "factory.duplicateIdentifier"

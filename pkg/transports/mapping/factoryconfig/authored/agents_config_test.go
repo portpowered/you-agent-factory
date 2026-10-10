@@ -9,6 +9,53 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
+func TestRenderWorkerMarkdownPreservesExecutionFields(t *testing.T) {
+	t.Parallel()
+	want := interfaces.FactoryWorkerConfig{Type: interfaces.WorkerTypeScript, Command: "python", Args: []string{"run.py"}, Stdin: "input", Timeout: "2m", Body: "instructions", ModelProvider: "customer.model", ExecutorProvider: "script_wrap"}
+	data, err := RenderWorkerAgentsMarkdown(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseWorkerConfig(data, "worker/AGENTS.md")
+	if err != nil || got.Command != want.Command || len(got.Args) != 1 || got.Args[0] != "run.py" || got.Body != want.Body || got.Stdin != want.Stdin || got.Timeout != want.Timeout || got.ModelProvider != want.ModelProvider || got.ExecutorProvider != want.ExecutorProvider {
+		t.Fatalf("worker round trip = %+v, %v", got, err)
+	}
+}
+
+func TestRenderWorkstationMarkdownPreservesRoutesAndSchedule(t *testing.T) {
+	t.Parallel()
+	guard := &interfaces.InputGuardConfig{Type: "MATCH", MatchInput: "task"}
+	route := []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done", Guard: guard}}
+	want := interfaces.FactoryWorkstationConfig{Name: "run", Type: interfaces.WorkstationTypeModel, WorkerTypeName: "model", Body: "instructions", Cron: &interfaces.CronConfig{Every: "1h", TriggerAtStart: true}, Inputs: route, Outputs: route, OnContinue: route, OnRejection: route, OnFailure: route, Guards: []interfaces.GuardConfig{{Type: "MAX_VISITS", MaxVisits: 3, LogicalRoundTrip: &interfaces.LogicalRoundTripConfig{Workstations: []string{"run"}, MaxRawVisits: 4}}}, Env: map[string]string{"MODE": "test"}}
+	data, err := RenderWorkstationAgentsMarkdown(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseWorkstationConfig(data, "station/AGENTS.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != want.Body || got.WorkerTypeName != "model" || got.Cron == nil || got.Cron.Every != "1h" || !got.Cron.TriggerAtStart || got.Env["MODE"] != "test" || len(got.Guards) != 1 || got.Guards[0].LogicalRoundTrip.MaxRawVisits != 4 {
+		t.Fatalf("station round trip = %+v", got)
+	}
+	assertWorkstationRoutes(t, got)
+}
+
+func TestAuthoredExpandedLayoutOmitsSplitBodiesWithoutMutatingInput(t *testing.T) {
+	t.Parallel()
+	want := &interfaces.FactoryConfig{Workers: []interfaces.FactoryWorkerConfig{{Body: "worker"}}, Workstations: []interfaces.FactoryWorkstationConfig{{Body: "station", PromptTemplate: "prompt"}}, ResourceManifest: &interfaces.PortableResourceManifestConfig{BundledFiles: []interfaces.BundledFileConfig{{Type: interfaces.BundledFileTypeDoc, TargetPath: "factory/docs/guide.md", Content: interfaces.BundledFileContentConfig{Inline: "guide"}}}}}
+	got, err := AuthoredFactoryConfigForExpandedLayout(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Workers[0].Body != "" || got.Workstations[0].Body != "" || got.Workstations[0].PromptTemplate != "" || got.ResourceManifest.BundledFiles[0].Content.Inline != "" {
+		t.Fatalf("expanded config = %+v", got)
+	}
+	if want.Workers[0].Body != "worker" || want.Workstations[0].PromptTemplate != "prompt" || want.ResourceManifest.BundledFiles[0].Content.Inline != "guide" {
+		t.Fatal("input mutated")
+	}
+}
+
 func TestLoadWorkerConfig_ModelWorker(t *testing.T) {
 	dir := t.TempDir()
 	agentsMD := `---
@@ -528,6 +575,15 @@ Produce the declared files.
 	for index := range want {
 		if cfg.ExpectedArtifacts[index] != want[index] {
 			t.Fatalf("artifact declaration %d = %#v, want %#v", index, cfg.ExpectedArtifacts[index], want[index])
+		}
+	}
+}
+
+func assertWorkstationRoutes(t *testing.T, got *interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+	for _, routes := range [][]interfaces.IOConfig{got.Inputs, got.Outputs, got.OnContinue, got.OnRejection, got.OnFailure} {
+		if len(routes) != 1 || routes[0].WorkTypeName != "task" || routes[0].StateName != "done" || routes[0].Guard == nil || routes[0].Guard.MatchInput != "task" {
+			t.Fatalf("routes = %+v", routes)
 		}
 	}
 }

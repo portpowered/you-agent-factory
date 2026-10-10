@@ -446,13 +446,12 @@ func provideFactoryDefinitionPersistence(
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateWrites factorydefinitions.PortableBundledFileWritesValidator,
 	copySupportedFiles factorydefinitions.PortableBundledFilesCopier,
-	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
-	ensureInbox factorydefinitions.InputInboxSentinelEnsurer,
+	writer *definitionsPersistenceWriter,
 	persistenceFileSystem factorydefinitions.PersistenceFileSystem,
 	namedPaths factorydefinitions.NamedPathResolver,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
-	conversions factorydefinitions.SerializedFactoryConfigReader,
-	canonical factorydefinitions.CanonicalFactoryConfigReader,
+	decode factorydefinitions.FactoryConfigJSONDecoder,
+	encode factorydefinitions.FactoryConfigJSONEncoder,
 ) (factorydefinitions.PackagedFactoryPersistence, error) {
 	return factorydefinitionswire.Persistence(
 		validator,
@@ -464,13 +463,12 @@ func provideFactoryDefinitionPersistence(
 		materializeFiles,
 		validateWrites,
 		copySupportedFiles,
-		fileSystem,
-		ensureInbox,
+		(*factorydefinitionswire.AuthoredLayoutWriter)(writer),
 		persistenceFileSystem,
 		namedPaths,
 		directoryReplacementStore,
-		conversions,
-		canonical,
+		decode,
+		encode,
 	)
 }
 
@@ -511,20 +509,11 @@ func provideEditableFactoryValidator(
 }
 
 func provideInitialFactorySnapshotFactory(
-	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
-	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
+	prepare factorydefinitions.PortableFactoryConfigPreparer,
+	capture factorydefinitions.LoadedFactorySnapshotCapturer,
 ) factorydefinitions.InitialFactorySnapshotFactory {
-	return func(
-		loaded factorydefinitions.LoadedFactorySource,
-	) (*factorydefinitions.FactorySnapshot, error) {
-		return factorydefinitionswire.CaptureInitialSnapshot(
-			loaded,
-			factorydefinitionswire.PortableFactoryConfigPreparer(
-				applySupportedFiles,
-				applyStarterWork,
-			),
-			factorydefinitionswire.LoadedFactorySnapshotCapturer(),
-		)
+	return func(loaded factorydefinitions.LoadedFactorySource) (*factorydefinitions.FactorySnapshot, error) {
+		return factorydefinitionswire.CaptureInitialSnapshot(loaded, prepare, capture)
 	}
 }
 

@@ -33,10 +33,8 @@ func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
 
 // FactorySnapshotCapturer binds canonical representation mapping to explicit
 // Factory Definition snapshot capture.
-func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
-	return snapshotsportabilitycapture.NewExplicit(
-		factorysnapshot.ObjectFromFactoryConfig,
-	)
+func FactorySnapshotCapturer(capture contracts.LoadedFactorySnapshotCapturer) contracts.FactorySnapshotCapturer {
+	return snapshotsportabilitycapture.NewExplicit(capture)
 }
 
 // CaptureInitialSnapshot captures the portable Factory Definition stored with
@@ -92,14 +90,6 @@ func ValidateEditableSnapshot(
 		mapInput,
 		validator,
 	)
-}
-
-// PrepareFactorySnapshotImport decodes one detached snapshot payload through
-// snapshots_portability-owned prepare-import logic.
-func PrepareFactorySnapshotImport(
-	payload []byte,
-) (contracts.PrepareFactorySnapshotImportResult, error) {
-	return snapshotsportabilityprepare.Import(payload, FactorySnapshotJSONDecoder())
 }
 
 // NewPortableBundledFilesApplier binds portable authored-file discovery to an

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ func injectedLifecycle(host lifecycle.Host, filesystem definitions.VersionFileSy
 	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
 		disabled, disabled, filesystem, disabled.ListEffectiveFactories,
+		definitions.UnimplementedService{},
 	)
 }
 
@@ -55,6 +57,7 @@ func TestFreshVersionRequiresBothCoordinatesToAdvance(t *testing.T) {
 		{"missing", nil, true},
 		{"equal", &current, true},
 		{"older", &definitions.FactoryVersion{Logical: 8, Physical: time.Unix(90, 0)}, true},
+		{"older logical with later physical", &definitions.FactoryVersion{Logical: 8, Physical: time.Unix(101, 0)}, true},
 		{"only logical advances", &definitions.FactoryVersion{Logical: 10, Physical: current.Physical}, true},
 		{"only physical advances", &definitions.FactoryVersion{Logical: 9, Physical: time.Unix(101, 0)}, true},
 		{"both advance", &definitions.FactoryVersion{Logical: 10, Physical: time.Unix(101, 0)}, false},
@@ -174,6 +177,21 @@ func TestCurrentVersionRetainsLookupLoadAndStatFailures(t *testing.T) {
 	}
 }
 
+func TestDefaultVersionUsesRootMtimeAndFailsClosedWithoutFilesystem(t *testing.T) {
+	t.Parallel()
+	host := &versionHost{source: versionSource{config: &definitions.FactoryConfig{}}, resolveError: errors.New("default must not resolve a named directory")}
+	modified := time.Unix(200, 123).UTC()
+	filesystem := &versionFileSystem{info: modifiedFile{modified: modified}}
+	got, err := injectedLifecycle(host, filesystem).CurrentFactoryDefinitionVersionAtRoot("root", definitions.DefaultCurrentFactoryName)
+	if err != nil || got.Logical != modified.UnixNano() || !got.Physical.Equal(modified) || host.loadedDir != "root" || filesystem.path != filepath.Join("root", definitions.FactoryConfigFile) {
+		t.Fatalf("default version = %#v, %v, loaded %q, stat %q", got, err, host.loadedDir, filesystem.path)
+	}
+	got, err = injectedLifecycle(host, nil).CurrentFactoryDefinitionVersionAtRoot("root", definitions.DefaultCurrentFactoryName)
+	if got != (definitions.FactoryVersion{}) || err == nil || !strings.Contains(err.Error(), "version filesystem is required") {
+		t.Fatalf("version without filesystem = %#v, %v", got, err)
+	}
+}
+
 type staleSaveHost struct {
 	*versionHost
 	snapshot *definitions.FactorySnapshot
@@ -208,6 +226,7 @@ func TestStaleSaveRejectsBeforePersistenceOrActivation(t *testing.T) {
 			gateway := staleActivation{DefinitionActivationGateway: lifecycle.StubActivationGateway(), t: t}
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 				host, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories,
+				definitions.UnimplementedService{},
 			)
 			got, err := service.Save(context.Background(), "session", definitions.SaveModeReplaceCurrent, definitions.EditableFactory{Snapshot: snapshot, Version: submitted})
 			if !errors.Is(err, definitions.ErrFactoryVersionStale) || got.Snapshot != nil {

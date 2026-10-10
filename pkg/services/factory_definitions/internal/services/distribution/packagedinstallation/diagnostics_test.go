@@ -677,3 +677,17 @@ func TestExplicitNoopInstallationResultsAndFailures(t *testing.T) {
 		})
 	}
 }
+
+func newWithOwnerProbe(
+	persistence factorydefinitions.PackagedFactoryPersistence,
+	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
+	probe ownerProbe,
+	logger logging.Logger,
+) *Service {
+	service := New(persistence, fileSystem, directoryCreator, nil, logger)
+	if probe != nil {
+		service.ownerProbe = probe
+	}
+	return service
+}

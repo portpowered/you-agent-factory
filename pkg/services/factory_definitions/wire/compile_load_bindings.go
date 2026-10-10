@@ -30,29 +30,25 @@ func NewLoader(
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	loadingFileSystem factorydefinitions.LoadingFileSystem,
 	namedPaths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	authoredReader *AuthoredLayoutReader,
+	loadAuthoredSource factorydefinitions.AuthoredFactorySourceLoader,
+	newSource factorydefinitions.LoadedFactorySourceFactory,
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
-	conversions factorydefinitions.SerializedFactoryConfigReader,
+	decodeFactory factorydefinitions.FactoryConfigJSONDecoder,
+	normalizeCanonical CanonicalFactoryNormalizer,
 ) *Loader {
-	decodeFactory := FactoryConfigDecoder(conversions)
-	authoredReader := internalauthoredlayout.NewReader(
-		authoredmapping.ParseWorkerConfig,
-		authoredmapping.ParseWorkstationConfig,
-		authoredmapping.ParseAgentsBody,
-		fileSystem,
-	)
 	return compilationloading.New(
 		loadingFileSystem,
-		internalauthoredlayout.NewFactorySourceLoader(fileSystem),
+		loadAuthoredSource,
 		namedPaths.ResolveCurrentDir,
-		LoadedFactorySourceFactory(),
+		newSource,
 		factorymapping.ExpandFactoryConfigForRuntimeLoad,
 		decodeFactory,
 		factorymapping.MarshalCanonicalFactoryConfig,
 		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		normalizeCanonicalFactory,
+		normalizeCanonical,
 		func(
 			factoryDir string,
 			factoryConfig *factorydefinitions.FactoryConfig,
@@ -119,17 +115,28 @@ func LoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory 
 	}
 }
 
-func normalizeCanonicalFactory(
-	payload []byte,
-) (*factorydefinitions.FactoryConfig, error) {
+// AuthoredLayoutReader is the completed split-layout reader supplied to loading.
+type AuthoredLayoutReader = internalauthoredlayout.Reader
+
+// NewAuthoredLayoutReader constructs only the split-layout reader.
+func NewAuthoredLayoutReader(fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem) *AuthoredLayoutReader {
+	return internalauthoredlayout.NewReader(authoredmapping.ParseWorkerConfig,
+		authoredmapping.ParseWorkstationConfig, authoredmapping.ParseAgentsBody, fileSystem)
+}
+
+// CanonicalFactoryNormalizer preserves load-specific error context.
+type CanonicalFactoryNormalizer func([]byte) (*factorydefinitions.FactoryConfig, error)
+
+// CanonicalFactoryNormalizerFromMapper binds one mapper before any load operation.
+func CanonicalFactoryNormalizerFromMapper() CanonicalFactoryNormalizer {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	factoryConfig, err := mapper.Expand(payload)
-	if err != nil {
-		return nil, fmt.Errorf("parse factory config: %w", err)
+	return func(payload []byte) (*factorydefinitions.FactoryConfig, error) {
+		config, err := mapper.Expand(payload)
+		if err != nil {
+			return nil, fmt.Errorf("parse factory config: %w", err)
+		}
+		return config, nil
 	}
-	// Expand validates and normalizes the public representation. Loading keeps
-	// that effective config; authored-output normalization belongs to persistence.
-	return factoryConfig, nil
 }
 
 // Compilation is the completed private owner supplied to the Definitions root.

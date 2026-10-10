@@ -1,6 +1,8 @@
 package impl
 
 import (
+	"math"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -8,6 +10,60 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestLayoutValidationAndPruningPreserveLiveGeometry(t *testing.T) {
+	t.Parallel()
+	topology := factorydefinitions.PendingFactoryGraphTopology{NodeIDs: map[string]struct{}{"live": {}}, EdgeIDs: map[string]struct{}{"edge": {}}}
+	config := &factorydefinitions.FactoryConfig{Layout: &factorydefinitions.FactoryLayoutConfig{
+		SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
+		Nodes:         []factorydefinitions.FactoryLayoutNodeConfig{{ID: "live", Position: factorydefinitions.FactoryLayoutPointConfig{X: 10, Y: 20}}, {ID: "retired"}},
+		Edges:         []factorydefinitions.FactoryLayoutEdgeConfig{{ID: "edge", Waypoints: []factorydefinitions.FactoryLayoutPointConfig{{X: 2, Y: 3}}}, {ID: "retired-edge"}},
+		Groups:        []factorydefinitions.FactoryLayoutGroupConfig{{ID: "group", NodeIDs: []string{"live", "retired", ""}}},
+		Viewport:      &factorydefinitions.FactoryLayoutViewportConfig{X: 1, Y: 2, Zoom: 1},
+	}}
+	result := ValidateLayout(config, topology)
+	assertLayoutCodes(t, result, map[string]int{CodeLayoutUnknownNodeReference: 1, CodeLayoutUnknownEdgeReference: 1, CodeLayoutUnknownGroupMemberReference: 1})
+	if len(config.Layout.Nodes) != 2 {
+		t.Fatal("validation mutated authored layout")
+	}
+	result = PruneLayout(config, topology)
+	assertLayoutCodes(t, result, map[string]int{CodeLayoutUnknownNodeReference: 1, CodeLayoutUnknownEdgeReference: 1, CodeLayoutUnknownGroupMemberReference: 1})
+	if len(config.Layout.Nodes) != 1 || config.Layout.Nodes[0].Position.X != 10 || len(config.Layout.Edges) != 1 || config.Layout.Edges[0].Waypoints[0].Y != 3 || !reflect.DeepEqual(config.Layout.Groups[0].NodeIDs, []string{"live"}) || config.Layout.Viewport.Zoom != 1 {
+		t.Fatalf("pruned layout = %+v", config.Layout)
+	}
+	assertLayoutCodes(t, ValidateLayout(config, topology), map[string]int{})
+}
+
+func TestLayoutNonFiniteGeometryIsRejectedWithoutRemovingValidPeers(t *testing.T) {
+	t.Parallel()
+	topology := factorydefinitions.PendingFactoryGraphTopology{NodeIDs: map[string]struct{}{"position": {}, "size": {}, "live": {}}, EdgeIDs: map[string]struct{}{"waypoint": {}, "label": {}, "live-edge": {}}}
+	config := &factorydefinitions.FactoryConfig{Layout: &factorydefinitions.FactoryLayoutConfig{
+		SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
+		Nodes:         []factorydefinitions.FactoryLayoutNodeConfig{{ID: "position", Position: factorydefinitions.FactoryLayoutPointConfig{X: math.NaN()}}, {ID: "size", Size: &factorydefinitions.FactoryLayoutSizeConfig{Width: math.Inf(1)}}, {ID: "live"}},
+		Edges:         []factorydefinitions.FactoryLayoutEdgeConfig{{ID: "waypoint", Waypoints: []factorydefinitions.FactoryLayoutPointConfig{{Y: math.Inf(-1)}}}, {ID: "label", LabelPosition: &factorydefinitions.FactoryLayoutPointConfig{X: math.NaN()}}, {ID: "live-edge"}},
+		Groups:        []factorydefinitions.FactoryLayoutGroupConfig{{ID: "invalid", Bounds: factorydefinitions.FactoryLayoutBoundsConfig{Width: math.NaN()}}, {ID: "valid", NodeIDs: []string{"live"}}},
+		Viewport:      &factorydefinitions.FactoryLayoutViewportConfig{Zoom: math.Inf(1)},
+	}}
+	assertLayoutCodes(t, ValidateLayout(config, topology), map[string]int{CodeLayoutInvalidGeometry: 6})
+	assertLayoutCodes(t, PruneLayout(config, topology), map[string]int{CodeLayoutInvalidGeometry: 6})
+	if len(config.Layout.Nodes) != 1 || config.Layout.Nodes[0].ID != "live" || len(config.Layout.Edges) != 1 || config.Layout.Edges[0].ID != "live-edge" || len(config.Layout.Groups) != 1 || config.Layout.Groups[0].ID != "valid" || config.Layout.Viewport != nil {
+		t.Fatalf("invalid geometry retained: %+v", config.Layout)
+	}
+}
+
+func assertLayoutCodes(t *testing.T, result Result, want map[string]int) {
+	t.Helper()
+	got := map[string]int{}
+	for _, target := range result.Targets {
+		got[target.Code]++
+		if target.Severity != SeverityWarning || target.Subject.Type != SubjectTypeFactory || target.Subject.Location != SubjectLocationReference || target.Path == "" {
+			t.Fatalf("layout finding = %+v", target)
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("layout codes = %v, want %v", got, want)
+	}
+}
 
 func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) {
 	vr := &ValidationResult{

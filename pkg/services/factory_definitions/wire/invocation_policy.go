@@ -2,38 +2,52 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
-	invocationpolicywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/wire"
+	decisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
+	invocationinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation"
+	invocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput"
+	invocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
+	quorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy"
+	ttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability"
+	workpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation"
+	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
 )
 
-// InvocationPolicyPorts are the published Definitions root policy contracts
-// constructed from the nested invocation_policy owner.
-type InvocationPolicyPorts struct {
-	DecisionEnvelope        factorydefinitions.DecisionEnvelopeService
-	InvocationInterpolation factorydefinitions.InvocationInterpolationService
-	InvocationOutput        factorydefinitions.InvocationOutputShapingService
-	InvocationWorkType      factorydefinitions.InvocationWorkTypeService
-	QuorumPolicy            factorydefinitions.QuorumPolicyService
-	WorkPropagation         factorydefinitions.WorkPropagationPolicyService
-	WorkstationExecution    factorydefinitions.WorkstationExecutionPolicyService
-	TTSObservability        factorydefinitions.TTSObservabilityService
+// NewDecisionEnvelopeService constructs the focused Definitions policy owner.
+func NewDecisionEnvelopeService() factorydefinitions.DecisionEnvelopeService {
+	return decisionenvelope.NewService()
 }
 
-// InvocationPolicyPortsFromNestedOwner constructs published root policy contracts
-// from the nested invocation_policy subservice.
-func InvocationPolicyPortsFromNestedOwner() (InvocationPolicyPorts, error) {
-	service, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
-	if err != nil {
-		return InvocationPolicyPorts{}, err
-	}
-	return InvocationPolicyPorts{
-		DecisionEnvelope:        service.DecisionEnvelope(),
-		InvocationInterpolation: service.InvocationInterpolation(),
-		InvocationOutput:        service.InvocationOutput(),
-		InvocationWorkType:      service.InvocationWorkType(),
-		QuorumPolicy:            service.QuorumPolicy(),
-		WorkPropagation:         service.WorkPropagation(),
-		WorkstationExecution:    service.WorkstationExecution(),
-		TTSObservability:        service.TTSObservability(),
-	}, nil
+// NewInvocationInterpolationService constructs the focused Definitions policy owner.
+func NewInvocationInterpolationService() factorydefinitions.InvocationInterpolationService {
+	return invocationinterpolation.NewService()
+}
+
+// NewInvocationOutputShapingService constructs the focused Definitions policy owner.
+func NewInvocationOutputShapingService() factorydefinitions.InvocationOutputShapingService {
+	return invocationoutput.NewService()
+}
+
+// NewInvocationWorkTypeService constructs the focused Definitions policy owner.
+func NewInvocationWorkTypeService() factorydefinitions.InvocationWorkTypeService {
+	return invocationworktype.NewService()
+}
+
+// NewQuorumPolicyService constructs the focused Definitions policy owner.
+func NewQuorumPolicyService() factorydefinitions.QuorumPolicyService {
+	return quorumpolicy.NewService()
+}
+
+// NewWorkPropagationPolicyService constructs the focused Definitions policy owner.
+func NewWorkPropagationPolicyService() factorydefinitions.WorkPropagationPolicyService {
+	return workpropagation.NewService()
+}
+
+// NewWorkstationExecutionPolicyService constructs the focused Definitions policy owner.
+func NewWorkstationExecutionPolicyService() factorydefinitions.WorkstationExecutionPolicyService {
+	return workstationexecution.NewService()
+}
+
+// NewTTSObservabilityService constructs the focused Definitions policy owner.
+func NewTTSObservabilityService() factorydefinitions.TTSObservabilityService {
+	return ttsobservability.NewService()
 }

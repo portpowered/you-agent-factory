@@ -59,25 +59,20 @@ func runPersistenceFailure(t *testing.T, replace bool, fault string) {
 	}
 	filesystem := &failingPersistenceFilesystem{fault: fault, failure: failure}
 	writes := 0
-	ports := Ports{
-		FileSystem:           filesystem,
-		RequireDefinitionDir: func(string) error { return nil },
-		Directories:          failedDirectoryCommit{failure: failure},
-		Write: func(dir string, _ *factorydefinitions.PreparedFactoryLayoutPayload, _ string) error {
-			writes++
-			if fault == "write" {
-				return failure
-			}
-			return os.WriteFile(filepath.Join(dir, "factory.json"), []byte("candidate"), 0o600)
-		},
-		Validate: func(string) error {
-			if fault == "validation" {
-				return failure
-			}
-			return nil
-		},
+	write := func(dir string, _ *factorydefinitions.PreparedFactoryLayoutPayload, _ string) error {
+		writes++
+		if fault == "write" {
+			return failure
+		}
+		return os.WriteFile(filepath.Join(dir, "factory.json"), []byte("candidate"), 0o600)
 	}
-	result, err := NamedFactory(ctx, rootDir, "alpha", &factorydefinitions.PreparedFactoryLayoutPayload{}, replace, ports)
+	validate := func(string) error {
+		if fault == "validation" {
+			return failure
+		}
+		return nil
+	}
+	result, err := NamedFactory(ctx, rootDir, "alpha", &factorydefinitions.PreparedFactoryLayoutPayload{}, replace, write, validate, filesystem, func(string) error { return nil }, failedDirectoryCommit{failure: failure})
 	if result != "" || !errors.Is(err, failure) {
 		t.Fatalf("NamedFactory = %q, %v, want empty path and %v", result, err, failure)
 	}

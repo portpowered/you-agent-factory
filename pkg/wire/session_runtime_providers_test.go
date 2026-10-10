@@ -817,17 +817,30 @@ func (wireTestWorkersService) Execute(
 	return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
 }
 
-// statelessDecisionEnvelopeService resolves the same Factory Definitions
-// decision-envelope owner the composed process injects, so the stateless
-// Workers root under test parses envelopes through the canonical contract.
+// These script/worktree scenarios do not opt into decision-envelope output.
+// A controlled collaborator makes any accidental policy dependency fail loudly.
 func statelessDecisionEnvelopeService(t *testing.T) factorydefinitions.DecisionEnvelopeService {
 	t.Helper()
+	return unexpectedDecisionEnvelopeService{t: t}
+}
 
-	ports, err := provideFactoryInvocationPolicyPorts()
-	if err != nil {
-		t.Fatalf("provideFactoryInvocationPolicyPorts() error = %v", err)
-	}
-	return provideDecisionEnvelopeService(ports)
+type unexpectedDecisionEnvelopeService struct{ t *testing.T }
+
+func (s unexpectedDecisionEnvelopeService) UsesDecisionEnvelopeOutcome(*factorydefinitions.FactoryWorkstationConfig) bool {
+	s.t.Fatal("script/worktree scenario unexpectedly consulted decision-envelope policy")
+	return false
+}
+func (s unexpectedDecisionEnvelopeService) UsesGoalRoutingDecisionEnvelope(*factorydefinitions.FactoryWorkstationConfig) bool {
+	s.t.Fatal("script/worktree scenario unexpectedly consulted goal-routing policy")
+	return false
+}
+func (s unexpectedDecisionEnvelopeService) WorkResultFromDecisionEnvelopeJSONOrFailed(string, string, string) workers.WorkResult {
+	s.t.Fatal("script/worktree scenario unexpectedly parsed a decision envelope")
+	return workers.WorkResult{}
+}
+func (s unexpectedDecisionEnvelopeService) WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(string, string, string) workers.WorkResult {
+	s.t.Fatal("script/worktree scenario unexpectedly parsed a goal-routing envelope")
+	return workers.WorkResult{}
 }
 
 // unavailableWorkerControlStore is a controlled persistence outage for tests

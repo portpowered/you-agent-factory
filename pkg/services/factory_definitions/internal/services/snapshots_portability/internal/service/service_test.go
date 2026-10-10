@@ -4,16 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
+	"fmt"
+	"reflect"
 	"testing"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
-	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
-	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
-	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
+	snapshotsportabilityservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
@@ -65,17 +62,20 @@ func newSnapshotService(
 	decode factorydefinitions.FactorySnapshotJSONDecoder,
 ) snapshotsportability.Service {
 	t.Helper()
-	fileSystem := platformfilesystem.Local{}
-	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             stubLoadCanonical,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(snapshotObjectMapper),
-		PreparePortable:           stubPreparePortable,
-		DecodeSnapshot:            decode,
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
-	})
-	if err != nil {
-		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
+	svc := snapshotsportabilityservice.New(
+		stubLoadCanonical,
+		func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+			return factorydefinitions.NewFactorySnapshot(map[string]any{"name": "captured"})
+		},
+		stubPreparePortable,
+		decode,
+		func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) error { return nil },
+	)
+	if svc == nil {
+		t.Fatal("component rejected complete test fixture")
 	}
 	return svc
 }
@@ -92,87 +92,55 @@ func testSnapshotPayload() []byte {
 	}`)
 }
 
-func snapshotObjectMapper(factory *factorydefinitions.FactoryConfig) (map[string]any, error) {
-	return map[string]any{"name": factory.Name}, nil
-}
-
-func fullSnapshotObjectMapper(factory *factorydefinitions.FactoryConfig) (map[string]any, error) {
-	encoded, err := json.Marshal(factory)
-	if err != nil {
-		return nil, err
-	}
-	var object map[string]any
-	if err := json.Unmarshal(encoded, &object); err != nil {
-		return nil, err
-	}
-	return object, nil
-}
-
-func newRoundTripService(t *testing.T) snapshotsportability.Service {
-	t.Helper()
-	fileSystem := platformfilesystem.Local{}
-	svc, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
-		LoadCanonical:             stubLoadCanonical,
-		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(fullSnapshotObjectMapper),
-		PreparePortable:           stubPreparePortable,
-		DecodeSnapshot:            stubDecodeSnapshot,
-		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(fileSystem),
-		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(fileSystem),
-	})
-	if err != nil {
-		t.Fatalf("snapshotsportabilitywire.NewService: %v", err)
-	}
-	return svc
-}
-
-func roundTripCanonicalPayload() []byte {
-	return []byte(`{
-		"name": "alpha",
-		"resourceManifest": {
-			"bundledFiles": [
-				{"type": "DOC", "targetPath": "factory/docs/README.md", "content": {"inline": "hello", "encoding": "utf-8"}}
-			]
-		}
-	}`)
-}
-
-func TestCaptureFactorySnapshot_SuccessFromCanonicalPayload(t *testing.T) {
+// Capture owns orchestration; encoding, hashing and file effects are proved at
+// their component boundaries and through public session/export scenarios.
+func TestCaptureFactorySnapshotUsesPreparedSourceAndReturnsCapturedIdentity(t *testing.T) {
 	t.Parallel()
-
-	svc := newCaptureService(t)
-	payload := []byte(`{"name":"alpha"}`)
-
-	captured, err := svc.CaptureFactorySnapshot(
-		context.Background(),
-		factorydefinitions.CaptureFactorySnapshotRequest{
-			FactoryDir: "/factories/alpha",
-			Canonical:  payload,
-			Name:       "alpha",
-		},
-	)
+	loadedConfig := &factorydefinitions.FactoryConfig{Name: "loaded"}
+	preparedConfig := &factorydefinitions.FactoryConfig{Name: "prepared"}
+	captured, err := factorydefinitions.NewFactorySnapshot(map[string]any{"name": "captured"})
 	if err != nil {
-		t.Fatalf("CaptureFactorySnapshot: %v", err)
+		t.Fatal(err)
 	}
-	if captured.Snapshot == nil {
-		t.Fatal("CaptureFactorySnapshot snapshot is nil")
+	calls := []string{}
+	svc := snapshotsportabilityservice.New(
+		func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			calls = append(calls, "load")
+			if string(payload) != `{"name":"alpha"}` || loader != nil {
+				t.Fatalf("load arguments = %s, %v", payload, loader)
+			}
+			return stubLoadedSource{dir: "/loaded", cfg: loadedConfig}, nil
+		},
+		func(source factorydefinitions.FactorySnapshotSource, dir string, replacements map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+			calls = append(calls, "capture")
+			if source.FactoryConfig() != preparedConfig || source.FactoryDir() != "/selected" || dir != "/selected" || replacements != nil {
+				t.Fatalf("capture arguments = %#v, %q, %#v", source, dir, replacements)
+			}
+			return captured, nil
+		},
+		func(dir string, cfg *factorydefinitions.FactoryConfig, portable bool) (*factorydefinitions.FactoryConfig, error) {
+			calls = append(calls, "prepare")
+			if dir != "/selected" || cfg != loadedConfig || !portable {
+				t.Fatalf("prepare arguments = %q, %p, %v", dir, cfg, portable)
+			}
+			return preparedConfig, nil
+		},
+		stubDecodeSnapshot,
+		func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			t.Fatal("capture materialized files")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) error { t.Fatal("capture validated writes"); return nil },
+	)
+	if len(calls) != 0 {
+		t.Fatal("construction invoked a port")
 	}
-
-	var object map[string]any
-	if decodeErr := captured.Snapshot.Decode(&object); decodeErr != nil {
-		t.Fatalf("CaptureFactorySnapshot decode: %v", decodeErr)
+	result, err := svc.CaptureFactorySnapshot(t.Context(), factorydefinitions.CaptureFactorySnapshotRequest{FactoryDir: " /selected ", Canonical: []byte(` {"name":"alpha"} `)})
+	if err != nil || result.Snapshot != captured {
+		t.Fatalf("capture result=%#v error=%v", result, err)
 	}
-	if object["name"] != "alpha" {
-		t.Fatalf("snapshot name = %#v, want alpha", object["name"])
-	}
-	if object["factoryDirectory"] != "/factories/alpha" {
-		t.Fatalf("factoryDirectory = %#v, want /factories/alpha", object["factoryDirectory"])
-	}
-	metadata, ok := object["metadata"].(map[string]any)
-	if !ok {
-		t.Fatalf("metadata type = %T, want map[string]any", object["metadata"])
-	}
-	if metadata["source_format"] != factorydefinitions.ReplayV1SourceFormat {
-		t.Fatalf("metadata source_format = %#v, want %q", metadata["source_format"], factorydefinitions.ReplayV1SourceFormat)
+	if !reflect.DeepEqual(calls, []string{"load", "prepare", "capture"}) {
+		t.Fatalf("calls = %v", calls)
 	}
 }
 
@@ -235,141 +203,77 @@ func TestPrepareFactorySnapshotImport_InvalidPayloadReturnsTypedFailure(t *testi
 	}
 }
 
-func TestMaterializeFactorySnapshot_SuccessRestoresBundledAssets(t *testing.T) {
+func TestEmptySnapshotRequestsRejectBeforeCallingPorts(t *testing.T) {
 	t.Parallel()
-
-	svc := newSnapshotService(t, stubDecodeSnapshot)
-	payload := testSnapshotPayload()
-
-	imported, err := svc.PrepareFactorySnapshotImport(
-		context.Background(),
-		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: payload},
-	)
-	if err != nil {
-		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
-	}
-
-	targetDir := t.TempDir()
-	materialized, err := svc.MaterializeFactorySnapshot(
-		context.Background(),
-		factorydefinitions.MaterializeFactorySnapshotRequest{
-			TargetDir: targetDir,
-			Snapshot:  imported.Snapshot,
+	svc := snapshotsportabilityservice.New(
+		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			t.Fatal("empty request called loader")
+			return nil, nil
+		},
+		func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+			t.Fatal("empty request called capture")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig, bool) (*factorydefinitions.FactoryConfig, error) {
+			t.Fatal("empty request called portable preparation")
+			return nil, nil
+		},
+		func([]byte) (*factorydefinitions.FactorySnapshot, error) {
+			t.Fatal("empty request called decoder")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			t.Fatal("empty request wrote files")
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) error {
+			t.Fatal("empty request validated writes")
+			return nil
 		},
 	)
-	if err != nil {
-		t.Fatalf("MaterializeFactorySnapshot: %v", err)
+	if _, err := svc.PrepareFactorySnapshotImport(t.Context(), factorydefinitions.PrepareFactorySnapshotImportRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
+		t.Fatalf("empty import error = %v, want ErrInvalidFactorySnapshotPayload", err)
 	}
-	if materialized.TargetDir != targetDir ||
-		materialized.Portable.FactoryDir != targetDir ||
-		len(materialized.Portable.Assets) == 0 {
-		t.Fatalf("MaterializeFactorySnapshot result = %#v, want portable success facts", materialized)
-	}
-
-	docPath := filepath.Join(targetDir, "docs", "README.md")
-	content, readErr := os.ReadFile(docPath)
-	if readErr != nil {
-		t.Fatalf("read materialized doc: %v", readErr)
-	}
-	if string(content) != "hello" {
-		t.Fatalf("materialized doc content = %q, want hello", content)
+	if _, err := svc.MaterializeFactorySnapshot(t.Context(), factorydefinitions.MaterializeFactorySnapshotRequest{}); !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
+		t.Fatalf("empty materialization error = %v, want ErrUnsafeFactorySnapshotMaterialize", err)
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestDetachedSnapshot_CapturePrepareImportMaterializeRoundTrip(t *testing.T) {
+func TestMaterializeFactorySnapshotValidatesBeforeWritingAndReturnsAssetFacts(t *testing.T) {
 	t.Parallel()
-
-	svc := newRoundTripService(t)
-	ctx := context.Background()
-	canonical := roundTripCanonicalPayload()
-	factoryDir := "/factories/alpha"
-
-	captured, err := svc.CaptureFactorySnapshot(
-		ctx,
-		factorydefinitions.CaptureFactorySnapshotRequest{
-			FactoryDir: factoryDir,
-			Canonical:  canonical,
-			Name:       "alpha",
+	calls := []string{}
+	var validated *factorydefinitions.FactoryConfig
+	svc := snapshotsportabilityservice.New(stubLoadCanonical,
+		func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+			t.Fatal("materialize captured a snapshot")
+			return nil, nil
 		},
-	)
-	if err != nil {
-		t.Fatalf("CaptureFactorySnapshot: %v", err)
-	}
-	if captured.Snapshot == nil {
-		t.Fatal("CaptureFactorySnapshot snapshot is nil")
-	}
-
-	detachedPayload, marshalErr := json.Marshal(captured.Snapshot)
-	if marshalErr != nil {
-		t.Fatalf("marshal detached snapshot payload: %v", marshalErr)
-	}
-	if !json.Valid(detachedPayload) || detachedPayload[0] != '{' {
-		t.Fatalf("detached snapshot payload = %s, want JSON object", detachedPayload)
-	}
-
-	var capturedObject map[string]any
-	if decodeErr := captured.Snapshot.Decode(&capturedObject); decodeErr != nil {
-		t.Fatalf("decode captured snapshot: %v", decodeErr)
-	}
-	if capturedObject["name"] != "alpha" {
-		t.Fatalf("captured name = %#v, want alpha", capturedObject["name"])
-	}
-	if capturedObject["factoryDirectory"] != factoryDir {
-		t.Fatalf("captured factoryDirectory = %#v, want %q", capturedObject["factoryDirectory"], factoryDir)
-	}
-	metadata, ok := capturedObject["metadata"].(map[string]any)
-	if !ok {
-		t.Fatalf("captured metadata type = %T, want map[string]any", capturedObject["metadata"])
-	}
-	if metadata["source_format"] != factorydefinitions.ReplayV1SourceFormat {
-		t.Fatalf("captured source_format = %#v, want %q", metadata["source_format"], factorydefinitions.ReplayV1SourceFormat)
-	}
-	if metadata["factory_hash"] == "" || metadata["runtime_config_hash"] == "" {
-		t.Fatalf("captured replay metadata = %#v, want non-empty portable hashes", metadata)
-	}
-
-	imported, err := svc.PrepareFactorySnapshotImport(
-		ctx,
-		factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: detachedPayload},
-	)
-	if err != nil {
-		t.Fatalf("PrepareFactorySnapshotImport: %v", err)
-	}
-	if imported.Snapshot == nil || imported.Name != "alpha" {
-		t.Fatalf("PrepareFactorySnapshotImport result = %#v, want alpha snapshot facts", imported)
-	}
-	if imported.Portable.FactoryDir != factoryDir ||
-		len(imported.Portable.Assets) == 0 ||
-		imported.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
-		t.Fatalf("PrepareFactorySnapshotImport portable = %#v, want replay-compatible asset facts", imported.Portable)
-	}
-
-	targetDir := t.TempDir()
-	materialized, err := svc.MaterializeFactorySnapshot(
-		ctx,
-		factorydefinitions.MaterializeFactorySnapshotRequest{
-			TargetDir: targetDir,
-			Snapshot:  imported.Snapshot,
+		stubPreparePortable, stubDecodeSnapshot,
+		func(dir string, cfg *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			calls = append(calls, "write")
+			if dir != "/target" || cfg != validated {
+				t.Fatalf("write arguments = %q, %p", dir, cfg)
+			}
+			return nil, nil
 		},
-	)
+		func(dir string, cfg *factorydefinitions.FactoryConfig) error {
+			calls = append(calls, "validate")
+			if dir != "/target" || cfg.Name != "alpha" || cfg.ResourceManifest.BundledFiles[0].TargetPath != "factory/docs/README.md" {
+				t.Fatalf("validate arguments = %q, %#v", dir, cfg)
+			}
+			validated = cfg
+			return nil
+		})
+	snapshot, err := stubDecodeSnapshot(testSnapshotPayload())
 	if err != nil {
-		t.Fatalf("MaterializeFactorySnapshot: %v", err)
+		t.Fatal(err)
 	}
-	if materialized.TargetDir != targetDir ||
-		materialized.Portable.FactoryDir != targetDir ||
-		len(materialized.Portable.Assets) == 0 ||
-		materialized.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
-		t.Fatalf("MaterializeFactorySnapshot result = %#v, want portable success facts", materialized)
+	result, err := svc.MaterializeFactorySnapshot(t.Context(), factorydefinitions.MaterializeFactorySnapshotRequest{TargetDir: " /target ", Snapshot: snapshot})
+	if err != nil || result.TargetDir != "/target" || result.Portable.FactoryDir != "/target" || len(result.Portable.Assets) != 1 || result.Portable.Assets[0].TargetPath != "factory/docs/README.md" {
+		t.Fatalf("materialize result=%#v error=%v", result, err)
 	}
-
-	docPath := filepath.Join(targetDir, "docs", "README.md")
-	content, readErr := os.ReadFile(docPath)
-	if readErr != nil {
-		t.Fatalf("read materialized doc: %v", readErr)
-	}
-	if string(content) != "hello" {
-		t.Fatalf("materialized doc content = %q, want hello", content)
+	if !reflect.DeepEqual(calls, []string{"validate", "write"}) {
+		t.Fatalf("calls = %v", calls)
 	}
 }
 
@@ -398,5 +302,140 @@ func TestMaterializeFactorySnapshot_UnsafeTargetReturnsTypedFailure(t *testing.T
 	}
 	if errors.Is(unsafeErr, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
 		t.Fatal("unsafe materialize must not also match ErrInvalidFactorySnapshotPayload")
+	}
+}
+
+func TestCaptureFactorySnapshotPreservesPortFailuresAndStopsDownstreamCalls(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("controlled failure")
+	for _, tc := range []struct {
+		name                                                       string
+		loadErr                                                    error
+		noSource, noConfig, prepareFails, captureFails, noSnapshot bool
+		want                                                       error
+		calls                                                      []string
+	}{
+		{name: "load failure", loadErr: failure, want: failure, calls: []string{"load"}},
+		{name: "invalid named definition", loadErr: factorydefinitions.ErrInvalidNamedFactory, want: factorydefinitions.ErrInvalidFactorySnapshotPayload, calls: []string{"load"}},
+		{name: "missing source", noSource: true, want: factorydefinitions.ErrInvalidFactorySnapshotPayload, calls: []string{"load"}},
+		{name: "missing config", noConfig: true, want: factorydefinitions.ErrInvalidFactorySnapshotPayload, calls: []string{"load"}},
+		{name: "prepare failure", prepareFails: true, want: failure, calls: []string{"load", "prepare"}},
+		{name: "capture failure", captureFails: true, want: failure, calls: []string{"load", "prepare", "capture"}},
+		{name: "missing snapshot", noSnapshot: true, want: factorydefinitions.ErrInvalidFactorySnapshotPayload, calls: []string{"load", "prepare", "capture"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			calls := []string{}
+			svc := snapshotsportabilityservice.New(
+				func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+					calls = append(calls, "load")
+					if tc.loadErr != nil || tc.noSource {
+						return nil, tc.loadErr
+					}
+					var cfg *factorydefinitions.FactoryConfig
+					if !tc.noConfig {
+						cfg = &factorydefinitions.FactoryConfig{Name: "alpha"}
+					}
+					return stubLoadedSource{dir: "/loaded", cfg: cfg}, nil
+				},
+				func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+					calls = append(calls, "capture")
+					if tc.captureFails {
+						return nil, failure
+					}
+					return nil, nil
+				},
+				func(dir string, cfg *factorydefinitions.FactoryConfig, portable bool) (*factorydefinitions.FactoryConfig, error) {
+					calls = append(calls, "prepare")
+					if dir != "/loaded" || !portable {
+						t.Fatalf("fallback arguments = %q, %v", dir, portable)
+					}
+					if tc.prepareFails {
+						return nil, failure
+					}
+					return cfg, nil
+				}, stubDecodeSnapshot,
+				func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+					t.Fatal("capture wrote files")
+					return nil, nil
+				},
+				func(string, *factorydefinitions.FactoryConfig) error { t.Fatal("capture validated writes"); return nil },
+			)
+			result, err := svc.CaptureFactorySnapshot(t.Context(), factorydefinitions.CaptureFactorySnapshotRequest{Canonical: []byte(`{"name":"alpha"}`)})
+			if !errors.Is(err, tc.want) || result.Snapshot != nil || !reflect.DeepEqual(calls, tc.calls) {
+				t.Fatalf("result=%#v error=%v calls=%v", result, err, calls)
+			}
+		})
+	}
+}
+
+func TestMaterializeFactorySnapshotFailsClosedAtEachWritePort(t *testing.T) {
+	t.Parallel()
+	for _, validationFails := range []bool{true, false} {
+		t.Run(fmt.Sprint(validationFails), func(t *testing.T) {
+			t.Parallel()
+			writes := 0
+			svc := snapshotsportabilityservice.New(stubLoadCanonical,
+				func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+					return nil, nil
+				},
+				stubPreparePortable, stubDecodeSnapshot,
+				func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+					writes++
+					return nil, errors.New("write failed")
+				},
+				func(string, *factorydefinitions.FactoryConfig) error {
+					if validationFails {
+						return errors.New("unsafe writes")
+					}
+					return nil
+				})
+			snapshot, err := stubDecodeSnapshot(testSnapshotPayload())
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := svc.MaterializeFactorySnapshot(t.Context(), factorydefinitions.MaterializeFactorySnapshotRequest{TargetDir: "/target", Snapshot: snapshot})
+			wantWrites := 1
+			if validationFails {
+				wantWrites = 0
+			}
+			if !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) || writes != wantWrites || !reflect.DeepEqual(result, factorydefinitions.MaterializeFactorySnapshotResult{}) {
+				t.Fatalf("result=%#v error=%v writes=%d", result, err, writes)
+			}
+		})
+	}
+}
+
+func TestCanceledSnapshotOperationsDoNotInvokePorts(t *testing.T) {
+	t.Parallel()
+	unexpected := func() { t.Fatal("canceled operation invoked a port") }
+	svc := snapshotsportabilityservice.New(
+		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			unexpected()
+			return nil, nil
+		},
+		func(factorydefinitions.FactorySnapshotSource, string, map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+			unexpected()
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig, bool) (*factorydefinitions.FactoryConfig, error) {
+			unexpected()
+			return nil, nil
+		},
+		func([]byte) (*factorydefinitions.FactorySnapshot, error) { unexpected(); return nil, nil },
+		func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			unexpected()
+			return nil, nil
+		},
+		func(string, *factorydefinitions.FactoryConfig) error { unexpected(); return nil })
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, captureErr := svc.CaptureFactorySnapshot(ctx, factorydefinitions.CaptureFactorySnapshotRequest{})
+	_, importErr := svc.PrepareFactorySnapshotImport(ctx, factorydefinitions.PrepareFactorySnapshotImportRequest{})
+	_, writeErr := svc.MaterializeFactorySnapshot(ctx, factorydefinitions.MaterializeFactorySnapshotRequest{})
+	for _, err := range []error{captureErr, importErr, writeErr} {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v", err)
+		}
 	}
 }

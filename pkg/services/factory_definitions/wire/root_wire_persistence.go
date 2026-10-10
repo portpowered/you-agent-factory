@@ -4,10 +4,7 @@ import (
 	"context"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
-	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
@@ -22,27 +19,13 @@ func Persistence(
 	materializeFiles contracts.PortableBundledFilesMaterializer,
 	validateWrites contracts.PortableBundledFileWritesValidator,
 	copySupportedFiles contracts.PortableBundledFilesCopier,
-	fileSystem contracts.AuthoredLayoutWriterFileSystem,
-	ensureInbox contracts.InputInboxSentinelEnsurer,
+	writer *AuthoredLayoutWriter,
 	persistenceFileSystem contracts.PersistenceFileSystem,
 	namedPaths contracts.NamedPathResolver,
 	replacement contracts.DirectoryReplacementStore,
-	conversions contracts.SerializedFactoryConfigReader,
-	canonical contracts.CanonicalFactoryConfigReader,
+	decodeFactory contracts.FactoryConfigJSONDecoder,
+	encodeFactory contracts.FactoryConfigJSONEncoder,
 ) (contracts.PackagedFactoryPersistence, error) {
-	mapper := factorymapping.NewFactoryConfigMapper()
-	decodeFactory := FactoryConfigDecoder(conversions)
-	encodeFactory := compilationwire.NewCanonicalFactoryConfigEncoder(canonical, mapper.Flatten)
-	writer := factoryauthoredlayout.NewWriter(
-		authoredmapping.RenderWorkerAgentsMarkdown,
-		authoredmapping.RenderWorkstationAgentsMarkdown,
-		authoredmapping.RenderAgentsBody,
-		factoryauthoredlayout.NewAgentsFileWriter(fileSystem),
-		authoredmapping.SafeFactoryLayoutSegment,
-		authoredmapping.SafePromptFilePath,
-		fileSystem,
-		ensureInbox,
-	)
 	return NewPersistence(
 		validator,
 		mapInput,

@@ -104,6 +104,42 @@ func TestCaptureLoadedRequiresRepresentationMapper(t *testing.T) {
 	}
 }
 
+func TestExplicitCaptureDelegatesToCompletedLoadedCapture(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "failure"}[failure], func(t *testing.T) {
+			config := &factorydefinitions.FactoryConfig{Name: "selected"}
+			lookup := source{}
+			metadata := map[string]string{"selected": "value"}
+			snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{"name": "selected"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cause error
+			if failure {
+				cause = errors.New("capture denied")
+			}
+			calls := 0
+			capture := snapshotsportabilitycapture.NewExplicit(func(input factorydefinitions.FactorySnapshotSource, directory string, received map[string]string) (*factorydefinitions.FactorySnapshot, error) {
+				calls++
+				if input.FactoryDir() != "selected-dir" || input.FactoryConfig() != config || directory != "source-dir" || received["selected"] != "value" {
+					t.Fatalf("capture input = %#v, %q, %#v", input, directory, received)
+				}
+				received["observed"] = "yes"
+				return snapshot, cause
+			})
+			if calls != 0 {
+				t.Fatal("construction invoked capture")
+			}
+			result, gotErr := capture("selected-dir", config, lookup, "source-dir", metadata)
+			assertCaptureErrorIdentity(t, gotErr, cause)
+			if result != snapshot || !errors.Is(gotErr, cause) || calls != 1 || metadata["observed"] != "yes" {
+				t.Fatalf("delegation = %p, %v, calls=%d, metadata=%v", result, gotErr, calls, metadata)
+			}
+		})
+	}
+}
+
 func TestCaptureLoadedRedactsOnlyProvenSensitiveSpans(t *testing.T) {
 	t.Parallel()
 
@@ -397,4 +433,11 @@ func snapshotMetadata(t *testing.T, snapshot *factorydefinitions.FactorySnapshot
 		t.Fatalf("decode snapshot metadata: %v", err)
 	}
 	return object.Metadata
+}
+
+func assertCaptureErrorIdentity(t *testing.T, got, want error) {
+	t.Helper()
+	if got != want { //nolint:errorlint // The capture adapter forwards the selected operation's exact error.
+		t.Fatalf("capture error = %v, want identical %v", got, want)
+	}
 }

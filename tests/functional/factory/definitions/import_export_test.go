@@ -2,6 +2,7 @@ package definitions
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -310,6 +311,7 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 			diagnostic,
 		)
 	}
+	assertMalformedImportRejected(t, process, env, workingDir, namedFactoriesRoot)
 
 	reloadedFactory, err := support.LoadedFactoryWithProcessAndEnv(
 		t,
@@ -371,6 +373,29 @@ type importExportFactoryListEntry struct {
 	Name             string `json:"name"`
 	FactoryDirectory string `json:"factoryDirectory"`
 	Current          bool   `json:"current"`
+}
+
+// This static authoring request shares the immutable process and owns its home,
+// destination and streams; it never selects a runtime Factory Session.
+func assertMalformedImportRejected(t *testing.T, process support.Process, env []string, workingDir, root string) {
+	t.Helper()
+	sourcePath := filepath.Join(t.TempDir(), "portable.json")
+	if err := os.WriteFile(sourcePath, []byte(`{"name":"broken","resourceManifest":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "create", "rejected-import", "--from", sourcePath, "--dir", root,
+	})
+	inputs.Input.Env = env
+	inputs.Input.WorkingDirectory = workingDir
+	err := process.Execute(inputs.Input)
+	var syntaxError *json.SyntaxError
+	if !errors.As(err, &syntaxError) {
+		t.Fatalf("malformed import error = %v, want JSON syntax error; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if _, err := os.Stat(filepath.Join(root, "rejected-import")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rejected import destination = %v, want absent", err)
+	}
 }
 
 func assertImportExportCurrentFactoryUnchanged(
