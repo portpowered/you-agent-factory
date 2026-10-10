@@ -634,16 +634,17 @@ func sessionIsTerminal(r *registry, id string) bool {
 type supervision struct {
 	// Selected effects are fixed before this supervision becomes visible to
 	// controls. Retry and resume keep the same execution and timing sources.
-	executor   workers.Service
-	clock      platformclock.Source
-	scheduler  platformclock.TimerSource
-	runtimeKey workersessions.RuntimeAttemptKey
-	progress   workersessions.ProviderSessionObservationPublisher
-	dispatchID string
-	turnID     string
-	execution  workers.WorkstationDispatchRequest
-	startedAt  time.Time
-	deadlineAt time.Time
+	executor            workers.Service
+	clock               platformclock.Source
+	scheduler           platformclock.TimerSource
+	runtimeKey          workersessions.RuntimeAttemptKey
+	progress            workersessions.ProviderSessionObservationPublisher
+	dispatchID          string
+	turnID              string
+	execution           workers.WorkstationDispatchRequest
+	identityEnvironment []string // detached admitted facts; never part of restart input
+	startedAt           time.Time
+	deadlineAt          time.Time
 
 	mu                     sync.Mutex
 	publishing             bool

@@ -119,6 +119,33 @@ type Session struct {
 	SuccessorWorkerSessionID   string
 }
 
+// IdentityEnvironment renders admitted nonsecret facts for this execution.
+// Callers supply the public Worker Session ID, never an internal scoped key.
+// Legacy metadata and unattributed roots do not invent a requester or context.
+// Credentials and the selected server endpoint are bound separately by the
+// execution owner; they are never derived from descriptive metadata.
+func (s Session) IdentityEnvironment() []string {
+	environment := []string{"YOU_WORKER_SESSION_ID=" + s.ID}
+	if s.Metadata == nil {
+		return environment
+	}
+	if requester := s.Metadata.Requester; requester != nil {
+		environment = append(environment, "YOU_MESSAGE_TARGET="+requester.WorkerSessionID)
+		if requester.WorkID != "" {
+			environment = append(environment, "YOU_MESSAGE_TARGET_WORK_ID="+requester.WorkID)
+		}
+	}
+	if correlation := s.Metadata.Correlation; correlation != nil {
+		if correlation.WorkID != "" {
+			environment = append(environment, "YOU_WORK_ID="+correlation.WorkID)
+		}
+		if correlation.FactorySessionID != "" {
+			environment = append(environment, "YOU_FACTORY_SESSION_ID="+correlation.FactorySessionID)
+		}
+	}
+	return environment
+}
+
 // Validate reports whether s has a non-empty stable identity, exactly one
 // accepted lifecycle state, and a Result that is present if and only if
 // State is StateCompleted or StateFailed and, when present, agrees with

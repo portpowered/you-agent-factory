@@ -251,7 +251,12 @@ func TestCapturedRequesterMetadataIsDetachedAndValidated(t *testing.T) {
 			}
 			continue
 		}
-		if got.Requester == nil || got.Requester.WorkerSessionID != "lead" || got.Requester.WorkID != "project" || got.Correlation == nil || got.Correlation.WorkID != "lane" || got.Labels[0] != "tag:project=example" {
+		want, err := decodeSessionMetadata(json.RawMessage(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		actual := &workersessions.SessionMetadata{Requester: got.Requester, Correlation: got.Correlation, Labels: got.Labels}
+		if !reflect.DeepEqual(actual, want) {
 			t.Fatalf("lost requester facts: %+v", got)
 		}
 		got.Requester.WorkerSessionID, got.Correlation.WorkID, got.Labels[0] = "mutated", "mutated", "mutated"
@@ -316,5 +321,35 @@ func TestArchivedContinuationMetadataMustMatchOpening(t *testing.T) {
 				t.Fatalf("archived requester lost: %+v %v", got, err)
 			}
 		})
+	}
+}
+
+func TestRestartRecipeUsesDetachedReservedMetadata(t *testing.T) {
+	t.Parallel()
+	r, plan, _ := newDurableInterruptFixture(t)
+	store := &restartRecipeStore{}
+	r.restart = store
+	r.observations["worker"] = &observation{direct: true}
+	session := r.sessions["worker"]
+	session.Metadata = &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
+		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory"},
+		Labels:      []string{"tag:project=example"},
+	}
+	r.sessions["worker"] = session
+	if err := r.saveRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{
+		ID: "worker", Execution: plan.execution,
+		Metadata: &workersessions.SessionMetadata{Labels: []string{"untrusted-replacement"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := decodeSessionMetadata(store.metadata)
+	if err != nil || !reflect.DeepEqual(metadata, session.Metadata) {
+		t.Fatalf("recipe lost reserved facts: %s %v", store.metadata, err)
+	}
+	session.Metadata.Requester.WorkerSessionID = "mutated"
+	session.Metadata.Labels[0] = "mutated"
+	if metadata.Requester.WorkerSessionID != "lead" || metadata.Labels[0] != "tag:project=example" {
+		t.Fatal("recipe shares reserved metadata")
 	}
 }

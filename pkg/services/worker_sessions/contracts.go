@@ -59,6 +59,9 @@ type RuntimeAttemptRequest struct {
 	AttemptID                   string
 	Execution                   workers.WorkstationDispatchRequest
 	Metadata                    *SessionMetadata
+	// BindEnvironment installs detached nonsecret identity facts into the
+	// externally owned execution after admission and before provider handoff.
+	BindEnvironment func([]string) `json:"-"`
 	// BindAttemptControl installs the exact admitted generation's observer into
 	// the externally executed request. It runs once after admission, before
 	// BeginRuntimeAttempt returns, and must return promptly. The observer is

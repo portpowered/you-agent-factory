@@ -9,7 +9,86 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestDirectIdentityHandoffUsesReservedMetadataWithoutChangingRestartInput(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	metadata := &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
+		Correlation: &workersessions.Correlation{WorkID: "original-work", FactorySessionID: "original-factory"},
+	}
+	if _, err := r.Reserve(t.Context(), workersessions.ReserveRequest{ID: "child", Metadata: metadata}); err != nil {
+		t.Fatal(err)
+	}
+	want := (workersessions.Session{ID: "child", Metadata: metadata}).IdentityEnvironment()
+	var got workers.ExecuteRequest
+	r.execution = coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		got = request.Clone()
+		request.Target.Environment.SupervisedEnvironment[0] = "mutated"
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	request := validStartRequest("child", "child-dispatch")
+	request.Metadata = &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "replacement"}}
+	request.Execution.Execution.ProcessEnvironment = []string{"PATH=explicit"}
+	result, err := r.InvokeSession(t.Context(), request)
+	if err != nil || result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("invocation = %#v, %v", result.Session, err)
+	}
+	if !reflect.DeepEqual(got.Target.Environment.SupervisedEnvironment, want) {
+		t.Fatalf("supervised environment = %#v, want reserved facts %#v", got.Target.Environment.SupervisedEnvironment, want)
+	}
+	if !reflect.DeepEqual(got.Target.Environment.ProcessEnvironment, []string{"PATH=explicit"}) || !got.Target.Environment.SkipProcessInheritance {
+		t.Fatal("identity binding changed ordinary explicit environment policy")
+	}
+	if !reflect.DeepEqual(result.Session.Metadata, metadata) || !reflect.DeepEqual(r.executionIdentityEnvironment("child"), want) {
+		t.Fatal("runner mutated admitted identity")
+	}
+	supervision := r.supervisions["child"]
+	if supervision != nil && !reflect.DeepEqual(supervision.execution.Execution.ProcessEnvironment, []string{"PATH=explicit"}) {
+		t.Fatal("identity overlay entered retained restart execution")
+	}
+}
+
+func TestRuntimeIdentityHandoffIsDetachedScopedAndAbsentOnRejectedAdmission(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	request := workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "runtime-test", DispatchID: "identity-dispatch"},
+		ID:  "scoped-child", Execution: runtimeAttemptHandoff("identity-dispatch"),
+		Metadata: &workersessions.SessionMetadata{
+			Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "exact-lead"},
+			Correlation: &workersessions.Correlation{WorkID: "source-work", FactorySessionID: "source-factory"},
+		},
+	}
+	want := (workersessions.Session{ID: request.ID, Metadata: request.Metadata}).IdentityEnvironment()
+	var got []string
+	request.BindEnvironment = func(environment []string) {
+		got = append([]string(nil), environment...)
+		environment[0] = "mutated"
+	}
+	attempt, err := r.BeginRuntimeAttempt(t.Context(), request, r.execution, r.clock, r.scheduler, runtimeAttemptNoopCancellation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("runtime identity = %#v, want public scoped facts %#v", got, want)
+	}
+	key := scopedWorkerAddress(request.ID, request.Execution.Execution.FactorySessionID)
+	if !reflect.DeepEqual(r.executionIdentityEnvironment(key), want) {
+		t.Fatal("runtime callback mutated registry facts")
+	}
+	if err := attempt.Complete(t.Context(), runtimeAttemptCompletedDispatch("identity-dispatch"), nil); err != nil {
+		t.Fatal(err)
+	}
+	got = nil
+	request.ID = "rejected-child"
+	request.Metadata.Requester.Kind = "OPERATOR"
+	if _, err := r.BeginRuntimeAttempt(t.Context(), request, r.execution, r.clock, r.scheduler, runtimeAttemptNoopCancellation); err == nil || got != nil {
+		t.Fatal("invalid admission bound an identity environment")
+	}
+}
 
 func TestKeyedRuntimeControlsRejectForeignFactoryScopeBeforeEffects(t *testing.T) {
 	t.Parallel()

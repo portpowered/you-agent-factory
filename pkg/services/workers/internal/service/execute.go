@@ -52,6 +52,12 @@ func (s *Service) Execute(
 		len(request.Target.Environment.ProcessEnvironment) == 0 {
 		request.Target.Environment.ProcessEnvironment = inheritedExecutionEnvironment(os.Environ())
 	}
+	if len(request.Target.Environment.SupervisedEnvironment) > 0 {
+		request.Target.Environment.ProcessEnvironment = append(
+			inheritedExecutionEnvironment(request.Target.Environment.ProcessEnvironment),
+			request.Target.Environment.SupervisedEnvironment...,
+		)
+	}
 	correlation := request.Correlation
 	if request.Target.Noop {
 		return workers.ExecuteResult{

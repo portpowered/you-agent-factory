@@ -887,6 +887,13 @@ func TestRuntimeAttemptPreparationInstallsExecutingControlObserver(t *testing.T)
 			if execution.Input.AttemptControlObserver == nil {
 				t.Fatal("preparation did not install the bound observer in the executing request")
 			}
+			identity := []string{"YOU_WORKER_SESSION_ID=worker", "YOU_MESSAGE_TARGET=lead"}
+			sessions.request.BindEnvironment(identity)
+			identity[0] = "mutated"
+			if !reflect.DeepEqual(execution.Target.Environment.SupervisedEnvironment,
+				[]string{"YOU_WORKER_SESSION_ID=worker", "YOU_MESSAGE_TARGET=lead"}) {
+				t.Fatal("admission failed to bind a detached identity into the executing request")
+			}
 			execution.Input.AttemptControlObserver(owned)
 			if retained != owned || (withObserver && forwarded != owned) {
 				t.Fatal("executing handle lost during runtime preparation")

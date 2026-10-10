@@ -23,6 +23,18 @@ var _ interface {
 	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, workers.Service, platformclock.Source, platformclock.TimerSource, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
 } = (*registry)(nil)
 
+func (r *registry) executionIdentityEnvironment(id string) []string {
+	r.mu.RLock()
+	session, exists := r.sessions[id]
+	session = cloneSession(session)
+	r.mu.RUnlock()
+	if !exists {
+		return nil
+	}
+	session.ID = publicWorkerID(session.ID)
+	return session.IdentityEnvironment()
+}
+
 // transitionToStarting atomically moves id from StateReserved to
 // StateStarting. Only one caller can win this transition for a given id: a
 // concurrent Start racing to claim the same newly reserved or already

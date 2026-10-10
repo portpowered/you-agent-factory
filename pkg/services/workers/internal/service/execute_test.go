@@ -586,6 +586,52 @@ func TestExecuteEnvironmentReservesSupervisorIdentity(t *testing.T) {
 	}
 }
 
+func TestExecuteSupervisedEnvironmentPreservesProcessInheritanceAndDetachesOverlay(t *testing.T) {
+	// Environment mutation requires a serialized component test; no process or
+	// application is assembled. The runner is this component's controlled edge.
+	t.Setenv("YOU_TEST_ORDINARY", "inherited")
+	t.Setenv("YOU_MESSAGE_TARGET", "ambient-parent")
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit=%t", explicit), func(t *testing.T) {
+			request := validExecuteRequest("dispatch-identity", "attempt-identity")
+			request.Target.Environment.SkipProcessInheritance = explicit
+			if explicit {
+				request.Target.Environment.ProcessEnvironment = []string{"PATH=explicit-path", "you_worker_session_id=stale", "YOU_MESSAGE_TARGET=stale"}
+			}
+			request.Target.Environment.SupervisedEnvironment = []string{"YOU_WORKER_SESSION_ID=child", "YOU_WORK_ID=source"}
+			var got []string
+			service := mustExecuteService(t, &stubRunner{execute: func(_ context.Context, req workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				got = append([]string(nil), req.ProcessEnvironment...)
+				req.ProcessEnvironment[len(req.ProcessEnvironment)-1] = "mutated-by-runner"
+				return workers.RunnerExecutionResult{Content: "done"}, nil
+			}}, nil)
+			if _, err := service.Execute(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range []string{"YOU_WORKER_SESSION_ID=child", "YOU_WORK_ID=source"} {
+				if !slices.Contains(got, entry) {
+					t.Fatalf("runner did not receive %s", entry)
+				}
+			}
+			for _, entry := range got {
+				if strings.HasPrefix(strings.ToUpper(entry), "YOU_MESSAGE_TARGET=") || strings.Contains(entry, "stale") {
+					t.Fatal("execution retained a parent identity")
+				}
+			}
+			ordinary := "YOU_TEST_ORDINARY=inherited"
+			if explicit {
+				ordinary = "PATH=explicit-path"
+			}
+			if !slices.Contains(got, ordinary) || (explicit && slices.Contains(got, "YOU_TEST_ORDINARY=inherited")) {
+				t.Fatal("identity overlay changed ordinary process inheritance")
+			}
+			if request.Target.Environment.SupervisedEnvironment[1] != "YOU_WORK_ID=source" {
+				t.Fatal("runner overlay aliases caller state")
+			}
+		})
+	}
+}
+
 func TestExecuteIngressDetachesWorkflowContextBeforeRunnerStarts(t *testing.T) {
 	t.Parallel()
 

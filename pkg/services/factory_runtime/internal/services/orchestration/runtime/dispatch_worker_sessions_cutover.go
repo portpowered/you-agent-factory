@@ -65,7 +65,12 @@ func runtimeAttemptPreparation(
 				ID:                          sessionID,
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
-				BindAttemptControl:          bindRuntimeAttemptControl(executing, runtimeForceDispositionAvailable(cfg, request, executeRequest)),
+				BindEnvironment: func(environment []string) {
+					if executing != nil {
+						executing.Target.Environment.SupervisedEnvironment = append([]string(nil), environment...)
+					}
+				},
+				BindAttemptControl: bindRuntimeAttemptControl(executing, runtimeForceDispositionAvailable(cfg, request, executeRequest)),
 			},
 			execution,
 			clock,

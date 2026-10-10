@@ -51,6 +51,32 @@ func TestSessionMetadata_ValidationPreservesAbsentRootsAndBounds(t *testing.T) {
 	}
 }
 
+func TestSessionIdentityEnvironmentKeepsExactAdmittedFactsAndAbsentRoots(t *testing.T) {
+	t.Parallel()
+	metadata := &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead/exact", WorkID: "project-work"},
+		Correlation: &workersessions.Correlation{WorkID: "lane-work", FactorySessionID: "factory-exact"},
+		Labels:      []string{"project:example"},
+	}
+	session := workersessions.Session{ID: "successor", Metadata: metadata}
+	want := []string{"YOU_WORKER_SESSION_ID=successor", "YOU_MESSAGE_TARGET=lead/exact",
+		"YOU_MESSAGE_TARGET_WORK_ID=project-work", "YOU_WORK_ID=lane-work", "YOU_FACTORY_SESSION_ID=factory-exact"}
+	got := session.IdentityEnvironment()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("identity environment = %#v, want %#v", got, want)
+	}
+	got[0] = "mutated"
+	if !reflect.DeepEqual(session.IdentityEnvironment(), want) || metadata.Requester.WorkerSessionID != "lead/exact" {
+		t.Fatal("environment shares mutable session state")
+	}
+	for _, absent := range []*workersessions.SessionMetadata{nil, {}, {Correlation: &workersessions.Correlation{}}} {
+		root := workersessions.Session{ID: "root", Metadata: absent}
+		if got := root.IdentityEnvironment(); !reflect.DeepEqual(got, []string{"YOU_WORKER_SESSION_ID=root"}) {
+			t.Fatalf("unattributed identity = %#v, want own identity only", got)
+		}
+	}
+}
+
 func TestSessionMetadata_SnapshotClonesDetachEveryField(t *testing.T) {
 	t.Parallel()
 	metadata := &workersessions.SessionMetadata{

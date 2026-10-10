@@ -92,6 +92,10 @@ func (r *registry) publishExecution(
 	finished := make(chan struct{})
 	dispatchDone := make(chan error, 1)
 	execution := supervision.executor
+	identity := r.executionIdentityEnvironment(sessionID)
+	supervision.mu.Lock()
+	supervision.identityEnvironment = identity
+	supervision.mu.Unlock()
 	var progress func(workers.ExecutionCorrelation, workers.ProgressFragment)
 	if supervision.runtimeKey.RuntimeID == "" {
 		progress = r.directAttemptProgress(sessionID, supervision)
@@ -154,6 +158,9 @@ func executeWithService(
 	if supervision.runtimeKey.RuntimeID != "" {
 		executeRequest.Correlation.DispatchID = supervision.runtimeKey.DispatchID
 	}
+	supervision.mu.Lock()
+	executeRequest.Target.Environment.SupervisedEnvironment = append([]string(nil), supervision.identityEnvironment...)
+	supervision.mu.Unlock()
 	if !supervision.admissionAllowed() {
 		return canceledDispatchResult(request)
 	}
@@ -871,6 +878,9 @@ func (r *registry) BeginRuntimeAttempt(
 		return nil, err
 	}
 	opened = true
+	if req.BindEnvironment != nil {
+		req.BindEnvironment(r.executionIdentityEnvironment(req.ID))
+	}
 	handle.bindProviderAttemptControl(ctx, req.BindAttemptControl, req.Execution.Execution.AttemptControlObserver)
 	return workersessions.RuntimeAttempt(handle.Resolve), nil
 }

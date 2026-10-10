@@ -569,8 +569,12 @@ type OutputPolicy struct {
 }
 
 type EnvironmentPolicy struct {
-	Vars                   map[string]string
-	ProcessEnvironment     []string
+	Vars               map[string]string
+	ProcessEnvironment []string
+	// SupervisedEnvironment is an execution-only overlay installed by the
+	// Worker Session owner. Apply it after ordinary process inheritance so
+	// identity injection never replaces PATH or changes inheritance policy.
+	SupervisedEnvironment  []string `json:"-"`
 	WorkingDirectory       string
 	WorkingDirectorySet    bool
 	SkipProcessInheritance bool
@@ -867,6 +871,7 @@ func (target ExecutionTarget) Clone() ExecutionTarget {
 		[]string(nil),
 		target.Environment.ProcessEnvironment...,
 	)
+	clone.Environment.SupervisedEnvironment = append([]string(nil), target.Environment.SupervisedEnvironment...)
 	clone.Prompt.Redaction = target.Prompt.Redaction.Clone()
 	return clone
 }
