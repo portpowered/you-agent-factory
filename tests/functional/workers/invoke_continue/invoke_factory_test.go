@@ -233,10 +233,16 @@ func assertRequesterFactoryListed(t *testing.T, fixture *invokeContinuePackageFi
 	}
 	var rows api.ListWorkerSessionsResponse
 	decodeDirectWorkerSessionResult(t, list.Stdout(), &rows)
-	if len(rows.Sessions) != 1 || rows.Sessions[0].WorkerSessionId != observation.WorkerSessionId || rows.Sessions[0].Requester != nil ||
-		!reflect.DeepEqual(rows.Sessions[0].Correlation, observation.Correlation) || !reflect.DeepEqual(rows.Sessions[0].Labels, observation.Labels) {
+	var selected []api.WorkerSessionObservation
+	for _, row := range rows.Sessions {
+		if row.WorkerSessionId == observation.WorkerSessionId {
+			selected = append(selected, row)
+		}
+	}
+	if len(selected) != 1 || !reflect.DeepEqual(selected[0].Requester, observation.Requester) || !reflect.DeepEqual(selected[0].Correlation, observation.Correlation) || !reflect.DeepEqual(selected[0].Labels, observation.Labels) {
 		t.Fatal("CLI list lost exact Factory dispatch metadata")
 	}
+
 }
 
 func requesterCorrelationAgrees(observation api.WorkerSessionObservation, workID, sessionID string) bool {
@@ -660,5 +666,98 @@ func assertActiveHeadRefusal(t *testing.T, started invokeContinueStartedProcess,
 	status, body := t7HTTP(t, t.Context(), http.MethodPost, started.baseURL+"/worker-sessions/active-source/continue", map[string]any{"resolveHead": true, "requestId": "active-http-denied", "successorWorkerSessionId": "active-http-successor", "followUpInput": "refused"})
 	if status != http.StatusConflict || !strings.Contains(body, "WORKER_SESSION_CONTINUATION_CONFLICT") {
 		t.Fatalf("active HTTP refusal: %d %s", status, body)
+	}
+}
+
+// M1: a real Factory output has an exact producing dispatch. The child
+// observes the producer identity and Project Work via public show/list and the
+// controlled command edge, independently of the producer's terminal lifetime.
+func TestRequesterFactoryProducingDispatch(t *testing.T) {
+	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.show", "cli/you.worker-sessions.list")
+	fixture := ensureInvokeContinuePackageFixture(t)
+	lead, lane := fixture.scenario(t, "requester-factory-lead"), fixture.scenario(t, "requester-factory-lane")
+	defer lead.close(t)
+	defer lane.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := lane.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	writeRequesterFactoryLineage(t, lead.workingDirectory, lane.workingDirectory)
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, lead.workingDirectory)
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	projectName := "requester-project"
+	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{Name: &projectName, WorkTypeName: "project", Payload: "project input", Tags: &api.StringMap{"project": projectName}})
+	if submitted.WorkId == nil {
+		t.Fatal("Project Work has no ID")
+	}
+	support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{WorkTypeName: "seed", Payload: "lead input", Tags: &api.StringMap{"project": projectName}})
+	t19AwaitSignal(t, ctx, runner.started, "produced lane started")
+
+	assertRequesterProducedLineage(t, fixture, lead, lane, ctx, opened.Session.Id, *submitted.WorkId)
+}
+
+func assertRequesterProducedLineage(t *testing.T, fixture *invokeContinuePackageFixture, lead, lane *invokeContinueScenario, ctx context.Context, sessionID, projectWorkID string) {
+	t.Helper()
+	runner := lane.providerRunner.(*t7GatedProviderRunner)
+
+	leadEnvironment := requesterEnvironment(lead.providerRunner.Requests()[0].Env)
+	producer := support.GetJSON[api.WorkerSessionObservation](t, fixture.baseURL+"/worker-sessions/"+leadEnvironment["YOU_WORKER_SESSION_ID"])
+
+	environment := requesterEnvironment(runner.Requests()[0].Env)
+	childID := environment["YOU_WORKER_SESSION_ID"]
+	child := support.GetJSON[api.WorkerSessionObservation](t, fixture.baseURL+"/worker-sessions/"+childID)
+	if child.Correlation == nil || child.Correlation.WorkId == nil {
+		t.Fatal("produced Work correlation absent")
+	}
+
+	observation := requesterObservation(t, fixture, lane, ctx, child.WorkerSessionId)
+	if observation.Requester == nil || observation.Requester.WorkerSessionId != producer.WorkerSessionId || observation.Requester.WorkId == nil || *observation.Requester.WorkId != projectWorkID || !requesterCorrelationAgrees(observation, *child.Correlation.WorkId, sessionID) {
+		metadata, _ := json.Marshal(map[string]any{"childCorrelation": observation.Correlation, "childRequester": observation.Requester, "producerCorrelation": producer.Correlation, "producerID": producer.WorkerSessionId, "expectedProject": projectWorkID, "expectedFactory": sessionID})
+		t.Fatalf("produced requester mismatch: %s", metadata)
+	}
+	if !reflect.DeepEqual(child.Requester, observation.Requester) || !reflect.DeepEqual(child.Labels, observation.Labels) {
+		t.Fatal("show/list disagree on producing requester")
+	}
+	assertRequesterFactoryListed(t, fixture, lane, ctx, *child.Correlation.WorkId, sessionID, observation)
+	assertRequesterProducedEnvironment(t, fixture, lead, runner, producer, child, environment, sessionID, projectWorkID)
+}
+
+func assertRequesterProducedEnvironment(t *testing.T, fixture *invokeContinuePackageFixture, lead *invokeContinueScenario, runner *t7GatedProviderRunner, producer, child api.WorkerSessionObservation, environment map[string]string, sessionID, projectWorkID string) {
+	t.Helper()
+	assertRequesterSuccessorEnvironment(t, environment, child.WorkerSessionId, producer.WorkerSessionId, requesterEnvironment(lead.providerRunner.Requests()[0].Env)["YOU_WORKER_SESSION_TOKEN"])
+	assertRequesterEndpoint(t, environment, fixture.baseURL)
+	if environment["YOU_MESSAGE_TARGET"] != producer.WorkerSessionId || environment["YOU_MESSAGE_TARGET_WORK_ID"] != projectWorkID || environment["YOU_WORK_ID"] != *child.Correlation.WorkId || environment["YOU_FACTORY_SESSION_ID"] != sessionID {
+		t.Fatal("controlled runner disagrees with verified producing lineage")
+	}
+	if producer.Requester != nil || lead.providerRunner.CallCount() != 1 || runner.CallCount() != 1 {
+		t.Fatal("root attribution or canonical attempt counts changed")
+	}
+}
+
+func writeRequesterFactoryLineage(t *testing.T, root, lane string) {
+	t.Helper()
+	t7WriteFactorySibling(t, root)
+	document := map[string]any{
+		"name": "requester-lineage", "workTypes": []any{map[string]any{"name": "seed", "states": []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "failed", "type": "FAILED"}}},
+			map[string]any{"name": "project", "states": []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "done", "type": "TERMINAL"}, map[string]any{"name": "failed", "type": "FAILED"}}},
+			map[string]any{"name": "task", "states": []any{map[string]any{"name": "init", "type": "INITIAL"}, map[string]any{"name": "done", "type": "TERMINAL"}, map[string]any{"name": "failed", "type": "FAILED"}}},
+		}, "workers": []any{map[string]any{"name": "worker"}},
+		"workstations": []any{
+			map[string]any{"name": "lead", "worker": "worker", "inputs": []any{map[string]any{"workType": "seed", "state": "init"}}, "workPropagation": map[string]any{"mode": "PRESERVE_INPUT"}, "outputs": []any{map[string]any{"workType": "task", "state": "init"}}, "onFailure": []any{map[string]any{"workType": "seed", "state": "failed"}}},
+			map[string]any{"name": "process", "worker": "worker", "inputs": []any{map[string]any{"workType": "task", "state": "init"}}, "outputs": []any{map[string]any{"workType": "task", "state": "done"}}, "onFailure": []any{map[string]any{"workType": "task", "state": "failed"}}},
+		},
+	}
+	writeInvokeContinueJSON(t, filepath.Join(root, "factory.json"), document)
+	for name, dir := range map[string]string{"lead": root, "process": lane} {
+		path := filepath.Join(root, "workstations", name)
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		encoded, _ := json.Marshal(dir)
+		station := fmt.Sprintf("---\ntype: MODEL_WORKSTATION\nrunner: codex\nworkingDirectory: %s\n---\nRequester lineage {{ (index .Inputs 0).Payload }}\n", encoded)
+		if err := os.WriteFile(filepath.Join(path, "AGENTS.md"), []byte(station), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

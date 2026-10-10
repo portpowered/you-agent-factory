@@ -253,6 +253,13 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+      "stableIds": [
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
       "stableIds": [
         "cli/you.worker-sessions.cancel",

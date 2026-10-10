@@ -771,6 +771,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
           "boundary": "cli"
         },
@@ -868,6 +872,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
           "boundary": "cli"
         },
         {

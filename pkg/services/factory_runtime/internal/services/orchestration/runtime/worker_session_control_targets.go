@@ -1008,3 +1008,97 @@ func recordDispatchWorkerSessionAssociation(
 	}
 	ledger.RecordDispatchWorkerSessionAssociation(tick, dispatchID, workerSessionID, requestID, eventTime)
 }
+
+func (cfg *runtimeConfig) dispatchRequesterMetadata(ctx context.Context, request workers.WorkstationDispatchRequest, execution workers.ExecuteRequest) (*workersessions.SessionMetadata, error) {
+	metadata := runtimeDispatchMetadata(request, execution)
+	if metadata.Correlation == nil || metadata.Correlation.WorkID == "" {
+		return metadata, nil
+	}
+	reader, available := cfg.eventHistory.(recordings.WorkOriginProjectionReader)
+	if !available {
+		return metadata, nil
+	} // Legacy ledgers expose no verified requester.
+	project := ""
+	for _, input := range execution.Input.Work {
+		if input.WorkID == metadata.Correlation.WorkID && input.Kind != string(workers.DataTypeResource) {
+			project = input.Tags["project"]
+		}
+	}
+	facts, err := reader.CurrentWorkOriginFacts(ctx, metadata.Correlation.WorkID, project)
+	if err != nil {
+		return nil, fmt.Errorf("read producing Work lineage: %w", err)
+	}
+	requester, err := requesterFromWorkOrigin(metadata.Correlation.WorkID, project, facts)
+	if err != nil {
+		return nil, err
+	}
+	metadata.Requester = requester
+	return metadata, nil
+}
+
+func requesterFromWorkOrigin(workID, project string, facts recordings.WorkOriginFacts) (*workersessions.Requester, error) {
+	snapshot := facts.InitialSnapshot
+	if snapshot == nil || snapshot.WorkID != workID {
+		return nil, fmt.Errorf("producing Work lineage unavailable for Work %q", workID)
+	}
+	producer, err := producingSnapshot(*snapshot, facts.ParentSnapshotsByID)
+	if err != nil {
+		return nil, err
+	}
+	if producer == nil {
+		return nil, nil
+	}
+	snapshot = producer
+	sessionID := facts.WorkerSessionID
+	if snapshot.SnapshotID != facts.InitialSnapshot.SnapshotID {
+		sessionID = facts.WorkerSessionIDsByDispatchID[snapshot.DispatchID]
+	}
+
+	if sessionID == "" {
+		return nil, fmt.Errorf("producing Worker Session unavailable for dispatch %q", snapshot.DispatchID)
+	}
+	requester := &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: sessionID}
+	if project != "" {
+		if len(facts.RelatedWorkIDs) != 1 {
+			return nil, fmt.Errorf("Project Work %q is unavailable or ambiguous", project)
+		}
+		requester.WorkID = facts.RelatedWorkIDs[0]
+	}
+	return requester, nil
+}
+
+func producingSnapshot(origin work.WorkPayloadSnapshot, parents map[string]work.WorkPayloadSnapshot) (*work.WorkPayloadSnapshot, error) {
+	pending := []work.WorkPayloadSnapshot{origin}
+	seen := make(map[string]bool)
+	var producer *work.WorkPayloadSnapshot
+	for len(pending) > 0 {
+		snapshot := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if seen[snapshot.SnapshotID] {
+			continue
+		}
+		seen[snapshot.SnapshotID] = true
+		if snapshot.SourceKind == work.WorkPayloadSnapshotKindDispatchOutput {
+			if snapshot.DispatchID == "" {
+				return nil, fmt.Errorf("producing dispatch unavailable for Work %q", origin.WorkID)
+			}
+			if producer != nil && producer.DispatchID != snapshot.DispatchID {
+				return nil, fmt.Errorf("producing dispatch ambiguous for Work %q", origin.WorkID)
+			}
+			copy := snapshot
+			producer = &copy
+			continue
+		}
+		if snapshot.SourceKind != work.WorkPayloadSnapshotKindWorkRequest {
+			return nil, fmt.Errorf("producing Work lineage unavailable for Work %q", origin.WorkID)
+		}
+		for _, id := range snapshot.ParentSnapshotIDs {
+			parent, found := parents[id]
+			if !found {
+				return nil, fmt.Errorf("producing parent snapshot %q unavailable", id)
+			}
+			pending = append(pending, parent)
+		}
+	}
+	return producer, nil
+}

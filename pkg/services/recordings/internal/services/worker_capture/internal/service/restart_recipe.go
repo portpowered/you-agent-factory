@@ -204,16 +204,11 @@ func (writer *FileWriter) SaveWorkerRestartRecipe(ctx context.Context, target re
 }
 
 func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) ([]byte, error) {
-	var sessionMetadata json.RawMessage
-	if len(metadata) > 1 {
-		return nil, recordings.ErrInvalidWorkerControlOperation
+	sessionMetadata, err := restartRecipeMetadata(metadata)
+	if err != nil {
+		return nil, err
 	}
-	if len(metadata) == 1 {
-		sessionMetadata = metadata[0]
-	}
-	if len(sessionMetadata) != 0 && (!json.Valid(sessionMetadata) || bytes.Equal(bytes.TrimSpace(sessionMetadata), []byte("null"))) {
-		return nil, recordings.ErrInvalidWorkerControlOperation
-	}
+
 	request := execution.Execution
 	redaction := request.PromptRedaction
 	if len(request.EnvVars) != 0 || request.WorkflowContext != nil ||
@@ -347,4 +342,18 @@ func (writer *FileWriter) prepareRestartRecipe(ctx context.Context, entry *recor
 		session.restartRecipes = make(map[string][]byte)
 	}
 	session.restartRecipes[target.ExpectedAttemptID] = input
+}
+
+func restartRecipeMetadata(metadata []json.RawMessage) (json.RawMessage, error) {
+	var sessionMetadata json.RawMessage
+	if len(metadata) > 1 {
+		return nil, recordings.ErrInvalidWorkerControlOperation
+	}
+	if len(metadata) == 1 {
+		sessionMetadata = metadata[0]
+	}
+	if len(sessionMetadata) != 0 && (!json.Valid(sessionMetadata) || bytes.Equal(bytes.TrimSpace(sessionMetadata), []byte("null"))) {
+		return nil, recordings.ErrInvalidWorkerControlOperation
+	}
+	return sessionMetadata, nil
 }

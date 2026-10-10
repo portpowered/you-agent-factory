@@ -57,6 +57,10 @@ func runtimeAttemptPreparation(
 		if executing != nil {
 			admissionRequest.Execution.AttemptControlObserver = executing.Input.AttemptControlObserver
 		}
+		metadata, err := cfg.dispatchRequesterMetadata(ctx, admissionRequest, executeRequest)
+		if err != nil {
+			return nil, err
+		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
@@ -66,7 +70,7 @@ func runtimeAttemptPreparation(
 				ID:                          sessionID,
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
-				Metadata:                    runtimeDispatchMetadata(admissionRequest, executeRequest),
+				Metadata:                    metadata,
 				BindEnvironment: func(environment []string) {
 					if executing != nil {
 						executing.Target.Environment.SupervisedEnvironment = append([]string(nil), environment...)

@@ -3,6 +3,9 @@ package runtime
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"reflect"
 	"testing"
 	"time"
 
@@ -386,5 +389,73 @@ func TestWorkerSessionReadTranslatesPublicScopeToImmutableExecutionOwner(t *test
 				}
 			}
 		})
+	}
+}
+
+func TestRequesterFromWorkOrigin(t *testing.T) {
+	t.Parallel()
+	snapshot := work.WorkPayloadSnapshot{WorkID: "lane", DispatchID: "producing-dispatch", SourceKind: work.WorkPayloadSnapshotKindDispatchOutput}
+	facts := recordings.WorkOriginFacts{InitialSnapshot: &snapshot, WorkerSessionID: "lead-session", RelatedWorkIDs: []string{"project-work"}}
+	got, err := requesterFromWorkOrigin("lane", "example", facts)
+	want := &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead-session", WorkID: "project-work"}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("requester=%+v err=%v", got, err)
+	}
+	cases := []struct {
+		name   string
+		change func(*recordings.WorkOriginFacts)
+	}{
+		{"missing snapshot", func(f *recordings.WorkOriginFacts) { f.InitialSnapshot = nil }},
+		{"wrong Work", func(f *recordings.WorkOriginFacts) {
+			copy := *f.InitialSnapshot
+			copy.WorkID = "foreign"
+			f.InitialSnapshot = &copy
+		}},
+		{"missing association", func(f *recordings.WorkOriginFacts) { f.WorkerSessionID = "" }},
+		{"missing Project Work", func(f *recordings.WorkOriginFacts) { f.RelatedWorkIDs = nil }},
+		{"ambiguous Project Work", func(f *recordings.WorkOriginFacts) { f.RelatedWorkIDs = []string{"one", "two"} }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			changed := facts
+			test.change(&changed)
+			if got, err := requesterFromWorkOrigin("lane", "example", changed); err == nil || got != nil {
+				t.Fatalf("refusal=%+v err=%v", got, err)
+			}
+		})
+	}
+	root := facts
+	rootSnapshot := snapshot
+	rootSnapshot.SourceKind = work.WorkPayloadSnapshotKindWorkRequest
+	root.InitialSnapshot = &rootSnapshot
+	if got, err := requesterFromWorkOrigin("lane", "invented-project", root); err != nil || got != nil {
+		t.Fatalf("root invented requester: %+v err=%v", got, err)
+	}
+	if got, err := requesterFromWorkOrigin("lane", "", facts); err != nil || got.WorkID != "" || got.WorkerSessionID != "lead-session" {
+		t.Fatalf("unscoped producer=%+v err=%v", got, err)
+	}
+}
+
+func TestRequesterParentSnapshotProducerAndRefusals(t *testing.T) {
+	t.Parallel()
+	origin := work.WorkPayloadSnapshot{SnapshotID: "origin", WorkID: "lane", SourceKind: work.WorkPayloadSnapshotKindWorkRequest, ParentSnapshotIDs: []string{"parent"}}
+	parent := work.WorkPayloadSnapshot{SnapshotID: "parent", WorkID: "seed", SourceKind: work.WorkPayloadSnapshotKindDispatchOutput, DispatchID: "lead-dispatch"}
+	facts := recordings.WorkOriginFacts{InitialSnapshot: &origin, ParentSnapshotsByID: map[string]work.WorkPayloadSnapshot{"parent": parent}, WorkerSessionIDsByDispatchID: map[string]string{"lead-dispatch": "lead-session"}, RelatedWorkIDs: []string{"project-work"}}
+	got, err := requesterFromWorkOrigin("lane", "project", facts)
+	if err != nil || got == nil || got.WorkerSessionID != "lead-session" || got.WorkID != "project-work" {
+		t.Fatalf("parent requester=%+v err=%v", got, err)
+	}
+	delete(facts.ParentSnapshotsByID, "parent")
+	if got, err := requesterFromWorkOrigin("lane", "project", facts); err == nil || got != nil {
+		t.Fatal("missing parent acquired requester")
+	}
+	facts.ParentSnapshotsByID["parent"] = parent
+	second := parent
+	second.SnapshotID = "other"
+	second.DispatchID = "other-dispatch"
+	facts.ParentSnapshotsByID["other"] = second
+	origin.ParentSnapshotIDs = append(origin.ParentSnapshotIDs, "other")
+	if got, err := requesterFromWorkOrigin("lane", "project", facts); err == nil || got != nil {
+		t.Fatal("ambiguous parents acquired requester")
 	}
 }
