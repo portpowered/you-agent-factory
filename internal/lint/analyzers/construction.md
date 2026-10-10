@@ -103,6 +103,19 @@ are `integration,functionallong,backendconformance,factoryartifact,managed_proce
 Excluded import edges alone may use `parser.ImportsOnly`; no excluded call-body
 proof is claimed. Native platform execution owns platform-dependent bodies.
 
+The maintained ci-smoke includes compiler-valid generated/test exclusions and
+handwritten `pkg/transports/http/servertests` construction rejection. A separate
+integration-tagged service caller is rejected only in the complete-tag cell;
+ordinary mode does not claim to analyze its inactive body. Clean and recovered
+cells remove the prohibited calls while retaining the declarations. These
+controls protect source selection, not completeness of the production registry.
+
+Settings remains a known classification blocker: its dormant HTTP adapter still
+guards NewAdapter's root, its receiver and its stored root in three invocation
+helpers. AM03's absent canonical route is not evidence that these compiled guards
+were removed. See the named inventory row; enabling Settings over this debt or
+excluding the adapter would not satisfy final repository enforcement.
+
 Unlisted constructor discovery is bounded by the existing constructor-name
 vocabulary and exact named result classifications. Arbitrarily named factories,
 structural/erased results, distinct defined-type ancestry, callable variables,

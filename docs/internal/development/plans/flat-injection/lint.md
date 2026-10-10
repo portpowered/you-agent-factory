@@ -72,6 +72,17 @@ the Settings root findings; PR #3137 removed the private document and Providers
 query guards and retired RootBinding/NewAdapterFromRoot. Optional preservation
 and diagnostics, request validation and lifecycle/resource errors remain lawful.
 Settings still requires exact classification; source removal is not coverage.
+The current dormant Settings HTTP adapter remains BLOCKED: NewAdapter checks its
+required root, Root checks its receiver, and invokeLoadDocument,
+invokeApplyDocumentUpdate and invokeResolveEffective check receiver/stored root.
+AM03 prohibits inventing canonical routes; it does not prove those compiled
+requiredness guards lawful or removed. The current inventory records this
+original-owner delta without adding a baseline, exclusion or allowance.
+
+Maintained ci-smoke now distinguishes ordinary and integration-tagged service
+callers and compiled HTTP servertests helpers, while retaining compiler-valid
+generated/test exclusions. Inactive bodies in ordinary mode remain unproved;
+these source-selection controls do not close the rest of S1-S9 or registry scope.
 
 Concrete receiver/storage identity behind an interface return follows authored
 literals, immutable result aliases and same-package helper returns. Required
