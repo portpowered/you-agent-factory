@@ -45,6 +45,12 @@ func TestModelsGalleryBootstrapCancellation(t *testing.T) {
 		t.Fatalf("canceled download = %T %v; stdout=%q", err, err, inputs.Stdout())
 	}
 	galleryAssertNoUnverifiedInstallation(t, fixture)
+	peer := seedGalleryOfflinePeer(t, fixture)
+	requests, commands := fixture.requests.Load(), fixture.commands.Load()
+	assertGalleryLifecycleInference(t, process, peer)
+	if fixture.requests.Load() != requests || fixture.commands.Load() != commands {
+		t.Fatal("canceled download disrupted the cached offline peer")
+	}
 	fixture.failed.Store(false)
 	assertGalleryLifecyclePull(t, process, home, fixture)
 	assertGalleryLifecycleInference(t, process, home)

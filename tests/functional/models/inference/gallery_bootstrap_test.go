@@ -171,7 +171,7 @@ func (fixture *galleryPullFixture) Run(ctx context.Context, request platformproc
 	if err := ctx.Err(); err != nil {
 		return platformprocess.CommandResult{}, err
 	}
-	if request.Command != fixture.wantedCommand || len(request.Args) != 4 || request.Args[0] != "backends" || request.Args[1] != "install" || request.Args[2] != "--backends-path="+filepath.Join(fixture.cache, "you", "localai-backends") || request.Args[3] != "cpu-whisper" {
+	if request.Command != fixture.wantedCommand || len(request.Args) != 4 || request.Args[0] != "backends" || request.Args[1] != "install" || request.Args[2] != "--backends-path="+filepath.Join(fixture.cache, "you", "localai-backends") || (request.Args[3] != "cpu-whisper" && request.Args[3] != "cpu-llama-cpp") {
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected controlled gallery command: %#v", request)
 	}
 	if fixture.failed.Load() {
