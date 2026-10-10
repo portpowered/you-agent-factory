@@ -50,7 +50,7 @@ func (s *Service) Execute(
 	}
 	if !request.Target.Environment.SkipProcessInheritance &&
 		len(request.Target.Environment.ProcessEnvironment) == 0 {
-		request.Target.Environment.ProcessEnvironment = os.Environ()
+		request.Target.Environment.ProcessEnvironment = inheritedExecutionEnvironment(os.Environ())
 	}
 	correlation := request.Correlation
 	if request.Target.Noop {
