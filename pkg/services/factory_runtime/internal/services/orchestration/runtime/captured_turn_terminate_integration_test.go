@@ -21,7 +21,7 @@ import (
 	"go.uber.org/goleak"
 )
 
-func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.T) {
+func TestRecordedWorkerSessionLiveIdentityPreservesPhysicalAttribution(t *testing.T) {
 	t.Parallel()
 	const (
 		workerSessionID   = "worker-live-identity"
@@ -47,8 +47,8 @@ func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.
 	}
 	live.getByWorkerResult.FactorySessionID = historicalSession
 	observation, err = restored.GetObservationByWorkerSessionID(context.Background(), request)
-	if err != nil || observation.FactorySessionID != successorSession {
-		t.Fatalf("restored observation = %#v, %v; want successor Factory Session", observation, err)
+	if err != nil || observation.FactorySessionID != historicalSession {
+		t.Fatalf("restored observation = %#v, %v; want historical Factory Session", observation, err)
 	}
 }
 
