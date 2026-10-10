@@ -120,6 +120,9 @@ func (runner *concurrencyScenarioRunner) Run(ctx context.Context, request platfo
 			return platformprocess.CommandResult{}, err
 		}
 		if runner.behavior == concurrencyRunnerFailureHold && commandRequestContains(request, runner.failMarker) {
+			if request.Command == "controlled-script" {
+				return platformprocess.CommandResult{ExitCode: 2, Stderr: []byte("selected script rejected input")}, nil
+			}
 			return runner.failureResult(), nil
 		}
 		return runner.successResult(request), nil
@@ -168,6 +171,9 @@ func (runner *concurrencyScenarioRunner) successResult(request platformprocess.C
 	marker := concurrencyRequestMarker(request)
 	if marker == "" {
 		marker = runner.marker
+	}
+	if request.Command == "controlled-script" {
+		return platformprocess.CommandResult{Stdout: []byte(marker + " output COMPLETE")}
 	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(marker + " output COMPLETE")}
 }
