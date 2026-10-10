@@ -25,7 +25,7 @@ func TestSubscribe_ConcurrentSubscribersObserveContiguousLiveHistory(t *testing.
 	const totalAppends = 200
 	const subscribers = 20
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/concurrent-subscribe/events")
 
@@ -109,7 +109,7 @@ func TestSubscribe_ConcurrentSubscribersObserveContiguousLiveHistory(t *testing.
 // it.
 func TestSubscribe_ConcurrentAppendDuringCancellationNeverPanics(t *testing.T) {
 	const rounds = 500
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	topic := events.Topic("chat-session/cancel-append-race/events")
 
 	for i := range rounds {
@@ -149,7 +149,7 @@ func TestSubscribe_NoGoroutineLeakAcrossSubscribeNextAndClose(t *testing.T) {
 	runtime.GC()
 	baseline := runtime.NumGoroutine()
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/goroutine-leak/events")
 

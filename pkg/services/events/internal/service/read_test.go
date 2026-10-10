@@ -39,7 +39,7 @@ func itoa(n int) string {
 }
 
 func TestRead_ReturnsAtHeadOnEmptyTopic(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	result, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 10})
@@ -55,7 +55,7 @@ func TestRead_ReturnsAtHeadOnEmptyTopic(t *testing.T) {
 }
 
 func TestRead_ProgressReturnsContiguousRecordsAndNextCursor(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5)
 
@@ -86,7 +86,7 @@ func TestRead_ProgressReturnsContiguousRecordsAndNextCursor(t *testing.T) {
 }
 
 func TestRead_AtHeadAfterConsumingEverything(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 3)
 
@@ -103,7 +103,7 @@ func TestRead_AtHeadAfterConsumingEverything(t *testing.T) {
 }
 
 func TestRead_InvalidCursorAheadOfHead(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 2)
 
@@ -263,7 +263,7 @@ func TestRead_DuplicateIdentityStillResolvesAfterEviction(t *testing.T) {
 }
 
 func TestRead_IndependentCursorsDoNotAffectEachOther(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, readTestTopic, 5)
 
@@ -296,7 +296,7 @@ func TestRead_IndependentCursorsDoNotAffectEachOther(t *testing.T) {
 }
 
 func TestRead_RejectsMalformedRequestBeforeAnyLogOrStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	_, err := st.Read(ctx, events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 0})
@@ -316,7 +316,7 @@ func TestRead_RejectsMalformedRequestBeforeAnyLogOrStateChange(t *testing.T) {
 }
 
 func TestRead_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -327,7 +327,7 @@ func TestRead_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestRead_RejectedAfterClose(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -341,7 +341,7 @@ func TestRead_RejectedAfterClose(t *testing.T) {
 }
 
 func TestRead_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -355,7 +355,7 @@ func TestRead_RejectedAfterCloseForATopicCreatedAfterwards(t *testing.T) {
 }
 
 func TestRead_ReturnedRecordsAreDetached(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	req := validAppendRequest()
 	req.Topic = readTestTopic

@@ -44,7 +44,7 @@ func readAll(st *Store, ctx context.Context, t *testing.T, topic events.Topic) [
 }
 
 func TestAttachSource_RetainedThenLiveForwardsBacklogThenLiveCommits(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/abc/response-events")
 	destination := events.Topic("chat-session/abc/events")
@@ -89,7 +89,7 @@ func TestAttachSource_RetainedThenLiveForwardsBacklogThenLiveCommits(t *testing.
 }
 
 func TestAttachSource_RetainedThenLiveFromMidpointSkipsEarlierRecords(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/mid/response-events")
 	destination := events.Topic("chat-session/mid/events")
@@ -121,7 +121,7 @@ func TestAttachSource_RetainedThenLiveFromMidpointSkipsEarlierRecords(t *testing
 }
 
 func TestAttachSource_LiveOnlyForwardsNoRetainedHistory(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/live/response-events")
 	destination := events.Topic("chat-session/live/events")
@@ -158,7 +158,7 @@ func TestAttachSource_LiveOnlyForwardsNoRetainedHistory(t *testing.T) {
 }
 
 func TestAttachSource_IdempotentAttachmentDoesNotForwardTwice(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/idem/response-events")
 	destination := events.Topic("chat-session/idem/events")
@@ -201,7 +201,7 @@ func TestAttachSource_IdempotentAttachmentDoesNotForwardTwice(t *testing.T) {
 }
 
 func TestAttachSource_ValidationBeforeEffects(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	source := events.Topic("factory-session/val/response-events")
 	destination := events.Topic("chat-session/val/events")
 	appendFixture(st, context.Background(), t, source, 1, "evt-1")
@@ -269,7 +269,7 @@ func TestAttachSource_ValidationBeforeEffects(t *testing.T) {
 }
 
 func TestAttachSource_CanceledContextRejectsBeforeEffects(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	source := events.Topic("factory-session/cancel/response-events")
 	destination := events.Topic("chat-session/cancel/events")
 
@@ -297,7 +297,7 @@ func TestAttachSource_CanceledContextRejectsBeforeEffects(t *testing.T) {
 }
 
 func TestAttachSource_StartAtBeyondHeadIsRejected(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/stale/response-events")
 	destination := events.Topic("chat-session/stale/events")
@@ -397,7 +397,7 @@ func TestAttachSource_StartAtExactlyBeforeEarliestRetainedIsAcceptedAndForwarded
 }
 
 func TestAttachSource_IndirectCycleIsRejectedWithoutDeadlock(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	a := events.Topic("factory-session/cycle-a/response-events")
 	b := events.Topic("factory-session/cycle-b/response-events")
@@ -445,7 +445,7 @@ func TestAttachSource_IndirectCycleIsRejectedWithoutDeadlock(t *testing.T) {
 }
 
 func TestAttachSource_ClosedSourceTopicIsRejected(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/closed/response-events")
 	destination := events.Topic("chat-session/closed/events")
@@ -477,7 +477,7 @@ func TestAttachSource_ClosedSourceTopicIsRejected(t *testing.T) {
 }
 
 func TestAttachSource_CloseTearsDownActiveForwarding(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/teardown/response-events")
 	destination := events.Topic("chat-session/teardown/events")

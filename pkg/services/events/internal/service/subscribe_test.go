@@ -27,7 +27,7 @@ func TestSubscribe_ByteBudgetBoundsCatchupAndInFlight(t *testing.T) {
 	t.Parallel()
 	for _, catchup := range []bool{false, true} {
 		t.Run(fmt.Sprint("catchup=", catchup), func(t *testing.T) {
-			st := New(logging.NoopLogger{})
+			st := NewWithRetention(0, logging.NoopLogger{})
 			ctx := context.Background()
 			req := validAppendRequest()
 			req.Topic = subscribeTestTopic
@@ -75,7 +75,7 @@ func TestSubscribe_ByteBudgetBoundsCatchupAndInFlight(t *testing.T) {
 
 func TestSubscribe_ByteBudgetReleasesProcessedRecord(t *testing.T) {
 	t.Parallel()
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic,
 		From: events.Cursor{Topic: subscribeTestTopic}, Limit: 100, MaxPendingBytes: 1024})
@@ -92,7 +92,7 @@ func TestSubscribe_ByteBudgetRejectsOversizedAndCombinedPendingRecords(t *testin
 	t.Parallel()
 	for _, payloadBytes := range []int{512, 8 << 20} {
 		t.Run(fmt.Sprint(payloadBytes), func(t *testing.T) {
-			st := New(logging.NoopLogger{})
+			st := NewWithRetention(0, logging.NoopLogger{})
 			ctx := context.Background()
 			req := validAppendRequest()
 			req.Payload = []byte(`"` + strings.Repeat("x", payloadBytes) + `"`)
@@ -121,7 +121,7 @@ func TestSubscribe_ByteBudgetRejectsOversizedAndCombinedPendingRecords(t *testin
 }
 
 func TestSubscribe_LiveOnlyFromCurrentHeadDoesNotReplayRetainedRecords(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 3)
 
@@ -146,7 +146,7 @@ func TestSubscribe_LiveOnlyFromCurrentHeadDoesNotReplayRetainedRecords(t *testin
 }
 
 func TestSubscribe_RetainedThenLiveDeliversContiguousPositionsAcrossHandoff(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 3)
 
@@ -181,7 +181,7 @@ func TestSubscribe_RetainedThenLiveDeliversContiguousPositionsAcrossHandoff(t *t
 }
 
 func TestSubscribe_MultipleSubscribersAreIndependent(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 2)
 
@@ -261,7 +261,7 @@ func TestSubscribe_FromExactlyBeforeEarliestRetainedIsNotAGap(t *testing.T) {
 }
 
 func TestSubscribe_UnresolvableCursorAheadOfHeadReturnsError(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	appendN(t, st, ctx, subscribeTestTopic, 2)
 
@@ -276,7 +276,7 @@ func TestSubscribe_UnresolvableCursorAheadOfHeadReturnsError(t *testing.T) {
 }
 
 func TestSubscribe_ContextCancellationReturnsCanceled(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -293,7 +293,7 @@ func TestSubscribe_ContextCancellationReturnsCanceled(t *testing.T) {
 }
 
 func TestSubscribe_ContextCancellationWhileBlockedReleasesNext(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -316,7 +316,7 @@ func TestSubscribe_ContextCancellationWhileBlockedReleasesNext(t *testing.T) {
 }
 
 func TestSubscribe_CancellationIsPersistentAcrossLaterLiveContextCalls(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -345,7 +345,7 @@ func TestSubscribe_CancellationIsPersistentAcrossLaterLiveContextCalls(t *testin
 }
 
 func TestSubscribe_CancellationUnregistersSubscriberSoAppendAfterCancelIsNotDelivered(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	ts := st.topic(subscribeTestTopic)
@@ -387,7 +387,7 @@ func TestSubscribe_CancellationUnregistersSubscriberSoAppendAfterCancelIsNotDeli
 }
 
 func TestSubscribe_BackpressureTerminatesConsumerWithoutSilentLoss(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 2})
@@ -424,7 +424,7 @@ func TestSubscribe_BackpressureTerminatesConsumerWithoutSilentLoss(t *testing.T)
 }
 
 func TestSubscribe_StoreCloseTerminatesBlockedSubscriberWithClosed(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -456,7 +456,7 @@ func TestSubscribe_StoreCloseTerminatesBlockedSubscriberWithClosed(t *testing.T)
 }
 
 func TestSubscribe_AfterStoreCloseObservesClosedWithoutRegistering(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	if err := st.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -470,7 +470,7 @@ func TestSubscribe_AfterStoreCloseObservesClosedWithoutRegistering(t *testing.T)
 }
 
 func TestSubscribe_CloseIsIdempotent(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	if err := st.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -481,7 +481,7 @@ func TestSubscribe_CloseIsIdempotent(t *testing.T) {
 }
 
 func TestSubscribe_DeliveredRecordsAreDetached(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	sub := mustSubscribe(t, st, ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 
@@ -503,7 +503,7 @@ func TestSubscribe_DeliveredRecordsAreDetached(t *testing.T) {
 }
 
 func TestSubscribe_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 
 	_, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 0})
@@ -521,7 +521,7 @@ func TestSubscribe_RejectsMalformedRequestBeforeAnyStateChange(t *testing.T) {
 }
 
 func TestSubscribe_RejectsCanceledContextBeforeAnyStateChange(t *testing.T) {
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

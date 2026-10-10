@@ -27,7 +27,7 @@ func TestAttachSource_ConcurrentSourceAppendsForwardInDestinationCommitOrder(t *
 	const perGoroutine = 10
 	const total = goroutines * perGoroutine
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/concurrent-attach/response-events")
 	destination := events.Topic("chat-session/concurrent-attach/events")
@@ -107,7 +107,7 @@ func TestAttachSource_ConcurrentSourceAppendsForwardInDestinationCommitOrder(t *
 func TestAttachSource_ConcurrentIdempotentAttachOnlyRegistersOnce(t *testing.T) {
 	const goroutines = 50
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	source := events.Topic("factory-session/concurrent-idem/response-events")
 	destination := events.Topic("chat-session/concurrent-idem/events")
@@ -163,7 +163,7 @@ func TestAttachSource_ConcurrentComplementaryEdgesNeverFormACycle(t *testing.T) 
 	const rounds = 30
 
 	for round := range rounds {
-		st := New(logging.NoopLogger{})
+		st := NewWithRetention(0, logging.NoopLogger{})
 		ctx := context.Background()
 		a := events.Topic(fmt.Sprintf("factory-session/race-cycle-a-%d/response-events", round))
 		b := events.Topic(fmt.Sprintf("factory-session/race-cycle-b-%d/response-events", round))

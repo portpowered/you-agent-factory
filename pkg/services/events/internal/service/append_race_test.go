@@ -23,7 +23,7 @@ func TestAppend_ConcurrentAppendsAssignUniqueContiguousPositions(t *testing.T) {
 	const perGoroutine = 20
 	const total = goroutines * perGoroutine
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	topic := events.Topic("chat-session/concurrent/events")
 
@@ -84,7 +84,7 @@ func TestAppend_ConcurrentAppendsAssignUniqueContiguousPositions(t *testing.T) {
 func TestAppend_ConcurrentDuplicateAppendsConvergeOnOneAcceptedRecord(t *testing.T) {
 	const goroutines = 50
 
-	st := New(logging.NoopLogger{})
+	st := NewWithRetention(0, logging.NoopLogger{})
 	ctx := context.Background()
 	req := events.AppendRequest{
 		Topic:          "chat-session/race/events",

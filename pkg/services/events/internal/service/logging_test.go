@@ -74,7 +74,10 @@ func TestClassifyAppendError_TableDriven(t *testing.T) {
 
 func TestAppend_AcceptedLogsIntentAndOutcomeWithoutPayload(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
+	if len(*calls) != 0 {
+		t.Fatal("construction emitted diagnostics")
+	}
 
 	req := validAppendRequest()
 	req.Payload = json.RawMessage(`{"content":"private-events-payload-marker"}`)
@@ -112,7 +115,7 @@ func TestAppend_AcceptedLogsIntentAndOutcomeWithoutPayload(t *testing.T) {
 
 func TestAppend_DuplicateLogsDuplicateOutcome(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	req := validAppendRequest()
 
 	if _, err := st.Append(context.Background(), req); err != nil {
@@ -132,7 +135,7 @@ func TestAppend_DuplicateLogsDuplicateOutcome(t *testing.T) {
 
 func TestAppend_RejectedLogsClassificationOnlyWithoutIntentLog(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 
 	req := validAppendRequest()
 	req.Payload = nil
@@ -161,7 +164,7 @@ func TestAppend_RejectedLogsClassificationOnlyWithoutIntentLog(t *testing.T) {
 
 func TestAppend_CanceledContextLogsClassificationOnlyWithoutIntentLog(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -180,7 +183,7 @@ func TestAppend_CanceledContextLogsClassificationOnlyWithoutIntentLog(t *testing
 
 func TestAppend_RejectedAfterCloseLogsClosedClassificationWithoutIntentLog(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -204,14 +207,38 @@ func TestAppend_RejectedAfterCloseLogsClosedClassificationWithoutIntentLog(t *te
 	}
 }
 
-func TestNew_ExplicitNoopLoggerPreservesAppend(t *testing.T) {
-	st := New(logging.NoopLogger{})
-	if _, err := st.Append(context.Background(), validAppendRequest()); err != nil {
-		t.Fatalf("Append() with explicit no-op logger error = %v", err)
+func TestNewWithRetention_ExplicitNoopLoggerPreservesObservations(t *testing.T) {
+	t.Parallel()
+	st := NewWithRetention(0, logging.NoopLogger{})
+	ctx := t.Context()
+	req := validAppendRequest()
+	appended, err := st.Append(ctx, req)
+	if err != nil || appended.Outcome != events.AppendOutcomeAccepted {
+		t.Fatalf("Append() = %+v, %v", appended, err)
+	}
+	read, err := st.Read(ctx, events.ReadRequest{Topic: req.Topic, From: events.Cursor{Topic: req.Topic}, Limit: 1})
+	if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 1 || read.Next != (events.Cursor{Topic: req.Topic, Position: appended.Record.ID.Position}) {
+		t.Fatalf("Read() = %+v, %v", read, err)
+	}
+	child, cancel := context.WithCancel(ctx)
+	sub, err := st.Subscribe(child, events.SubscribeRequest{Topic: req.Topic, From: read.Next, Limit: 1})
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	cancel()
+	if got := sub.Next(child); got.Kind != events.DeliveryCanceled {
+		t.Fatalf("Next() = %+v", got)
+	}
+	if err := st.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Append(ctx, req); !errors.Is(err, events.ErrOperationFailed) {
+		t.Fatalf("Append() after Close = %v", err)
 	}
 }
 
-func TestNew_NonPositiveRetentionPreservesDefault(t *testing.T) {
+func TestNewWithRetention_NonPositiveRetentionPreservesDefault(t *testing.T) {
 	t.Parallel()
 	for _, limit := range []int{0, -1} {
 		st := NewWithRetention(limit, logging.NoopLogger{})
@@ -221,12 +248,16 @@ func TestNew_NonPositiveRetentionPreservesDefault(t *testing.T) {
 		if _, err := st.Append(t.Context(), validAppendRequest()); err != nil {
 			t.Fatal(err)
 		}
+		read, err := st.Read(t.Context(), events.ReadRequest{Topic: validAppendRequest().Topic, From: events.Cursor{Topic: validAppendRequest().Topic}, Limit: 1})
+		if err != nil || read.Outcome != events.ReadOutcomeProgress || len(read.Records) != 1 || read.Records[0].ID.Position != 1 {
+			t.Fatalf("Read() with retention %d = %+v, %v", limit, read, err)
+		}
 	}
 }
 
 func TestRead_LogsProgressOutcomeWithoutPayload(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 	req := validAppendRequest()
 	req.Topic = readTestTopic
@@ -264,7 +295,7 @@ func TestRead_LogsProgressOutcomeWithoutPayload(t *testing.T) {
 
 func TestRead_RejectedRequestLogsNothing(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 
 	_, err := st.Read(context.Background(), events.ReadRequest{Topic: readTestTopic, From: events.Cursor{Topic: readTestTopic}, Limit: 0})
 	if !errors.Is(err, events.ErrInvalidReadLimit) {
@@ -277,7 +308,7 @@ func TestRead_RejectedRequestLogsNothing(t *testing.T) {
 
 func TestRead_RejectedAfterCloseLogsNothing(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 
 	if err := st.Close(ctx); err != nil {
@@ -295,7 +326,7 @@ func TestRead_RejectedAfterCloseLogsNothing(t *testing.T) {
 
 func TestSubscribe_AcceptedLogsOutcomeWithoutPayload(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 
 	_, err := st.Subscribe(context.Background(), events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10})
 	if err != nil {
@@ -312,7 +343,7 @@ func TestSubscribe_AcceptedLogsOutcomeWithoutPayload(t *testing.T) {
 
 func TestSubscribe_UnresolvableCursorLogsRejectedOutcome(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 	appendOne(t, st, ctx, subscribeTestTopic, 1)
 	*calls = nil
@@ -335,7 +366,7 @@ func TestSubscribe_UnresolvableCursorLogsRejectedOutcome(t *testing.T) {
 
 func TestSubscribe_RejectedRequestLogsNothing(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 
 	_, err := st.Subscribe(context.Background(), events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 0})
 	if !errors.Is(err, events.ErrInvalidReadLimit) {
@@ -374,7 +405,7 @@ func TestSubscribe_GapLogsSafeFacts(t *testing.T) {
 
 func TestSubscribe_BackpressureLogsSafeTopicContextOnce(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 
 	sub, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 1})
@@ -415,7 +446,7 @@ func TestSubscribe_BackpressureLogsSafeTopicContextOnce(t *testing.T) {
 
 func TestSubscribe_CloseLogsTopicClosedAndStoreClosed(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 
 	if _, err := st.Subscribe(ctx, events.SubscribeRequest{Topic: subscribeTestTopic, From: events.Cursor{Topic: subscribeTestTopic}, Limit: 10}); err != nil {
@@ -449,7 +480,7 @@ func TestSubscribe_CloseLogsTopicClosedAndStoreClosed(t *testing.T) {
 
 func TestAttachSource_AcceptedLogsIntentAndOutcome(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	source := events.Topic("factory-session/log-attach/response-events")
 	destination := events.Topic("chat-session/log-attach/events")
 
@@ -490,7 +521,7 @@ func TestAttachSource_AcceptedLogsIntentAndOutcome(t *testing.T) {
 
 func TestAttachSource_AlreadyAttachedLogsOutcome(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	source := events.Topic("factory-session/log-idem/response-events")
 	destination := events.Topic("chat-session/log-idem/events")
 	req := events.AttachSourceRequest{
@@ -518,7 +549,7 @@ func TestAttachSource_AlreadyAttachedLogsOutcome(t *testing.T) {
 
 func TestAttachSource_RejectedLogsClassificationOnlyWithoutIntentLog(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	source := events.Topic("factory-session/log-reject/response-events")
 
 	_, err := st.AttachSource(context.Background(), events.AttachSourceRequest{
@@ -578,7 +609,7 @@ func TestAttachSource_EvictedStartAtLogsRejectedUnresolvableCursor(t *testing.T)
 
 func TestAttachSource_CloseLogsAttachTopicClosed(t *testing.T) {
 	logger, calls := newCaptureLogger()
-	st := New(logger)
+	st := NewWithRetention(0, logger)
 	ctx := context.Background()
 	source := events.Topic("factory-session/log-close/response-events")
 	destination := events.Topic("chat-session/log-close/events")
