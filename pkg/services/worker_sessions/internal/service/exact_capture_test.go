@@ -460,7 +460,7 @@ func (store *restartRecipeStore) ReadWorkerContinuationSource(context.Context, r
 // capture lookup collaborators, without opening a provider execution.
 func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"captured", "captured-scoped", "missing", "wrong-attempt", "wrong-scope", "recipe-scope", "wrong-reference"} {
+	for _, cell := range []string{"captured", "captured-scoped", "factory", "factory-missing", "missing", "wrong-attempt", "wrong-scope", "recipe-scope", "wrong-reference"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			req := continuationReservationRequest()
@@ -478,6 +478,15 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 			}}
 			r.logs = &LogReader{reader: reader}
 			r.restart = store
+			if strings.HasPrefix(cell, "factory") {
+				r.observations[req.SourceWorkerSessionID].direct = false
+				live := &r.supervisions[req.SourceWorkerSessionID].execution.Execution
+				live.RuntimeID = "source-runtime"
+				live.WorkflowContext = &workers.Context{SessionID: "source-factory"}
+				if cell == "factory-missing" {
+					store.err = os.ErrNotExist
+				}
+			}
 			switch cell {
 			case "captured-scoped":
 				store.execution.Execution.FactorySessionID = "factory"
@@ -495,7 +504,7 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 				store.reference.ID = "foreign-provider-session"
 			}
 			replay, owner, err := r.reserveContinuation(req)
-			if cell != "captured" && cell != "captured-scoped" {
+			if cell != "captured" && cell != "captured-scoped" && cell != "factory" {
 				expected := workersessions.ErrContinuationExecutionUnavailable
 				if cell == "wrong-reference" {
 					expected = workersessions.ErrContinuationProviderSessionInvalid
@@ -506,6 +515,9 @@ func TestContinuationReservationUsesCapturedRecipe(t *testing.T) {
 				return
 			}
 			assertCapturedContinuationPlan(t, replay, owner, err, req, reader.entry.FactorySessionID)
+			if cell == "factory" && (!replay.plan.direct || replay.plan.execution.Execution.RuntimeID != "" || replay.plan.execution.Execution.WorkflowContext != nil) {
+				t.Fatal("Factory continuation inherited Runtime ownership or workflow context")
+			}
 		})
 	}
 }

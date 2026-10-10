@@ -127,6 +127,56 @@ func archivedContinuationSupport(cell string) *interruptContinuationSupportFake 
 	return support
 }
 
+// A terminal Runtime-owned source has a control handle, not a direct
+// supervision. Captured facts must agree with it before direct reservation.
+func TestContinuationLiveFactoryCaptureFencesAdmission(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"exact", "reference", "terminal", "control-pending", "journal-pending", "persistence-lost"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			delete(r.supervisions, req.SourceWorkerSessionID)
+			source := r.sessions[req.SourceWorkerSessionID]
+			captured := &archivedContinuationSource{snapshot: continuationSourceSnapshot{
+				session: cloneSession(source), execution: continuationValidExecution("dispatch-1"),
+				dispatchID: "dispatch-1", direct: true, archived: true,
+			}}
+			attempt := &runtimeAttempt{}
+			r.runtimeAttemptControls = map[string]*runtimeAttempt{req.SourceWorkerSessionID: attempt}
+			switch cell {
+			case "reference":
+				captured.snapshot.session.ProviderSessionAssociation.Reference.ID = "foreign"
+			case "terminal":
+				captured.snapshot.session.State = workersessions.StateCanceled
+			case "control-pending":
+				attempt.controlPending = true
+			case "journal-pending":
+				attempt.forceJournalPending = 1
+			case "persistence-lost":
+				attempt.controlPersistenceLost = true
+			}
+			snapshot, err := r.continuationSnapshotLocked(req, captured)
+			if cell == "exact" {
+				if err != nil || !snapshot.direct || snapshot.executor == nil || snapshot.address != req.SourceWorkerSessionID {
+					t.Fatalf("live Factory source lost direct admission: %+v %v", snapshot, err)
+				}
+			} else {
+				want := workersessions.ErrContinuationSourceConflict
+				if cell == "reference" || cell == "terminal" {
+					want = workersessions.ErrContinuationProviderSessionInvalid
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("unsafe Factory capture: got %v want %v", err, want)
+				}
+			}
+			if len(r.sessions) != 1 || len(r.supervisions) != 0 {
+				t.Fatal("snapshot created a successor or restored source supervision")
+			}
+		})
+	}
+}
+
 func TestContinuationCompletedCaptureRejectsMismatchedEvidence(t *testing.T) {
 	t.Parallel()
 	for _, cell := range []string{"exact", "failed", "canceled", "terminated", "active", "opening-only", "incomplete", "scope", "attempt", "predecessor", "reference", "workspace", "model"} {

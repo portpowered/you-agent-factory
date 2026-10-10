@@ -259,6 +259,20 @@ func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 // runner is controlled at the public command edge; no executable is built.
 func TestDurableRevivalFactorySourceAfterHostRestart(t *testing.T) {
 	t.Parallel()
+	for _, restart := range []bool{false, true} {
+		name := "live-host"
+		if restart {
+			name = "rebuilt-host"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runDurableRevivalFactorySource(t, restart)
+		})
+	}
+}
+
+func runDurableRevivalFactorySource(t *testing.T, restart bool) {
+	t.Helper()
 	root, dir := t.TempDir(), t.TempDir()
 	host, home, err := prepareInvokeContinuePackageRoot(t, root)
 	if err != nil {
@@ -285,23 +299,35 @@ func TestDurableRevivalFactorySourceAfterHostRestart(t *testing.T) {
 	}
 	sourceID := rows.Sessions[0].WorkerSessionId
 	awaitContinuationRestartLogs(t, first, home, dir, sourceID)
-	support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
-	if err := first.command.stop(); err != nil {
-		t.Fatal(err)
+	fresh := first
+	if restart {
+		support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+		if err := first.command.stop(); err != nil {
+			t.Fatal(err)
+		}
+		if err := first.process.Close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		fresh = startContinuationRestartHost(t, root, host, home, route)
 	}
-	if err := first.process.Close(t.Context()); err != nil {
-		t.Fatal(err)
+	var factoryEvents []factoryapi.FactoryEvent
+	if !restart {
+		factoryEvents = support.GetFactoryEventsForSessionAt(t, first.baseURL, opened.Session.Id)
 	}
-	fresh := startContinuationRestartHost(t, root, host, home, route)
 	request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", sourceID,
 		"--session", opened.Session.Id, "--request-id", "factory-revival-request",
 		"--successor-worker-session-id", "factory-revival-successor", "--user-message", "fresh host follow-up"})
 	request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 	if err := fresh.process.Execute(request.Input); err != nil {
-		observation := support.GetJSON[factoryapi.WorkerSessionObservation](t, fresh.baseURL+"/worker-sessions/factory-revival-successor")
-		t.Fatalf("Factory revival: %v %s %s failure=%+v providerCalls=%d", err, request.Stdout(), request.Stderr(), observation.Failure, runner.CallCount())
+		t.Fatalf("Factory revival: %v %s %s providerCalls=%d", err, request.Stdout(), request.Stderr(), runner.CallCount())
 	}
 	assertFactoryRevivalResult(t, fresh, runner, request.Stdout(), dir, sourceID)
+	if !restart {
+		if after := support.GetFactoryEventsForSessionAt(t, first.baseURL, opened.Session.Id); !reflect.DeepEqual(factoryEvents, after) {
+			t.Fatal("direct Factory revival changed canonical Factory history")
+		}
+		support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+	}
 }
 
 func assertFactoryRevivalResult(t *testing.T, host invokeContinueStartedProcess, runner *testutil.ProviderCommandRunner, stdout, dir, sourceID string) {

@@ -19,10 +19,12 @@ type archivedContinuationSource struct {
 // select this host's execution services only when reserving a new successor.
 func (r *registry) readArchivedContinuationSource(req workersessions.ContinueRequest) (*archivedContinuationSource, error) {
 	r.mu.RLock()
-	_, exists := r.sessions[r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)]
+	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	source, exists := r.sessions[address]
+	liveFactory := exists && source.Terminal() && r.supervisions[address] == nil
 	_, replay := r.continueReplays[req.RequestID]
 	r.mu.RUnlock()
-	if exists || replay || r.logs == nil {
+	if (exists && !liveFactory) || replay || r.logs == nil {
 		return nil, nil
 	}
 	ctx := r.serverOwnedContext()
@@ -99,8 +101,28 @@ func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, ta
 // never install a historical supervision handle or grant source controls.
 func (r *registry) continuationSnapshotLocked(req workersessions.ContinueRequest, archived *archivedContinuationSource) (continuationSourceSnapshot, error) {
 	address := r.workerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
-	if _, exists := r.sessions[address]; exists || archived == nil {
+	if _, exists := r.sessions[address]; (exists && r.supervisions[address] != nil) || archived == nil {
 		return r.snapshotContinuationSourceLocked(req)
+	}
+	if source, exists := r.sessions[address]; exists {
+		if !source.Terminal() {
+			return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceActive
+		}
+		if source.SuccessorWorkerSessionID != "" {
+			return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
+		}
+		if validateContinuationSourceAssociation(source) != nil || source.State != archived.snapshot.session.State ||
+			*source.ProviderSessionAssociation != *archived.snapshot.session.ProviderSessionAssociation {
+			return continuationSourceSnapshot{}, workersessions.ErrContinuationProviderSessionInvalid
+		}
+		if attempt := r.runtimeAttemptControls[address]; attempt != nil {
+			attempt.mu.Lock()
+			unsafe := attempt.controlPending || attempt.forceJournalPending != 0 || attempt.controlPersistenceLost
+			attempt.mu.Unlock()
+			if unsafe {
+				return continuationSourceSnapshot{}, workersessions.ErrContinuationSourceConflict
+			}
+		}
 	}
 	address = firstNonEmpty(address, req.SourceWorkerSessionID)
 	if archived.snapshot.session.SuccessorWorkerSessionID != "" ||

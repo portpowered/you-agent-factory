@@ -113,7 +113,10 @@ func (r *registry) readContinuationRecipe(req workersessions.ContinueRequest, ca
 	source, exists := r.sessions[address]
 	metadata := r.observations[address]
 	_, replay := r.continueReplays[req.RequestID]
-	read := !replay && exists && source.Terminal() && metadata != nil && metadata.direct && r.logs != nil
+	// Live Factory attempts use the same detached recipe as archived attempts.
+	// Their supervision still carries Runtime ownership and workflow context;
+	// neither may be inherited by an independent direct continuation.
+	read := !replay && exists && source.Terminal() && metadata != nil && r.supervisions[address] != nil && r.logs != nil
 	factorySessionID, terminalPublished := r.continuationPublicationLocked(address)
 	source = cloneSession(source)
 	r.mu.RUnlock()
