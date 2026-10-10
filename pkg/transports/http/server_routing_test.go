@@ -243,7 +243,7 @@ func TestFactoryCallerMalformedHeaderHasTypedRefusal(t *testing.T) {
 	for _, route := range []string{"/factory-sessions", "/factory-sessions/async", "/factory-sessions/sync", "/factory-sessions/selected/invocations"} {
 		t.Run(route, func(t *testing.T) {
 			t.Parallel()
-			server := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+			server := newLiveSessionTestServer(nil)
 			req := httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`))
 			req.Header.Set("X-You-Worker-Session-Id", "")
 			token := strings.Repeat("A", 43)
