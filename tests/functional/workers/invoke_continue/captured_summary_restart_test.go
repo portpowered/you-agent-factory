@@ -100,9 +100,7 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 	decodeDirectWorkerSessionResult(t, summaryRestartCLI(t, host, home, dir, "show", "--worker-session-id", id), &snapshot.observation)
 	http := support.GetJSON[api.WorkerSessionObservation](t, host.baseURL+"/worker-sessions/"+id)
 	if !reflect.DeepEqual(snapshot.observation, http) {
-		cliJSON, _ := json.Marshal(snapshot.observation)
-		httpJSON, _ := json.Marshal(http)
-		t.Fatalf("CLI/HTTP summary differs: cli=%s http=%s", cliJSON, httpJSON)
+		t.Fatalf("CLI/HTTP summary differs for %s: %s", id, summaryRestartDifferences(snapshot.observation, http))
 	}
 	for _, history := range []string{"archived", "all"} {
 		var list api.ListWorkerSessionsResponse
@@ -116,9 +114,7 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 					assertArchivedFailureUnknowns(t, row)
 				}
 				if !reflect.DeepEqual(recordedSummaryFailure(row), recordedSummaryFailure(http)) {
-					rowJSON, _ := json.Marshal(row)
-					showJSON, _ := json.Marshal(http)
-					t.Fatalf("%s row differs for %s: list=%s show=%s", history, id, rowJSON, showJSON)
+					t.Fatalf("%s row differs for %s: %s", history, id, summaryRestartDifferences(recordedSummaryFailure(row), recordedSummaryFailure(http)))
 				}
 			}
 		}
@@ -133,6 +129,21 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 		t.Fatal(err)
 	}
 	return snapshot
+}
+
+// Report only unequal fields so hosted failure excerpts retain both values.
+// The equality assertions above still compare the complete observations.
+func summaryRestartDifferences(before, after api.WorkerSessionObservation) string {
+	a, b := reflect.ValueOf(before), reflect.ValueOf(after)
+	var differences []string
+	for i := 0; i < a.NumField(); i++ {
+		if !reflect.DeepEqual(a.Field(i).Interface(), b.Field(i).Interface()) {
+			oldJSON, _ := json.Marshal(a.Field(i).Interface())
+			newJSON, _ := json.Marshal(b.Field(i).Interface())
+			differences = append(differences, a.Type().Field(i).Name+": before="+string(oldJSON)+" after="+string(newJSON))
+		}
+	}
+	return strings.Join(differences, "; ")
 }
 
 // The terminal schema records safe failure fields, not normalized provider
@@ -169,6 +180,14 @@ func TestCapturedControlledTerminalRestart(t *testing.T) {
 	for _, action := range []string{"cancel", "terminate", "interrupt", "ownerlost"} {
 		a, b := interruptRestartRepositories(t, filepath.Join(root, action))
 		runner := newS8InterruptProviderRunner(directCodexSessionOutput("session_fixture_codex_success", "Codex fixture answer COMPLETE"), a, b)
+		// These independent executions share a profile, not a provider session.
+		// Inspection requires every reuse of a reference to form one lineage;
+		// colliding fixture references otherwise change capability as peers publish.
+		for _, providerCase := range runner.cases {
+			for _, call := range providerCase.calls {
+				call.sessionID = action + "-" + call.sessionID
+			}
+		}
 		t.Cleanup(runner.releaseAll)
 		id := action + "-source"
 		if action == "ownerlost" {
@@ -269,7 +288,7 @@ func runControlledRestartLive(t *testing.T, first invokeContinueStartedProcess, 
 		c.runner.release(t, c.a.path, s8InterruptCallASuccessor)
 		// Replay synchronously to join the successor before capability parity.
 		summaryRestartCLI(t, first, home, c.a.path, "interrupt", c.id, "--request-id", "recorded-interrupt", "--successor-worker-session-id", "recorded-successor", "--replacement-message", s8ReplacementMessage, "--resume-mode", "recorded")
-		awaitContinuationRestartLogs(t, first, home, c.a.path, "recorded-successor", s8InterruptProviderSessionA)
+		awaitContinuationRestartLogs(t, first, home, c.a.path, "recorded-successor", c.action+"-"+s8InterruptProviderSessionA)
 		c.before["recorded-successor"] = readSummaryRestartSnapshot(t, first, home, c.a.path, "recorded-successor")
 	} else if c.action == "ownerlost" {
 		summaryRestartCLI(t, first, home, c.a.path, "cancel", c.id)
@@ -292,7 +311,7 @@ func runControlledRestartLive(t *testing.T, first invokeContinueStartedProcess, 
 		// capture consumer. Join the source's durable terminal through the public
 		// log follower before comparing successive CLI/HTTP snapshots, just as
 		// for the completed peer and successor below.
-		awaitContinuationRestartLogs(t, first, home, c.a.path, c.id, s8InterruptProviderSessionA)
+		awaitContinuationRestartLogs(t, first, home, c.a.path, c.id, c.action+"-"+s8InterruptProviderSessionA)
 		c.before[c.id] = readSummaryRestartSnapshot(t, first, home, c.a.path, c.id)
 		assertControlledRestartFacts(t, c.action, c.before[c.id].observation)
 	}
@@ -302,7 +321,7 @@ func runControlledRestartLive(t *testing.T, first invokeContinueStartedProcess, 
 	// through its synchronous public replay before comparing successive reads.
 	// The retained runner call-count assertion also protects replay idempotency.
 	summaryRestartCLI(t, first, home, c.b.path, "invoke", "--execution", filepath.Join(c.b.path, peerID+".json"))
-	awaitContinuationRestartLogs(t, first, home, c.b.path, peerID, s8InterruptProviderSessionB)
+	awaitContinuationRestartLogs(t, first, home, c.b.path, peerID, c.action+"-"+s8InterruptProviderSessionB)
 	if c.action != "ownerlost" {
 		c.before[peerID] = readSummaryRestartSnapshot(t, first, home, c.b.path, peerID)
 	}
