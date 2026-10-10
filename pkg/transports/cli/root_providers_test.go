@@ -14,16 +14,42 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
 
 func TestWorkerSessionsInvokeForwardsInjectedCallerEnvironment(t *testing.T) {
 	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		server string
+		args   []string
+		want   string
+		local  bool
+	}{
+		{name: "injected", server: "http://bound.test:49123", want: "http://bound.test:49123"},
+		{name: "explicit", server: "http://bound.test:49123", args: []string{"--server", "http://selected.test:7437"}, want: "http://selected.test:7437"},
+		{name: "absent", want: "http://localhost:7437"},
+		{name: "blank", server: "  ", want: "http://localhost:7437"},
+		{name: "local", server: "http://bound.test:49123", want: "http://bound.test:49123", local: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertWorkerInvokeEnvironment(t, test.server, test.args, test.want, !test.local)
+		})
+	}
+}
+
+func assertWorkerInvokeEnvironment(t *testing.T, server string, arguments []string, wantServer string, remote bool) {
+	t.Helper()
 	token := strings.Repeat("A", 43)
 	called := false
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		InvokeWorkerSession: func(config workersessionscli.InvokeConfig) error {
 			called = true
+			if config.Server != wantServer || config.Remote != remote {
+				t.Fatalf("invoke server/placement = %q/%t, want %q/%t", config.Server, config.Remote, wantServer, remote)
+			}
 			if config.LookupEnv == nil {
 				t.Fatal("invoke lost the injected process environment edge")
 			}
@@ -39,6 +65,8 @@ func TestWorkerSessionsInvokeForwardsInjectedCallerEnvironment(t *testing.T) {
 	})
 	root := factory.NewCommand(context.Background(), nil, func(key string) (string, bool) {
 		switch key {
+		case "YOU_SERVER":
+			return server, server != ""
 		case "YOU_WORKER_SESSION_ID":
 			return "exact/caller", true
 		case "YOU_WORKER_SESSION_TOKEN":
@@ -49,12 +77,67 @@ func TestWorkerSessionsInvokeForwardsInjectedCallerEnvironment(t *testing.T) {
 	}, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--server", "http://selected.test:7437", "worker-sessions", "invoke", "--async", "work"})
+	args := append([]string(nil), arguments...)
+	if remote {
+		args = append(args, "--remote")
+	}
+	root.SetArgs(append(args, "worker-sessions", "invoke", "--async", "work"))
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
 		t.Fatal("invoke operation was not called")
+	}
+}
+
+func TestInjectedServerPreservesLocalListener(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		args []string
+		cfg  runcli.RunConfig
+		port int
+	}{
+		{name: "environment", port: 7437},
+		{name: "explicit server", args: []string{"--server", "http://127.0.0.1:49124"}, port: 49124},
+		{name: "explicit listen", cfg: runcli.RunConfig{ListenExplicit: true, ListenAddress: "127.0.0.1:49125"}, port: 49125},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var root *cobra.Command
+			called := false
+			factory := withTestInjectedPlatformRoles(CommandFactory{
+				InvokeWorkerSession: func(config workersessionscli.InvokeConfig) error {
+					called = true
+					cfg := test.cfg
+					command, _, err := root.Find([]string{"worker-sessions", "invoke"})
+					if err != nil {
+						return err
+					}
+					if err := resolveRunBindFromServer(command, config.Server, &cfg); err != nil {
+						return err
+					}
+					if cfg.Port != test.port {
+						t.Fatalf("local listener port = %d, want %d", cfg.Port, test.port)
+					}
+					return nil
+				},
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+			})
+			root = factory.NewCommand(context.Background(), nil, func(key string) (string, bool) {
+				return "http://remote.test:49123", key == "YOU_SERVER"
+			}, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(append(append([]string(nil), test.args...), "worker-sessions", "invoke", "--async", "work"))
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if !called {
+				t.Fatal("invoke operation was not called")
+			}
+		})
 	}
 }
 

@@ -41,8 +41,11 @@ func TestRequesterDirectInvokeFromRunningCaller(t *testing.T) {
 	token := requesterSourceToken(t, runner, parentID)
 	childID := scenarioScopedID(child, "requester-child")
 	path := requesterExecutionPath(t, child, childID)
-	invoke := t7RemoteCLIInputs(child, ctx, fixture.baseURL, "invoke", "--execution", path)
-	invoke.Input.Env = append(invoke.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
+	parentEnv := requesterEnvironment(runner.Requests()[0].Env)
+	assertRequesterEndpoint(t, parentEnv, fixture.baseURL)
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "--remote", "worker-sessions", "invoke", "--execution", path})
+	invoke.Input.WorkingDirectory = child.workingDirectory
+	invoke.Input.Env = append(child.environment(), "YOU_SERVER="+parentEnv["YOU_SERVER"], "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
 	if err := fixture.process.Execute(invoke.Input); err != nil {
 		t.Fatalf("attributed invoke: %v: %s", err, invoke.Stderr())
 	}
