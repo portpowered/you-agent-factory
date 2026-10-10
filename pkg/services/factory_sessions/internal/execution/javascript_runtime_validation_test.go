@@ -956,28 +956,33 @@ func TestJavaScriptRuntimeServiceWriteRecordingPreservesChildArtifactEnvelope(t 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if portable.Session.ID != id || portable.Session.Status != "SUCCEEDED" || portable.Result == nil || len(portable.Events) == 0 {
-				t.Fatalf("terminal envelope lost result: %#v", portable)
-			}
-			var gotResult, wantResult any
-			if err := json.Unmarshal(portable.Result.PrimaryResult, &gotResult); err != nil {
-				t.Fatal(err)
-			}
-			if err := json.Unmarshal(content, &wantResult); err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(gotResult, wantResult) {
-				t.Fatalf("envelope result = %#v, want %#v", gotResult, wantResult)
-			}
-			if len(portable.Artifacts) != 1 || portable.Artifacts[0].ID != "child-artifact-1" || portable.Artifacts[0].ContentHash != wantHash || portable.Artifacts[0].SizeBytes != int64(len(content)) {
-				t.Fatalf("envelope lost child artifact identity/content: %#v", portable.Artifacts)
-			}
-			for index := 1; index < len(portable.Events); index++ {
-				if portable.Events[index].Sequence <= portable.Events[index-1].Sequence {
-					t.Fatal("envelope lost event order")
-				}
-			}
+			assertChildRecordingEnvelope(t, portable, id, content, wantHash)
 		})
+	}
+}
+
+func assertChildRecordingEnvelope(t *testing.T, portable recordings.PortableRecording, id string, content []byte, wantHash string) {
+	t.Helper()
+	if portable.Session.ID != id || portable.Session.Status != "SUCCEEDED" || portable.Result == nil || len(portable.Events) == 0 {
+		t.Fatalf("terminal envelope lost result: %#v", portable)
+	}
+	var gotResult, wantResult any
+	if err := json.Unmarshal(portable.Result.PrimaryResult, &gotResult); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(content, &wantResult); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotResult, wantResult) {
+		t.Fatalf("envelope result = %#v, want %#v", gotResult, wantResult)
+	}
+	if len(portable.Artifacts) != 1 || portable.Artifacts[0].ID != "child-artifact-1" || portable.Artifacts[0].ContentHash != wantHash || portable.Artifacts[0].SizeBytes != int64(len(content)) {
+		t.Fatalf("envelope lost child artifact identity/content: %#v", portable.Artifacts)
+	}
+	for index := 1; index < len(portable.Events); index++ {
+		if portable.Events[index].Sequence <= portable.Events[index-1].Sequence {
+			t.Fatal("envelope lost event order")
+		}
 	}
 }
 

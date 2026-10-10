@@ -118,40 +118,10 @@ func runNativeRecordingCase(t *testing.T, process support.Process, sessions fact
 			WorkingDirectory: dir, Context: t.Context(), Stdout: &output, Stderr: &stderr, Stdin: strings.NewReader("")})
 	}
 	err := execute(append([]string{"--factory", source}, flags...))
-	if name == "conflict" || name == "write-failure" {
-		if err == nil {
-			t.Fatalf("expected refusal; output=%s", output.String())
-		}
-		if _, statErr := os.Stat(path); statErr == nil {
-			t.Fatal("failed export left artifact")
-		}
+	if assertNativeRecordingEarlyOutcome(t, name, path, home, err, output.String(), stderr.String()) {
 		return
 	}
-	if err != nil && name != "child-denied" {
-		t.Fatalf("native run: %v; output=%s stderr=%s", err, output.String(), stderr.String())
-	}
-	if name == "disabled" {
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("disabled recording: %v", err)
-		}
-		if matches, _ := filepath.Glob(filepath.Join(home, ".you-agent-factory", "recordings", "*", "*", "*", "*")); len(matches) != 0 {
-			t.Fatalf("disabled created recordings: %v", matches)
-		}
-		return
-	}
-	if name == "generated" {
-		const prefix = "Recording saved: "
-		index := strings.Index(output.String(), prefix)
-		if index < 0 {
-			t.Fatalf("missing saved path: %s", output.String())
-		}
-		path = strings.TrimSpace(strings.Split(output.String()[index+len(prefix):], "\n")[0])
-	}
-	if name == "explicit-json" || name == "child-json" || name == "child-denied" {
-		if !json.Valid(bytes.TrimSpace(output.Bytes())) {
-			t.Fatalf("invalid JSON result: %s", output.String())
-		}
-	}
+	path = assertNativeRecordingOutput(t, name, path, &output)
 	wantStatus := "SUCCEEDED"
 	if name == "workflow-failure" || name == "child-denied" {
 		wantStatus = "FAILED"
@@ -167,6 +137,51 @@ func runNativeRecordingCase(t *testing.T, process support.Process, sessions fact
 	if !strings.Contains(output.String(), wantStatus) || !strings.Contains(output.String(), id) {
 		t.Fatalf("lost recorded outcome: %s", output.String())
 	}
+}
+
+// Refusal and disabled selection finish before historical inspection.
+func assertNativeRecordingEarlyOutcome(t *testing.T, name, path, home string, err error, output, stderr string) bool {
+	t.Helper()
+	if name == "conflict" || name == "write-failure" {
+		if err == nil {
+			t.Fatalf("expected refusal; output=%s", output)
+		}
+		if _, statErr := os.Stat(path); statErr == nil {
+			t.Fatal("failed export left artifact")
+		}
+		return true
+	}
+	if err != nil && name != "child-denied" {
+		t.Fatalf("native run: %v; output=%s stderr=%s", err, output, stderr)
+	}
+	if name == "disabled" {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("disabled recording: %v", err)
+		}
+		if matches, _ := filepath.Glob(filepath.Join(home, ".you-agent-factory", "recordings", "*", "*", "*", "*")); len(matches) != 0 {
+			t.Fatalf("disabled created recordings: %v", matches)
+		}
+		return true
+	}
+	return false
+}
+
+func assertNativeRecordingOutput(t *testing.T, name, path string, output *bytes.Buffer) string {
+	t.Helper()
+	if name == "generated" {
+		const prefix = "Recording saved: "
+		index := strings.Index(output.String(), prefix)
+		if index < 0 {
+			t.Fatalf("missing saved path: %s", output.String())
+		}
+		path = strings.TrimSpace(strings.Split(output.String()[index+len(prefix):], "\n")[0])
+	}
+	if name == "explicit-json" || name == "child-json" || name == "child-denied" {
+		if !json.Valid(bytes.TrimSpace(output.Bytes())) {
+			t.Fatalf("invalid JSON result: %s", output.String())
+		}
+	}
+	return path
 }
 
 func assertNativeReplay(t *testing.T, process support.Process, sessions factorysessions.Service, dir, home, path, id, status string, child bool) {
@@ -185,6 +200,14 @@ func assertNativeReplay(t *testing.T, process support.Process, sessions factorys
 	if err != nil || string(read.Status) != status {
 		t.Fatalf("recorded identity/status: %#v, %v", read, err)
 	}
+	assertNativeReplayResult(t, sessions, id, status, child)
+	assertNativeReplayHistory(t, sessions, id)
+	release()
+	assertSelectedReplayCommandJoined(t, done)
+}
+
+func assertNativeReplayResult(t *testing.T, sessions factorysessions.Service, id, status string, child bool) {
+	t.Helper()
 	result, err := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal, IncludeArtifacts: true})
 	if err != nil || result.SessionID != id || (status == "SUCCEEDED" && !bytes.Contains(result.PrimaryResult, []byte("native-recorded-result"))) {
 		t.Fatalf("recorded primary result: %#v, %v", result, err)
@@ -195,6 +218,10 @@ func assertNativeReplay(t *testing.T, process support.Process, sessions factorys
 	if status == "FAILED" && result.Failure == nil {
 		t.Fatalf("recorded failure lost: %#v", result)
 	}
+}
+
+func assertNativeReplayHistory(t *testing.T, sessions factorysessions.Service, id string) {
+	t.Helper()
 	events, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{})
 	if err != nil || len(events.Events) == 0 {
 		t.Fatalf("recorded history: %#v, %v", events, err)
@@ -207,8 +234,6 @@ func assertNativeReplay(t *testing.T, process support.Process, sessions factorys
 		}
 		previous = event.Context.Sequence
 	}
-	release()
-	assertSelectedReplayCommandJoined(t, done)
 }
 
 // TestPortableReplayInspectionExecutesThroughRootProcess proves portable
