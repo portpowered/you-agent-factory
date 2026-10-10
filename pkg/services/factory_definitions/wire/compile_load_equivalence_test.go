@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	snapshotmaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
@@ -132,7 +133,7 @@ func newCompileLoadLoader(
 		targetDir string,
 		config *factorydefinitions.FactoryConfig,
 	) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return internalportableconfig.MaterializeFiles(fileSystem, targetDir, config)
+		return snapshotmaterialize.MaterializeFiles(fileSystem, targetDir, config)
 	}
 	namedPaths, err := factorynamedpaths.New(fileSystem)
 	if err != nil {

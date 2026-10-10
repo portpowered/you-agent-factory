@@ -19,6 +19,7 @@ import (
 	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	snapshotmaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
@@ -120,7 +121,7 @@ func (c Composition) Loader() *compilationloading.Loader {
 		c.effects.AuthoredReader,
 	)
 	materializeFiles := func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return internalportableconfig.MaterializeFiles(c.fileSystem, targetDir, config)
+		return snapshotmaterialize.MaterializeFiles(c.fileSystem, targetDir, config)
 	}
 	return compilationloading.New(
 		c.effects.Loading,
@@ -217,10 +218,10 @@ func (c Composition) Persistence(
 		c.effects.InboxSentinels,
 	)
 	materializeFiles := func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return internalportableconfig.MaterializeFiles(c.fileSystem, targetDir, config)
+		return snapshotmaterialize.MaterializeFiles(c.fileSystem, targetDir, config)
 	}
 	validateWrites := func(targetDir string, config *factorydefinitions.FactoryConfig) error {
-		return internalportableconfig.ValidateWrites(c.fileSystem, targetDir, config)
+		return snapshotmaterialize.ValidateWrites(c.fileSystem, targetDir, config)
 	}
 	copySupportedFiles := func(sourceDir, targetDir string, config *factorydefinitions.FactoryConfig) error {
 		return internalportableconfig.CopySupportedFiles(c.fileSystem, sourceDir, targetDir, config)

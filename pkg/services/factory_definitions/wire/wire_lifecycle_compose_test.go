@@ -210,3 +210,19 @@ func resolveAuthoringLayoutFilesystem(files portablefiles.FileSystem) (authoring
 	}
 	return fs, nil
 }
+
+// Catalog fixtures bind representation decoding explicitly; no production
+// normalizer is retained solely for test composition.
+func effectiveCatalogNormalizerForTest() factorydefinitions.EffectiveFactoryDefinitionNormalizer {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return func(ctx context.Context, candidate factorydefinitions.EffectiveFactoryCatalogCandidate) (*factorydefinitions.FactoryConfig, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		definition, err := mapper.Expand(candidate.Canonical)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, contextErr
+		}
+		return definition, err
+	}
+}

@@ -264,7 +264,7 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 func TestEffectiveFactoryDefinitionNormalizerFromMapperHonorsCancelledContext(t *testing.T) {
 	t.Parallel()
 
-	normalizer := factorydefinitionswire.EffectiveFactoryDefinitionNormalizerFromMapper()
+	normalizer := effectiveCatalogNormalizerForTest()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

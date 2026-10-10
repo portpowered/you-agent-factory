@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	snapshotprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
@@ -55,7 +56,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal(snapshot) error = %v", err)
 	}
-	imported, err := factorydefinitionswire.PrepareFactorySnapshotImport(payload)
+	imported, err := snapshotprepare.Import(payload, factorydefinitionswire.FactorySnapshotJSONDecoder())
 	if err != nil {
 		t.Fatalf("prepare.Import() error = %v", err)
 	}

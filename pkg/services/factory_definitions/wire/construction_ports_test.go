@@ -32,7 +32,7 @@ func TestPublishedConstructionPorts_ExposeRootCompositionHelpers(t *testing.T) {
 		t.Fatal("NewEffectiveCatalogDiscovery() returned incomplete discovery ports")
 	}
 
-	normalize := factorydefinitionswire.EffectiveFactoryDefinitionNormalizerFromMapper()
+	normalize := effectiveCatalogNormalizerForTest()
 	catalog, err := factorydefinitionswire.NewEffectiveCatalog(discovery, normalize)
 	if err != nil {
 		t.Fatalf("NewEffectiveCatalog() error = %v", err)

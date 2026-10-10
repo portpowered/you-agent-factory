@@ -7,6 +7,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotmaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 )
 
 func TestMaterializeFilesReportsChangedExistingContent(t *testing.T) {
@@ -30,7 +31,7 @@ func TestMaterializeFilesReportsChangedExistingContent(t *testing.T) {
 		},
 	}
 
-	replacements, err := MaterializeFiles(
+	replacements, err := snapshotmaterialize.MaterializeFiles(
 		platformfilesystem.Local{},
 		factoryDir,
 		factoryConfig,

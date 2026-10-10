@@ -14,16 +14,6 @@ import (
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
-// Ports are the durable-write collaborators required to stage and commit one
-// named Factory layout.
-type Ports struct {
-	Write                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error
-	Validate             func(string) error
-	FileSystem           factorydefinitions.PersistenceFileSystem
-	RequireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
-	Directories          factorydefinitions.DirectoryReplacementStore
-}
-
 // NamedFactory atomically creates or replaces one named Factory layout under
 // rootDir using staging and commit semantics.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
@@ -33,21 +23,25 @@ func NamedFactory(
 	name string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 	replaceExisting bool,
-	ports Ports,
+	write func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error,
+	validate func(string) error,
+	fileSystem factorydefinitions.PersistenceFileSystem,
+	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
+	directories factorydefinitions.DirectoryReplacementStore,
 ) (string, error) {
-	if ports.Write == nil {
+	if write == nil {
 		return "", fmt.Errorf("Factory Definitions layout writer is required")
 	}
-	if ports.Validate == nil {
+	if validate == nil {
 		return "", fmt.Errorf("Factory Definitions layout validator is required")
 	}
-	if ports.FileSystem == nil {
+	if fileSystem == nil {
 		return "", fmt.Errorf("Factory Definitions persistence filesystem is required")
 	}
-	if ports.RequireDefinitionDir == nil {
+	if requireDefinitionDir == nil {
 		return "", fmt.Errorf("Factory Definition directory validator is required")
 	}
-	if ports.Directories == nil {
+	if directories == nil {
 		return "", fmt.Errorf("directory replacement store is required")
 	}
 	if err := ctx.Err(); err != nil {
@@ -68,29 +62,29 @@ func NamedFactory(
 	if err != nil {
 		return "", err
 	}
-	if err := validateTarget(ports.FileSystem, targetDir, canonicalName, replaceExisting); err != nil {
+	if err := validateTarget(fileSystem, targetDir, canonicalName, replaceExisting); err != nil {
 		return "", err
 	}
-	if err := ensureParentDirectories(ports.FileSystem, rootDir, targetDir); err != nil {
+	if err := ensureParentDirectories(fileSystem, rootDir, targetDir); err != nil {
 		return "", err
 	}
 
-	stagingDir, err := ports.FileSystem.MkdirTemp(rootDir, stagingPrefix(canonicalName))
+	stagingDir, err := fileSystem.MkdirTemp(rootDir, stagingPrefix(canonicalName))
 	if err != nil {
 		return "", fmt.Errorf("create staging directory for factory %q: %w", canonicalName, err)
 	}
 	keepStaging := false
 	defer func() {
 		if !keepStaging {
-			_ = ports.FileSystem.RemoveAll(stagingDir)
+			_ = fileSystem.RemoveAll(stagingDir)
 		}
 	}()
 
 	sourcePath := filepath.Join(targetDir, factorydefinitions.FactoryConfigFile)
-	if err := ports.Write(stagingDir, prepared, sourcePath); err != nil {
+	if err := write(stagingDir, prepared, sourcePath); err != nil {
 		return "", fmt.Errorf("%w: %w", factorydefinitions.ErrInvalidNamedFactory, err)
 	}
-	if err := ports.Validate(stagingDir); err != nil {
+	if err := validate(stagingDir); err != nil {
 		return "", fmt.Errorf(
 			"%w: validate factory %q config: %w",
 			factorydefinitions.ErrInvalidNamedFactory,
@@ -99,10 +93,10 @@ func NamedFactory(
 		)
 	}
 	if replaceExisting {
-		if err := replaceDirectory(ports, stagingDir, targetDir, canonicalName); err != nil {
+		if err := replaceDirectory(fileSystem, directories, stagingDir, targetDir, canonicalName); err != nil {
 			return "", err
 		}
-	} else if err := ports.FileSystem.Rename(stagingDir, targetDir); err != nil {
+	} else if err := fileSystem.Rename(stagingDir, targetDir); err != nil {
 		return "", fmt.Errorf("commit factory %q: %w", canonicalName, err)
 	}
 	keepStaging = true
@@ -150,10 +144,11 @@ func ensureParentDirectories(
 }
 
 func replaceDirectory(
-	ports Ports,
+	fileSystem factorydefinitions.PersistenceFileSystem,
+	directories factorydefinitions.DirectoryReplacementStore,
 	stagingDir, targetDir, name string,
 ) error {
-	backupDir, err := ports.Directories.Commit(
+	backupDir, err := directories.Commit(
 		filepath.Dir(targetDir),
 		targetDir,
 		stagingDir,
@@ -164,7 +159,7 @@ func replaceDirectory(
 	if backupDir == "" {
 		return nil
 	}
-	return ports.FileSystem.RemoveAll(backupDir)
+	return fileSystem.RemoveAll(backupDir)
 }
 
 // StagingDirectoryPrefix returns the exact temporary-directory prefix used

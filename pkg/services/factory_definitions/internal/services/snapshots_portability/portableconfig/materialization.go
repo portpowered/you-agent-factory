@@ -37,26 +37,6 @@ func NewWritesValidator(
 	return snapshotsportabilitymaterialize.NewWritesValidator(fileSystem)
 }
 
-// MaterializeFiles restores inline portable assets described by a Factory
-// Definition and reports existing files whose contents changed.
-func MaterializeFiles(
-	fileSystem portablefiles.FileSystem,
-	targetDir string,
-	factoryConfig *factorydefinitions.FactoryConfig,
-) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-	return snapshotsportabilitymaterialize.MaterializeFiles(fileSystem, targetDir, factoryConfig)
-}
-
-// ValidateWrites checks that all inline portable assets can be safely
-// resolved without mutating the filesystem.
-func ValidateWrites(
-	fileSystem portablefiles.FileSystem,
-	targetDir string,
-	factoryConfig *factorydefinitions.FactoryConfig,
-) error {
-	return snapshotsportabilitymaterialize.ValidateWrites(fileSystem, targetDir, factoryConfig)
-}
-
 // PruneRemovedDocs removes authored documentation files no longer declared by
 // the Factory Definition manifest.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.

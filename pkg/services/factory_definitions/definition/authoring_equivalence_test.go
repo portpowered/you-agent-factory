@@ -21,6 +21,7 @@ import (
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	snapshotmaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
@@ -45,10 +46,10 @@ func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {
 	loader := composition.Loader()
 	_, _, pruneRemovedDocs := factorydefinitiontestcomposition.PortableOperations(fileSystem)
 	materializeFiles := func(targetDir string, config *factoryroot.FactoryConfig) ([]factoryroot.PortableBundledFileReplacement, error) {
-		return portableconfig.MaterializeFiles(fileSystem, targetDir, config)
+		return snapshotmaterialize.MaterializeFiles(fileSystem, targetDir, config)
 	}
 	validateWrites := func(targetDir string, config *factoryroot.FactoryConfig) error {
-		return portableconfig.ValidateWrites(fileSystem, targetDir, config)
+		return snapshotmaterialize.ValidateWrites(fileSystem, targetDir, config)
 	}
 	copySupportedFiles := func(sourceDir, targetDir string, config *factoryroot.FactoryConfig) error {
 		return portableconfig.CopySupportedFiles(fileSystem, sourceDir, targetDir, config)
@@ -479,10 +480,10 @@ func newRootAuthoringServiceWithCorruptingWriteForPeer(t *testing.T) factoryroot
 		inboxgitkeep.NewLocal(fileSystem),
 	)
 	materializeFiles := func(targetDir string, config *factoryroot.FactoryConfig) ([]factoryroot.PortableBundledFileReplacement, error) {
-		return portableconfig.MaterializeFiles(fileSystem, targetDir, config)
+		return snapshotmaterialize.MaterializeFiles(fileSystem, targetDir, config)
 	}
 	validateWrites := func(targetDir string, config *factoryroot.FactoryConfig) error {
-		return portableconfig.ValidateWrites(fileSystem, targetDir, config)
+		return snapshotmaterialize.ValidateWrites(fileSystem, targetDir, config)
 	}
 	writePrepared := func(
 		targetDir string,

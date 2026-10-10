@@ -566,7 +566,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	}
 	listEffective, err := factorydefinitionsinternal.NewEffectiveCatalog(
 		discovery,
-		factorydefinitionswire.EffectiveFactoryDefinitionNormalizerFromMapper(),
+		effectiveCatalogNormalizerForTest(),
 	)
 	if err != nil {
 		t.Fatalf("NewEffectiveCatalog() error = %v", err)

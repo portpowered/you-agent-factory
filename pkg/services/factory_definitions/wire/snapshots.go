@@ -94,14 +94,6 @@ func ValidateEditableSnapshot(
 	)
 }
 
-// PrepareFactorySnapshotImport decodes one detached snapshot payload through
-// snapshots_portability-owned prepare-import logic.
-func PrepareFactorySnapshotImport(
-	payload []byte,
-) (contracts.PrepareFactorySnapshotImportResult, error) {
-	return snapshotsportabilityprepare.Import(payload, FactorySnapshotJSONDecoder())
-}
-
 // NewPortableBundledFilesApplier binds portable authored-file discovery to an
 // injected filesystem.
 func NewPortableBundledFilesApplier(

@@ -12,7 +12,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // LifecycleHost is the completed session/persistence adapter consumed by Definitions.
@@ -83,23 +82,4 @@ func NewLifecycleHost(
 		sessionHost.ValidateEditableFactorySnapshot, sessionHost.GetCurrentFactorySnapshotForSession,
 		persistence.ReplaceFactoryLayout,
 	)
-}
-
-// EffectiveFactoryDefinitionNormalizerFromMapper binds the canonical Factory
-// config mapper to effective-catalog normalization for Wire composition.
-func EffectiveFactoryDefinitionNormalizerFromMapper() factorydefinitions.EffectiveFactoryDefinitionNormalizer {
-	mapper := factorymapping.NewFactoryConfigMapper()
-	return func(
-		ctx context.Context,
-		candidate factorydefinitions.EffectiveFactoryCatalogCandidate,
-	) (*factorydefinitions.FactoryConfig, error) {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		definition, err := mapper.Expand(candidate.Canonical)
-		if contextErr := ctx.Err(); contextErr != nil {
-			return nil, contextErr
-		}
-		return definition, err
-	}
 }

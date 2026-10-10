@@ -176,7 +176,7 @@ func (s *Service) CreateNamedFactory(
 		request.Name,
 		&request.Prepared,
 		false,
-		s.persistPorts(),
+		s.write, s.validate, s.fileSystem, s.requireDefinitionDir, s.directories,
 	)
 	if err != nil {
 		return factorydefinitions.CreateNamedFactoryResult{}, atomicWriteFailure(request.Name, factoryDir, err)
@@ -200,7 +200,7 @@ func (s *Service) ReplaceNamedFactory(
 		request.Name,
 		&request.Prepared,
 		true,
-		s.persistPorts(),
+		s.write, s.validate, s.fileSystem, s.requireDefinitionDir, s.directories,
 	)
 	if err != nil {
 		return factorydefinitions.ReplaceNamedFactoryResult{}, atomicWriteFailure(request.Name, factoryDir, err)
@@ -209,16 +209,6 @@ func (s *Service) ReplaceNamedFactory(
 		Name:       strings.TrimSpace(request.Name),
 		FactoryDir: factoryDir,
 	}, nil
-}
-
-func (s *Service) persistPorts() persist.Ports {
-	return persist.Ports{
-		Write:                s.write,
-		Validate:             s.validate,
-		FileSystem:           s.fileSystem,
-		RequireDefinitionDir: s.requireDefinitionDir,
-		Directories:          s.directories,
-	}
 }
 
 func atomicWriteFailure(name, factoryDir string, cause error) error {
