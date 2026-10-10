@@ -44,18 +44,31 @@ func (f *rootServiceFake) Project(providersessions.ProjectRequest) (providersess
 
 type blockingRootServiceFake struct {
 	rootServiceFake
-	started chan struct{}
-	release chan struct{}
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
 }
 
-func newBlockingRootServiceFake() *blockingRootServiceFake {
-	return &blockingRootServiceFake{
-		started: make(chan struct{}),
-		release: make(chan struct{}),
+func newBlockingRootServiceFake(t *testing.T) *blockingRootServiceFake {
+	t.Helper()
+	fake := &blockingRootServiceFake{
+		started:  make(chan struct{}),
+		release:  make(chan struct{}),
+		finished: make(chan struct{}),
 	}
+	t.Cleanup(func() {
+		close(fake.release)
+		select {
+		case <-fake.finished:
+		case <-time.After(30 * time.Second):
+			t.Error("root call did not finish after release")
+		}
+	})
+	return fake
 }
 
 func (f *blockingRootServiceFake) Details(provider, kind, id string) (providersessions.Detail, error) {
+	defer close(f.finished)
 	f.lastProvider = provider
 	f.lastKind = kind
 	f.lastID = id
@@ -64,9 +77,10 @@ func (f *blockingRootServiceFake) Details(provider, kind, id string) (providerse
 	return f.rootServiceFake.Details(provider, kind, id)
 }
 
-func TestNewAdapterRequiresInjectedRoot(t *testing.T) {
-	if adapter := NewAdapter(nil); adapter != nil {
-		t.Fatalf("NewAdapter(nil) = %#v, want nil", adapter)
+func TestNewAdapterIsInertWithInjectedRoot(t *testing.T) {
+	fake := &rootServiceFake{}
+	if adapter := NewAdapter(fake); adapter == nil || fake.lastID != "" {
+		t.Fatalf("construction = %#v, root identity = %q", adapter, fake.lastID)
 	}
 }
 
@@ -125,11 +139,11 @@ func TestAdapterDetailsPropagatesTypedRootFailures(t *testing.T) {
 	}
 }
 
-func TestAdapterDetailsRequiresInjectedRoot(t *testing.T) {
-	var adapter *Adapter
-
-	_, err := adapter.Details("codex", providersessions.SessionIDKind, "session-http-1")
-	if err == nil {
-		t.Fatal("Details on nil adapter = nil, want error")
+func TestAdapterDetailsPreservesRootFailureIdentity(t *testing.T) {
+	failure := &providersessions.LookupError{Provider: providersessions.ProviderCodex, SessionID: "missing", Err: providersessions.ErrSessionNotFound}
+	fake := &rootServiceFake{detailErr: failure}
+	_, err := NewAdapter(fake).Details("codex", providersessions.SessionIDKind, "missing")
+	if err != failure || fake.lastProvider != "codex" || fake.lastKind != providersessions.SessionIDKind || fake.lastID != "missing" {
+		t.Fatalf("Details = %v, forwarded identity = (%q, %q, %q)", err, fake.lastProvider, fake.lastKind, fake.lastID)
 	}
 }

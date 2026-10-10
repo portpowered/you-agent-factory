@@ -26,18 +26,12 @@ type Adapter struct {
 // NewAdapter constructs the Provider Sessions HTTP adapter bound to the
 // accepted root Service seam.
 func NewAdapter(sessions providersessions.Service) *Adapter {
-	if sessions == nil {
-		return nil
-	}
 	return &Adapter{sessions: sessions}
 }
 
 // Details invokes the Provider Sessions root Details slice for one session
 // identity.
 func (a *Adapter) Details(provider, kind, id string) (providersessions.Detail, error) {
-	if a == nil || a.sessions == nil {
-		return providersessions.Detail{}, errors.New("Provider Sessions service is required")
-	}
 	return a.sessions.Details(provider, kind, id)
 }
 

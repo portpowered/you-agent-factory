@@ -3,7 +3,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -19,9 +18,6 @@ var _ providersessions.Service = (*inspectionService)(nil)
 
 // New constructs an inert captured-only inspection service.
 func New(captured recordings.WorkerCapturedActivityReader) (providersessions.Service, error) {
-	if captured == nil {
-		return nil, fmt.Errorf("provider-session captured activity reader is required")
-	}
 	return &inspectionService{captured: capturedProvider{reader: captured}}, nil
 }
 
