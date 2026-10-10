@@ -15,6 +15,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -138,12 +139,14 @@ func ValidateSource(
 
 // SubagentInput is the simplified request accepted by you.subagent.
 type SubagentInput struct {
-	Prompt          string `json:"prompt"`
-	Provider        string `json:"provider,omitempty"`
-	Model           string `json:"model,omitempty"`
-	ReasoningEffort string `json:"reasoningEffort,omitempty"`
-	WorkingRoot     string `json:"workingRoot,omitempty"`
-	TimeoutMillis   *int64 `json:"timeoutMillis,omitempty"`
+	// Caller is supplied by the execution boundary, never by MCP arguments.
+	Caller          *workersessions.CallerIdentity `json:"-"`
+	Prompt          string                         `json:"prompt"`
+	Provider        string                         `json:"provider,omitempty"`
+	Model           string                         `json:"model,omitempty"`
+	ReasoningEffort string                         `json:"reasoningEffort,omitempty"`
+	WorkingRoot     string                         `json:"workingRoot,omitempty"`
+	TimeoutMillis   *int64                         `json:"timeoutMillis,omitempty"`
 }
 
 // SubagentResult returns the child response as readable text with the identity
@@ -167,6 +170,7 @@ func Subagent(
 	resolveProvider ProviderIdentityResolver,
 	input SubagentInput,
 ) ToolResponse[SubagentResult] {
+	input.Caller = input.Caller.Clone()
 	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
 		envelope := subagentRequestErrorEnvelope(err, ctx, target, generateID)
 		return ToolResponse[SubagentResult]{Error: &envelope}
@@ -197,7 +201,7 @@ func Subagent(
 	if input.WorkingRoot != "" {
 		workingRoot = input.WorkingRoot
 	}
-	started, err, startAbandoned := startSubagentSession(callCtx, target, workingRoot, requestID)
+	started, err, startAbandoned := startSubagentSession(callCtx, target, workingRoot, requestID, input.Caller)
 	if startAbandoned {
 		releaseAdmission = false // The Start goroutine owns the slot and any late cleanup.
 	}
@@ -236,6 +240,9 @@ func Subagent(
 }
 
 func subagentStartFailure(err error, requestID string, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+	if errors.Is(err, workersessions.ErrCallerInvalid) {
+		return subagentExecutionFailure(err)
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		response := subagentInvocationTimeout("", requestID, timeoutMillis, input, nil)
 		response.Error.Details["phase"] = "start"
@@ -244,11 +251,16 @@ func subagentStartFailure(err error, requestID string, timeoutMillis int64, inpu
 	if errors.Is(err, errSubagentCapacity) {
 		return subagentCapacityFailure("", requestID)
 	}
+	if input.Caller != nil && input.Caller.Token != "" && strings.Contains(err.Error(), input.Caller.Token) {
+		envelope := unmappedExecutionErrorEnvelope()
+		return ToolResponse[SubagentResult]{Error: &envelope}
+	}
 	return subagentExecutionFailure(err)
 }
 
-func startSubagentSession(ctx context.Context, target factorysessionexecution.Service, workingRoot, requestID string) (factorysessionexecution.SessionStartResult, error, bool) {
+func startSubagentSession(ctx context.Context, target factorysessionexecution.Service, workingRoot, requestID string, caller *workersessions.CallerIdentity) (factorysessionexecution.SessionStartResult, error, bool) {
 	return boundedSubagentStart(ctx, target, factorysessionexecution.SessionStartRequest{
+		Caller:         caller.Clone(),
 		Mode:           factorysessionexecution.SessionOperationModeLive,
 		ActivationOnly: true,
 		Correlation:    factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
@@ -276,6 +288,7 @@ func invokeSubagent(callCtx context.Context, target factorysessionexecution.Serv
 	}
 	return boundedSubagentCall(callCtx, subagentInvokeSlots, func() (factorysessionexecution.InvocationResult, error) {
 		return target.Invoke(callCtx, factorysessionexecution.SessionInvokeRequest{
+			Caller:      input.Caller.Clone(),
 			SessionID:   sessionID,
 			Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
 			Args:        args,
@@ -739,6 +752,11 @@ func subagentInvocationFailure(sessionID, requestID string) ToolResponse[Subagen
 }
 
 func subagentInvokeError(err error, sessionID, requestID string, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
+	if errors.Is(err, workersessions.ErrCallerInvalid) {
+		response := subagentExecutionFailure(err)
+		response.Error.SessionID = sessionID
+		return response
+	}
 	if errors.Is(err, errSubagentCapacity) {
 		return subagentCapacityFailure(sessionID, requestID)
 	}

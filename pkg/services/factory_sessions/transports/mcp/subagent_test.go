@@ -2,6 +2,7 @@ package factorysession_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -14,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -29,6 +31,7 @@ type subagentTargetFake struct {
 	invoke                factorysessions.SessionInvokeRequest
 	control               factorysessions.SessionControlRequest
 	started               bool
+	startErr              error
 	closed                bool
 	controlHasDeadline    bool
 	controlTimeToDeadline time.Duration
@@ -46,6 +49,9 @@ type subagentTargetFake struct {
 func (fake *subagentTargetFake) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	fake.start = request
 	fake.started = true
+	if fake.startErr != nil {
+		return factorysessions.SessionStartResult{}, fake.startErr
+	}
 	return factorysessions.SessionStartResult{SessionID: "session-1", Mode: factorysessions.SessionOperationModeLive, Status: "RUNNING"}, nil
 }
 
@@ -89,6 +95,9 @@ func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	}
 	if response.Result.Text != "subagent answer" || response.Result.SessionID != "session-1" {
 		t.Fatalf("Subagent result = %#v", response.Result)
+	}
+	if target.start.Caller != nil || target.invoke.Caller != nil {
+		t.Fatal("ordinary subagent acquired caller authority")
 	}
 	assertSubagentStart(t, target)
 	assertSubagentInvocationAndClose(t, target)
@@ -758,5 +767,102 @@ func TestSubagentCloseDeadlineExceededReportsCleanupTimeout(t *testing.T) {
 		if strings.Contains(leaked, secret) {
 			t.Fatalf("close timeout error leaked %q: %#v", secret, response.Error)
 		}
+	}
+}
+
+// This adapter witness controls only Factory admission. Live owner authority and
+// selected-host RUN are separate public functional obligations.
+type callerSubagentTarget struct {
+	*subagentTargetFake
+	admitted workersessions.CallerIdentity
+}
+
+func (target *callerSubagentTarget) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	target.admitted = *request.Caller.Clone()
+	result, err := target.subagentTargetFake.Start(ctx, request)
+	request.Caller.WorkerSessionID = "changed-by-start"
+	request.Caller.Token = "changed-by-start"
+	return result, err
+}
+
+func TestSubagentForwardsDetachedCallerToBothAdmissions(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-caller-token"}
+	want := *caller
+	target := &callerSubagentTarget{subagentTargetFake: &subagentTargetFake{}}
+	input := mcpfactorysession.SubagentInput{Prompt: "Explain the result", Provider: "controlled", Caller: caller}
+	resolve := func(_ context.Context, identity string) (string, error) {
+		caller.WorkerSessionID = "changed-by-resolver"
+		caller.Token = "changed-by-resolver"
+		return identity, nil
+	}
+	response := mcpfactorysession.Subagent(t.Context(), target, "workspace", func() string { return "caller-request" }, resolve, input)
+	if response.Error != nil || response.Result == nil || !target.closed {
+		t.Fatalf("response = %#v; closed = %v", response, target.closed)
+	}
+	if target.admitted != want || target.invoke.Caller == nil || *target.invoke.Caller != want {
+		t.Fatal("start or invoke did not retain the exact entry caller")
+	}
+	if target.invoke.Caller == caller || target.invoke.Caller == target.start.Caller {
+		t.Fatal("caller credential pointers are shared between admissions")
+	}
+	assertSubagentCallerPrivate(t, want, input, target.start, target.invoke, response)
+}
+
+func assertSubagentCallerPrivate(t *testing.T, caller workersessions.CallerIdentity, values ...any) {
+	t.Helper()
+	for _, value := range values {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), caller.Token) || strings.Contains(string(raw), caller.WorkerSessionID) {
+			t.Fatal("execution-only caller entered serialized MCP or Factory values")
+		}
+	}
+}
+
+func TestSubagentCallerRefusalIsTypedPrivateAndClosesAdmittedSession(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"start", "invoke", "start-secret-error"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			caller := &workersessions.CallerIdentity{WorkerSessionID: "refused-caller", Token: "refused-caller-token"}
+			target := &subagentTargetFake{}
+			refusal := fmt.Errorf("%s: %w", caller.Token, workersessions.ErrCallerInvalid)
+			wantCode := "WORKER_SESSION_CALLER_INVALID"
+			switch phase {
+			case "start":
+				target.startErr = refusal
+			case "invoke":
+				target.invokeErr = refusal
+			case "start-secret-error":
+				target.startErr = fmt.Errorf("external failure: %s", caller.Token)
+				wantCode = "factory_session.execution.internal"
+			}
+			response := mcpfactorysession.Subagent(t.Context(), target, "workspace", func() string { return "refusal-request" }, testSubagentProviderIdentity,
+				mcpfactorysession.SubagentInput{Prompt: "Explain the result", Caller: caller})
+			if response.Error == nil || response.Result != nil || response.Error.Code != wantCode || response.Error.Retryable {
+				t.Fatalf("response = %#v", response)
+			}
+			if target.closed != (phase == "invoke") || (phase != "invoke" && target.invoke.SessionID != "") {
+				t.Fatal("refusal launched invocation or failed to close the admitted session")
+			}
+			assertSubagentCallerPrivate(t, *caller, response, target.start, target.invoke)
+		})
+	}
+}
+
+func TestSubagentArgumentsCannotSupplyCallerAuthority(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"caller", "Caller", "workerSessionId", "token"} {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+			raw, _ := json.Marshal(map[string]any{"prompt": "Explain", key: "untrusted"})
+			response, err := mcpfactorysession.ValidateSubagentArguments(raw)
+			if err != nil || response == nil || !strings.Contains(string(response), `"code":"BAD_REQUEST"`) {
+				t.Fatalf("authority argument response = %s, %v", response, err)
+			}
+		})
 	}
 }
