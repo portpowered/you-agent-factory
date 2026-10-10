@@ -9,6 +9,32 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+func TestRuntimeActivationInputsCloneDetachesResultBody(t *testing.T) {
+	t.Parallel()
+
+	const declared = `{"decision":"ACCEPTED","output":"detached"}`
+	body := []byte(declared)
+	inputs := RuntimeActivationInputs{
+		Workers: RuntimeActivationWorkerInputs{
+			MockWorkers: &RuntimeActivationMockWorkersConfig{
+				MockWorkers: []RuntimeActivationMockWorker{{RunType: "accept", ResultBody: body}},
+			},
+		},
+	}
+	cloned, err := inputs.Clone()
+	if err != nil {
+		t.Fatalf("Clone() error = %v", err)
+	}
+	body[1] = 'x'
+	if got := string(cloned.Workers.MockWorkers.MockWorkers[0].ResultBody); got != declared {
+		t.Fatalf("cloned result body = %s, want %s", got, declared)
+	}
+	cloned.Workers.MockWorkers.MockWorkers[0].ResultBody[2] = 'y'
+	if body[2] != declared[2] {
+		t.Fatal("mutating cloned result body changed caller bytes")
+	}
+}
+
 func TestWorkRestoreErrorBoundsEscapesAndPreservesCause(t *testing.T) {
 	t.Parallel()
 	cause := errors.New("PRIVATE-PROMPT")

@@ -1076,3 +1076,16 @@ func TestRuntimeOpeningActivationCancellationStopsBeforeAcquisition(t *testing.T
 		})
 	}
 }
+
+func TestActivationMockResultBodyRoundtripIsDetached(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"decision":"ACCEPTED","output":"detached"}`)
+	original := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeAccept, ResultBody: body}}}
+	activation := runtimeActivationMockWorkers(original)
+	body[1] = 'x'
+	roundtrip := activationMockWorkers(activation)
+	activation.MockWorkers[0].ResultBody[1] = 'y'
+	if got := string(roundtrip.MockWorkers[0].ResultBody); got != `{"decision":"ACCEPTED","output":"detached"}` {
+		t.Fatalf("activation lost or aliased body: %s", got)
+	}
+}

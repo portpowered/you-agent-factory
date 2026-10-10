@@ -141,7 +141,11 @@ func (r *runner) Execute(
 		}
 		return workerexecution.ApplyMockWorkerUsageDiagnostics(runnerResult, entry.Usage), nil
 	default:
-		return workerexecution.ApplyMockWorkerUsageDiagnostics(acceptResult(), entry.Usage), nil
+		result := acceptResult()
+		if len(entry.ResultBody) > 0 {
+			result.Content = string(entry.ResultBody)
+		}
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(result, entry.Usage), nil
 	}
 }
 

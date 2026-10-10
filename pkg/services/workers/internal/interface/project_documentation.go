@@ -144,6 +144,11 @@ func projectContractMockWorkerEntryFieldDocumentation() map[string]ContractField
 				},
 			},
 		},
+		"mockWorkers[].resultBody": {
+			Title:       "Declared result body",
+			Description: "Optional non-null JSON object for accept mocks. Returned unchanged through provider framing. Factory Runtime validates business output; omission preserves the default accepted result.",
+			Examples:    []any{map[string]any{"decision": "ACCEPTED", "output": "declared mock output"}},
+		},
 		"mockWorkers[].runType": {
 			Title:       "Mock worker run type",
 			Description: "Required run-type union selecting accept, script, or reject behavior.",

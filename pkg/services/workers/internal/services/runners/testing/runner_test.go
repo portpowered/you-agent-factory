@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -764,4 +765,22 @@ func (r *inspectingCommandRunner) Run(ctx context.Context, req workerprocess.Com
 	r.req = req
 	_, r.hasDeadline = ctx.Deadline()
 	return workerprocess.CommandResult{}, nil
+}
+
+func TestMockWorkerCommandRunner_ResultBodyPreservesDeclaredOutput(t *testing.T) {
+	t.Parallel()
+	body := json.RawMessage(`{ "decision":"ACCEPTED", "output":{"exact":[1,null]}, "unknown":"opaque" }`)
+	for _, command := range []string{"", "codex", "claude", "cursor", "agy"} {
+		t.Run(command, func(t *testing.T) {
+			r := &MockWorkerCommandRunner{
+				Config:       &MockWorkersConfig{MockWorkers: []MockWorkerConfig{{RunType: MockWorkerRunTypeAccept, ResultBody: body}}},
+				OutputPolicy: workers.OutputPolicy{Format: "decision-envelope", StopToken: "STOP"},
+				Next:         failCommandRunner{t: t},
+			}
+			result, err := r.Run(t.Context(), workerprocess.CommandRequest{Command: command})
+			if err != nil || result.ExitCode != 0 || string(result.Stdout) != mockAcceptStdout(command, string(body)) {
+				t.Fatalf("declared output = %#v, %v", result, err)
+			}
+		})
+	}
 }

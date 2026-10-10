@@ -121,6 +121,17 @@ func topologyMockWorkerEntryFields() []FieldRecord {
 			ValidationOwner:      ownerValidate,
 		},
 		{
+			ID:                   "mockWorkers[].resultBody",
+			JSONPath:             "mockWorkers[].resultBody",
+			JSONName:             "resultBody",
+			ValueType:            "object",
+			ParentField:          "mockWorkers[]",
+			Required:             "optional; accept only",
+			DefaultEmptyBehavior: "omitted resultBody preserves the synthesized accepted result",
+			ValidationOwner:      ownerValidate,
+			Notes:                "non-null JSON object; opaque payload returned unchanged; Factory Runtime owns business validation",
+		},
+		{
 			ID:                   "mockWorkers[].usage",
 			JSONPath:             "mockWorkers[].usage",
 			JSONName:             "usage",

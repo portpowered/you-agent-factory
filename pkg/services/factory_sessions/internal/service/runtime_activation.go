@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -173,6 +174,7 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 	}
 	for index, worker := range input.MockWorkers {
 		converted := workers.MockWorkerConfig{
+			ResultBody:      append(json.RawMessage(nil), worker.ResultBody...),
 			ID:              worker.ID,
 			WorkerName:      worker.WorkerName,
 			WorkstationName: worker.WorkstationName,
@@ -601,6 +603,7 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 	}
 	for index, worker := range input.MockWorkers {
 		converted := factoryruntime.RuntimeActivationMockWorker{
+			ResultBody:      append(json.RawMessage(nil), worker.ResultBody...),
 			ID:              worker.ID,
 			WorkerName:      worker.WorkerName,
 			WorkstationName: worker.WorkstationName,

@@ -66,6 +66,9 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 
 	switch entry.RunType {
 	case MockWorkerRunTypeAccept:
+		if len(entry.ResultBody) > 0 {
+			return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, string(entry.ResultBody), entry.Usage))}, nil
+		}
 		return r.acceptResult(req, entry.Usage), nil
 	case MockWorkerRunTypeReject:
 		result := mockRejectResult(req.Command, entry.RejectConfig, entry.Usage)
