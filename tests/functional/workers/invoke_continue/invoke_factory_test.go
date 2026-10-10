@@ -148,14 +148,19 @@ func TestT7DirectStopLeavesFactorySiblingRunning(t *testing.T) {
 	t7WriteFactorySibling(t, peer.workingDirectory)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, peer.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	feedback := strings.Repeat("ordinary feedback ", 3000)
 	work := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{
 		WorkTypeName: "task", Payload: "T7 Factory sibling input",
-		Tags: &api.StringMap{"project": "unattributed", "role": "root"},
+		Tags: &api.StringMap{"project": "unattributed", "role": "root", "_last_output": feedback},
 	})
 	if work.WorkId == nil {
 		t.Fatal("Factory Work has no ID")
 	}
 	t19AwaitSignal(t, ctx, peerRunner.started, "Factory sibling started")
+	canonical := support.GetJSON[api.Work](t, support.SessionWorkURL(fixture.baseURL, opened.Session.Id, "/work/"+*work.WorkId))
+	if canonical.Tags == nil || (*canonical.Tags)["_last_output"] != feedback {
+		t.Fatal("Worker metadata projection changed canonical feedback")
+	}
 	endpoint := fixture.baseURL + "/factory-sessions/" + opened.Session.Id + "/worker-sessions?workId=" + *work.WorkId
 	rows := support.GetJSON[api.ListWorkerSessionsResponse](t, endpoint)
 	if len(rows.Sessions) != 1 {

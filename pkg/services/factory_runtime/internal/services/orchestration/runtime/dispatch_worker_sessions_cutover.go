@@ -147,6 +147,11 @@ func runtimeDispatchMetadata(request workers.WorkstationDispatchRequest, executi
 		workIDs[input.WorkID] = struct{}{}
 		labels["work:"+input.WorkID] = struct{}{}
 		for key, value := range input.Tags {
+			// Previous output is unbounded internal routing state, not a label.
+			// Keep it on the canonical Work without projecting it into metadata.
+			if key == "_last_output" {
+				continue
+			}
 			labels["tag:"+key+"="+value] = struct{}{}
 		}
 	}

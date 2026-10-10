@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -27,15 +28,19 @@ func TestRuntimeDispatchMetadataKnownFacts(t *testing.T) {
 	t.Parallel()
 	request := workers.WorkstationDispatchRequest{WorkstationName: "process"}
 	request.Execution.FactorySessionID = "factory-scope"
-	input := workers.WorkInput{WorkID: "lane", Tags: map[string]string{"project": "example", "role": "process"}, Lineage: workers.WorkLineage{ParentWorkID: "ambient-parent"}}
+	feedback := strings.Repeat("ordinary feedback ", 3000)
+	input := workers.WorkInput{WorkID: "lane", Tags: map[string]string{"project": "example", "role": "process", "_last_output": feedback, "_other": "retained"}, Lineage: workers.WorkLineage{ParentWorkID: "ambient-parent"}}
 	execution := workers.ExecuteRequest{Input: workers.ExecutionInput{Work: []workers.WorkInput{input, {Kind: string(workers.DataTypeResource), WorkID: "slot", Tags: map[string]string{"resource": "ignored"}}}}}
 	want := &workersessions.SessionMetadata{
 		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory-scope"},
-		Labels:      []string{"factory-session:factory-scope", "tag:project=example", "tag:role=process", "work:lane", "workstation:process"},
+		Labels:      []string{"factory-session:factory-scope", "tag:_other=retained", "tag:project=example", "tag:role=process", "work:lane", "workstation:process"},
 	}
 	got := runtimeDispatchMetadata(request, execution)
 	if !reflect.DeepEqual(got, want) || got.Validate() != nil {
 		t.Fatalf("known dispatch metadata = %+v, want %+v", got, want)
+	}
+	if input.Tags["_last_output"] != feedback {
+		t.Fatal("metadata projection changed canonical feedback")
 	}
 	input.Tags["project"] = "mutated"
 	if !reflect.DeepEqual(got, want) {
@@ -66,6 +71,10 @@ func TestRuntimeDispatchMetadataMultipleWorksAndLimits(t *testing.T) {
 	}
 	if err := runtimeDispatchMetadata(request, execution).Validate(); err == nil {
 		t.Fatal("oversized labels were silently dropped or admitted")
+	}
+	execution.Input.Work[0].Tags = map[string]string{"_other": strings.Repeat("x", 201)}
+	if err := runtimeDispatchMetadata(request, execution).Validate(); err == nil {
+		t.Fatal("oversized underscore tag was silently dropped or admitted")
 	}
 }
 
