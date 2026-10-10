@@ -148,3 +148,154 @@ func assertFileInvocationTerminalWork(t *testing.T, listed factoryapi.ListWorkRe
 		t.Fatalf("terminal content = %s, error = %v", content, err)
 	}
 }
+
+// File submission uses real owned files and HTTP with the parent's reusable
+// process and controlled provider command runner. Each parallel case owns its
+// sessions; failed requests must never create Work or dispatch events.
+func runFileSubmissionSessions(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	t.Run("success isolation", func(t *testing.T) {
+		t.Parallel()
+		runFileSubmissionIsolation(t, server)
+	})
+	for _, name := range []string{"read", "parse", "reject", "session"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runFileSubmissionFailure(t, server, name)
+		})
+	}
+}
+
+func runFileSubmissionIsolation(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	a, closeA := openFileSubmissionSession(t, server)
+	b, closeB := openFileSubmissionSession(t, server)
+	t.Run("concurrent submissions", func(t *testing.T) {
+		for _, session := range []string{a, b} {
+			t.Run(session, func(t *testing.T) {
+				t.Parallel()
+				input, err := submitOwnedBatchFile(t, server, session, fileSubmissionJSON(session), false)
+				if err != nil {
+					t.Fatalf("submit: %v; stdout=%s; stderr=%s", err, input.Stdout(), input.Stderr())
+				}
+				assertBatchSubmitAcknowledgment(t, []byte(input.Stdout()), session, "item")
+			})
+		}
+	})
+	for _, session := range []string{a, b} {
+		listed := listRelationshipSessionWork(t, server.URL(), session)
+		if len(listed.Results) != 1 || support.StringPointerValue(listed.Results[0].WorkId) != "work-"+session || support.StringPointerValue(listed.Results[0].RequestId) != session {
+			t.Fatalf("session %s Work = %#v", session, listed)
+		}
+		item := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(server.URL(), session, "/work/work-"+session))
+		if support.StringPointerValue(item.RequestId) != session {
+			t.Fatalf("get Work = %#v", item)
+		}
+		assertFileSubmissionEvents(t, server, session, session, true)
+	}
+	closeA()
+	if len(listRelationshipSessionWork(t, server.URL(), b).Results) != 1 {
+		t.Fatal("closing peer changed live session")
+	}
+	closeB()
+}
+
+func runFileSubmissionFailure(t *testing.T, server *support.FunctionalAPIServer, name string) {
+	t.Helper()
+	peer, _ := openFileSubmissionSession(t, server)
+	selected := peer
+	body := fileSubmissionJSON(peer)
+	diagnostic := ""
+	switch name {
+	case "read":
+		diagnostic = "batch file not found:"
+	case "parse":
+		body, diagnostic = "{", "parse"
+	case "reject":
+		body, diagnostic = strings.TrimSuffix(body, `]}`)+`,{"name":"invalid","workTypeName":"unknown"}]}`, "unknown"
+	case "session":
+		selected, diagnostic = "00000000-0000-4000-8000-000000000099", "not_found"
+	}
+	input, err := submitOwnedBatchFile(t, server, selected, body, name == "read")
+	assertFileSubmissionDiagnostic(t, name, diagnostic, peer, input, err)
+	if strings.Contains(input.Stdout(), `"accepted":true`) {
+		t.Fatalf("failed file acknowledged: %s", input.Stdout())
+	}
+	if got := listRelationshipSessionWork(t, server.URL(), peer); len(got.Results) != 0 {
+		t.Fatalf("failed file created Work: %#v", got)
+	}
+	assertFileSubmissionEvents(t, server, peer, peer, false)
+}
+
+func assertFileSubmissionDiagnostic(t *testing.T, name, diagnostic, peer string, input *support.CapturedInputs, err error) {
+	t.Helper()
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()+input.Stderr()), diagnostic) {
+		t.Fatalf("%s diagnostic = %v, stderr=%s", name, err, input.Stderr())
+	}
+	if name == "session" {
+		for _, marker := range []string{"(404)", "code=NOT_FOUND", "family=NOT_FOUND"} {
+			if !strings.Contains(err.Error()+input.Stderr(), marker) {
+				t.Fatalf("session diagnostic missing %q: %v; %s", marker, err, input.Stderr())
+			}
+		}
+	}
+	if name == "reject" {
+		assertBatchSubmitRejected(t, []byte(input.Stderr()), err, peer)
+	}
+}
+
+func openFileSubmissionSession(t *testing.T, server *support.FunctionalAPIServer) (string, func()) {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
+	configureSubmissionCodexWorkers(t, dir, "mock-worker")
+	session, closeSession := openSharedRelationshipSession(t, server.URL(), dir)
+	return session.Id, closeSession
+}
+
+func fileSubmissionJSON(id string) string {
+	return fmt.Sprintf(`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":"item","workId":%q,"workTypeName":"task","payload":{"title":"owned file"}}]}`, id, "work-"+id)
+}
+
+func submitOwnedBatchFile(t *testing.T, server *support.FunctionalAPIServer, session, body string, missing bool) (*support.CapturedInputs, error) {
+	t.Helper()
+	home := t.TempDir()
+	path := filepath.Join(home, "request.json")
+	if !missing {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "--session", session, "--json", "submit", "batch", path})
+	input.Input.Env = recoveryActivationHomeEnvironment(home)
+	input.Input.WorkingDirectory = home
+	err := server.Execute(t, input.Input)
+	return input, err
+}
+
+func assertFileSubmissionEvents(t *testing.T, server *support.FunctionalAPIServer, session, request string, accepted bool) {
+	t.Helper()
+	found := 0
+	for _, event := range support.GetFactoryEventsForSessionAt(t, server.URL(), session) {
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest {
+			if !accepted || support.StringPointerValue(event.Context.RequestId) != request {
+				t.Fatalf("unexpected request event: %#v", event)
+			}
+			payload, err := event.Payload.AsWorkRequestEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			works := support.FactoryWorksValue(payload.Works)
+			if len(works) != 1 || support.StringPointerValue(works[0].WorkId) != "work-"+request {
+				t.Fatalf("request facts = %#v", payload)
+			}
+			found++
+		}
+		// RUN_REQUEST also records session startup without a Work dispatch.
+		if !accepted && (event.Context.DispatchId != nil || event.Type == factoryapi.FactoryEventTypeModelRequest) {
+			t.Fatalf("failed file dispatched: type=%s context=%#v", event.Type, event.Context)
+		}
+	}
+	if accepted && found != 1 {
+		t.Fatalf("request events = %d, want 1", found)
+	}
+}

@@ -60,7 +60,7 @@ func TestWorkBatchCLIIngress(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
 	configureSubmissionCodexWorkers(t, factoryDir, "mock-worker")
 	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionStaticProviderRunner()))
-	defer server.Stop(t)
+	t.Cleanup(func() { server.Stop(t) })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -72,6 +72,9 @@ func TestWorkBatchCLIIngress(t *testing.T) {
 	})
 	t.Run("TestWorkBatchRejectsUnknownTypeWithoutPartialMutation", func(t *testing.T) {
 		assertWorkBatchRejectsUnknownTypeWithoutPartialMutation(t, server, factoryDir, ctx)
+	})
+	t.Run("FileSubmissionSessions", func(t *testing.T) {
+		runFileSubmissionSessions(t, server)
 	})
 }
 

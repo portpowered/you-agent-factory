@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,6 +15,10 @@ import (
 
 type recordingFactory struct {
 	submitted work.WorkRequest
+	ctx       context.Context
+	result    work.WorkRequestSubmitResult
+	err       error
+	calls     int
 	movedID   string
 	source    work.WorkStateChangeSource
 }
@@ -27,9 +32,130 @@ func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 	return r.runtime, r.err
 }
 
-func (f *recordingFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+func (f *recordingFactory) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	f.submitted = request
-	return work.WorkRequestSubmitResult{}, nil
+	f.ctx = ctx
+	f.calls++
+	return f.result, f.err
+}
+
+type selectedWorkResolver func(string) (work.Runtime, error)
+
+func (r selectedWorkResolver) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
+	return r(sessionID)
+}
+
+func TestSubmitFileForSessionPreservesSelectionAndFailures(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"success", "resolver", "unavailable", "read", "parse", "admission", "canceled"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runSelectedFileSubmission(t, name)
+		})
+	}
+}
+
+func runSelectedFileSubmission(t *testing.T, name string) {
+	t.Helper()
+	failure := errors.New("controlled failure")
+	canonical := `{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[{"name":"item","workId":"work-edge","workTypeName":"task","state":"init","payload":{"value":"hello"}}]}`
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	want := work.WorkRequestSubmitResult{RequestID: "request-edge", WorkID: "work-edge", Accepted: true}
+	peer := &recordingFactory{result: want}
+	wantErr := error(nil)
+	if name == "admission" {
+		peer.err, wantErr = failure, failure
+	}
+	if name == "canceled" {
+		cancel()
+		peer.err, wantErr = ctx.Err(), context.Canceled
+	}
+	readCalls := 0
+	resolverCalls := 0
+	service := newTestWorkService(selectedWorkResolver(func(id string) (work.Runtime, error) {
+		resolverCalls++
+		if id != "selected-session" {
+			t.Fatalf("session = %q", id)
+		}
+		if name == "resolver" {
+			return nil, failure
+		}
+		if name == "unavailable" {
+			return nil, nil
+		}
+		return peer, nil
+	}), func(path string) ([]byte, error) {
+		readCalls++
+		if path != "owned.json" {
+			t.Fatalf("path = %q", path)
+		}
+		if name == "read" {
+			return nil, failure
+		}
+		if name == "parse" {
+			return []byte(`{`), nil
+		}
+		return []byte(canonical), nil
+	}, nil, nil, nil)
+	got, err := service.SubmitFileForSession(ctx, "selected-session", "owned.json")
+	if resolverCalls != 1 {
+		t.Fatalf("resolver calls = %d", resolverCalls)
+	}
+	switch name {
+	case "resolver", "unavailable":
+		assertSelectedFileResolutionFailure(t, name, err, failure, readCalls, peer.calls)
+	case "read", "parse":
+		assertSelectedFileReadFailure(t, name, err, failure, readCalls, peer.calls)
+	default:
+		assertSelectedFileAdmission(t, ctx, peer, readCalls, got, want, err, wantErr)
+	}
+	if err != nil && !reflect.DeepEqual(got, work.WorkRequestSubmitResult{}) {
+		t.Fatalf("failure returned success: %#v", got)
+	}
+}
+
+func assertSelectedFileResolutionFailure(t *testing.T, name string, err, failure error, readCalls, admissionCalls int) {
+	t.Helper()
+	if readCalls != 0 || admissionCalls != 0 {
+		t.Fatal("failed resolution reached reader/admission")
+	}
+	// Is proves sentinel identity; DeepEqual also rejects an added wrapper.
+	if name == "resolver" && (!errors.Is(err, failure) || !reflect.DeepEqual(err, failure)) {
+		t.Fatalf("resolver error = %v", err)
+	}
+	if name == "unavailable" && (err == nil || err.Error() != "Factory Session runtime is unavailable: selected-session") {
+		t.Fatalf("absence error = %v", err)
+	}
+}
+
+func assertSelectedFileReadFailure(t *testing.T, name string, err, failure error, readCalls, admissionCalls int) {
+	t.Helper()
+	if readCalls != 1 || admissionCalls != 0 {
+		t.Fatal("failed file reached admission")
+	}
+	prefix := name + " work file owned.json: "
+	if err == nil || !strings.HasPrefix(err.Error(), prefix) {
+		t.Fatalf("file error = %v", err)
+	}
+	if name == "read" && !errors.Is(err, failure) {
+		t.Fatalf("read error identity = %v", err)
+	}
+}
+
+func assertSelectedFileAdmission(t *testing.T, ctx context.Context, peer *recordingFactory, readCalls int, got, want work.WorkRequestSubmitResult, err, wantErr error) {
+	t.Helper()
+	request := work.WorkRequest{RequestID: "request-edge", Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{Name: "item", WorkID: "work-edge", WorkTypeID: "task", State: "init", Payload: map[string]any{"value": "hello"}}}}
+	if readCalls != 1 || peer.calls != 1 || peer.ctx != ctx || !reflect.DeepEqual(peer.submitted, request) {
+		t.Fatalf("admission changed context/request: %#v", peer)
+	}
+	if wantErr != nil && (!errors.Is(err, wantErr) || !strings.HasPrefix(err.Error(), "submit initial work: ")) {
+		t.Fatalf("admission error = %v", err)
+	}
+	if wantErr == nil && (err != nil || !reflect.DeepEqual(got, want)) {
+		t.Fatalf("result = %#v, error = %v", got, err)
+	}
 }
 
 func (f *recordingFactory) MoveWork(_ context.Context, workID, _ string, source work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
