@@ -8,7 +8,11 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/root"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"io"
 	"io/fs"
 	"net/http"
@@ -16,8 +20,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -76,7 +82,10 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	)
 
 	candidateFiles := &replacementOpeningFiles{path: filepath.Join(dir, factorydefinitions.InputsDir)}
-	edges := serviceedges.Edges{FactoryRuntimeDirectories: candidateFiles}
+	backend, logs := observer.New(zap.DebugLevel)
+	logErrors := &replacementLogErrors{}
+	edges := serviceedges.Edges{FactoryRuntimeDirectories: candidateFiles,
+		ProcessLogger: zap.New(backend, zap.ErrorOutput(zapcore.AddSync(logErrors)))}
 	support.ConfigureWorkerCommands(
 		t,
 		&edges,
@@ -131,7 +140,9 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 		t.Fatal("peer has no response history before replacement")
 	}
 
-	firstInvocation := postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "first dispatch, before replacement")
+	oldLog := replacementSessionLogPath(t, sessions, sessionID)
+	peerLog := replacementSessionLogPath(t, sessions, peerID)
+	firstInvocation := postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "replacement-input-secret")
 	assertSessionRuntimeReplaceInvocationCompleted(t, firstInvocation)
 
 	firstEvents := support.GetFactoryResponseEventsAt(t, baseURL, sessionID)
@@ -149,6 +160,10 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	}
 
 	replaceSessionRuntimeCurrentFactory(t, baseURL, sessionID, "task")
+	currentLog := replacementSessionLogPath(t, sessions, sessionID)
+	if currentLog == oldLog {
+		t.Fatal("replacement retained retired log artifact")
+	}
 	if got := getSessionRuntimeReplaceCurrentFactory(t, baseURL, peerID); !reflect.DeepEqual(got, peerFactory) {
 		t.Fatalf("selected replacement changed peer Current Factory: got %#v, want %#v", got, peerFactory)
 	}
@@ -223,6 +238,14 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	assertReplacementResponseCursor(t, baseURL, peerID,
 		peerBefore[len(peerBefore)-1].Sequence, peerAfter[len(peerBefore):])
 	assertReplacementPeerRecording(t, process, sessions, peerID, peerRecording)
+	server.Close(t)
+	assertReplacementBackendDiagnostics(t, logs, sessionID, peerID)
+	assertReplacementSinkDiagnostics(t, oldLog, sessionID, false)
+	assertReplacementSinkDiagnostics(t, currentLog, sessionID, true)
+	assertReplacementSinkDiagnostics(t, peerLog, peerID, false)
+	if rejected := logErrors.String(); rejected != "" {
+		t.Fatalf("replacement diagnostics rejected writes:\n%s", rejected)
+	}
 }
 
 func assertReplacementResponseCursor(t *testing.T, baseURL, sessionID string, cursor int64, want []factoryapi.FactoryResponseEvent) {
@@ -509,5 +532,91 @@ func assertReplacementPeerRecording(t *testing.T, process support.Process, sessi
 			t.Fatalf("peer recording lost ordered event %s", event.Id)
 		}
 		previous = position
+	}
+}
+
+// Keep Zap's real rolling core and capture its rejected writes without changing
+// process stderr. The stack identifies the operation that outlived its sink.
+type replacementLogErrors struct {
+	mu   sync.Mutex
+	data bytes.Buffer
+}
+
+func (sink *replacementLogErrors) Write(data []byte) (int, error) {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	n, err := sink.data.Write(data)
+	sink.data.Write(debug.Stack())
+	return n, err
+}
+func (sink *replacementLogErrors) String() string {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	return sink.data.String()
+}
+
+func assertReplacementBackendDiagnostics(t *testing.T, logs *observer.ObservedLogs, selected, peer string) {
+	t.Helper()
+	for _, id := range []string{selected, peer} {
+		for _, message := range []string{"factory session invocation submitted", "factory session invocation completed"} {
+			found := false
+			for _, entry := range logs.FilterMessage(message).All() {
+				if entry.ContextMap()["session_id"] == id {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("selected backend missing %q for session %s", message, id)
+			}
+		}
+	}
+}
+
+func replacementSessionLogPath(t *testing.T, sessions factorysessions.Service, sessionID string) string {
+	t.Helper()
+	diagnostics, err := sessions.(interface {
+		ApplicationDiagnostics(string) (factoryruntime.RuntimeLogDiagnostics, error)
+	}).ApplicationDiagnostics(sessionID)
+	if err != nil || diagnostics.Path == "" {
+		t.Fatalf("session log artifact: %#v, %v", diagnostics, err)
+	}
+	return diagnostics.Path
+}
+
+func assertReplacementSinkDiagnostics(t *testing.T, path, sessionID string, replacement bool) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte("replacement-input-secret")) {
+		t.Fatal("runtime diagnostics leaked invocation input")
+	}
+	want := map[string]bool{"factory session invocation submitted": false, "factory session invocation completed": false}
+	if replacement {
+		want["factory session lifecycle control"] = false
+		want["session persistence invalidation"] = false
+	}
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatal(err)
+		}
+		message, _ := record["msg"].(string)
+		if _, expected := want[message]; !expected {
+			continue
+		}
+		if record["session_id"] != sessionID || record["runtime_instance_id"] == "" || record["runtime_instance_id"] == nil {
+			t.Fatalf("unattributed runtime diagnostic: %#v", record)
+		}
+		want[message] = true
+	}
+	for message, found := range want {
+		if !found {
+			t.Fatalf("runtime sink %s missing %q", path, message)
+		}
 	}
 }

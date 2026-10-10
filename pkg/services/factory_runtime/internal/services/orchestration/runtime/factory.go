@@ -214,7 +214,7 @@ func (opening *EngineOpening) Open(
 	petriMutationRecorder factory.PetriMutationRecorder,
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner,
 ) (factoryhost.Engine, error) {
-	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, opening.workRequestIDs, opening.newID, statelessService, workerSessionsService); err != nil {
+	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, statelessService, workerSessionsService); err != nil {
 		return nil, err
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)

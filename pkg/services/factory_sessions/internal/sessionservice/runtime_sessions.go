@@ -287,7 +287,7 @@ func (a *Assembly) scopedReplaceSessionRuntime(fs *SessionRuntime,
 			if session != nil {
 				sessionID = session.ID
 			}
-			fs.logger.Warn("session runtime replacement warning", zap.Error(err), zap.String("session_id", sessionID))
+			replacement.RuntimeLogger().Warn("session runtime replacement warning", zap.Error(err), zap.String("session_id", sessionID))
 		},
 		func(sessionID string, runtime *factorysessions.LiveRuntime, record factory.RuntimeRecord) {
 			a.retireWorkAdmissionProjection(sessionID, runtime, record)
@@ -304,7 +304,7 @@ func (a *Assembly) scopedReplaceSessionRuntime(fs *SessionRuntime,
 					currentScope,
 					session.ID,
 				); ok {
-					factorysessioncursors.NewZapObserver(fs.logger).Record(diagnostic)
+					factorysessioncursors.NewZapObserver(replacement.RuntimeLogger()).Record(diagnostic)
 				}
 			}
 		}

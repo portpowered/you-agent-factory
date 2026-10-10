@@ -173,27 +173,12 @@ func (f *RuntimeFactory) Build(
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (result *factoryhost.Bundle, buildErr error) {
-	if f == nil || f.newID == nil {
-		return nil, fmt.Errorf("Factory Runtime ID generator is required")
-	}
-	if f.workRequestIDs == nil {
-		return nil, fmt.Errorf("Work Request ID generator is required")
-	}
-	if f.runtimeDirs == nil || f.inputFiles == nil || f.inputDirectoryWalker == nil {
-		return nil, fmt.Errorf("Factory Runtime runtime directory filesystem, input filesystem, and input directory walker are required")
-	}
-	if f.orchestrationCompilation == nil {
-		return nil, fmt.Errorf("Factory Runtime orchestration compilation is required")
-	}
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime clock is required")
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		sessionID = defaultSessionID
-	}
-	if f == nil || f.loggerFactory == nil {
-		return nil, fmt.Errorf("runtime logger factory is required")
 	}
 	// Retain ownership before the first open. Finalize the recording before
 	// closing its sinks, and preserve cleanup failures alongside the build error.
@@ -270,9 +255,6 @@ func (f *RuntimeFactory) Build(
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(runnerID, loadedFactoryCfg.FactoryConfig())
-	if f.recordingsRuntime == nil {
-		return nil, fmt.Errorf("Recordings runtime opening is required")
-	}
 	loaded, ok := loadedFactoryCfg.(interfaces.LoadedFactorySource)
 	if !ok || loaded == nil {
 		return nil, fmt.Errorf("loaded Factory source is required for Recordings runtime scope")
