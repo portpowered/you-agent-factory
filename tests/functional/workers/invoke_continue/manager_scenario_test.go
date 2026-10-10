@@ -382,7 +382,10 @@ type s8ProviderSession struct {
 }
 
 type s8WorkerList struct {
-	Sessions []s8WorkerObservation `json:"sessions"`
+	Sessions          []s8WorkerObservation `json:"sessions"`
+	PaginationContext *struct {
+		NextToken string `json:"nextToken"`
+	} `json:"paginationContext"`
 }
 
 func listS8RemoteWorkers(
@@ -394,14 +397,28 @@ func listS8RemoteWorkers(
 	states ...string,
 ) []s8WorkerObservation {
 	t.Helper()
-	args := []string{"--json", "worker-sessions", "list", "--scope", "direct"}
+	args := []string{"--json", "worker-sessions", "list", "--scope", "direct", "--limit", "2"}
 	for _, state := range states {
 		args = append(args, "--state", state)
 	}
-	inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, args...)
-	var result s8WorkerList
-	decodeS8JSON(t, inputs.Stdout(), &result)
-	return result.Sessions
+	// Direct scope is fleet-wide. Follow its snapshot cursor so parallel peer
+	// sessions cannot push the scenario's source or successor beyond one page.
+	// Small pages exercise continuation even in a focused scenario selection.
+	var sessions []s8WorkerObservation
+	for nextToken := ""; ; {
+		pageArgs := append([]string(nil), args...)
+		if nextToken != "" {
+			pageArgs = append(pageArgs, "--next-token", nextToken)
+		}
+		inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, pageArgs...)
+		var result s8WorkerList
+		decodeS8JSON(t, inputs.Stdout(), &result)
+		sessions = append(sessions, result.Sessions...)
+		if result.PaginationContext == nil || result.PaginationContext.NextToken == "" {
+			return sessions
+		}
+		nextToken = result.PaginationContext.NextToken
+	}
 }
 
 func showS8RemoteWorker(

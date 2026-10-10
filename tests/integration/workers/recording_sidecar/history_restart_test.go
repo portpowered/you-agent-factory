@@ -391,7 +391,7 @@ func assertHistoryMCP(t *testing.T, ctx context.Context, binary, project string,
 	assertHistoryMCPViews(t, ctx, binary, project, env, server, observation, logs, []string{"LIST", "READ", "logs", "events"})
 }
 
-func assertHistoryMCPViews(t *testing.T, ctx context.Context, binary, project string, env []string, server string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage, views []string) {
+func assertHistoryMCPViews(t *testing.T, ctx context.Context, binary, project string, env []string, server string, observation api.WorkerSessionObservation, logs api.WorkerSessionLogPage, views []string, transcripts ...api.WorkerSessionTranscriptResponse) {
 	t.Helper()
 	command := exec.CommandContext(ctx, binary, "--server", server, "server", "mcp")
 	command.Dir, command.Env = project, env
@@ -414,8 +414,11 @@ func assertHistoryMCPViews(t *testing.T, ctx context.Context, binary, project st
 		} else {
 			args["workerSessionId"] = observation.WorkerSessionId
 		}
-		if action == "logs" || action == "events" {
+		if action == "logs" || action == "events" || action == "transcript" {
 			args["action"], args["view"], args["limit"] = "READ", action, 1000
+			if action == "transcript" {
+				delete(args, "limit")
+			}
 		}
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
 		if err != nil || result.IsError || len(result.Content) != 1 {
@@ -425,7 +428,26 @@ func assertHistoryMCPViews(t *testing.T, ctx context.Context, binary, project st
 		if !ok {
 			t.Fatalf("MCP %s content: %T", action, result.Content[0])
 		}
-		assertHistoryMCPResult(t, action, content.Text, observation, logs)
+		if action == "transcript" {
+			assertHistoryMCPTranscript(t, content.Text, transcripts)
+		} else {
+			assertHistoryMCPResult(t, action, content.Text, observation, logs)
+		}
+	}
+}
+
+func assertHistoryMCPTranscript(t *testing.T, payload string, transcripts []api.WorkerSessionTranscriptResponse) {
+	t.Helper()
+	var envelope struct {
+		Result struct {
+			Transcript api.WorkerSessionTranscriptResponse `json:"transcript"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(transcripts) != 1 || !reflect.DeepEqual(transcripts[0], envelope.Result.Transcript) {
+		t.Fatalf("MCP transcript changed captured text/order/identity: %s", payload)
 	}
 }
 

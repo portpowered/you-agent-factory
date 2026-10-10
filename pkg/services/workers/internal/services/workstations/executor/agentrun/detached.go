@@ -2,11 +2,15 @@ package agentrun
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
 
 // DetachedRequest is the complete input for one agent-run attempt started from
@@ -50,7 +54,7 @@ func ExecuteDetached(
 	// request it replays always declares tools required.
 	attempt.ToolExecutionMode = workerexecution.RunnerToolExecutionModeRequired
 	recorder := NewToolDiagnosticRecorder()
-	observed := &lastRunnerResult{runner: runner}
+	observed := &lastRunnerResult{runner: runner, publish: request.ProgressPublisher}
 	harnessResult, err := harness.Execute(ctx, HarnessInput{
 		SystemPrompt: attempt.SystemPrompt,
 		UserMessage:  attempt.UserMessage,
@@ -92,7 +96,8 @@ func ExecuteDetached(
 		request.ProgressPublisher,
 		request.Attempt.Dispatch.DispatchID,
 		request.Correlation,
-		finalContent,
+		capturedFinalContent(finalContent, request.Attempt),
+		observed.messageIdentity(),
 	)
 	return result, nil
 }
@@ -105,19 +110,101 @@ type lastRunnerResult struct {
 	result   workerexecution.RunnerExecutionResult
 	lastErr  error
 	executed bool
+	publish  workerexecution.ProgressPublisher
+	message  *workerexecution.Draft
+	turn     uint64
 }
 
 func (observed *lastRunnerResult) Execute(
 	ctx context.Context,
 	request workerexecution.RunnerExecutionRequest,
 ) (workerexecution.RunnerExecutionResult, error) {
+	// Bind observations to this physical provider turn. A later turn without
+	// an identity cannot borrow an earlier turn's message, even for equal text.
+	publish := workerinternal.ProgressPublisherFromContext(ctx, observed.publish)
+	observed.mu.Lock()
+	observed.turn++
+	turnID := "agent-turn-" + strconv.FormatUint(observed.turn, 10)
+	observed.mu.Unlock()
+	var mu sync.Mutex
+	var message *workerexecution.Draft
+	if publish != nil {
+		ctx = workerinternal.WithProgressPublisher(ctx, func(fragment workerexecution.ProgressFragment) {
+			// Native item IDs can be reused in a later provider turn. Preserve
+			// the item and carry its request-local turn scope separately.
+			fragment = scopeMessageTurn(fragment, turnID)
+			if identity, isMessage := assistantMessageIdentity(fragment); isMessage {
+				mu.Lock()
+				message = identity
+				mu.Unlock()
+			}
+			publish(fragment)
+		})
+	}
 	result, err := observed.runner.Execute(ctx, request)
+	mu.Lock()
 	observed.mu.Lock()
 	observed.result = result
 	observed.lastErr = err
 	observed.executed = true
+	observed.message = message
 	observed.mu.Unlock()
+	mu.Unlock()
 	return result, err
+}
+
+func (observed *lastRunnerResult) messageIdentity() *workerexecution.Draft {
+	observed.mu.Lock()
+	defer observed.mu.Unlock()
+	return observed.message
+}
+
+func assistantMessageIdentity(fragment workerexecution.ProgressFragment) (*workerexecution.Draft, bool) {
+	if draft, ok := fragment.CanonicalDraft.(workerexecution.Draft); ok {
+		if draft.Kind != workerexecution.KindMessage {
+			return nil, false
+		}
+		var payload workerexecution.MessagePayload
+		if draft.Phase != workerexecution.PhaseDelta &&
+			(json.Unmarshal(draft.Payload, &payload) != nil || payload.Role != "assistant") {
+			return nil, true
+		}
+		if draft.ItemID == "" {
+			return nil, true
+		}
+		return &draft, true
+	}
+	if fragment.Kind != workerexecution.ProgressFragmentKind ||
+		!strings.HasPrefix(strings.ToLower(fragment.Type), "message.") {
+		return nil, false
+	}
+	if strings.TrimSpace(fragment.Metadata["item_id"]) == "" {
+		return nil, true
+	}
+	return &workerexecution.Draft{
+		DispatchID: strings.TrimSpace(fragment.DispatchID), ItemID: strings.TrimSpace(fragment.Metadata["item_id"]),
+		RunID: strings.TrimSpace(fragment.Metadata["run_id"]), TurnID: strings.TrimSpace(fragment.Metadata["turn_id"]),
+	}, true
+}
+
+func scopeMessageTurn(fragment workerexecution.ProgressFragment, turnID string) workerexecution.ProgressFragment {
+	if draft, ok := fragment.CanonicalDraft.(workerexecution.Draft); ok && draft.Kind == workerexecution.KindMessage {
+		draft = workerexecution.CloneDraft(draft)
+		if draft.TurnID == "" {
+			draft.TurnID = turnID
+		}
+		fragment.CanonicalDraft = draft
+	} else if fragment.Kind == workerexecution.ProgressFragmentKind && strings.HasPrefix(strings.ToLower(fragment.Type), "message.") {
+		metadata := make(map[string]string, len(fragment.Metadata)+1)
+		for key, value := range fragment.Metadata {
+			metadata[key] = value
+		}
+		if metadata["turn_id"] == "" {
+			metadata["turn_id"] = turnID
+		}
+		fragment.Metadata = metadata
+	}
+	return fragment
 }
 
 func (observed *lastRunnerResult) snapshot() (workerexecution.RunnerExecutionResult, bool) {

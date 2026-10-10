@@ -229,6 +229,11 @@ A matched mock-worker entry can declare provider usage with an optional
 `usage` object. The configured `runType` outcome remains unchanged. Omit the
 object when the dispatch should report no usage.
 
+Captured usage and Worker Session summaries label configured counters with
+`origin: "SYNTHETIC"`. The counters are mock facts, not measured provider usage.
+An absent origin makes no claim about how usage was obtained. Explicit zero
+counts remain present; omitted token classes remain absent after replay.
+
 | Field | Required | Description |
 |-------|----------|-------------|
 | `provider` | When `usage` is present | Non-empty provider identity used by Worker Session inspection and Costs. |
