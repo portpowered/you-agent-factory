@@ -34,24 +34,41 @@ func configureWebhookEffects(t *testing.T, c *timeCohort, edges *serviceedges.Ed
 		edges.FactoryWebhookClock = c.webhook
 	}
 	effects := &webhookEffects{routes: map[string]*journeyRoute{}, resolved: make(chan string, 16), letters: make(chan []byte, 16)}
+	keys := []string{"recover", "exhaust", "closing", "healthy", "badstatus", "secretfail", "storefail", "redirect"}
+	secretRef := "secrets/webhook-" + uuid.NewString()
+	if !specialized {
+		// This immutable cohort uses Wire's default file resolver. The common
+		// relative reference must resolve in each selected Factory, never a peer.
+		effects.resolved = nil
+		keys = append(keys, "secretempty", "secretdirectory")
+	}
 	c.webhookEffects = effects
-	for _, key := range []string{"recover", "exhaust", "closing", "healthy", "badstatus", "secretfail", "storefail", "redirect"} {
+	for _, key := range keys {
 		effects.routes[key] = &journeyRoute{calls: make(chan journeyCall, 16)}
 		config := idleTimeConfig()
+		ref := key
+		if !specialized {
+			ref = secretRef
+		}
 		config["webhooks"] = []map[string]any{{"name": key, "enabled": true,
 			"url":              "https://selected-webhook.invalid/" + key + "?token=" + webhookSecret,
-			"signingSecretRef": key, "filter": map[string]any{"eventTypes": []string{"WORK_STATE_CHANGE"}},
+			"signingSecretRef": ref, "filter": map[string]any{"eventTypes": []string{"WORK_STATE_CHANGE"}},
 			"deliveryPolicy": map[string]any{"maxAttempts": 3, "initialBackoff": "1s", "maxBackoff": "2s", "backoffMultiplier": 2.0, "requestTimeout": "30s"}}}
 		c.dirs[key] = support.ScaffoldFactory(t, config)
 		support.ClearSeedInputs(t, c.dirs[key])
+		if !specialized {
+			writeWebhookSecretFixture(t, c.dirs[key], ref, key)
+		}
 	}
 	edges.FactoryWebhookHTTPClient = journeyHTTP{routes: effects.routes}
-	edges.FactoryWebhookSecretResolver = func(_ context.Context, _ factorydefinitions.LoadedFactorySource, ref string) (string, error) {
-		effects.resolved <- ref
-		if ref == "secretfail" {
-			return "", fmt.Errorf("sensitive resolver failure: %s", webhookSecret)
+	if specialized {
+		edges.FactoryWebhookSecretResolver = func(_ context.Context, _ factorydefinitions.LoadedFactorySource, ref string) (string, error) {
+			effects.resolved <- ref
+			if ref == "secretfail" {
+				return "", fmt.Errorf("sensitive resolver failure: %s", webhookSecret)
+			}
+			return webhookSecret, nil
 		}
-		return webhookSecret, nil
 	}
 	edges.FactoryWebhookDeadLetterAppender = func(_ string, line []byte) error {
 		effects.letters <- append([]byte(nil), line...)
@@ -68,6 +85,30 @@ func configureWebhookEffects(t *testing.T, c *timeCohort, edges *serviceedges.Ed
 	}
 }
 
+func writeWebhookSecretFixture(t *testing.T, dir, ref, key string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(ref))
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if key == "secretfail" {
+		return // A healthy peer has this same reference; this Factory does not.
+	}
+	if key == "secretdirectory" {
+		if err := os.Mkdir(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	value := " \n" + webhookSecret + "\r\n "
+	if key == "secretempty" {
+		value = " \r\n\t "
+	}
+	if err := os.WriteFile(path, []byte(value), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func openWebhookSession(t *testing.T, c *timeCohort, key string) string {
 	t.Helper()
 	// Webhook delivery requires an initial recorded runtime, rather than the
@@ -76,17 +117,23 @@ func openWebhookSession(t *testing.T, c *timeCohort, key string) string {
 	dir := c.dirs[key]
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--session", id,
 		"--record", filepath.Join(dir, "selected.recording.json"), "--continuously", "--quiet"})
-	inputs.Env = c.env
+	// Live peers and the API host must not contend on one mutable installation
+	// profile. Bootstrap this session's home before measuring runtime readiness.
+	home := t.TempDir()
+	inputs.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + filepath.Join(home, "appdata"), "LOCALAPPDATA=" + filepath.Join(home, "localappdata"), "XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_CACHE_HOME=" + filepath.Join(home, "cache"), "XDG_STATE_HOME=" + filepath.Join(home, "state"), "XDG_DATA_HOME=" + filepath.Join(home, "data")}
 	inputs.WorkingDirectory = dir
+	support.InitializeCustomerHomeWithProcess(t, c.cli, inputs.Env, dir)
 	command := support.StartProcessCommand(t, c.cli, inputs.Input)
 	t.Cleanup(func() { command.Stop(t) })
-	select {
-	case got := <-c.webhookEffects.resolved:
-		if got != key {
-			t.Fatalf("resolved %q, want %q", got, key)
+	if c.webhookEffects.resolved != nil {
+		select {
+		case got := <-c.webhookEffects.resolved:
+			if got != key {
+				t.Fatalf("resolved %q, want %q", got, key)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("webhook secret activation not observed")
 		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("webhook secret activation not observed")
 	}
 	// Secret resolution precedes runtime startup. Observe this exact session's
 	// public readiness before submitting work, including on a busy CI host.
