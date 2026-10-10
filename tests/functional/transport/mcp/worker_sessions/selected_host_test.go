@@ -37,6 +37,10 @@ func TestWorkerSessionMCPParity(t *testing.T) {
 
 func runSelectedHostScenarios(t *testing.T) {
 	process := newSelectedHostClientProcess(t)
+	t.Run("real host logs limit validation", func(t *testing.T) {
+		t.Parallel()
+		runLogsLimitValidation(t, process)
+	})
 	t.Run("run subagent", func(t *testing.T) {
 		t.Parallel()
 		workDir := filepath.Join(t.TempDir(), "run-subagent")

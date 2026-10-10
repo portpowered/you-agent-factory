@@ -10,6 +10,7 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
@@ -860,7 +861,7 @@ func executeGeneratedWorkerSessionsReadWithValues(
 		return err
 	}
 	if cmd.Flags().Changed("limit") && (limit < 1 || limit > 1000) {
-		return fmt.Errorf("--limit must be between 1 and 1000")
+		return &clidiag.LocalFailure{Code: "BAD_REQUEST", Message: "--limit must be between 1 and 1000"}
 	}
 	provider, err := commandInputValue[string](values, "you.worker-sessions.read.flag.provider")
 	if err != nil {
