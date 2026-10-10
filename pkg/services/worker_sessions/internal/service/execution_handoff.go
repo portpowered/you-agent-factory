@@ -840,7 +840,7 @@ func (r *registry) BeginRuntimeAttempt(
 
 	prepared, err := r.prepareInvocation(
 		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Metadata: req.Metadata},
 		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID},
 		executor,
 		clock,
@@ -1003,7 +1003,7 @@ func (r *registry) prepareRuntimeInvocation(
 	}
 	execution := cloneWorkstationDispatchRequest(req.Execution)
 	execution.Execution.Dispatch.DispatchID = attemptID
-	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry}
+	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry, Metadata: req.Metadata.Clone()}
 	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
 		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID}, executor, clock, scheduler)
 	if err != nil {

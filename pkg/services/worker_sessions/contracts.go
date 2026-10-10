@@ -58,6 +58,7 @@ type RuntimeAttemptRequest struct {
 	ID                          string
 	AttemptID                   string
 	Execution                   workers.WorkstationDispatchRequest
+	Metadata                    *SessionMetadata
 	// BindAttemptControl installs the exact admitted generation's observer into
 	// the externally executed request. It runs once after admission, before
 	// BeginRuntimeAttempt returns, and must return promptly. The observer is
@@ -69,7 +70,7 @@ type RuntimeAttemptRequest struct {
 // Callers normalize legacy blank runtime correlation from the resolved runtime
 // before supplying it in both the key and execution request.
 func (r RuntimeAttemptRequest) Validate() error {
-	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution}).Validate(); err != nil {
+	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution, Metadata: r.Metadata}).Validate(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(r.Key.RuntimeID) == "" || strings.TrimSpace(r.Key.DispatchID) == "" ||
@@ -323,7 +324,8 @@ type Service interface {
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.
 type ReserveRequest struct {
-	ID string
+	ID       string
+	Metadata *SessionMetadata
 }
 
 // Validate reports whether req carries a non-empty stable identity. Validate
@@ -332,7 +334,7 @@ func (req ReserveRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
 	}
-	return nil
+	return req.Metadata.Validate()
 }
 
 // GetRequest asks Service to inspect one Worker Session identity.
@@ -395,7 +397,8 @@ type InvokeSessionRequest struct {
 	// InvokeSession reserves it. If ID is already registered in StateReserved,
 	// InvokeSession reuses that exact session and never creates a replacement.
 	// Any other existing state is a conflicting invocation.
-	ID string
+	ID       string
+	Metadata *SessionMetadata
 	// Execution is the already-resolved Workers execution request.
 	// InvokeSession hands a detached clone of Execution to the injected
 	// workers.Service, so the caller retains exclusive
@@ -428,6 +431,7 @@ type StartRequest struct {
 	ID        string
 	Execution workers.WorkstationDispatchRequest
 	Retry     RetryPolicy
+	Metadata  *SessionMetadata
 }
 
 // Validate reports whether req carries the required caller request identity
@@ -441,6 +445,7 @@ func (req StartRequest) Validate() error {
 		ID:        req.ID,
 		Execution: req.Execution,
 		Retry:     req.Retry,
+		Metadata:  req.Metadata,
 	}).Validate()
 }
 
@@ -562,6 +567,9 @@ func (p RetryPolicy) Validate() error {
 func (req InvokeSessionRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
+	}
+	if err := req.Metadata.Validate(); err != nil {
+		return err
 	}
 	if err := req.Retry.Validate(); err != nil {
 		return err

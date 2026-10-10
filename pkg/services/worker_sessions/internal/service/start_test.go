@@ -501,6 +501,8 @@ func TestStart_RequestIDReplayAfterTerminalReturnsOriginalAcceptanceWithoutRepea
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
 	req := validAsyncStartRequest("worker-replay", "dispatch-replay")
+	req.Metadata = requesterMetadata()
+	wantMetadata := req.Metadata.Clone()
 	results := make(chan asyncStartOutcome, 1)
 	go func() {
 		result, startErr := registry.Start(context.Background(), req)
@@ -515,6 +517,17 @@ func TestStart_RequestIDReplayAfterTerminalReturnsOriginalAcceptanceWithoutRepea
 	if first.result.Session.ID != req.ID {
 		t.Fatalf("initial Start() session ID = %q, want %q", first.result.Session.ID, req.ID)
 	}
+	if !reflect.DeepEqual(first.result.Session.Metadata, wantMetadata) {
+		t.Fatalf("accepted metadata = %+v, want %+v", first.result.Session.Metadata, wantMetadata)
+	}
+	first.result.Session.Metadata.Requester.WorkerSessionID = "mutated acceptance"
+	observation, observationErr := registry.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: req.ID})
+	if observationErr != nil || !reflect.DeepEqual(observation.Requester, wantMetadata.Requester) || !reflect.DeepEqual(observation.Correlation, wantMetadata.Correlation) || !reflect.DeepEqual(observation.Labels, wantMetadata.Labels) {
+		t.Fatalf("live observation metadata = %+v, %v", observation, observationErr)
+	}
+	observation.Requester.WorkerSessionID = "mutated observation"
+	observation.Correlation.WorkID = "mutated observation"
+	observation.Labels[0] = "mutated observation"
 
 	topic := workersessions.Topic(req.ID)
 	terminalSubscription := subscribeForTerminal(t, eventsSvc, topic)
@@ -536,6 +549,18 @@ func TestStart_RequestIDReplayAfterTerminalReturnsOriginalAcceptanceWithoutRepea
 	}
 	if execution.callCount() != 1 {
 		t.Fatalf("Workers dispatch count = %d, want exactly one", execution.callCount())
+	}
+	if !reflect.DeepEqual(replay.Session.Metadata, wantMetadata) {
+		t.Fatalf("replay metadata = %+v, want original %+v", replay.Session.Metadata, wantMetadata)
+	}
+	conflict := req
+	conflict.Metadata = wantMetadata.Clone()
+	conflict.Metadata.Labels[0] = "different metadata"
+	if _, err := registry.Start(context.Background(), conflict); !errors.Is(err, workersessions.ErrStartRequestIDConflict) {
+		t.Fatalf("changed metadata replay = %v, want request ID conflict", err)
+	}
+	if execution.callCount() != 1 {
+		t.Fatal("metadata conflict launched another execution")
 	}
 	read, err := eventsSvc.Read(context.Background(), events.ReadRequest{
 		Topic: topic,

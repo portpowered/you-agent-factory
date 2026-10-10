@@ -1,17 +1,99 @@
 package workersessions
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
+
+// ErrInvalidSessionMetadata rejects malformed descriptive admission facts.
+var ErrInvalidSessionMetadata = errors.New("worker sessions: invalid session metadata")
+
+// Requester identifies the Worker Session that produced or invoked this work.
+// These nonsecret facts describe lineage; they do not authorize messaging.
+type Requester struct {
+	Kind            string `json:"kind"`
+	WorkerSessionID string `json:"workerSessionId"`
+	WorkID          string `json:"workId,omitempty"`
+}
+
+// Correlation retains the original work context through direct continuation.
+type Correlation struct {
+	WorkID           string `json:"workId,omitempty"`
+	FactorySessionID string `json:"factorySessionId,omitempty"`
+}
+
+// SessionMetadata carries only nonsecret facts supplied by the admitting owner.
+// Nil metadata preserves legacy absence; a nil Requester describes an
+// unattributed root and never implies an operator or ambient message target.
+type SessionMetadata struct {
+	Requester   *Requester   `json:"requester"`
+	Correlation *Correlation `json:"correlation,omitempty"`
+	Labels      []string     `json:"labels,omitempty"`
+}
+
+const (
+	maxSessionLabels     = 32
+	maxSessionLabelRunes = 200
+)
+
+// Validate checks the additive metadata contract without rewriting its values.
+func (m *SessionMetadata) Validate() error {
+	if m == nil {
+		return nil
+	}
+	if m.Requester != nil && (m.Requester.Kind != "WORKER_SESSION" ||
+		!validSessionID(m.Requester.WorkerSessionID) || !validOptionalMetadataID(m.Requester.WorkID)) {
+		return ErrInvalidSessionMetadata
+	}
+	if m.Correlation != nil && (!validOptionalMetadataID(m.Correlation.WorkID) ||
+		!validOptionalMetadataID(m.Correlation.FactorySessionID)) {
+		return ErrInvalidSessionMetadata
+	}
+	if len(m.Labels) > maxSessionLabels {
+		return ErrInvalidSessionMetadata
+	}
+	for _, label := range m.Labels {
+		if !utf8.ValidString(label) || utf8.RuneCountInString(label) > maxSessionLabelRunes {
+			return ErrInvalidSessionMetadata
+		}
+	}
+	return nil
+}
+
+func validOptionalMetadataID(id string) bool {
+	return id == "" || validSessionID(id)
+}
+
+// Clone detaches every reference-backed field, including opaque labels.
+func (m *SessionMetadata) Clone() *SessionMetadata {
+	if m == nil {
+		return nil
+	}
+	clone := *m
+	if m.Requester != nil {
+		requester := *m.Requester
+		clone.Requester = &requester
+	}
+	if m.Correlation != nil {
+		correlation := *m.Correlation
+		clone.Correlation = &correlation
+	}
+	if m.Labels != nil {
+		clone.Labels = append([]string{}, m.Labels...)
+	}
+	return &clone
+}
 
 // Session is an immutable snapshot of one Worker Session's stable identity,
 // current lifecycle state, and — once terminal — its committed TerminalResult.
 // Session is a plain value; callers that mutate a returned Session, or its
 // Result, never affect registry-owned state.
 type Session struct {
-	ID    string
-	State State
+	ID       string
+	State    State
+	Metadata *SessionMetadata `json:"Metadata,omitempty"`
 	// Model is the optional model identifier resolved for the provider
 	// invocation that opened this Worker Session. A nil value is durable
 	// absence: Worker Sessions never derives it from current configuration.
@@ -47,6 +129,9 @@ func (s Session) Validate() error {
 	}
 	if !s.State.Valid() {
 		return ErrInvalidState
+	}
+	if err := s.Metadata.Validate(); err != nil {
+		return err
 	}
 	switch s.State {
 	case StateCompleted, StateFailed:
@@ -84,6 +169,7 @@ func (s Session) Validate() error {
 // replay.
 func (s Session) Clone() Session {
 	clone := s
+	clone.Metadata = s.Metadata.Clone()
 	clone.Model = cloneString(s.Model)
 	clone.ReasoningEffort = cloneString(s.ReasoningEffort)
 	if s.Result != nil {

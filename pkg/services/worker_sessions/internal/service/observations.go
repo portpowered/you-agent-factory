@@ -602,6 +602,7 @@ func observationFactoryScopeMatches(metadata *observation, factorySessionIDs ...
 // baseObservation projects the registry-owned identity, correlation, and
 // lifecycle facts that never require the Provider Sessions root.
 func baseObservation(id string, session workersessions.Session, metadata *observation) workersessions.Observation {
+	facts := session.Metadata.Clone()
 	projected := workersessions.Observation{
 		WorkerSessionID:            publicWorkerID(id),
 		Provider:                   metadata.provider,
@@ -620,6 +621,9 @@ func baseObservation(id string, session workersessions.Session, metadata *observ
 		ConfirmationState:          workersessions.ConfirmationStateUnconfirmed,
 		DurationBasis:              workersessions.DurationBasisUnavailable,
 		Transcript:                 workersessions.TranscriptAvailabilityUnavailable,
+	}
+	if facts != nil {
+		projected.Requester, projected.Correlation, projected.Labels = facts.Requester, facts.Correlation, facts.Labels
 	}
 	if strings.TrimSpace(metadata.usageModel) != "" {
 		model := strings.TrimSpace(metadata.usageModel)

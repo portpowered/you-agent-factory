@@ -13,6 +13,69 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestSessionMetadata_ValidationPreservesAbsentRootsAndBounds(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		metadata *workersessions.SessionMetadata
+		invalid  bool
+	}{
+		{name: "legacy absent"},
+		{name: "unattributed root", metadata: &workersessions.SessionMetadata{}},
+		{name: "worker requester", metadata: &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"}}},
+		{name: "invented operator", metadata: &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "OPERATOR", WorkerSessionID: "lead"}}, invalid: true},
+		{name: "missing requester ID", metadata: &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION"}}, invalid: true},
+		{name: "blank requester ID", metadata: &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: " "}}, invalid: true},
+		{name: "blank requester Work", metadata: &workersessions.SessionMetadata{Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: " "}}, invalid: true},
+		{name: "absent correlation members", metadata: &workersessions.SessionMetadata{Correlation: &workersessions.Correlation{}}},
+		{name: "blank Work", metadata: &workersessions.SessionMetadata{Correlation: &workersessions.Correlation{WorkID: " "}}, invalid: true},
+		{name: "blank Factory Session", metadata: &workersessions.SessionMetadata{Correlation: &workersessions.Correlation{FactorySessionID: " "}}, invalid: true},
+		{name: "32 labels", metadata: &workersessions.SessionMetadata{Labels: make([]string, 32)}},
+		{name: "33 labels", metadata: &workersessions.SessionMetadata{Labels: make([]string, 33)}, invalid: true},
+		{name: "200 Unicode characters", metadata: &workersessions.SessionMetadata{Labels: []string{strings.Repeat("界", 200)}}},
+		{name: "201 Unicode characters", metadata: &workersessions.SessionMetadata{Labels: []string{strings.Repeat("界", 201)}}, invalid: true},
+		{name: "invalid Unicode", metadata: &workersessions.SessionMetadata{Labels: []string{string([]byte{0xff})}}, invalid: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			before := tc.metadata.Clone()
+			err := tc.metadata.Validate()
+			if tc.invalid && !errors.Is(err, workersessions.ErrInvalidSessionMetadata) || !tc.invalid && err != nil {
+				t.Fatalf("Validate() = %v, invalid=%v", err, tc.invalid)
+			}
+			if !reflect.DeepEqual(before, tc.metadata) {
+				t.Fatal("validation mutated metadata")
+			}
+		})
+	}
+}
+
+func TestSessionMetadata_SnapshotClonesDetachEveryField(t *testing.T) {
+	t.Parallel()
+	metadata := &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
+		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory"},
+		Labels:      []string{"tag:project=example"},
+	}
+	want := metadata.Clone()
+	session := workersessions.Session{ID: "lane", State: workersessions.StateReserved, Metadata: metadata}
+	clone := session.Clone()
+	observation := workersessions.Observation{Requester: metadata.Requester, Correlation: metadata.Correlation, Labels: metadata.Labels}.Clone()
+	clone.Metadata.Requester.WorkerSessionID = "other"
+	clone.Metadata.Correlation.WorkID = "other"
+	clone.Metadata.Labels[0] = "other"
+	observation.Requester.WorkID = "other"
+	observation.Correlation.FactorySessionID = "other"
+	observation.Labels[0] = "other"
+	if !reflect.DeepEqual(metadata, want) {
+		t.Fatal("snapshot mutation changed source metadata")
+	}
+	if (&workersessions.SessionMetadata{}).Clone().Requester != nil || (*workersessions.SessionMetadata)(nil).Clone() != nil {
+		t.Fatal("clone invented absent metadata")
+	}
+}
+
 func TestRuntimeAttempt_CompleteDelegatesAndRejectsUnavailable(t *testing.T) {
 	if err := (workersessions.RuntimeAttempt(nil)).Complete(context.Background(), workers.WorkstationDispatchResult{}, nil); err == nil {
 		t.Fatal("nil RuntimeAttempt.Complete() error = nil, want unavailable error")

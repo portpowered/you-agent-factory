@@ -19,6 +19,7 @@ type startTuple struct {
 	SessionID   string
 	Execution   workers.WorkstationDispatchRequest
 	MaxAttempts int
+	Metadata    *workersessions.SessionMetadata
 }
 
 // startReplay stores one accepted or deterministically rejected start result.
@@ -31,6 +32,7 @@ type startReplay struct {
 }
 
 func normalizeStartRequest(req workersessions.StartRequest) workersessions.StartRequest {
+	req.Metadata = req.Metadata.Clone()
 	req.RequestID = strings.TrimSpace(req.RequestID)
 	req.Execution = cloneWorkstationDispatchRequest(req.Execution)
 	if effort, ok := providers.ReasoningEffort(req.Execution.Execution.ReasoningEffort).Canonical(); ok {
@@ -46,7 +48,7 @@ func normalizeStartRequest(req workersessions.StartRequest) workersessions.Start
 }
 
 func startTupleFor(req workersessions.StartRequest) startTuple {
-	return startTuple{SessionID: req.ID, Execution: cloneWorkstationDispatchRequest(req.Execution), MaxAttempts: req.Retry.Attempts()}
+	return startTuple{SessionID: req.ID, Execution: cloneWorkstationDispatchRequest(req.Execution), MaxAttempts: req.Retry.Attempts(), Metadata: req.Metadata.Clone()}
 }
 
 // Complete commits the one terminal Worker Session observation. Runtime has
@@ -700,6 +702,7 @@ func sanitizeAgentRunFailureClass(class string) string {
 // cloneSession returns a detached copy of session: mutating the returned
 // value, or its Result, never affects registry-owned state.
 func cloneSession(session workersessions.Session) workersessions.Session {
+	session.Metadata = session.Metadata.Clone()
 	session.Result = cloneTerminalResult(session.Result)
 	if session.ProviderSessionAssociation != nil {
 		association := session.ProviderSessionAssociation.Clone()

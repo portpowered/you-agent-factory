@@ -410,7 +410,7 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 		r.startsDone = make(chan struct{})
 	}
 	r.activeStarts++
-	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved, Metadata: req.Metadata.Clone()}
 	r.publications[req.ID] = &publication{}
 	r.startReplays[req.RequestID] = replay
 	r.logger.Info("worker session start", "sessionID", publicWorkerID(req.ID), "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
@@ -429,11 +429,11 @@ func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest)
 		r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "duplicate")
 		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
 	}
-	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved, Metadata: req.Metadata.Clone()}
 	r.sessions[req.ID] = session
 	r.publications[req.ID] = &publication{}
 	r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "reserved")
-	return session, nil
+	return cloneSession(session), nil
 }
 
 func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
@@ -489,14 +489,14 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 // reserveIfAbsent exposes a newly reserved identity before the separate
 // STARTING transition. Existing identities remain unchanged; the transition
 // reports conflicts before any Workers call.
-func (r *registry) reserveIfAbsent(id string) {
+func (r *registry) reserveIfAbsent(id string, metadata *workersessions.SessionMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if _, exists := r.sessions[id]; exists {
 		return
 	}
-	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateReserved}
+	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateReserved, Metadata: metadata.Clone()}
 	r.publications[id] = &publication{}
 }
 

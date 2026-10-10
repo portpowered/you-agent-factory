@@ -313,6 +313,9 @@ func (c ObservationCursor) Clone() ObservationCursor { return c }
 // callers must not infer zero usage or zero duration from absence.
 type Observation struct {
 	WorkerSessionID string
+	Requester       *Requester
+	Correlation     *Correlation
+	Labels          []string
 	// Provider is the admitted binding, independent of a Provider Session reference.
 	// Empty means no provider identity was recorded.
 	Provider                   string
@@ -479,6 +482,8 @@ func (o Observation) validateFailure() error {
 
 // Clone returns a detached observation snapshot.
 func (o Observation) Clone() Observation {
+	metadata := (&SessionMetadata{Requester: o.Requester, Correlation: o.Correlation, Labels: o.Labels}).Clone()
+	o.Requester, o.Correlation, o.Labels = metadata.Requester, metadata.Correlation, metadata.Labels
 	o.ProviderSession = o.ProviderSession.Clone()
 	o.Model = cloneString(o.Model)
 	o.ReasoningEffort = cloneString(o.ReasoningEffort)

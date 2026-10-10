@@ -202,7 +202,7 @@ func TestControlOpeningBindsAcknowledgedCaptureIdentity(t *testing.T) {
 			t.Parallel()
 			r := newTestRegistry(t)
 			id := scopedWorkerAddress("worker", "factory")
-			r.reserveIfAbsent(id)
+			r.reserveIfAbsent(id, nil)
 			identity := exactCaptureIdentity()
 			switch mismatch {
 			case "missing-generation":

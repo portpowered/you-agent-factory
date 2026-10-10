@@ -236,7 +236,7 @@ func (r *registry) prepareInvocation(
 		return invocationPreparation{}, ErrMissingScheduler
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
-	r.reserveIfAbsent(req.ID)
+	r.reserveIfAbsent(req.ID, req.Metadata)
 	acceptedFields := []any{
 		"sessionID", publicWorkerID(req.ID),
 		"attemptID", attemptID,
@@ -349,7 +349,7 @@ func (r *registry) startReservedWithEffects(
 	serverCtx := r.serverOwnedContext()
 	prepared, err := r.prepareInvocation(
 		serverCtx,
-		workersessions.InvokeSessionRequest{ID: req.ID, Execution: req.Execution, Retry: req.Retry},
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: req.Execution, Retry: req.Retry, Metadata: req.Metadata},
 		invocationPreparationOptions{
 			serverOwned:      true,
 			direct:           true,
@@ -368,6 +368,7 @@ func (r *registry) startReservedWithEffects(
 	}
 	invokeReq := workersessions.InvokeSessionRequest{
 		ID:        req.ID,
+		Metadata:  req.Metadata.Clone(),
 		Execution: req.Execution,
 		Retry:     req.Retry,
 	}

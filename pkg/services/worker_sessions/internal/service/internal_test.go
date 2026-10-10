@@ -2600,7 +2600,7 @@ func TestBeginRuntimeAttempt_RejectsInvalidAndAlreadyStartingSessions(t *testing
 		t.Fatalf("invalid BeginRuntimeAttempt() error = %v, want ErrInvalidSessionID", err)
 	}
 
-	r.reserveIfAbsent("worker-already-starting")
+	r.reserveIfAbsent("worker-already-starting", nil)
 	if _, err := r.transitionToStarting("worker-already-starting"); err != nil {
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
@@ -2687,7 +2687,7 @@ func TestReserveIfAbsent_NewIdentity_IsObservableAsReservedBeforeStartingTransit
 	r := newTestRegistry(t)
 	ctx := context.Background()
 
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 
 	reserved, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-1"})
 	if err != nil {
@@ -2715,8 +2715,8 @@ func TestReserveIfAbsent_NewIdentity_IsObservableAsReservedBeforeStartingTransit
 // one that was reserved by a prior call.
 func TestReserveIfAbsent_ExistingReservedIdentity_IsLeftUntouched(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
+	r.reserveIfAbsent("worker-1", nil)
 
 	r.mu.RLock()
 	session, exists := r.sessions["worker-1"]
@@ -2753,7 +2753,7 @@ func TestTransitionToStarting_UnreservedIdentity_ReturnsErrSessionNotStartable(t
 // outcome or its FailureCause, and reports it did not win the commit.
 func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
@@ -2793,7 +2793,7 @@ func TestCommitTerminal_AlreadyTerminalIdentity_IsAbsorbingAndDoesNotOverwrite(t
 
 func TestCommitTerminal_NormalizesEmptyFailureCauseBeforeCommit(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
@@ -2823,7 +2823,7 @@ func TestCommitTerminal_NormalizesEmptyFailureCauseBeforeCommit(t *testing.T) {
 // terminal authority when completion wins an admission/control race.
 func TestTransitionToRunning_TerminalSessionRemainsAbsorbing(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
@@ -2868,7 +2868,7 @@ func TestCommitTerminal_MissingIdentity_DoesNotFabricateASession(t *testing.T) {
 // Workers handoff) must not be terminalized.
 func TestCommitTerminal_ReservedPredecessor_IsRejectedAndLeavesSessionUnchanged(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 
 	result := workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
 	got, committed := r.commitTerminal("worker-1", workersessions.StateCompleted, result)
@@ -2896,7 +2896,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	if got, committed := r.commitControlTerminal("missing", workersessions.StateCanceled); committed || got.ID != "" {
 		t.Fatalf("commit missing control terminal = %#v, %t; want no fabricated session", got, committed)
 	}
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 	if got, committed := r.commitControlTerminal("worker-1", workersessions.StateCompleted); committed || got.State != workersessions.StateReserved {
 		t.Fatalf("commit invalid control terminal = %#v, %t; want unchanged RESERVED", got, committed)
 	}
@@ -2910,7 +2910,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 		t.Fatalf("preAdmissionControlTerminal(missing) = %#v, %t; want no terminal", session, ok)
 	}
 
-	r.reserveIfAbsent("worker-2")
+	r.reserveIfAbsent("worker-2", nil)
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
 	}
@@ -2925,7 +2925,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 	if r.beginExecutionPublish("worker-2", supervision) {
 		t.Fatal("beginBoundaryPublish() succeeded after a control request")
 	}
-	r.reserveIfAbsent("worker-3")
+	r.reserveIfAbsent("worker-3", nil)
 	if workerSession, err := r.Get(ctx, workersessions.GetRequest{ID: "worker-3"}); err != nil || workerSession.State != workersessions.StateReserved {
 		t.Fatalf("Get(worker-3) = %#v, %v, want RESERVED", workerSession, err)
 	}
@@ -2940,7 +2940,7 @@ func TestControlGuards_RejectInvalidTransitionsAndPreserveObservableSessionState
 func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(t *testing.T) {
 	t.Run("control before boundary publication", func(t *testing.T) {
 		r := newTestRegistry(t)
-		r.reserveIfAbsent("worker-1")
+		r.reserveIfAbsent("worker-1", nil)
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
 		}
@@ -2958,7 +2958,7 @@ func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(
 			t.Fatalf("publishRegisteredAttempt() = %#v, retry %v, want retained CANCELED session and no retry", result, retry)
 		}
 
-		r.reserveIfAbsent("worker-2")
+		r.reserveIfAbsent("worker-2", nil)
 		if _, err := r.transitionToStarting("worker-2"); err != nil {
 			t.Fatalf("transitionToStarting(worker-2): %v", err)
 		}
@@ -2978,7 +2978,7 @@ func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(
 	t.Run("boundary publication failure", func(t *testing.T) {
 		r := newTestRegistry(t)
 		r.execution = failingPublishBoundary{unusedExecution: unusedExecution{t: t}, err: errors.New("execution publish failed")}
-		r.reserveIfAbsent("worker-1")
+		r.reserveIfAbsent("worker-1", nil)
 		if _, err := r.transitionToStarting("worker-1"); err != nil {
 			t.Fatalf("transitionToStarting: %v", err)
 		}
@@ -3039,7 +3039,7 @@ func newAdmissionCancellationFixture(t *testing.T) admissionCancellationFixture 
 	r := newTestRegistry(t)
 	const sessionID = "worker-1"
 	const dispatchID = "dispatch-1"
-	r.reserveIfAbsent(sessionID)
+	r.reserveIfAbsent(sessionID, nil)
 	if _, err := r.transitionToStarting(sessionID); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
@@ -3198,7 +3198,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 
 func TestCancel_PreAdmissionTerminalAndConcurrentControlRemainNoop(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-2")
+	r.reserveIfAbsent("worker-2", nil)
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
 	}
@@ -3219,7 +3219,7 @@ func TestCancel_PreAdmissionTerminalAndConcurrentControlRemainNoop(t *testing.T)
 		t.Fatalf("beginCancellation() after a requested action = %#v, want noop", attempt)
 	}
 
-	r.reserveIfAbsent("worker-3")
+	r.reserveIfAbsent("worker-3", nil)
 	if _, err := r.transitionToStarting("worker-3"); err != nil {
 		t.Fatalf("transitionToStarting(worker-3): %v", err)
 	}
@@ -3241,7 +3241,7 @@ func TestCancel_PreAdmissionTerminalAndConcurrentControlRemainNoop(t *testing.T)
 
 func TestCancel_BeforePublicationUsesRegisteredSupervision(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-before-publication")
+	r.reserveIfAbsent("worker-before-publication", nil)
 	if _, err := r.transitionToStarting("worker-before-publication"); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
@@ -3280,7 +3280,7 @@ func TestTerminate_BeforePublicationUsesRegisteredSupervisionAndIsIdempotent(t *
 	r := newTestRegistry(t)
 	const sessionID = "worker-terminate-before-publication"
 	const dispatchID = "dispatch-terminate-before-publication"
-	r.reserveIfAbsent(sessionID)
+	r.reserveIfAbsent(sessionID, nil)
 	if _, err := r.transitionToStarting(sessionID); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
@@ -3363,7 +3363,7 @@ func TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal(t 
 	r := newTestRegistry(t)
 	const sessionID = "worker-publish-canceled"
 	const dispatchID = "dispatch-publish-canceled"
-	r.reserveIfAbsent(sessionID)
+	r.reserveIfAbsent(sessionID, nil)
 	if _, err := r.transitionToStarting(sessionID); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
@@ -3686,7 +3686,7 @@ func TestCancelControlWaitsForConcurrentControl(t *testing.T) {
 // goroutine's outcome happened to win the race.
 func TestCommitTerminal_ConcurrentCompetingOutcomes_OnlyOneWinsAndStateStaysAbsorbing(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 	if _, err := r.transitionToStarting("worker-1"); err != nil {
 		t.Fatalf("transitionToStarting() error = %v, want nil", err)
 	}
@@ -3756,7 +3756,7 @@ func TestAppendDraft_InvalidDraft_ReturnsErrorAndAppendsNothing(t *testing.T) {
 
 func TestPublishOpeningRecordWithoutWorkerRecordingArgumentStillOpensAndCloses(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 
 	if err := r.publishOpeningRecord(
 		context.Background(),
@@ -3780,7 +3780,7 @@ func TestPublishOpeningRecordWithoutWorkerRecordingArgumentStillOpensAndCloses(t
 
 func TestPublishOpeningRecordAwaitOpeningFailureClosesCapture(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 	recording := &awaitOpeningFailureRecording{err: errors.New("opening barrier failed")}
 
 	err := r.publishOpeningRecord(
@@ -4404,7 +4404,7 @@ func TestPublishTerminalRecord_NonTerminalState_PropagatesTerminalDraftErrorAndA
 // publication window that was never opened.
 func TestPublishRecord_RejectsPublicationForMerelyReservedSession(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
+	r.reserveIfAbsent("worker-1", nil)
 
 	_, err := r.PublishRecord(context.Background(), workersessions.PublishRecordRequest{
 		SessionID:      "worker-1",
@@ -5492,7 +5492,7 @@ func TestStartSupervisionLifecycleFallbacks(t *testing.T) {
 		t.Fatal("non-server-owned supervision should use a non-cancelable context")
 	}
 
-	registry.reserveIfAbsent("owned-worker")
+	registry.reserveIfAbsent("owned-worker", nil)
 	if _, err := registry.transitionToStarting("owned-worker"); err != nil {
 		t.Fatalf("transitionToStarting() = %v, want nil", err)
 	}
@@ -5510,7 +5510,7 @@ func TestStartSupervisionLifecycleFallbacks(t *testing.T) {
 func TestStartPreparationFailureBranches(t *testing.T) {
 	ctx := context.Background()
 	stopping := newTestRegistry(t)
-	stopping.reserveIfAbsent("stopping")
+	stopping.reserveIfAbsent("stopping", nil)
 	if _, err := stopping.transitionToStarting("stopping"); err != nil {
 		t.Fatalf("transitionToStarting(stopping) = %v, want nil", err)
 	}
@@ -5521,7 +5521,7 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 	}
 
 	terminal := newTestRegistry(t)
-	terminal.reserveIfAbsent("terminal")
+	terminal.reserveIfAbsent("terminal", nil)
 	if _, err := terminal.transitionToStarting("terminal"); err != nil {
 		t.Fatalf("transitionToStarting(terminal) = %v, want nil", err)
 	}
@@ -5532,7 +5532,7 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 	}
 
 	reserved := newTestRegistry(t)
-	reserved.reserveIfAbsent("reserved")
+	reserved.reserveIfAbsent("reserved", nil)
 	_, err = reserved.registerInvocationSupervision(ctx, coverageInvokeRequest("reserved"), invocationPreparationOptions{}, reserved.execution, reserved.clock, reserved.scheduler)
 	if !errors.Is(err, workersessions.ErrStartNotAccepted) {
 		t.Fatalf("reserved registration error = %v, want ErrStartNotAccepted", err)
@@ -5551,7 +5551,7 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 	running.publishTerminalSnapshot(ctx, "missing", "", workersessions.Session{ID: "missing", State: workersessions.StateFailed})
 
 	secondTerminal := newTestRegistry(t)
-	secondTerminal.reserveIfAbsent("second-terminal")
+	secondTerminal.reserveIfAbsent("second-terminal", nil)
 	if _, err := secondTerminal.transitionToStarting("second-terminal"); err != nil {
 		t.Fatalf("transitionToStarting(second-terminal) = %v, want nil", err)
 	}
@@ -5635,7 +5635,7 @@ func coverageInvokeRequest(id string) workersessions.InvokeSessionRequest {
 func coverageOpeningRegistry(t *testing.T, id string) *registry {
 	t.Helper()
 	registry := newTestRegistry(t)
-	registry.reserveIfAbsent(id)
+	registry.reserveIfAbsent(id, nil)
 	if _, err := registry.transitionToStarting(id); err != nil {
 		t.Fatalf("transitionToStarting(%q) = %v, want nil", id, err)
 	}
@@ -6061,14 +6061,14 @@ func TestContinuationLineagePublicationGuardsAndClosedPersistence(t *testing.T) 
 	}
 
 	closed := newTestRegistry(t)
-	closed.reserveIfAbsent("worker-1")
+	closed.reserveIfAbsent("worker-1", nil)
 	if err := closed.publishSessionLineageRecord(ctx, "worker-1", identity, payload, false); !errors.Is(err, workersessions.ErrPublicationNotOpen) {
 		t.Fatalf("publishSessionLineageRecord(closed) = %v, want publication not open", err)
 	}
 
 	writer := &continuationLineageRecordingStub{}
 	accepted := newTestRegistry(t)
-	accepted.reserveIfAbsent("worker-1")
+	accepted.reserveIfAbsent("worker-1", nil)
 	accepted.publications["worker-1"].open = true
 	accepted.publications["worker-1"].recordingID = "recording-1"
 	accepted.recording = writer
@@ -6096,7 +6096,7 @@ func TestContinuationLineagePublicationGuardsAndClosedPersistence(t *testing.T) 
 	withoutWriter.persistClosedLineageRecord(ctx, "recording-1", "worker-1", events.Record{})
 
 	failingAppend := newTestRegistry(t)
-	failingAppend.reserveIfAbsent("worker-1")
+	failingAppend.reserveIfAbsent("worker-1", nil)
 	failingAppend.publications["worker-1"].open = true
 	appendErr := errors.New("lineage append failed")
 	failingAppend.events = failingContinuationEventsAppender{err: appendErr}
@@ -8112,14 +8112,14 @@ func TestWorkerSessionClassification_CoversStructuredFallbackAndAssociationRejec
 
 func TestWorkerSessionRecordingPublication_CleansUpAndPreservesErrors(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("opening-cleanup")
+	r.reserveIfAbsent("opening-cleanup", nil)
 	openingErr := errors.New("opening barrier failed")
 	abortErr := errors.New("abort failed")
 	if err := r.publishOpeningRecord(context.Background(), "opening-cleanup", "dispatch", workers.SessionPayload{Status: string(workersessions.StateStarting)}, "codex", &coverageRecording{awaitErr: openingErr, abortErr: abortErr}); !errors.Is(err, openingErr) {
 		t.Fatalf("publishOpeningRecord() error = %v, want opening barrier error", err)
 	}
 
-	r.reserveIfAbsent("terminal-cleanup")
+	r.reserveIfAbsent("terminal-cleanup", nil)
 	terminalPub := r.publications["terminal-cleanup"]
 	terminalPub.open = true
 	closeRecording := &coverageRecording{closeErr: errors.New("close failed")}
@@ -8424,7 +8424,7 @@ func TestWorkerSessionCallerCancellation_DetachesStartAndContinueAfterReadinessB
 
 func TestWorkerSessionControlCompletion_CoversResumeReservationAndInvalidContinuation(t *testing.T) {
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("control-history")
+	r.reserveIfAbsent("control-history", nil)
 	supervision := newSupervision("control-history-dispatch", "")
 	supervision.controlHistory = &controlHistoryReservation{
 		pub:       r.publications["control-history"],
