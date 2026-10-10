@@ -122,6 +122,7 @@ type Service interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
 	GetFactorySession(context.Context, string) (SessionProjection, error)
+	ReadSessionDetail(context.Context, string) (SessionDetail, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error)
 	SubscribeFactoryResponseEvents(context.Context, ResponseEventSubscriptionRequest) (*ResponseEventCursor, error)
 	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)

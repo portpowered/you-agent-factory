@@ -62,7 +62,11 @@ func newAPIServerFromRoles(
 	if durableLister != nil {
 		listRoot = testDurableListRoot{Service: sessionsRoot, lister: durableLister}
 	}
-	var liveControl factorysessions.LiveControlService
+	var liveControl interface {
+		ReadSessionDetail(context.Context, string) (factorysessions.SessionDetail, error)
+		PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error)
+		ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error)
+	}
 	if sessions != nil {
 		liveControl = testLiveControl{live: sessions}
 	}
@@ -253,6 +257,6 @@ func (root testLiveControl) ResumeLiveFactorySession(ctx context.Context, id str
 	return factorysession.LifecycleControlResultFromAPI(response), err
 }
 
-func (root testLiveControl) GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error) {
-	return factorysessions.SessionProjection{}, factorysessions.ErrSessionNotFound
+func (root testLiveControl) ReadSessionDetail(context.Context, string) (factorysessions.SessionDetail, error) {
+	return factorysessions.SessionDetail{}, factorysessions.ErrSessionNotFound
 }

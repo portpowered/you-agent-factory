@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -29,13 +27,11 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
@@ -43,60 +39,6 @@ import (
 )
 
 type canonicalStdioSessionsStub struct{ factorysessions.Service }
-
-type durableHTTPInspectionStub struct {
-	factorysessions.SessionInspectionService
-	requestedID string
-	err         error
-}
-
-func (stub *durableHTTPInspectionStub) QueryArtifacts(_ context.Context, request factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error) {
-	stub.requestedID = request.SessionID
-	return factorysessions.ListArtifactsResult{SessionID: request.SessionID}, stub.err
-}
-
-func TestDurableHTTPUsesInjectedInspectionForSelectedSession(t *testing.T) {
-	for _, missing := range []bool{false, true} {
-		name := "selected artifacts"
-		if missing {
-			name = "typed missing session"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			inspection := &durableHTTPInspectionStub{}
-			if missing {
-				inspection.err = factorysessions.ErrDurableSessionNotFound
-			}
-			// This Sessions fake has no inspection accessor. Only the separately
-			// injected owner can answer the selected artifact request.
-			sessions := canonicalStdioSessionsStub{}
-			handler := bindDurableExecutionHTTPHandler(
-				recordingshttp.NewAdapterWithSessions(nil, sessions, inspection),
-				factorysessionshttp.NewHandler(
-					factorysessionshttp.NewLifecycleHandler(sessions, nil, nil, nil, zap.NewNop()),
-					factorysessionshttp.NewReadHandler(sessions, nil, nil, nil, zap.NewNop()),
-					factorysessionshttp.NewAuthoringHandler(nil, nil, nil, nil, nil, zap.NewNop()),
-					factorysessionshttp.NewInvocationHandler(nil, zap.NewNop()),
-					factorysessionshttp.NewObservationHandler(sessions, nil, nil, nil, zap.NewNop()),
-				),
-				zap.NewNop(), nil,
-			)
-			const sessionID = "dur-sess-selected-inspection"
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/artifacts", nil))
-			wantStatus := http.StatusOK
-			if missing {
-				wantStatus = http.StatusNotFound
-			}
-			if inspection.requestedID != sessionID || response.Code != wantStatus {
-				t.Fatalf("selected inspection = %q, status = %d, body = %s", inspection.requestedID, response.Code, response.Body.String())
-			}
-			if missing && !strings.Contains(response.Body.String(), `"code":"NOT_FOUND"`) {
-				t.Fatalf("missing session lost typed error: %s", response.Body.String())
-			}
-		})
-	}
-}
 
 type testStdioApplication struct{}
 

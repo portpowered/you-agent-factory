@@ -179,32 +179,8 @@ func testCompletedHTTPAuthoringAndControl(t *testing.T, baseURL, selected, proje
 	if string(after) != string(definition) {
 		t.Fatalf("H03: rejected save changed Current Factory: %s", after)
 	}
-	if factory.Version == nil {
-		t.Fatal("H03: Current Factory has no editable version")
-	}
-	stale["version"] = map[string]string{
-		"logical":  strconv.FormatInt(factory.Version.Logical.Int64()+1, 10),
-		"physical": factory.Version.Physical.UTC().Add(time.Nanosecond).Format(time.RFC3339Nano),
-	}
-	body, _ = json.Marshal(map[string]any{"factory": stale})
-	completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusOK)
-	reloaded := support.GetJSON[factoryapi.Factory](t, selected+"/factory")
-	if reloaded.Version == nil || reloaded.Version.Logical <= factory.Version.Logical || reloaded.WorkTypes == nil || (*reloaded.WorkTypes)[0].Name != "task" {
-		t.Fatalf("H03: accepted save did not preserve definition and advance version: %#v", reloaded)
-	}
-	previewBody, _ := json.Marshal(map[string]string{"sourceKind": "INLINE_WORKFLOW", "inlineSource": "return 7;", "projectRoot": projectRoot})
-	preview := completedHTTPRequest(t, http.MethodPost, baseURL+"/factories/preview", string(previewBody), http.StatusOK)
-	if !strings.Contains(string(preview), "JAVASCRIPT") {
-		t.Fatalf("H03: preview = %s", preview)
-	}
-	for _, operation := range []string{"pause", "resume"} {
-		controlled := completedHTTPRequest(t, http.MethodPost, selected+"/"+operation, `{}`, http.StatusOK)
-		var control factoryapi.FactorySessionLifecycleControlResponse
-		if err := json.Unmarshal(controlled, &control); err != nil || control.SessionId != strings.TrimPrefix(selected, baseURL+"/factory-sessions/") || string(control.Operation) != strings.ToUpper(operation) || control.Outcome != "ACCEPTED" {
-			t.Fatalf("H03: %s control = %s, %v", operation, controlled, err)
-		}
-	}
-	completedHTTPRequest(t, http.MethodGet, selected+"/status", "", http.StatusOK)
+	testCompletedHTTPAcceptedSave(t, selected, factory, stale)
+	testCompletedHTTPPreviewAndControl(t, baseURL, selected, projectRoot)
 }
 
 func testCompletedHTTPValidation(t *testing.T, sessions factorysessions.Service, baseURL string) {
@@ -343,14 +319,7 @@ func testCompletedDurableHTTP(t *testing.T, process support.Process, server *sup
 	case <-ctx.Done():
 		t.Fatalf("H02: host cleanup did not join: %v", ctx.Err())
 	}
-	if command.Err() != nil || !strings.Contains(inputs.Stdout(), id) || !strings.Contains(inputs.Stdout(), "completed durable HTTP") {
-		t.Fatalf("H02: Execute = %v, output=%s stderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
-	}
-	var outcome factoryapi.FactorySessionSyncExecutionResponse
-	lines := strings.Split(strings.TrimSpace(inputs.Stdout()), "\n")
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &outcome); err != nil || outcome.SessionId != id || outcome.Status != "SUCCEEDED" || outcome.Result == nil || outcome.Result.SessionId != id || outcome.Result.ResultStatus != "FINAL" {
-		t.Fatalf("H02: canonical outcome = %s, %v", inputs.Stdout(), err)
-	}
+	assertCompletedDurableHTTPOutcome(t, command.Err(), inputs.Stdout(), inputs.Stderr(), id)
 	// Durable host teardown leaves the concurrently hosted live profile usable.
 	completedHTTPRequest(t, http.MethodGet, liveURL+"/factory-sessions", "", http.StatusOK)
 }
@@ -395,20 +364,7 @@ func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, ba
 	ids := make([]string, len(scenarios))
 	closes := make([]func(), len(scenarios))
 	done := make([]<-chan completedHTTPInvocation, len(scenarios))
-	t.Cleanup(func() {
-		cancel()
-		gate.unblock()
-		for _, joined := range done {
-			if joined == nil {
-				continue
-			}
-			select {
-			case <-joined:
-			case <-time.After(time.Minute):
-				t.Error("HTTP invocation did not join during cleanup")
-			}
-		}
-	})
+	t.Cleanup(func() { joinCompletedHTTPInvocations(t, cancel, gate, done) })
 	streams := make([]*support.FactoryResponseEventStream, len(scenarios))
 	last := make([]int64, len(scenarios))
 	for i, scenario := range scenarios {
@@ -481,31 +437,7 @@ func testCompletedHTTPFailedCronRecovery(t *testing.T, sessions factorysessions.
 	if err != nil || history == nil {
 		t.Fatalf("H09: recovered history = %#v, %v", history, err)
 	}
-	if len(history.History) < len(fixture.Events) {
-		t.Fatal("H09: recovery discarded recorded events")
-	}
-	for i, recorded := range fixture.Events {
-		restored := history.History[i]
-		if restored.Id != recorded.Id || restored.Type != recorded.Type || !restored.Context.EventTime.Equal(recorded.Context.EventTime) {
-			t.Fatalf("H09: recovery replaced recorded identity/order/time at %d: %#v", i, restored)
-		}
-	}
-	dispatches := 0
-	for _, event := range history.History {
-		if event.Type != factorydefinitions.FactoryEventTypeDispatchRequest {
-			continue
-		}
-		var payload factorydefinitions.DispatchRequestEventPayload
-		if err := event.DecodePayload(&payload); err != nil {
-			t.Fatal(err)
-		}
-		if payload.TransitionID == "daily-refresh" {
-			dispatches++
-		}
-	}
-	if dispatches != 1 {
-		t.Fatalf("H09: consumed cron dispatches=%d, want recorded one", dispatches)
-	}
+	assertCompletedCronHistory(t, fixture, history.History)
 	for _, entry := range logs.All() {
 		fields := entry.ContextMap()
 		if fields["event"] == "run.restore.disposition" && fields["session_id"] == scenario.candidateID && fields["dispatch_id"] == "dispatch-daily-refresh" && fields["outcome"] == "FAILED" && fields["selected_backend"] == "completed-http" {
@@ -566,19 +498,7 @@ func testCompletedHTTPProviderFailure(t *testing.T, sessions factorysessions.Ser
 		t.Fatal("H12: public failure exposed secret")
 	}
 	assertInitialOpeningProviderSelection(t, effects, scenario.candidateDir)
-	correlated := false
-	for _, entry := range logs.All() {
-		fields := entry.ContextMap()
-		if strings.Contains(fmt.Sprint(entry.Message, fields), completedHTTPSecret) {
-			t.Fatal("H12: selected diagnostic exposed secret")
-		}
-		if fields["session_id"] == id && fields["selected_backend"] == "completed-http" && entry.Level >= zap.WarnLevel {
-			correlated = true
-		}
-	}
-	if !correlated {
-		t.Fatal("H12: provider failure has no correlated selected diagnostic")
-	}
+	assertCompletedHTTPFailureDiagnostics(t, logs, id)
 }
 
 // The server effect supplies an already terminal request context to the real
@@ -840,4 +760,112 @@ func completedHTTPResponse(t *testing.T, method, endpoint, body, contentType str
 		t.Fatalf("%s %s = %d %s, %v, want %d", method, endpoint, response.StatusCode, data, err, status)
 	}
 	return data, response.Header.Clone()
+}
+
+func testCompletedHTTPAcceptedSave(t *testing.T, selected string, factory factoryapi.Factory, stale map[string]any) {
+	t.Helper()
+	if factory.Version == nil {
+		t.Fatal("H03: Current Factory has no editable version")
+	}
+	stale["version"] = map[string]string{
+		"logical":  strconv.FormatInt(factory.Version.Logical.Int64()+1, 10),
+		"physical": factory.Version.Physical.UTC().Add(time.Nanosecond).Format(time.RFC3339Nano),
+	}
+	body, _ := json.Marshal(map[string]any{"factory": stale})
+	completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusOK)
+	reloaded := support.GetJSON[factoryapi.Factory](t, selected+"/factory")
+	if reloaded.Version == nil || reloaded.Version.Logical <= factory.Version.Logical || reloaded.WorkTypes == nil || (*reloaded.WorkTypes)[0].Name != "task" {
+		t.Fatalf("H03: accepted save did not preserve definition and advance version: %#v", reloaded)
+	}
+}
+
+func testCompletedHTTPPreviewAndControl(t *testing.T, baseURL, selected, projectRoot string) {
+	t.Helper()
+	previewBody, _ := json.Marshal(map[string]string{"sourceKind": "INLINE_WORKFLOW", "inlineSource": "return 7;", "projectRoot": projectRoot})
+	preview := completedHTTPRequest(t, http.MethodPost, baseURL+"/factories/preview", string(previewBody), http.StatusOK)
+	if !strings.Contains(string(preview), "JAVASCRIPT") {
+		t.Fatalf("H03: preview = %s", preview)
+	}
+	for _, operation := range []string{"pause", "resume"} {
+		controlled := completedHTTPRequest(t, http.MethodPost, selected+"/"+operation, `{}`, http.StatusOK)
+		var control factoryapi.FactorySessionLifecycleControlResponse
+		if err := json.Unmarshal(controlled, &control); err != nil || control.SessionId != strings.TrimPrefix(selected, baseURL+"/factory-sessions/") || string(control.Operation) != strings.ToUpper(operation) || control.Outcome != "ACCEPTED" {
+			t.Fatalf("H03: %s control = %s, %v", operation, controlled, err)
+		}
+	}
+	completedHTTPRequest(t, http.MethodGet, selected+"/status", "", http.StatusOK)
+}
+
+func assertCompletedDurableHTTPOutcome(t *testing.T, commandErr error, stdout, stderr, id string) {
+	t.Helper()
+	if commandErr != nil || !strings.Contains(stdout, id) || !strings.Contains(stdout, "completed durable HTTP") {
+		t.Fatalf("H02: Execute = %v, output=%s stderr=%s", commandErr, stdout, stderr)
+	}
+	var outcome factoryapi.FactorySessionSyncExecutionResponse
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &outcome); err != nil || outcome.SessionId != id || outcome.Status != "SUCCEEDED" || outcome.Result == nil || outcome.Result.SessionId != id || outcome.Result.ResultStatus != "FINAL" {
+		t.Fatalf("H02: canonical outcome = %s, %v", stdout, err)
+	}
+}
+
+func joinCompletedHTTPInvocations(t *testing.T, cancel context.CancelFunc, gate *selectedProviderGate, done []<-chan completedHTTPInvocation) {
+	t.Helper()
+	cancel()
+	gate.unblock()
+	for _, joined := range done {
+		if joined == nil {
+			continue
+		}
+		select {
+		case <-joined:
+		case <-time.After(time.Minute):
+			t.Error("HTTP invocation did not join during cleanup")
+		}
+	}
+}
+
+func assertCompletedCronHistory(t *testing.T, fixture *factorydefinitions.ReplayArtifact, history []factorydefinitions.FactoryEvent) {
+	t.Helper()
+	if len(history) < len(fixture.Events) {
+		t.Fatal("H09: recovery discarded recorded events")
+	}
+	for i, recorded := range fixture.Events {
+		restored := history[i]
+		if restored.Id != recorded.Id || restored.Type != recorded.Type || !restored.Context.EventTime.Equal(recorded.Context.EventTime) {
+			t.Fatalf("H09: recovery replaced recorded identity/order/time at %d: %#v", i, restored)
+		}
+	}
+	dispatches := 0
+	for _, event := range history {
+		if event.Type != factorydefinitions.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		var payload factorydefinitions.DispatchRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.TransitionID == "daily-refresh" {
+			dispatches++
+		}
+	}
+	if dispatches != 1 {
+		t.Fatalf("H09: consumed cron dispatches=%d, want recorded one", dispatches)
+	}
+}
+
+func assertCompletedHTTPFailureDiagnostics(t *testing.T, logs *observer.ObservedLogs, id string) {
+	t.Helper()
+	correlated := false
+	for _, entry := range logs.All() {
+		fields := entry.ContextMap()
+		if strings.Contains(fmt.Sprint(entry.Message, fields), completedHTTPSecret) {
+			t.Fatal("H12: selected diagnostic exposed secret")
+		}
+		if fields["session_id"] == id && fields["selected_backend"] == "completed-http" && entry.Level >= zap.WarnLevel {
+			correlated = true
+		}
+	}
+	if !correlated {
+		t.Fatal("H12: provider failure has no correlated selected diagnostic")
+	}
 }

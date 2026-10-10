@@ -1749,18 +1749,3 @@ func assertProviderSessionParseDiagnostics(t *testing.T, parse factoryapi.Provid
 		t.Fatalf("parse diagnostics = %#v, want malformed line 4 and unknown line 3", parse)
 	}
 }
-
-type deletionTestRoot struct {
-	factorysessions.LiveControlService
-	close func(context.Context, string) error
-}
-
-func (root deletionTestRoot) DeleteFactorySession(ctx context.Context, id string) error {
-	return root.close(ctx, id)
-}
-func newDeletionTestServer(close func(context.Context, string) error) *Server {
-	srv := newLiveSessionTestServer(nil)
-	root := deletionTestRoot{close: close}
-	srv.factorySessionsAdapter.LifecycleHandler = factorysessionshttp.NewLifecycleHandler(nil, root, root, nil, zap.NewNop())
-	return srv
-}

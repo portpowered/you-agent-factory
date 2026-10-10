@@ -174,7 +174,7 @@ func (s *LifecycleHandler) usesDurableLifecycleControl(ctx context.Context, sess
 		return false
 	}
 	if s.liveControl != nil {
-		if _, err := s.liveControl.GetFactorySession(ctx, sessionID); err == nil {
+		if _, err := s.liveControl.ReadSessionDetail(ctx, sessionID); err == nil {
 			return false
 		}
 	}

@@ -12,9 +12,10 @@ import (
 )
 
 type workerSessionScope struct {
-	requestedID  string
-	effectiveID  string
-	defaultScope bool
+	requestedID     string
+	effectiveID     string
+	defaultScope    bool
+	validatedSource bool
 }
 
 // GetWorkerSessionObservation verifies the request identity and returns the
@@ -140,7 +141,7 @@ func (a *Adapter) ReadWorkerSessionTranscript(
 	}
 	response := WorkerSessionTranscriptToAPI(result)
 	response.FactorySessionId = stringPtr(strings.TrimSpace(sessionID))
-	return response, nil
+	return a.scopedTranscriptIdentity(ctx, observations, scope, result, response)
 }
 
 // ReadWorkerSessionTranscriptByWorkerSessionID reads the normalized history
@@ -175,6 +176,25 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 	}
 	response := WorkerSessionTranscriptToAPI(result)
 	response.FactorySessionId = stringPtr(strings.TrimSpace(sessionID))
+	return a.scopedTranscriptIdentity(ctx, observations, scope, result, response)
+}
+
+// ReadTranscriptResult has no Factory owner field. The same selected Runtime's
+// materialized summary supplies that attribution, fenced to this exact attempt.
+func (a *Adapter) scopedTranscriptIdentity(ctx context.Context, observations observationService, scope workerSessionScope, result workersessions.ReadTranscriptResult, response factoryapi.WorkerSessionTranscriptResponse) (factoryapi.WorkerSessionTranscriptResponse, error) {
+	if !scope.validatedSource {
+		return response, nil
+	}
+	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID, FactorySessionID: scope.observationID()})
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, err
+	}
+	if observation.WorkerSessionID != result.WorkerSessionID || observation.AttemptID != result.AttemptID {
+		return factoryapi.WorkerSessionTranscriptResponse{}, workersessions.ErrObservationSessionNotFound
+	}
+	if observation.FactorySessionID != "" {
+		response.FactorySessionId = stringPtr(observation.FactorySessionID)
+	}
 	return response, nil
 }
 
@@ -439,6 +459,7 @@ func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID strin
 		scope.effectiveID = effectiveID
 	}
 	scope.defaultScope = resolved.IsDefault
+	_, scope.validatedSource = a.resolver.(sessionObservationResolver)
 	return scope, nil
 }
 
@@ -472,6 +493,12 @@ func scopeWorkerSessionObservation(
 ) (workersessions.Observation, error) {
 	expectedSessionID := strings.TrimSpace(scope.effectiveID)
 	actualSessionID := strings.TrimSpace(observation.FactorySessionID)
+	// The selected Runtime validates canonical Work/Worker/attempt membership,
+	// including restored captures. Its physical owner can differ from the
+	// current board UUID; the selector must not relabel that execution.
+	if scope.validatedSource && actualSessionID != "" {
+		return observation, nil
+	}
 	if actualSessionID != "" && actualSessionID != expectedSessionID &&
 		!(scope.defaultScope && actualSessionID == defaultFactorySessionAlias) {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound

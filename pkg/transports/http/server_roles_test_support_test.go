@@ -224,3 +224,22 @@ type testDurableListRoot struct {
 func (root testDurableListRoot) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
 	return root.lister.ListSessions(ctx, request)
 }
+
+type deletionTestRoot struct {
+	factorysessions.LiveControlService
+	close func(context.Context, string) error
+}
+
+func (root deletionTestRoot) DeleteFactorySession(ctx context.Context, id string) error {
+	return root.close(ctx, id)
+}
+func newDeletionTestServer(close func(context.Context, string) error) *Server {
+	srv := newLiveSessionTestServer(nil)
+	root := deletionTestRoot{close: close}
+	srv.LifecycleHandler = factorysessionshttp.NewLifecycleHandler(nil, root, root, nil, zap.NewNop())
+	return srv
+}
+
+func (deletionTestRoot) ReadSessionDetail(context.Context, string) (factorysessions.SessionDetail, error) {
+	return factorysessions.SessionDetail{}, factorysessions.ErrSessionNotFound
+}

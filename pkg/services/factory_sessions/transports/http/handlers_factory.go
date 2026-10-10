@@ -149,7 +149,7 @@ func (s *ReadHandler) GetFactorySession(w http.ResponseWriter, r *http.Request, 
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
+		projection, err := s.sessionsRoot.ReadSessionDetail(r.Context(), decodeGetFactorySessionRequest(sessionID))
 		if err != nil {
 			if s.writeSessionsRootError(w, string(sessionID), err) {
 				return
@@ -158,7 +158,7 @@ func (s *ReadHandler) GetFactorySession(w http.ResponseWriter, r *http.Request, 
 			s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
 			return
 		}
-		s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
+		s.writeJSON(w, http.StatusOK, factorysession.SessionDetailResponseToAPI(projection))
 		return
 	}
 

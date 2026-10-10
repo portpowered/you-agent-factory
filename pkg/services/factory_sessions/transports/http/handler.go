@@ -149,14 +149,14 @@ func (s *LifecycleHandler) pendingHumanApprovals(r *http.Request, sessionID stri
 		return nil, errors.New("factory session id is required")
 	}
 	if s.liveControl != nil {
-		projection, err := s.liveControl.GetFactorySession(r.Context(), sessionID)
+		projection, err := s.liveControl.ReadSessionDetail(r.Context(), sessionID)
 		if err != nil {
 			return nil, err
 		}
 		return append([]factorydefinitions.FactoryWorldHumanApproval(nil), projection.Runtime.PendingHumanApprovals...), nil
 	}
 	if s.sessionsRoot != nil {
-		projection, err := s.sessionsRoot.GetFactorySession(r.Context(), sessionID)
+		projection, err := s.sessionsRoot.ReadSessionDetail(r.Context(), sessionID)
 		if err != nil {
 			return nil, err
 		}

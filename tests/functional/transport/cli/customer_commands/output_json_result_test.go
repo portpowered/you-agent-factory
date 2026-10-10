@@ -2,16 +2,155 @@ package customer_commands_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const diagnosticSecretURL = "https://PRIVATE_USER:PRIVATE_PASS@example.test/provider?token=PRIVATE_QUERY#PRIVATE_FRAGMENT"
+
+func testOutputPrivateUsefulInvocationDiagnostics(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		id        string
+		flags     []string
+		malformed bool
+	}{
+		{"D-NORMAL", nil, false},
+		{"D-VERBOSE", []string{"--verbose"}, false},
+		{"D-DEBUG", []string{"--debug"}, false},
+		{"D-PRIMARY", []string{"--json", "--output", "primary"}, false},
+		{"D-NDJSON", []string{"--verbose", "--json", "--output", "response-stream"}, false},
+		{"D-QUIET", []string{"--quiet"}, false},
+		{"D-MALFORMED", []string{"--debug", "--json"}, true},
+	} {
+		t.Run(cell.id, func(t *testing.T) {
+			t.Parallel()
+			assertPrivateInvocationFailure(t, cell.flags, cell.malformed)
+		})
+	}
+	t.Run("D-PEER and D-RECOVERY", testPrivateDiagnosticPeerAndRecovery)
+	// Reuse the public logical-failure witnesses for both existing structured
+	// terminal contracts, and the owned-session conflict witnesses.
+	t.Run("D-TERMINAL primary", func(t *testing.T) { t.Parallel(); testOutputCLIJSONFailureRemainsValidJSONCase2(t) })
+	t.Run("D-TERMINAL response-stream", testOutputCLINDJSONFailureEndsWithOneTerminalResult)
+	for index, flags := range [][]string{{"--quiet", "--json"}, {"--quiet", "--output", "primary"}} {
+		t.Run(fmt.Sprintf("D-CONFLICT-%d", index), func(t *testing.T) {
+			t.Parallel()
+			assertConcurrentOutputConflict(t, 80+index, flags)
+		})
+	}
+}
+
+func assertPrivateInvocationFailure(t *testing.T, flags []string, malformed bool) *support.CapturedInputs {
+	t.Helper()
+	args := append([]string{"you", "run"}, flags...)
+	args = append(args, "--named", goalFactoryName, "--no-record", "private diagnostic input")
+	fixture, inputs, _ := newMachineOutputInputs(t, args, goalFactoryName)
+	// Initialize this private profile before introducing the unsupported env
+	// override. Use the original local resolution path, never remote routing.
+	setup := support.FakeInputs(t.Context(), []string{"you", "init", "--provider", "codex", "--model", "gpt-5-codex"})
+	setup.Input.Env = append([]string(nil), inputs.Input.Env...)
+	setup.Input.WorkingDirectory = inputs.Input.WorkingDirectory
+	if err := fixture.process.Execute(setup.Input); err != nil {
+		t.Fatalf("initialize private profile: %v", err)
+	}
+	secret := diagnosticSecretURL
+	wantURL := "https://example.test/provider"
+	if malformed {
+		secret = "https://PRIVATE_USER:PRIVATE_PASS@%zz/provider?token=PRIVATE_QUERY#PRIVATE_FRAGMENT"
+		wantURL = "<unavailable>"
+	}
+	inputs.Input.Env = append(inputs.Input.Env, operatorsettings.EnvDefaultWorkerModelProvider+"="+secret)
+	originalArgs := append([]string(nil), inputs.Input.Args...)
+	originalEnv := append([]string(nil), inputs.Input.Env...)
+	err := fixture.process.Execute(inputs.Input)
+	invocation := assertPrivateInvocationFailureType(t, err, secret)
+	assertPrivateInvocationFailureOutput(t, inputs, wantURL)
+	if !reflect.DeepEqual(inputs.Input.Args, originalArgs) || !reflect.DeepEqual(inputs.Input.Env, originalEnv) || !strings.Contains(invocation.Message, secret) {
+		t.Fatal("presentation mutated caller input or original error")
+	}
+	return inputs
+}
+
+func assertPrivateInvocationFailureType(t *testing.T, err error, secret string) *runcli.InvocationError {
+	t.Helper()
+	var invocation *runcli.InvocationError
+	var resolution operatorsettings.ResolutionFailure
+	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) || !errors.As(err, &resolution) || resolution.Field != "workerModelProvider" || resolution.Message != secret || !errors.As(err, &invocation) || invocation.Code != runcli.InvocationErrorCodeFailed {
+		t.Fatalf("want original typed unsupported provider failure; got %T: %v", err, err)
+	}
+	return invocation
+}
+
+func assertPrivateInvocationFailureOutput(t *testing.T, inputs *support.CapturedInputs, wantURL string) {
+	t.Helper()
+	stdout, stderr := inputs.Stdout(), inputs.Stderr()
+	primary, trailing, _ := strings.Cut(stderr, "\n")
+	response := decodeSingleJSONErrorResponse(t, primary)
+	wantMessage := "operator effective resolution override is unsupported: " + wantURL + " (workerModelProvider)"
+	if stdout != "" || response.Code != runcli.InvocationErrorCodeFailed || response.Family != factoryapi.ErrorFamilyInternalServerError || response.Message != wantMessage || strings.Contains(stdout+stderr, "PRIVATE_") {
+		t.Fatalf("unsafe or incorrectly framed diagnostic: stdout=%q stderr=%q", stdout, stderr)
+	}
+	assertPrivateDiagnosticCauses(t, trailing)
+	t.Logf("typed unsupported override; empty stdout; primary=%s; safe trailing cause lines=%d", primary, len(nonEmptyStdoutLines(trailing)))
+}
+
+func assertPrivateDiagnosticCauses(t *testing.T, trailing string) {
+	t.Helper()
+	seen := make(map[string]bool)
+	for _, line := range nonEmptyStdoutLines(trailing) {
+		if !(strings.HasPrefix(line, "cause[") || strings.HasPrefix(line, "debug: cause[")) || seen[line] {
+			t.Fatalf("unexpected or duplicated trailing diagnostic %q", line)
+		}
+		seen[line] = true
+	}
+	if len(seen) == 0 {
+		t.Fatal("startup failure lost useful safe cause context")
+	}
+}
+
+func testPrivateDiagnosticPeerAndRecovery(t *testing.T) {
+	t.Parallel()
+	peer := newConcurrentOutputCall(t, 90, []string{"--quiet"})
+	peer.start()
+	select {
+	case <-peer.runner.entered:
+	case <-peer.done:
+		t.Fatalf("peer ended before overlap: %v", peer.err)
+	case <-peer.ctx.Done():
+		t.Fatal(peer.ctx.Err())
+	}
+	failed := assertPrivateInvocationFailure(t, []string{"--verbose", "--json", "--output", "response-stream"}, false)
+	select {
+	case <-peer.done:
+		t.Fatal("quiet peer ended before failed diagnostic rendered")
+	default:
+	}
+	peer.runner.release()
+	peer.join(t)
+	assertConcurrentOutputSuccess(t, 0, peer, []*concurrentOutputCall{peer})
+	assertInjectedOutputDiagnostics(t, peer)
+	if strings.Contains(failed.Stdout()+failed.Stderr(), peer.marker) || strings.Contains(failed.Stderr(), peer.sessionID) || strings.Contains(peer.inputs.Stdout()+peer.inputs.Stderr(), "PRIVATE_") {
+		t.Fatal("failure and quiet peer output/correlation crossed")
+	}
+	recovery := newConcurrentOutputCall(t, 91, []string{"--json", "--output", "primary"})
+	recovery.runner.release()
+	recovery.start()
+	recovery.join(t)
+	assertConcurrentOutputSuccess(t, 1, recovery, []*concurrentOutputCall{peer, recovery})
+	assertInjectedOutputDiagnostics(t, recovery)
+	t.Log("quiet peer remained live throughout failed rendering, then returned its exact raw result; next owned invocation completed on the shared root")
+}
 
 const (
 	jsonGoalFactoryName          = "@you/goal"

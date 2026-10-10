@@ -603,7 +603,7 @@ func (s *recordedWorkerSessionObservation) listLive(
 	if s == nil || s.Service == nil {
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
-	if factorySessionID := strings.TrimSpace(s.factorySessionID); factorySessionID != "" {
+	if factorySessionID := firstRuntimeValue(s.executionFactorySessionID, s.factorySessionID); factorySessionID != "" {
 		req.FactorySessionID = factorySessionID
 	}
 	return s.Service.ListObservations(ctx, req)
@@ -755,7 +755,7 @@ func (s *recordedWorkerSessionObservation) withRecordingHealth(
 
 func (s *recordedWorkerSessionObservation) decorateRecordingHealth(observations []workersessions.Observation, health map[string]workerRecordingHealth) {
 	for index := range observations {
-		if s != nil && s.factorySessionID != "" {
+		if s != nil && s.factorySessionID != "" && observations[index].FactorySessionID == "" {
 			observations[index].FactorySessionID = s.factorySessionID
 		}
 		if current, ok := health[observations[index].WorkerSessionID]; ok {
@@ -935,12 +935,9 @@ func (s *recordedWorkerSessionObservation) applyLiveRecordingHealth(
 func (s *recordedWorkerSessionObservation) decorateLiveRecordingHealth(observations []workersessions.Observation, health map[string]workerRecordingHealth) {
 	for index := range observations {
 		observation := &observations[index]
-		// Only restored lineage can be rebound; shared registries can contain
-		// another Factory Session's attempts whose attribution must survive.
+		// Restore capture timing only for retained lineage. Preserve physical
+		// attribution even when the board has a different current Session UUID.
 		restored := s.liveObservationBelongsToRestoredPrefix(*observation)
-		if restored {
-			observation.FactorySessionID = s.factorySessionID
-		}
 		if current, ok := health[observation.WorkerSessionID]; ok {
 			observation.RecordingHealth = current.status
 			observation.RecordingHealthReason = current.reason
@@ -1033,7 +1030,10 @@ func (s *recordedWorkerSessionObservation) readRecordedTranscriptForRequest(
 	}
 	readRequest := req
 	if readRequest.WorkerSessionID != "" {
-		readRequest = workersessions.ReadTranscriptRequest{ProviderSession: providerSessionRef(*fact.provider)}
+		readRequest.FactorySessionID = s.executionFactorySessionID
+		if restored := s.restoredWorkerScopes[readRequest.WorkerSessionID]; restored != "" {
+			readRequest.FactorySessionID = restored
+		}
 	}
 	result, err := s.readRecordedTranscript(ctx, readRequest, fact)
 	return result, true, err
@@ -1084,7 +1084,11 @@ func (s *recordedWorkerSessionObservation) readRecordedTranscript(
 	if s.Service != nil {
 		live, err := s.Service.ReadTranscript(ctx, req)
 		if err == nil {
-			return historicalTranscriptResult(fact, live.Entries, req.ProviderSession)
+			if live.WorkerSessionID == fact.workerSessionID && live.AttemptID == fact.dispatchID && live.State.Terminal() {
+				// Physical completion is independent of subsequent Work rejection.
+				fact.state = live.State
+			}
+			return historicalTranscriptResult(fact, live.Entries, providerSessionRef(*fact.provider))
 		}
 		if errors.Is(err, workersessions.ErrObservationCanceled) {
 			return workersessions.ReadTranscriptResult{}, err
@@ -1094,7 +1098,7 @@ func (s *recordedWorkerSessionObservation) readRecordedTranscript(
 		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationTranscriptProjectionUnavailable
 	}
 	projected, err := s.providerSessions.Project(providersessions.ProjectRequest{
-		Session: req.ProviderSession.Clone(),
+		Session: providerSessionRef(*fact.provider),
 		Context: ctx,
 	})
 	if err != nil {
@@ -1106,7 +1110,7 @@ func (s *recordedWorkerSessionObservation) readRecordedTranscript(
 		}
 		return workersessions.ReadTranscriptResult{}, fmt.Errorf("%w: %v", workersessions.ErrObservationTranscriptProjectionUnavailable, err)
 	}
-	return historicalTranscriptResult(fact, recordedTranscriptEntries(projected.Detail.Transcript), req.ProviderSession)
+	return historicalTranscriptResult(fact, recordedTranscriptEntries(projected.Detail.Transcript), providerSessionRef(*fact.provider))
 }
 
 func historicalTranscriptResult(

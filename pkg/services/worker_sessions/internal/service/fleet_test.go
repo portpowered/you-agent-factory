@@ -1,8 +1,7 @@
-package wire
+package service
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -13,12 +12,48 @@ import (
 	"testing"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+func TestFleetObservationServiceRejectsAbsentOrCanceledContext(t *testing.T) {
+	t.Parallel()
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		t.Fatal("invalid context reached the catalog")
+		return nil, nil
+	}, nil)
+	reads := map[string]func(context.Context) error{
+		"detail": func(ctx context.Context) error {
+			_, err := service.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+			return err
+		},
+		"transcript": func(ctx context.Context) error {
+			_, err := service.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+			return err
+		},
+		"stream": func(ctx context.Context) error {
+			_, err := service.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+			return err
+		},
+		"list": func(ctx context.Context) error {
+			_, err := service.ListWorkerSessionObservations(ctx, workersessions.ListWorkerSessionObservationsRequest{})
+			return err
+		},
+	}
+	for name, read := range reads {
+		t.Run(name, func(t *testing.T) {
+			if err := read(nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+				t.Fatalf("absent context: %v", err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if err := read(ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled context: %v", err)
+			}
+		})
+	}
+}
 
 func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 	t.Parallel()
@@ -586,13 +621,6 @@ func TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput(t *test
 		})
 	}
 
-	if newLegacyFleetFixture(nil) != nil {
-		t.Fatal("newLegacyFleetFixture(nil) returned a service")
-	}
-	var unavailable *FleetObservationService
-	if _, err := unavailable.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
-		t.Fatalf("nil fleet service error = %v, want projection unavailable", err)
-	}
 	got, err := decodeFleetObservationCursor(base64.StdEncoding.EncodeToString([]byte("worker-1")))
 	if err != nil || got != "worker-1" {
 		t.Fatalf("decoded cursor = %q, %v, want worker-1", got, err)
@@ -1004,5 +1032,5 @@ func (source *fleetObservationSource) inventorySnapshot() []workersessions.Obser
 // These fixtures exercise the omitted-selector compatibility path with an older
 // injected writer that has no durable read capability.
 func newLegacyFleetFixture(catalog ObservationServiceCatalog) *FleetObservationService {
-	return NewFleetObservationService(catalog, nil, platformclock.Real{}, logging.NoopLogger{}, &HistorySnapshotBudget{Entropy: rand.Reader}, nil)
+	return NewFleetObservationService(catalog, nil)
 }

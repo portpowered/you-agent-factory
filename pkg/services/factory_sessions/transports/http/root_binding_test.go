@@ -475,3 +475,8 @@ func normalizeListSessionsScope(request factorysessions.ListSessionsRequest) (fa
 		}
 	}
 }
+
+func (fake *httpSessionsRootFake) ReadSessionDetail(ctx context.Context, id string) (factorysessions.SessionDetail, error) {
+	projection, err := fake.GetFactorySession(ctx, id)
+	return factorysessions.SessionDetail{Session: projection.Context.Session, SessionID: projection.Context.FactorySessionID, NormalizedTarget: projection.Context.NormalizedTarget, Runtime: projection.Runtime}, err
+}

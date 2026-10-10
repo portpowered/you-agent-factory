@@ -1,4 +1,4 @@
-package http
+package errors_test
 
 import (
 	"context"
