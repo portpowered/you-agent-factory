@@ -2,6 +2,8 @@ package analyzers
 
 import (
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -10,15 +12,54 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-func registeredProviderFixtureRegistry(mode ConstructionMode, unit string, names []string) ConstructionRegistry {
-	registry := registeredFixtureRegistry(mode)
-	for _, name := range names {
-		registry.Allowances = append(registry.Allowances, ConstructionAllowance{
-			Caller: ConstructionSymbol{ImportPath: "m/" + unit, Name: name}, Callee: registry.Constructors[0].Symbol,
-			FilePath: unit + "/provider.go", Kind: "focused-provider", OwnerTask: "T20", Reason: "Fixture focused provider.",
-		})
+// Reuse tiny controlled fixtures at the real canonical composition identity.
+// Each invocation owns its GOPATH; production source is never copied or loaded.
+func registeredProviderTestData(t *testing.T, unit string) string {
+	t.Helper()
+	files := map[string]string{}
+	for source, target := range map[string]string{unit: "pkg/wire", "pkg/registeredowner": "pkg/registeredowner"} {
+		entries, err := os.ReadDir(filepath.Join(analysistest.TestData(), "src/m", source))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if !strings.HasSuffix(entry.Name(), ".go") {
+				continue
+			}
+			contents, err := os.ReadFile(filepath.Join(analysistest.TestData(), "src/m", source, entry.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			files["m/"+target+"/"+entry.Name()] = string(contents)
+		}
 	}
-	return registry
+	// Historical callable cases used labels rather than constructor names.
+	// Keep their bodies and expectations while giving providers legal names.
+	names := regexp.MustCompile(`func ([A-Z][A-Za-z0-9_]*)\(`)
+	replacements := []string{}
+	for path, source := range files {
+		if strings.HasPrefix(path, "m/pkg/wire/") {
+			for _, match := range names.FindAllStringSubmatch(source, -1) {
+				if !serviceConstructorName(match[1]) {
+					replacements = append(replacements, match[1], "New"+match[1])
+				}
+			}
+		}
+	}
+	for path, source := range files {
+		if strings.HasPrefix(path, "m/pkg/wire/") {
+			for i := 0; i < len(replacements); i += 2 {
+				source = regexp.MustCompile(`\b`+replacements[i]+`\b`).ReplaceAllString(source, replacements[i+1])
+			}
+			files[path] = source
+		}
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	return dir
 }
 
 // Historical source-only examples that are invalid Go belong to the compiler
@@ -61,14 +102,12 @@ func TestConstructionCompilerRejectsInvalidHistoricalCases(t *testing.T) {
 // preserves the shared baseline fixture state; no application is assembled.
 func TestConstructionRegisteredProviders(t *testing.T) {
 	useFixtures(t)
-	names := []string{"Direct", "Deferred", "Async", "ClosureConstruction", "Argument", "Recursive", "Mutual", "Generic", "Method", "Closure", "PackageClosure", "PackageMutation", "PackageAddress", "Callback", "Field", "Interface", "Mutable", "ReturnedDeclaration", "ReturnedClosure", "ReturnedAlias", "ReturnedNested", "SameAlternatives", "MixedAlternatives", "DistinctClosures", "NamedReturn", "TupleReturn", "ReturnCycle", "Escaped", "EscapedAlias", "Acyclic", "Uncalled", "Shadowed", "UnrelatedCycle", "Builtins", "ReturnedUncalled", "NestedReturn", "PromotedInterface", "PromotedMethod", "ReturnedDeferred", "ReturnedGo", "SameClosure", "ReturnedCallback", "ReturnedField", "MutualReturnCycle", "MutatedResult", "ReturnedEscaped", "UncalledEvaluation", "RecursionAndDebt", "PackageParenWrite", "PackageParenAddress", "ConstructorAlias"}
-	names = append(names, "InterfaceAlias", "PromotedInterfaceAlias", "ConcreteMethodAlias")
-	registry := registeredProviderFixtureRegistry(ConstructionEnforce, "pkg/registeredproviders", names)
+	registry := registeredFixtureRegistry(ConstructionEnforce)
 	analyzer := registeredConstructionAnalyzer(registry)
 	run := analyzer.Run
 	analyzer.Run = func(pass *analysis.Pass) (any, error) {
 		findings, err := run(pass)
-		if err != nil || pass.Pkg.Path() != "m/pkg/registeredproviders" {
+		if err != nil || pass.Pkg.Path() != "m/pkg/wire" {
 			return findings, err
 		}
 		reportRegistry := registry
@@ -92,74 +131,76 @@ func TestConstructionRegisteredProviders(t *testing.T) {
 		}
 		return findings, nil
 	}
-	analysistest.Run(t, analysistest.TestData(), analyzer, "m/pkg/registeredproviders")
+	analysistest.Run(t, registeredProviderTestData(t, "pkg/registeredproviders"), analyzer, "m/pkg/wire")
 }
 
 func TestConstructionRegisteredProviderBaseline(t *testing.T) {
-	const unit = "pkg/registeredproviderlisted"
+	const unit = "pkg/wire"
 	const edge = "m/" + unit + "."
 	const target = "->m/pkg/registeredowner.New"
 	useFixtures(t,
-		"registered-construction|"+unit+"|"+edge+"Recursive"+target,
-		"unresolved-focused-provider-dispatch|"+unit+"|"+edge+"Callback"+target,
-		"unresolved-focused-provider-dispatch|"+unit+"|"+edge+"Removed"+target)
-	registry := registeredProviderFixtureRegistry(ConstructionEnforce, unit, []string{"Recursive", "Callback"})
-	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registry), "m/"+unit)
+		"registered-construction|"+unit+"|"+edge+"NewRecursive"+target,
+		"unresolved-focused-provider-dispatch|"+unit+"|"+edge+"NewCallback"+target,
+		"unresolved-focused-provider-dispatch|"+unit+"|"+edge+"NewRemoved"+target)
+	registry := registeredFixtureRegistry(ConstructionEnforce)
+	analysistest.Run(t, registeredProviderTestData(t, "pkg/registeredproviderlisted"), registeredConstructionAnalyzer(registry), "m/"+unit)
 }
 
-// Compile-valid retained provider cases have exact allowances and diagnostic
+// Compile-valid retained provider cases live at the owning Wire boundary and diagnostic
 // controls. Callable returns use the operator-authorized typed rule. Shared
 // baseline fixture state requires serial execution.
 func TestConstructionRegisteredProviderParity(t *testing.T) {
 	useFixtures(t)
 	cases := registeredProviderParityCases()
-	registry := registeredFixtureRegistry(ConstructionEnforce)
-	expected := map[ConstructionSymbol]int{}
-	for _, test := range cases {
-		caller := ConstructionSymbol{ImportPath: "m/" + test.unit, Name: test.name}
-		expected[caller] = test.count
-		registry.Allowances = append(registry.Allowances, ConstructionAllowance{
-			Caller: caller, Callee: registry.Constructors[0].Symbol, FilePath: test.unit + "/provider.go",
-			Kind: "focused-provider", OwnerTask: "T20", Reason: "Retained compile-valid provider behavior.",
+	for _, unit := range []string{"pkg/registeredprovidercycles", "pkg/registeredproviderdebt", "pkg/registeredproviderexecution"} {
+		t.Run(unit, func(t *testing.T) {
+			registry := registeredFixtureRegistry(ConstructionEnforce)
+			expected := map[ConstructionSymbol]int{}
+			for _, test := range cases {
+				if test.unit != unit {
+					continue
+				}
+				caller := ConstructionSymbol{ImportPath: "m/pkg/wire", Name: "New" + test.name}
+				expected[caller] = test.count
+			}
+			analyzer := registeredConstructionAnalyzer(registry)
+			run := analyzer.Run
+			analyzer.Run = func(pass *analysis.Pass) (any, error) {
+				result, err := run(pass)
+				if err != nil {
+					return result, err
+				}
+				reportRegistry := registry
+				reportRegistry.CapabilitySets = []ConstructionCapabilitySet{{Name: "fixture", OwnerTask: "T20", Mode: ConstructionReport}}
+				report, err := runRegisteredConstruction(pass, reportRegistry)
+				if err != nil {
+					return result, err
+				}
+				findings, observations := result.([]ConstructionFinding), report.([]ConstructionFinding)
+				if len(findings) != len(observations) {
+					t.Errorf("enforce/report count mismatch: %d/%d", len(findings), len(observations))
+				}
+				counts := map[ConstructionSymbol]int{}
+				for i, finding := range findings {
+					counts[finding.Caller]++
+					if finding.Callee != registry.Constructors[0].Symbol || finding.Line == 0 || finding.Mode != ConstructionEnforce {
+						t.Errorf("invalid finding: %#v", finding)
+					}
+					finding.Mode = ConstructionReport
+					if i < len(observations) && finding != observations[i] {
+						t.Errorf("report changed finding: %#v / %#v", finding, observations[i])
+					}
+				}
+				for caller, count := range expected {
+					if caller.ImportPath == pass.Pkg.Path() && counts[caller] != count {
+						t.Errorf("%s count=%d, want %d", caller, counts[caller], count)
+					}
+				}
+				return result, nil
+			}
+			analysistest.Run(t, registeredProviderTestData(t, unit), analyzer, "m/pkg/wire")
 		})
 	}
-	analyzer := registeredConstructionAnalyzer(registry)
-	run := analyzer.Run
-	analyzer.Run = func(pass *analysis.Pass) (any, error) {
-		result, err := run(pass)
-		if err != nil {
-			return result, err
-		}
-		reportRegistry := registry
-		reportRegistry.CapabilitySets = []ConstructionCapabilitySet{{Name: "fixture", OwnerTask: "T20", Mode: ConstructionReport}}
-		report, err := runRegisteredConstruction(pass, reportRegistry)
-		if err != nil {
-			return result, err
-		}
-		findings, observations := result.([]ConstructionFinding), report.([]ConstructionFinding)
-		if len(findings) != len(observations) {
-			t.Errorf("enforce/report count mismatch: %d/%d", len(findings), len(observations))
-		}
-		counts := map[ConstructionSymbol]int{}
-		for i, finding := range findings {
-			counts[finding.Caller]++
-			if finding.Callee != registry.Constructors[0].Symbol || finding.Line == 0 || finding.Mode != ConstructionEnforce {
-				t.Errorf("invalid finding: %#v", finding)
-			}
-			finding.Mode = ConstructionReport
-			if i < len(observations) && finding != observations[i] {
-				t.Errorf("report changed finding: %#v / %#v", finding, observations[i])
-			}
-		}
-		for caller, count := range expected {
-			if caller.ImportPath == pass.Pkg.Path() && counts[caller] != count {
-				t.Errorf("%s count=%d, want %d", caller, counts[caller], count)
-			}
-		}
-		return result, nil
-	}
-	analysistest.Run(t, analysistest.TestData(), analyzer,
-		"m/pkg/registeredprovidercycles", "m/pkg/registeredproviderdebt", "m/pkg/registeredproviderexecution")
 }
 
 type registeredProviderParityCase struct {

@@ -72,59 +72,12 @@ func TestConstructionRegisteredMetadataErrors(t *testing.T) {
 	}
 }
 
-func TestConstructionRegisteredAllowanceErrors(t *testing.T) {
-	useFixtures(t)
-	results := analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registeredFixtureRegistry(ConstructionReport)), "m/pkg/registeredallowed")
-	if len(results) != 1 {
-		t.Fatalf("analysis results = %d, want one calling unit", len(results))
-	}
-	allowance := ConstructionAllowance{
-		Caller:   ConstructionSymbol{ImportPath: "m/pkg/registeredallowed", Name: "Provide"},
-		Callee:   ConstructionSymbol{ImportPath: "m/pkg/registeredowner", Name: "New"},
-		FilePath: "pkg/registeredallowed/provider.go", Kind: "focused-provider", OwnerTask: "T20", Reason: "Fixture focused provider.",
-	}
-	tests := []struct {
-		name   string
-		change func(*ConstructionAllowance)
-		want   string
-	}{
-		{"wildcard", func(a *ConstructionAllowance) { a.FilePath = "pkg/*/provider.go" }, "invalid exact allowance"},
-		{"ownerless", func(a *ConstructionAllowance) { a.OwnerTask = "" }, "invalid exact allowance"},
-		{"missing reason", func(a *ConstructionAllowance) { a.Reason = "" }, "invalid exact allowance"},
-		{"kind", func(a *ConstructionAllowance) { a.Kind = "invalid" }, "invalid allowance kind"},
-		{"stale caller", func(a *ConstructionAllowance) { a.Caller.Name = "Missing" }, "stale allowance caller/path"},
-		{"stale path", func(a *ConstructionAllowance) { a.FilePath = "pkg/registeredallowed/missing.go" }, "stale allowance caller/path"},
-		{"stale callee", func(a *ConstructionAllowance) { a.Callee.Name = "Generic" }, "stale allowance callee"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			registry := registeredFixtureRegistry(ConstructionReport)
-			modified := allowance
-			test.change(&modified)
-			registry.Allowances = []ConstructionAllowance{modified}
-			err := validateRegisteredConstruction(results[0].Pass, registry)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
-		})
-	}
-	registry := registeredFixtureRegistry(ConstructionReport)
-	registry.Allowances = []ConstructionAllowance{allowance, allowance}
-	if err := validateRegisteredConstruction(results[0].Pass, registry); err == nil || !strings.Contains(err.Error(), "duplicate allowance") {
-		t.Fatalf("error = %v, want duplicate allowance", err)
-	}
-}
-
 func TestConstructionRegisteredTypedCallsAndReferences(t *testing.T) {
 	useFixtures(t)
 	registry := registeredFixtureRegistry(ConstructionEnforce)
-	registry.Allowances = []ConstructionAllowance{{
-		Caller:   ConstructionSymbol{ImportPath: "m/pkg/registeredallowed", Name: "Provide"},
-		Callee:   ConstructionSymbol{ImportPath: "m/pkg/registeredowner", Name: "New"},
-		FilePath: "pkg/registeredallowed/provider.go", Kind: "focused-provider", OwnerTask: "T20", Reason: "Fixture focused provider.",
-	}}
 	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registry),
-		"m/pkg/registeredowner", "m/pkg/registeredcalls", "m/pkg/registereddot", "m/pkg/registeredallowed", "m/pkg/registeredexcluded")
+		"m/pkg/registeredowner", "m/pkg/registeredcalls", "m/pkg/registereddot", "m/pkg/registeredexcluded")
+	analysistest.Run(t, registeredProviderTestData(t, "pkg/registeredallowed"), registeredConstructionAnalyzer(registry), "m/pkg/wire")
 }
 
 func TestConstructionRegisteredReportObservations(t *testing.T) {
@@ -236,4 +189,57 @@ func TestConstructionRegisteredTagged(t *testing.T) {
 	useFixtures(t)
 	t.Setenv("GOFLAGS", "-tags=backendconformance")
 	analysistest.Run(t, analysistest.TestData(), registeredConstructionAnalyzer(registeredFixtureRegistry(ConstructionEnforce)), "m/pkg/registeredtagged")
+}
+
+func TestConstructionCompositionBoundaries(t *testing.T) {
+	useFixtures(t)
+	const owner = "m/pkg/services/catalog/internal/service"
+	service := ConstructionSymbol{ImportPath: owner, Name: "Service"}
+	registry := ConstructionRegistry{
+		CapabilitySets: []ConstructionCapabilitySet{{Name: "catalog", OwnerTask: "T29", Mode: ConstructionEnforce}},
+		Types:          []ConstructionType{{Symbol: service, CapabilitySet: "catalog", Kind: ConstructionBehavior}},
+	}
+	files := map[string]string{
+		"github.com/google/wire/wire.go": `package wire
+func NewSet(...any) any { return nil }
+func Build(...any) string { return "" }
+`,
+		owner + "/service.go": `package service
+type Service struct{}
+func New() *Service { return &Service{} }
+func Operation() { New() } // want "registered-construction:.*Operation.*catalog/internal/service.New"
+`,
+		"m/pkg/services/catalog/wire/provider.go": `package wire
+import service "m/pkg/services/catalog/internal/service"
+func NewCatalog() *service.Service { return service.New() }
+func Operation() { service.New() } // want "registered-construction:.*Operation.*catalog/internal/service.New"
+type Maker struct{}
+func (Maker) NewCatalog() { service.New() } // want "registered-construction:.*Maker.*NewCatalog.*catalog/internal/service.New"
+var invalid = service.New() // want "registered-construction:.*<package>.*catalog/internal/service.New"
+`,
+		"m/pkg/services/other/wire/provider.go": `package wire
+import catalog "m/pkg/services/catalog/wire"
+func NewOther() { catalog.NewCatalog() } // want "registered-construction:.*NewOther.*catalog/wire.NewCatalog"
+`,
+		"m/pkg/wire/provider.go": `package wire
+import catalog "m/pkg/services/catalog/wire"
+import generator "github.com/google/wire"
+var providers = generator.NewSet(catalog.NewCatalog)
+func BuildCatalog() { generator.Build(catalog.NewCatalog) }
+func provideCatalog() { catalog.NewCatalog() }
+func Operation() { catalog.NewCatalog() } // want "registered-construction:.*Operation.*catalog/wire.NewCatalog"
+func provideDeferred() { defer catalog.NewCatalog() } // want "registered-construction:.*provideDeferred.*catalog/wire.NewCatalog"
+func Shadowed() {
+ generator := struct { NewSet func(...any) any }{func(...any) any { return nil }}
+ generator.NewSet(catalog.NewCatalog) // want "unresolved-construction-reference:.*Shadowed.*catalog/wire.NewCatalog"
+}
+`,
+	}
+	dir, cleanup, err := analysistest.WriteFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cleanup)
+	analysistest.Run(t, dir, registeredConstructionAnalyzer(registry), owner,
+		"m/pkg/services/catalog/wire", "m/pkg/services/other/wire", "m/pkg/wire")
 }
