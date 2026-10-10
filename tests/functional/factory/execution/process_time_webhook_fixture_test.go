@@ -35,7 +35,7 @@ func configureWebhookEffects(t *testing.T, c *timeCohort, edges *serviceedges.Ed
 	}
 	effects := &webhookEffects{routes: map[string]*journeyRoute{}, resolved: make(chan string, 16), letters: make(chan []byte, 16)}
 	c.webhookEffects = effects
-	for _, key := range []string{"recover", "exhaust", "closing", "healthy", "badstatus", "secretfail", "storefail"} {
+	for _, key := range []string{"recover", "exhaust", "closing", "healthy", "badstatus", "secretfail", "storefail", "redirect"} {
 		effects.routes[key] = &journeyRoute{calls: make(chan journeyCall, 16)}
 		config := idleTimeConfig()
 		config["webhooks"] = []map[string]any{{"name": key, "enabled": true,

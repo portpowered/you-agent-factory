@@ -34,6 +34,50 @@ func runWebhookTerminal(t *testing.T, c *timeCohort, specialized bool, key strin
 	assertWebhookTerminalRecord(t, line, key, eventID, firstBody, attempts, status, reason, firstAt, webhookNow(c, specialized))
 	route.assertHeld(t)
 	assertNoWebhookLetters(t, c)
+	assertWebhookNoSuccess(t, c, key)
+}
+
+// The selected HTTP edge returns the redirect unchanged. This proves the
+// runtime's terminal classification, not the default HTTP client's redirect
+// policy, which belongs to the real HTTP boundary's integration coverage.
+func runWebhookRedirect(t *testing.T, c *timeCohort, specialized bool) {
+	t.Helper()
+	id := openWebhookSession(t, c, "redirect")
+	defer support.CloseFactorySessionAt(t, c.url, id)
+	route := c.webhookEffects.routes["redirect"]
+	for _, status := range []int{http.StatusMovedPermanently, http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect} {
+		emitWebhookWork(t, c, id)
+		call := route.await(t)
+		now := webhookNow(c, specialized)
+		body := assertWebhookRequest(t, c, id, call, now)
+		call.reply <- journeyReply{status: status, header: http.Header{
+			"Location":    {"https://foreign.invalid/credential-target?token=" + webhookSecret},
+			"Retry-After": {"2"},
+		}, body: "sensitive redirect " + webhookSecret}
+		select {
+		case line := <-c.webhookEffects.letters:
+			assertWebhookTerminalRecord(t, line, "redirect", call.request.Header.Get(webhooks.EventIDHeader), body,
+				1, status, "non_retryable_http_status", now, now)
+		case <-time.After(30 * time.Second):
+			t.Fatal("redirect did not terminalize")
+		}
+		// The append follows attempt logging synchronously. It acknowledges that
+		// this event terminalized without a retry, even with Retry-After supplied.
+		assertWebhookNoSuccess(t, c, "redirect")
+		route.assertHeld(t)
+		assertNoWebhookLetters(t, c)
+	}
+	t.Log("W8-F: 301/302/307/308 responses produce one attributed redacted terminal record each; no successful-delivery claim or scheduled retry")
+}
+
+func assertWebhookNoSuccess(t *testing.T, c *timeCohort, endpoint string) {
+	t.Helper()
+	for _, entry := range c.logs.All() {
+		fields := entry.ContextMap()
+		if entry.Message == "factory webhook delivery attempt" && fields["endpoint"] == endpoint && fields["outcome"] == "success" {
+			t.Fatalf("failed endpoint %s reported successful delivery", endpoint)
+		}
+	}
 }
 
 func runWebhookTerminalAttempts(t *testing.T, c *timeCohort, id string, specialized bool, key string, attempts, status int) ([]byte, string) {
