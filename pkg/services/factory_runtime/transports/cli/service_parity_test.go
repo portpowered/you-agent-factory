@@ -16,9 +16,64 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestInvocationPrimaryDiagnosticDelegatesSafePresentation(t *testing.T) {
+	t.Parallel()
+	message := "unsupported https://PRIVATE_USER:PRIVATE_PASS@example.test/provider?token=PRIVATE_QUERY#PRIVATE_FRAGMENT (workerModelProvider)"
+	cause := errors.New(message)
+	for _, test := range []struct {
+		code   string
+		family factoryapi.ErrorFamily
+	}{
+		{"", factoryapi.ErrorFamilyInternalServerError},
+		{factoryruntimecli.InvocationErrorCodeFailed, factoryapi.ErrorFamilyInternalServerError},
+		{factoryruntimecli.CurrentFactoryNotFoundCode, factoryapi.ErrorFamilyNotFound},
+		{factoryruntimecli.InvocationOutputConflictCode, factoryapi.ErrorFamilyBadRequest},
+	} {
+		for _, contract := range []error{
+			&factoryruntimecli.InvocationError{Code: test.code, Message: message, Cause: cause},
+			stubInvocationCLIError{code: test.code, message: message},
+		} {
+			var output bytes.Buffer
+			writer := clidiag.NewDiagnosticWriter(&output)
+			if !factoryruntimecli.WriteInvocationError(writer, contract, true) || !clidiag.DiagnosticRendered(writer) {
+				t.Fatal("invocation renderer did not mark its primary output")
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			code := test.code
+			if code == "" {
+				code = factoryruntimecli.InvocationErrorCodeFailed
+			}
+			if string(response.Code) != code || response.Family != test.family || response.Message != "unsupported https://example.test/provider (workerModelProvider)" {
+				t.Fatalf("response=%#v", response)
+			}
+			if !strings.Contains(contract.Error(), "PRIVATE_PASS") {
+				t.Fatal("original error was mutated")
+			}
+			if invocation, ok := contract.(*factoryruntimecli.InvocationError); ok && !errors.Is(invocation, cause) {
+				t.Fatal("cause identity changed")
+			}
+			if !factoryruntimecli.WriteInvocationError(nil, contract, false) {
+				t.Fatal("nil writer lost contract selection")
+			}
+		}
+	}
+	if factoryruntimecli.WriteInvocationError(nil, nil, false) || factoryruntimecli.WriteInvocationError(nil, cause, false) {
+		t.Fatal("renderer recognized an unclassified error")
+	}
+	var empty bytes.Buffer
+	factoryruntimecli.WriteInvocationError(&empty, &factoryruntimecli.InvocationError{}, false)
+	if empty.String() != "{\"code\":\"RUN_INVOCATION_FAILED\",\"family\":\"INTERNAL_SERVER_ERROR\",\"message\":\"\"}\n" {
+		t.Fatalf("default invocation envelope changed: %q", empty.String())
+	}
+}
 
 type stubInvocationCLIError struct {
 	code    string
