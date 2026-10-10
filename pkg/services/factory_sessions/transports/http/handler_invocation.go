@@ -17,6 +17,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeWorkerCallerError(w, err)
+		return
+	}
 	// The HTTP router retains escaped invocation selectors as one segment so
 	// malformed identities reach admission rather than a different route.
 	if decodedID, err := url.PathUnescape(string(sessionID)); err == nil {
@@ -33,8 +38,11 @@ func (s *Server) InvokeFactorySessionBySessionId(
 		return
 	}
 
-	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req)
+	result, err := s.invocation.InvokeFactorySession(r.Context(), string(sessionID), req, caller)
 	if err != nil {
+		if s.writeWorkerCallerError(w, err) {
+			return
+		}
 		var identityError *factorysessions.DetachedRequestError
 		if errors.As(err, &identityError) {
 			s.writeError(w, http.StatusBadRequest, identityError.Error(), "BAD_REQUEST")

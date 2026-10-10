@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,34 +11,11 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
 const workerSessionsHTTPBoundary = "worker_sessions.http"
-
-// WorkerSessionCallerFromHeaders decodes execution-only credentials without
-// granting authority. Worker Sessions verifies the exact running owner at
-// admission. Any partial or malformed pair is refused, never downgraded to an
-// unattributed invocation. Credentials must not enter request bodies or logs.
-func WorkerSessionCallerFromHeaders(headers http.Header) (*workersessions.CallerIdentity, error) {
-	ids := headers.Values("X-You-Worker-Session-Id")
-	authorizations := headers.Values("Authorization")
-	if len(ids) == 0 && len(authorizations) == 0 {
-		return nil, nil
-	}
-	if len(ids) != 1 || len(authorizations) != 1 || ids[0] == "" || strings.TrimSpace(ids[0]) != ids[0] {
-		return nil, workersessions.ErrCallerInvalid
-	}
-	scheme, token, found := strings.Cut(authorizations[0], " ")
-	if !found || !strings.EqualFold(scheme, "Bearer") {
-		return nil, workersessions.ErrCallerInvalid
-	}
-	decoded, err := base64.RawURLEncoding.Strict().DecodeString(token)
-	if err != nil || len(decoded) != 32 {
-		return nil, workersessions.ErrCallerInvalid
-	}
-	return &workersessions.CallerIdentity{WorkerSessionID: ids[0], Token: token}, nil
-}
 
 // Handler owns request decoding, Worker Sessions root invocation, error
 // mapping, and response encoding. Route registration remains top-level.
@@ -69,7 +45,7 @@ func (h *Handler) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "request payload is required", "BAD_REQUEST")
 		return
 	}
-	caller, err := WorkerSessionCallerFromHeaders(r.Header)
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
 	if err != nil {
 		h.writeMappedStartError(w, err)
 		return

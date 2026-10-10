@@ -11,10 +11,10 @@ import (
 	"strings"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func invokeCaller(config InvokeConfig) (*workersessions.CallerIdentity, error) {
@@ -30,7 +30,7 @@ func invokeCaller(config InvokeConfig) (*workersessions.CallerIdentity, error) {
 			headers.Set("Authorization", "Bearer "+token)
 		}
 	}
-	return workersessionshttp.WorkerSessionCallerFromHeaders(headers)
+	return apisurface.WorkerSessionCallerFromHeaders(headers)
 }
 
 // Transport failures can quote credentials supplied to the HTTP effect. Keep

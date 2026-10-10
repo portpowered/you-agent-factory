@@ -6,6 +6,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -23,11 +24,11 @@ func NewInvocationAPI(owner factorysessions.InvocationService) *InvocationAPI {
 	return &InvocationAPI{owner: owner}
 }
 
-func (a *InvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+func (a *InvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest, caller *workersessions.CallerIdentity) (apisurface.FactoryInvocationResult, error) {
 	if a == nil || a.owner == nil {
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation service is required")
 	}
-	return InvokeFactorySession(ctx, a.owner, sessionID, request)
+	return InvokeFactorySession(ctx, a.owner, sessionID, request, caller)
 }
 
 // InvokeFactorySession maps and invokes one session request without
@@ -37,11 +38,14 @@ func InvokeFactorySession(
 	owner factorysessions.InvocationService,
 	sessionID string,
 	request factoryapi.InvocationRequest,
+	caller *workersessions.CallerIdentity,
 ) (apisurface.FactoryInvocationResult, error) {
 	if owner == nil {
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation service is required")
 	}
-	result, err := owner.InvokeFactorySession(ctx, sessionID, InvocationRequestFromAPI(request))
+	mapped := InvocationRequestFromAPI(request)
+	mapped.Caller = caller.Clone()
+	result, err := owner.InvokeFactorySession(ctx, sessionID, mapped)
 	if err != nil {
 		return apisurface.FactoryInvocationResult{}, err
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -16,6 +17,13 @@ import (
 func sessionsRootErrorResponse(sessionID string, err error) (int, any, bool) {
 	if err == nil {
 		return 0, nil, false
+	}
+	if errors.Is(err, workersessions.ErrCallerInvalid) {
+		return http.StatusForbidden, factoryapi.ErrorResponse{
+			Message: "Worker Session caller credentials are invalid",
+			Family:  factoryapi.ErrorFamilyBadRequest,
+			Code:    factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID,
+		}, true
 	}
 
 	if status, response, ok := sessionsRequestContextErrorResponse(err); ok {
@@ -82,6 +90,13 @@ func (s *Server) writeSessionsRootError(w http.ResponseWriter, sessionID string,
 		return true
 	}
 	return false
+}
+
+func (s *Server) writeWorkerCallerError(w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, workersessions.ErrCallerInvalid) {
+		return false
+	}
+	return s.writeSessionsRootError(w, "", err)
 }
 
 func (s *Server) writeSessionsRootErrorOrInternal(w http.ResponseWriter, sessionID string, err error, fallbackMessage string) {

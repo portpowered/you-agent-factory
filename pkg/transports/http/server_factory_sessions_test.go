@@ -17,16 +17,16 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorysessionfixtures"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -78,7 +78,7 @@ func (fake strictFactoryStatusAPIFake) ProjectFactoryStatus(ctx context.Context,
 	return fake.project(ctx, sessionID)
 }
 
-func (fake strictInvocationAPIFake) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+func (fake strictInvocationAPIFake) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest, _ *workersessions.CallerIdentity) (apisurface.FactoryInvocationResult, error) {
 	if fake.invoke == nil {
 		panic("unexpected InvocationAPI.InvokeFactorySession call")
 	}

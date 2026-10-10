@@ -2,13 +2,16 @@ package apisurface
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"net/http"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
@@ -82,7 +85,7 @@ type WorkReadAPI interface {
 // InvocationAPI is the session-scoped factory invocation seam used by the API
 // transport to submit one logical input and return the selected primary result.
 type InvocationAPI interface {
-	InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (FactoryInvocationResult, error)
+	InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest, caller *workersessions.CallerIdentity) (FactoryInvocationResult, error)
 }
 
 // DurableSessionLifecycleAPI is the shared durable session read and lifecycle
@@ -296,3 +299,27 @@ func NewTopologyValidationError(message string, targets []factoryapi.FactoryVali
 // when the active runtime is the root factory and no named-factory pointer
 // exists.
 const DefaultCurrentFactoryName factoryapi.FactoryName = "UNDEFINED"
+
+// WorkerSessionCallerFromHeaders decodes execution-only credentials without
+// granting authority. Worker Sessions verifies the exact running owner at
+// admission. Any partial or malformed pair is refused, never downgraded to an
+// unattributed invocation. Credentials must not enter request bodies or logs.
+func WorkerSessionCallerFromHeaders(headers http.Header) (*workersessions.CallerIdentity, error) {
+	ids := headers.Values("X-You-Worker-Session-Id")
+	authorizations := headers.Values("Authorization")
+	if len(ids) == 0 && len(authorizations) == 0 {
+		return nil, nil
+	}
+	if len(ids) != 1 || len(authorizations) != 1 || ids[0] == "" || strings.TrimSpace(ids[0]) != ids[0] {
+		return nil, workersessions.ErrCallerInvalid
+	}
+	scheme, token, found := strings.Cut(authorizations[0], " ")
+	if !found || !strings.EqualFold(scheme, "Bearer") {
+		return nil, workersessions.ErrCallerInvalid
+	}
+	decoded, err := base64.RawURLEncoding.Strict().DecodeString(token)
+	if err != nil || len(decoded) != 32 {
+		return nil, workersessions.ErrCallerInvalid
+	}
+	return &workersessions.CallerIdentity{WorkerSessionID: ids[0], Token: token}, nil
+}

@@ -10082,6 +10082,24 @@ type ListFactorySessionsParams struct {
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
 }
 
+// OpenFactorySessionParams defines parameters for OpenFactorySession.
+type OpenFactorySessionParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// StartDurableFactorySessionAsyncParams defines parameters for StartDurableFactorySessionAsync.
+type StartDurableFactorySessionAsyncParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// StartDurableFactorySessionSyncParams defines parameters for StartDurableFactorySessionSync.
+type StartDurableFactorySessionSyncParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // ListHumanApprovalsBySessionIdParams defines parameters for ListHumanApprovalsBySessionId.
 type ListHumanApprovalsBySessionIdParams struct {
 	// Status Optional status filter for pending human approvals.
@@ -10107,6 +10125,12 @@ type GetEventsBySessionIdParams struct {
 
 	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
 	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+}
+
+// InvokeFactorySessionBySessionIdParams defines parameters for InvokeFactorySessionBySessionId.
+type InvokeFactorySessionBySessionIdParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
 }
 
 // GetFactoryResponseEventsBySessionIdParams defines parameters for GetFactoryResponseEventsBySessionId.
@@ -19044,13 +19068,13 @@ type ServerInterface interface {
 	ListFactorySessions(w http.ResponseWriter, r *http.Request, params ListFactorySessionsParams)
 	// Open another live factory session
 	// (POST /factory-sessions)
-	OpenFactorySession(w http.ResponseWriter, r *http.Request)
+	OpenFactorySession(w http.ResponseWriter, r *http.Request, params OpenFactorySessionParams)
 	// Start durable factory session execution asynchronously
 	// (POST /factory-sessions/async)
-	StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request)
+	StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request, params StartDurableFactorySessionAsyncParams)
 	// Start durable factory session execution synchronously
 	// (POST /factory-sessions/sync)
-	StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request)
+	StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request, params StartDurableFactorySessionSyncParams)
 	// Delete one stopped live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
@@ -19101,7 +19125,7 @@ type ServerInterface interface {
 	InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Invoke one factory session and return its primary result
 	// (POST /factory-sessions/{session_id}/invocations)
-	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params InvokeFactorySessionBySessionIdParams)
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -19304,8 +19328,40 @@ func (siw *ServerInterfaceWrapper) ListFactorySessions(w http.ResponseWriter, r 
 // OpenFactorySession operation middleware
 func (siw *ServerInterfaceWrapper) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params OpenFactorySessionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.OpenFactorySession(w, r)
+		siw.Handler.OpenFactorySession(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19318,8 +19374,40 @@ func (siw *ServerInterfaceWrapper) OpenFactorySession(w http.ResponseWriter, r *
 // StartDurableFactorySessionAsync operation middleware
 func (siw *ServerInterfaceWrapper) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartDurableFactorySessionAsyncParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StartDurableFactorySessionAsync(w, r)
+		siw.Handler.StartDurableFactorySessionAsync(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19332,8 +19420,40 @@ func (siw *ServerInterfaceWrapper) StartDurableFactorySessionAsync(w http.Respon
 // StartDurableFactorySessionSync operation middleware
 func (siw *ServerInterfaceWrapper) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StartDurableFactorySessionSyncParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StartDurableFactorySessionSync(w, r)
+		siw.Handler.StartDurableFactorySessionSync(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -19851,8 +19971,38 @@ func (siw *ServerInterfaceWrapper) InvokeFactorySessionBySessionId(w http.Respon
 		return
 	}
 
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params InvokeFactorySessionBySessionIdParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.InvokeFactorySessionBySessionId(w, r, sessionId)
+		siw.Handler.InvokeFactorySessionBySessionId(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

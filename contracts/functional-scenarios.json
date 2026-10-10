@@ -1548,6 +1548,10 @@
         {
           "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
         }
       ]
     },
@@ -1709,10 +1713,15 @@
       "name": "openFactorySession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/pauseFactorySession",
@@ -1948,20 +1957,30 @@
       "name": "startDurableFactorySessionAsync",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/startDurableFactorySessionSync",
       "name": "startDurableFactorySessionSync",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/startWorkerSession",

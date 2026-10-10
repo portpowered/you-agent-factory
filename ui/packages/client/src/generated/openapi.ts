@@ -9156,7 +9156,10 @@ export interface operations {
   invokeFactorySessionBySessionId: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
         session_id: components["parameters"]["SessionID"];
@@ -9179,6 +9182,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
@@ -9742,7 +9754,10 @@ export interface operations {
   startDurableFactorySessionAsync: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9762,6 +9777,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       409: components["responses"]["ExecutionRequestIdConflict"];
       500: components["responses"]["InternalError"];
     };
@@ -9769,7 +9793,10 @@ export interface operations {
   startDurableFactorySessionSync: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9789,6 +9816,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       409: components["responses"]["ExecutionRequestIdConflict"];
       500: components["responses"]["InternalError"];
     };
@@ -9821,7 +9857,10 @@ export interface operations {
   openFactorySession: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9841,6 +9880,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };

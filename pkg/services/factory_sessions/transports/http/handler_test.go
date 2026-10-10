@@ -12,6 +12,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -24,14 +25,19 @@ type liveSessionAPIFake struct {
 }
 
 type invocationAPIFake struct {
-	err error
+	onInvoke func(*workersessions.CallerIdentity)
+	err      error
 }
 
 func (fake invocationAPIFake) InvokeFactorySession(
-	context.Context,
-	string,
-	factoryapi.InvocationRequest,
+	_ context.Context,
+	_ string,
+	_ factoryapi.InvocationRequest,
+	caller *workersessions.CallerIdentity,
 ) (apisurface.FactoryInvocationResult, error) {
+	if fake.onInvoke != nil {
+		fake.onInvoke(caller)
+	}
 	return apisurface.FactoryInvocationResult{}, fake.err
 }
 
@@ -375,4 +381,67 @@ func TestHandlerCurrentFactoryUsesInjectedDefinitionReader(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFactoryHTTPInvocationCaller(t *testing.T) {
+	t.Parallel()
+	for _, variant := range []string{"valid", "absent", "partial", "owner-refused"} {
+		t.Run(variant, func(t *testing.T) {
+			t.Parallel()
+			runFactoryHTTPInvocationCaller(t, variant)
+		})
+	}
+}
+
+func runFactoryHTTPInvocationCaller(t *testing.T, variant string) {
+	t.Helper()
+
+	token, calls := strings.Repeat("A", 43), 0
+	api := factoryHTTPCallerInvocationAPI(t, variant, token, &calls)
+	if variant == "owner-refused" {
+		api.err = fmt.Errorf("owner refusal: %w", workersessions.ErrCallerInvalid)
+	}
+	core, logs := observer.New(zap.DebugLevel)
+	handler := NewHandler(Dependencies{Invocation: api}, zap.New(core))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/selected/invocations", strings.NewReader(`{}`))
+	if variant != "absent" {
+		req.Header.Set("X-You-Worker-Session-Id", "exact/caller")
+	}
+	if variant != "absent" && variant != "partial" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	recorder := httptest.NewRecorder()
+	handler.InvokeFactorySessionBySessionId(recorder, req, "selected")
+	wantStatus, wantCalls := http.StatusOK, 1
+	if variant == "partial" {
+		wantStatus, wantCalls = http.StatusForbidden, 0
+	}
+	if variant == "owner-refused" {
+		wantStatus = http.StatusForbidden
+	}
+	if recorder.Code != wantStatus || calls != wantCalls {
+		t.Fatalf("status=%d calls=%d; want %d/%d", recorder.Code, calls, wantStatus, wantCalls)
+	}
+	if strings.Contains(recorder.Body.String(), token) || logs.Len() != 0 {
+		t.Fatal("caller path disclosed credentials or logged raw refusal")
+	}
+	if wantStatus == http.StatusForbidden && !strings.Contains(recorder.Body.String(), `"code":"WORKER_SESSION_CALLER_INVALID"`) {
+		t.Fatal("caller refusal lost typed code")
+	}
+}
+
+func factoryHTTPCallerInvocationAPI(t *testing.T, variant, token string, calls *int) invocationAPIFake {
+	t.Helper()
+
+	api := invocationAPIFake{onInvoke: func(caller *workersessions.CallerIdentity) {
+		(*calls)++
+		if variant == "absent" {
+			if caller != nil {
+				t.Fatal("absent caller gained authority")
+			}
+		} else if caller == nil || caller.WorkerSessionID != "exact/caller" || caller.Token != token {
+			t.Fatal("invocation lost caller pair")
+		}
+	}}
+	return api
 }

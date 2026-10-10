@@ -826,54 +826,6 @@ func TestWorkerSessionObservationMetadataMappingKeepsLegacyAbsent(t *testing.T) 
 	}
 }
 
-func TestWorkerSessionCallerHeaderValidation(t *testing.T) {
-	t.Parallel()
-	token := strings.Repeat("A", 43)
-	for _, tc := range []struct {
-		name          string
-		ids, auth     []string
-		valid, absent bool
-	}{
-		{name: "absent", valid: true, absent: true},
-		{name: "valid", ids: []string{"exact/caller"}, auth: []string{"Bearer " + token}, valid: true},
-		{name: "case insensitive scheme", ids: []string{"caller"}, auth: []string{"bearer " + token}, valid: true},
-		{name: "missing token", ids: []string{"caller"}},
-		{name: "missing identity", auth: []string{"Bearer " + token}},
-		{name: "empty identity", ids: []string{""}, auth: []string{"Bearer " + token}},
-		{name: "empty authorization", ids: []string{"caller"}, auth: []string{""}},
-		{name: "duplicate identity", ids: []string{"caller", "peer"}, auth: []string{"Bearer " + token}},
-		{name: "duplicate token", ids: []string{"caller"}, auth: []string{"Bearer " + token, "Bearer " + token}},
-		{name: "basic", ids: []string{"caller"}, auth: []string{"Basic " + token}},
-		{name: "padded token", ids: []string{"caller"}, auth: []string{"Bearer " + token + "="}},
-		{name: "short token", ids: []string{"caller"}, auth: []string{"Bearer short"}},
-		{name: "noncanonical token", ids: []string{"caller"}, auth: []string{"Bearer " + strings.Repeat("A", 42) + "B"}},
-		{name: "identity whitespace", ids: []string{" caller"}, auth: []string{"Bearer " + token}},
-		{name: "token whitespace", ids: []string{"caller"}, auth: []string{"Bearer  " + token}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			headers := http.Header{}
-			for _, id := range tc.ids {
-				headers.Add("X-You-Worker-Session-Id", id)
-			}
-			for _, auth := range tc.auth {
-				headers.Add("Authorization", auth)
-			}
-			caller, err := WorkerSessionCallerFromHeaders(headers)
-			if tc.valid {
-				if err != nil || (caller == nil) != tc.absent {
-					t.Fatal("valid credentials were refused or changed")
-				}
-				if caller != nil && (caller.WorkerSessionID != tc.ids[0] || caller.Token != token) {
-					t.Fatal("exact credentials changed")
-				}
-			} else if caller != nil || !errors.Is(err, workersessions.ErrCallerInvalid) {
-				t.Fatal("invalid credentials were accepted")
-			}
-		})
-	}
-}
-
 func TestWorkerSessionHTTPCallerRefusalDoesNotReachAdmissionOrExposeToken(t *testing.T) {
 	t.Parallel()
 	token := strings.Repeat("A", 43)

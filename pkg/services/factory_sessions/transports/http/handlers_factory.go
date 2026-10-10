@@ -220,6 +220,11 @@ func (s *Server) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeSessionsRootError(w, "", err)
+		return
+	}
 	if !requestAcceptsJSONContentType(r.Header.Get("Content-Type")) {
 		s.writeUnsupportedMediaTypeError(w)
 		return
@@ -248,7 +253,9 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	start, err := s.sessionsRoot.Start(r.Context(), factorysession.SessionStartRequestFromAPI(req))
+	mapped := factorysession.SessionStartRequestFromAPI(req)
+	mapped.Caller = caller
+	start, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {
 		s.writeOpenFactorySessionRejected(w, err)
 		return
@@ -263,6 +270,9 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
+	if s.writeWorkerCallerError(w, err) {
+		return
+	}
 	if s.writeSessionsRequestContextOutcome(w, err) {
 		return
 	}
@@ -415,6 +425,11 @@ func (s *Server) durableProjectRoot(ctx context.Context) (string, error) {
 }
 
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeSessionsRootError(w, "", err)
+		return
+	}
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -445,6 +460,7 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
+	mapped.Caller = caller
 	started, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {
 		if s.writeSessionsRootError(w, "", err) {
@@ -466,6 +482,11 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeSessionsRootError(w, "", err)
+		return
+	}
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -496,6 +517,7 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
+	mapped.Caller = caller
 	started, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {
 		if s.writeSessionsRootError(w, "", err) {

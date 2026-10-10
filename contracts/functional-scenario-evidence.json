@@ -299,6 +299,15 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+      "stableIds": [
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/startDurableFactorySessionAsync",
+        "rest/startDurableFactorySessionSync"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
