@@ -1840,6 +1840,8 @@ func (filesystem *incompleteRetentionFileSystem) WalkDir(root string, walk fs.Wa
 func TestRuntimeMetricsRetentionRevalidatesDisappearedOrReplacedArtifactAndRecovers(t *testing.T) {
 	for _, transition := range []string{
 		"missing before claim", "directory before claim", "inspection failure before claim",
+		"missing during date validation", "directory during date validation", "inspection failure during date validation",
+		"renamed during date validation",
 		"missing after claim", "directory after claim", "missing during removal",
 	} {
 		t.Run(transition, func(t *testing.T) {
@@ -1872,7 +1874,7 @@ func assertRetentionArtifactTransitionRecovery(t *testing.T, transition string) 
 	report, err := retention.Sweep(t.Context(), request)
 	assertRetentionArtifactTransitionReport(t, transition, report, err, selected)
 	wantClaims := 2
-	if strings.HasSuffix(transition, "before claim") {
+	if strings.HasSuffix(transition, "before claim") || strings.HasSuffix(transition, "date validation") {
 		wantClaims = 1
 	}
 	if rootLock.closed != 1 || claim.closed != wantClaims {
@@ -1902,6 +1904,38 @@ func configureRetentionArtifactTransition(
 		changeRetentionArtifact(t, transition, selected, path)
 	}
 	switch {
+	case strings.HasSuffix(transition, "date validation"):
+		// Read real entries first, then model the selected entry changing before
+		// complete-date validation inspects it. Keep the directory count stable.
+		filesystem.afterReadDir = func(path string) {
+			if path != filepath.Dir(selected) {
+				return
+			}
+			filesystem.afterReadDir = nil
+			filesystem.beforeLstat = func(path string) {
+				if path != selected {
+					return
+				}
+				filesystem.beforeLstat = nil
+				if strings.HasPrefix(transition, "inspection failure") {
+					filesystem.rejectedInspection, filesystem.rejectedAttempts = selected, 2
+					return
+				}
+				change(selected)
+			}
+		}
+		if strings.HasPrefix(transition, "renamed ") {
+			filesystem.afterReadDir = nil
+			filesystem.beforeReadDir = func(path string) {
+				if path != filepath.Dir(selected) {
+					return
+				}
+				filesystem.beforeReadDir = nil
+				if err := os.Rename(selected, renamedRetentionArtifactPath(selected)); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
 	case strings.HasSuffix(transition, "before claim"):
 		// The directory read follows inventory and precedes candidate inspection.
 		// Change only this scenario's selected artifact at that filesystem effect.
@@ -1943,6 +1977,11 @@ func changeRetentionArtifact(t *testing.T, transition, selected, path string) {
 
 func restoreRetentionArtifact(t *testing.T, transition, selected string) {
 	t.Helper()
+	if strings.HasPrefix(transition, "renamed ") {
+		if err := os.Rename(renamedRetentionArtifactPath(selected), selected); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if strings.HasPrefix(transition, "directory ") {
 		// Remove only the scenario-owned replacement after proving its bytes
 		// survived the failed candidate validation; never recursively delete it.
@@ -1965,8 +2004,12 @@ func assertRetentionArtifactTransitionReport(
 	t *testing.T, transition string, report RuntimeMetricsRetentionReport, err error, selected string,
 ) {
 	t.Helper()
-	if transition == "inspection failure before claim" {
+	if strings.HasPrefix(transition, "inspection failure") {
 		assertRetentionRejectedInspectionReport(t, report, err, selected)
+		return
+	}
+	if strings.HasPrefix(transition, "renamed ") {
+		assertRetentionRenamedArtifactReport(t, report, err, selected)
 		return
 	}
 	if err != nil || len(report.Failures) != 0 || report.Failed.Files != 0 || report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) || report.After.Files != 0 {
@@ -1989,6 +2032,22 @@ func assertRetentionArtifactTransitionReport(
 	assertRetentionPathAbsent(t, selected, "already removed candidate")
 }
 
+func renamedRetentionArtifactPath(selected string) string {
+	return strings.Replace(selected, "selected-runtime-selected", "late-runtime-late", 1)
+}
+
+func assertRetentionRenamedArtifactReport(t *testing.T, report RuntimeMetricsRetentionReport, err error, selected string) {
+	t.Helper()
+	if err != nil || len(report.Failures) != 0 || report.Failed.Files != 0 || report.Protected.Files != 0 ||
+		report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) ||
+		report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 11}) ||
+		report.Removed != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) {
+		t.Fatalf("renamed artifact sweep = %#v, %v", report, err)
+	}
+	assertRetentionPathAbsent(t, selected, "old artifact identity")
+	assertRetentionPreservedContent(t, renamedRetentionArtifactPath(selected), "mmmmmmmmmmm")
+}
+
 func assertRetentionRejectedInspectionReport(t *testing.T, report RuntimeMetricsRetentionReport, err error, selected string) {
 	t.Helper()
 	if err != nil || report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) ||
@@ -2007,7 +2066,10 @@ type retentionTransitionFileSystem struct {
 	platformfilesystem.Local
 	beforeRemove       func(string)
 	beforeReadDir      func(string)
+	afterReadDir       func(string)
+	beforeLstat        func(string)
 	rejectedInspection string
+	rejectedAttempts   int
 }
 
 func (filesystem *retentionTransitionFileSystem) ReadDir(path string) ([]fs.DirEntry, error) {
@@ -2019,12 +2081,22 @@ func (filesystem *retentionTransitionFileSystem) ReadDir(path string) ([]fs.DirE
 		// reports the fault. The final inventory must still see its intact bytes.
 		return nil, fs.ErrPermission
 	}
-	return filesystem.Local.ReadDir(path)
+	entries, err := filesystem.Local.ReadDir(path)
+	if filesystem.afterReadDir != nil {
+		filesystem.afterReadDir(path)
+	}
+	return entries, err
 }
 
 func (filesystem *retentionTransitionFileSystem) Lstat(path string) (fs.FileInfo, error) {
+	if filesystem.beforeLstat != nil {
+		filesystem.beforeLstat(path)
+	}
 	if path == filesystem.rejectedInspection {
-		filesystem.rejectedInspection = ""
+		filesystem.rejectedAttempts--
+		if filesystem.rejectedAttempts <= 0 {
+			filesystem.rejectedInspection = ""
+		}
 		return nil, fs.ErrPermission
 	}
 	return filesystem.Local.Lstat(path)
