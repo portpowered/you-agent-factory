@@ -496,6 +496,7 @@ func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseev
 		Payload:            payload,
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
 		ItemID:             strings.TrimSpace(fragment.Metadata["item_id"]),
+		TurnID:             strings.TrimSpace(fragment.Metadata["turn_id"]),
 		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
 	}, nil
 }

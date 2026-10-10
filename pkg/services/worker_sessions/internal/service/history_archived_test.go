@@ -192,3 +192,20 @@ func TestArchivedHistoryUsesBoundedCommittedUsageAndTerminalConfirmation(t *test
 func (*historyCatalogFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	panic("unexpected prepared catalog read")
 }
+
+func TestUsageOriginProjectionPreservesPresenceAndLegacy(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{`{"origin":"SYNTHETIC","inputTokens":0,"totalTokens":0,"model":"configured"}`, `{"inputTokens":0,"totalTokens":0,"model":"configured"}`} {
+		usage, model, ok := usageProjectionFromDraft(workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: []byte(payload)})
+		if !ok || model != "configured" || usage.InputTokens == nil || *usage.InputTokens != 0 || usage.OutputTokens != nil || usage.TotalTokens == nil || *usage.TotalTokens != 0 {
+			t.Fatalf("usage presence = %+v, %q, %v", usage, model, ok)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(payload), &fields); err != nil {
+			t.Fatal(err)
+		}
+		if (usage.Origin == "SYNTHETIC") != (fields["origin"] != nil) {
+			t.Fatalf("origin invented or lost: %+v", usage)
+		}
+	}
+}

@@ -83,6 +83,17 @@ func (r *RuntimeOpening) startDurable(ctx context.Context, request factorysessio
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
+	if request.Synchronous && started.Sync != nil && request.RuntimeSelection != nil {
+		if path := strings.TrimSpace(request.RuntimeSelection.Recording.RecordPath); path != "" {
+			writer, supported := execution.(canonicaldurable.RecordingWriter)
+			if !supported {
+				return factorysessions.SessionStartResult{}, fmt.Errorf("%w: durable execution does not support recording export", factorysessions.ErrExecutionServiceNotConfigured)
+			}
+			if err := writer.WriteRecording(context.WithoutCancel(ctx), started.Sync.SessionID, path); err != nil {
+				return factorysessions.SessionStartResult{}, err
+			}
+		}
+	}
 	return legacyservice.CanonicalDurableStartResult(started)
 }
 

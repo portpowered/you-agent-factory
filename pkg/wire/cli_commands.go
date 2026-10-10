@@ -298,6 +298,13 @@ func (b *localWorkerSessionsBoundary) Interrupt(
 	return b.service.Interrupt(ctx, req)
 }
 
+func (b *localWorkerSessionsBoundary) Get(ctx context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
+	if b == nil || b.service == nil {
+		return workersessions.Session{}, fmt.Errorf("local Worker Sessions service is unavailable")
+	}
+	return b.service.Get(ctx, req)
+}
+
 func (b *localWorkerSessionsBoundary) Pause(
 	ctx context.Context,
 	req workersessions.ControlRequest,

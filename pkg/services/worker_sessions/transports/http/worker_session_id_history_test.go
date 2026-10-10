@@ -44,7 +44,7 @@ func TestWorkerSessionSummaryClosedScopeUsesCapturedFacts(t *testing.T) {
 		WorkIDs: []string{"failed-work"}, Provider: "codex", Model: &model, State: workersessions.StateCompleted,
 		StartedAt: &start, EndedAt: &end, Duration: &duration, DurationBasis: workersessions.DurationBasisRecordedTimestamps,
 		RecordingHealth: recordings.WorkerRecordingStatusComplete, TerminalCause: &cause,
-		TokenUsage: &workersessions.TokenUsage{InputTokens: &input, OutputTokens: &output, TotalTokens: &total},
+		TokenUsage: &workersessions.TokenUsage{Origin: "SYNTHETIC", InputTokens: &input, OutputTokens: &output, TotalTokens: &total},
 	}}
 	live := &fakeObservationService{getByWorkerErr: workersessions.ErrObservationSessionNotFound}
 	adapter := NewAdapter(live, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
@@ -66,7 +66,7 @@ func assertClosedCaptureIdentity(t *testing.T, got factoryapi.WorkerSessionObser
 
 func assertClosedCaptureTerminal(t *testing.T, got factoryapi.WorkerSessionObservation, cause string) {
 	t.Helper()
-	if got.TokenUsage == nil || got.TokenUsage.InputTokens == nil || *got.TokenUsage.InputTokens != 11 || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 7 || got.TokenUsage.TotalTokens == nil || *got.TokenUsage.TotalTokens != 18 || got.RecordingHealth == nil || string(*got.RecordingHealth) != "COMPLETE" || got.TerminalCause == nil || string(*got.TerminalCause) != cause {
+	if got.TokenUsage == nil || got.TokenUsage.Origin == nil || *got.TokenUsage.Origin != factoryapi.ProviderSessionTokenUsageOriginSYNTHETIC || got.TokenUsage.InputTokens == nil || *got.TokenUsage.InputTokens != 11 || got.TokenUsage.OutputTokens == nil || *got.TokenUsage.OutputTokens != 7 || got.TokenUsage.TotalTokens == nil || *got.TokenUsage.TotalTokens != 18 || got.RecordingHealth == nil || string(*got.RecordingHealth) != "COMPLETE" || got.TerminalCause == nil || string(*got.TerminalCause) != cause {
 		t.Fatalf("captured terminal facts lost: %+v", got)
 	}
 }

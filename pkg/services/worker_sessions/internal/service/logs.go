@@ -21,11 +21,8 @@ type LogReader struct {
 	logger logging.Logger
 }
 
-func NewLogReader(reader recordings.WorkerCapturedActivityReader, logger logging.Logger) (*LogReader, error) {
-	if reader == nil {
-		return nil, recordings.ErrMissingWorkerRecordingReader
-	}
-	return &LogReader{reader: reader, logger: logging.EnsureLogger(logger)}, nil
+func NewLogReader(reader recordings.WorkerCapturedActivityReader, logger logging.Logger) *LogReader {
+	return &LogReader{reader: reader, logger: logger}
 }
 
 func (s *LogReader) ReadLogs(ctx context.Context, req workersessions.ReadLogsRequest) (workersessions.LogPage, error) {
@@ -131,7 +128,7 @@ func (r *registry) GetCapturedObservation(ctx context.Context, req workersession
 func NewWithCapturedActivity(
 	execution workers.Service, eventsAppender EventsAppender, logger logging.Logger,
 	clock platformclock.Source, scheduler platformclock.TimerSource, recording recordings.WorkerSessionRecordingService,
-	captured recordings.WorkerCapturedActivityReader,
+	logs *LogReader,
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	snapshots *HistorySnapshotBudget,
@@ -147,12 +144,6 @@ func NewWithCapturedActivity(
 	}
 	service.(*registry).continuationSupport = continuationSupport
 	service.(*registry).historySnapshots.HistorySnapshotBudget = snapshots
-	if captured != nil {
-		reader, err := NewLogReader(captured, logger)
-		if err != nil {
-			return nil, err
-		}
-		service.(*registry).logs = reader
-	}
+	service.(*registry).logs = logs
 	return service, nil
 }

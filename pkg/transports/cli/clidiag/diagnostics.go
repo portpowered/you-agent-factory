@@ -402,7 +402,7 @@ func WriteFailure(output io.Writer, err error) bool {
 	if !ok || strings.TrimSpace(values.code) == "" {
 		return false
 	}
-	if strings.TrimSpace(values.message) == "" {
+	if strings.TrimSpace(values.message) == "" && !values.hasResponse {
 		values.message = defaultFailureMessage
 	}
 	payload := values.response
@@ -420,6 +420,10 @@ func WriteFailure(output io.Writer, err error) bool {
 	if payload.Family == "" {
 		payload.Family = factoryapi.ErrorFamilyInternalServerError
 	}
+	// Sanitize the detached presentation only. Keep safe authored context and
+	// typed metadata intact; debug's path redaction and length bound do not
+	// apply to the primary diagnostic.
+	payload.Message = debugURLPattern.ReplaceAllStringFunc(payload.Message, sanitizeDebugURLMatch)
 	if output != nil {
 		if encoded, marshalErr := json.Marshal(payload); marshalErr == nil {
 			_, _ = fmt.Fprintln(output, string(encoded))
@@ -509,7 +513,7 @@ func WriteTerminalFailure(output io.Writer, err error) {
 
 func sanitizeDebugURLMatch(raw string) string {
 	suffix := ""
-	for len(raw) > 0 && strings.ContainsRune(".,;:)]}", rune(raw[len(raw)-1])) {
+	for len(raw) > 0 && strings.ContainsRune(".,;:)]}\"'", rune(raw[len(raw)-1])) {
 		suffix = string(raw[len(raw)-1]) + suffix
 		raw = raw[:len(raw)-1]
 	}

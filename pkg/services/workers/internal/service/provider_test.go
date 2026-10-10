@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -438,6 +439,10 @@ func TestPublishMockWorkerUsageEmitsCanonicalUsageUpdatedFragment(t *testing.T) 
 		t.Fatalf("published fragments = %d, want exactly one", len(fragments))
 	}
 	fragment := fragments[0]
+	draft, ok := fragment.CanonicalDraft.(workers.Draft)
+	if !ok || draft.Provenance.Delivery != workers.DeliverySynthesized || !strings.Contains(string(draft.Payload), `"origin":"SYNTHETIC"`) {
+		t.Fatalf("mock usage provenance = %#v", fragment.CanonicalDraft)
+	}
 	if fragment.Type != "usage.updated" || fragment.Provider != "codex" || fragment.DispatchID != "dispatch-1" {
 		t.Fatalf("fragment = %#v, want canonical usage identity", fragment)
 	}
@@ -445,7 +450,7 @@ func TestPublishMockWorkerUsageEmitsCanonicalUsageUpdatedFragment(t *testing.T) 
 	if err := json.Unmarshal([]byte(fragment.Payload), &payload); err != nil {
 		t.Fatalf("usage payload is not valid JSON: %v", err)
 	}
-	for _, field := range []string{"inputTokens", "outputTokens", "reasoningOutputTokens", "totalTokens", "model"} {
+	for _, field := range []string{"inputTokens", "outputTokens", "reasoningOutputTokens", "totalTokens", "model", "origin"} {
 		if _, ok := payload[field]; !ok {
 			t.Fatalf("usage payload = %s, missing %q", fragment.Payload, field)
 		}

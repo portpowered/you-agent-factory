@@ -5,13 +5,12 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-// Native adapters can publish before returning diagnostics. Apply the same
-// bounded redaction policy at that live boundary, before any consumer sees it.
+// Native adapters publish customer content before returning diagnostics.
+// Redact declared secrets here; ordinary request text is not a secret.
 func safeProgressRequest(request providers.ExecuteRequest, extraSecrets ...string) providers.ExecuteRequest {
 	observer := request.ProgressObserver
 	if observer == nil {
@@ -26,10 +25,43 @@ func safeProgressRequest(request providers.ExecuteRequest, extraSecrets ...strin
 			return
 		}
 		count++
-		diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{progress}}, request, extraSecrets...)
-		observer(diagnostics.Progress[0])
+		observer(sanitizeCapturedProgress(progress, request, extraSecrets...))
 	}
 	return request
+}
+
+func sanitizeCapturedProgress(progress providers.ExecuteProgress, request providers.ExecuteRequest, extraSecrets ...string) providers.ExecuteProgress {
+	// Diagnostic-only fields remain private in normalizeDiagnostics. Removing
+	// them from this detached policy input lets ordinary echoes survive capture.
+	request.SystemPrompt, request.UserMessage, request.OutputSchema = "", "", ""
+	request.WorkingDirectory, request.Worktree = "", ""
+	secrets := requestDiagnosticSecrets(request, extraSecrets...)
+	var replacements []string
+	for _, secret := range secrets {
+		if secret != "" {
+			replacements = append(replacements, secret, redactedValue)
+		}
+	}
+	replacer := strings.NewReplacer(replacements...)
+	redact := func(value string) string {
+		return replacer.Replace(strings.ToValidUTF8(value, ""))
+	}
+	progress.Phase = boundedRunes(redact(progress.Phase), maxProgressPhaseRunes)
+	// Adapters own capture limits and report truncation. A diagnostic bound
+	// here would silently lose otherwise admitted message/tool content.
+	progress.Detail = redact(progress.Detail)
+	if progress.Metadata != nil {
+		metadata := make(map[string]string, len(progress.Metadata))
+		for key, value := range progress.Metadata {
+			if containsSensitiveMetadataTerm(key) {
+				metadata[key] = redactedValue
+			} else {
+				metadata[key] = redact(value)
+			}
+		}
+		progress.Metadata = metadata
+	}
+	return progress
 }
 
 const (
@@ -186,7 +218,7 @@ func sanitizeDiagnosticText(
 ) string {
 	sanitized := strings.ToValidUTF8(value, "")
 	for _, secret := range requestDiagnosticSecrets(request, extraSecrets...) {
-		if utf8.RuneCountInString(secret) >= 4 {
+		if secret != "" {
 			sanitized = strings.ReplaceAll(sanitized, secret, redactedValue)
 		}
 	}
@@ -206,6 +238,12 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest, extraSecrets ...
 	// diagnostic, where filtering metadata keys alone cannot protect it.
 	for key, value := range request.EnvVars {
 		if containsSensitiveMetadataTerm(key) {
+			secrets = append(secrets, value)
+		}
+	}
+	for _, entry := range request.ProcessEnvironment {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok && containsSensitiveMetadataTerm(key) {
 			secrets = append(secrets, value)
 		}
 	}

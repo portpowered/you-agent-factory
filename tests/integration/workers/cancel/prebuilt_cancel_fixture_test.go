@@ -43,13 +43,14 @@ func writeRecordedParityFixture(t *testing.T) cancelFixture {
 			t.Fatal(err)
 		}
 	}
-	definition := `{"name":"recorded-parity","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"completed","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"},{"name":"lost","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"}],"workstations":[{"name":"process","type":"AGENT_RUN","worker":"completed","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`
+	definition := `{"name":"recorded-parity","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"completed","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"},{"name":"lost","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"},{"name":"peer","type":"AGENT_WORKER","modelProvider":"CODEX","model":"test-model"}],"workstations":[{"name":"process","type":"AGENT_RUN","worker":"completed","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`
 	if err := os.WriteFile(filepath.Join(f.factoryDir, "factory.json"), []byte(definition), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	mock := map[string]any{"mockWorkers": []any{
 		map[string]any{"workerName": "completed", "runType": "accept", "usage": map[string]any{"provider": "codex", "model": "test-model", "inputTokens": 1, "outputTokens": 1}, "resultBody": map[string]any{"decision": "ACCEPTED", "output": "recorded parity completed marker"}},
 		map[string]any{"workerName": "lost", "runType": "accept", "gateConfig": map[string]any{"arrivedFile": filepath.Join(root, "arrived"), "releaseFile": filepath.Join(root, "release"), "timeout": "5m"}},
+		map[string]any{"workerName": "peer", "runType": "accept", "gateConfig": map[string]any{"arrivedFile": filepath.Join(root, "peer-arrived"), "releaseFile": filepath.Join(root, "peer-release"), "timeout": "5m"}},
 	}}
 	body, err := json.Marshal(mock)
 	if err != nil {

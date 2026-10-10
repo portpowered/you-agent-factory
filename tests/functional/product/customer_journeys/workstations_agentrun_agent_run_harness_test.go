@@ -87,14 +87,19 @@ func assertAgentRunFinalResponseEvent(
 			event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
 			continue
 		}
-		if event.Provenance.Provider != "agent-run" ||
-			event.Provenance.NativeEventType != "agent_final_response" ||
-			event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliveryNativeFinal ||
-			event.Provenance.Fidelity != factoryapi.FactoryResponseEventProvenanceFidelityFinalOnly ||
-			event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
+		if event.Provenance.Provider != "agent-run" || event.Provenance.NativeEventType != "agent_final_response" {
 			continue
 		}
 		matchingEvents++
+		if event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliverySynthesized ||
+			event.Provenance.Fidelity != factoryapi.FactoryResponseEventProvenanceFidelityNormalized ||
+			event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
+			t.Fatalf("AGENT_RUN final response provenance = %#v, want synthesized normalized snapshot", event.Provenance)
+		}
+		if event.ItemId == nil || *event.ItemId != "codex-functional-message" ||
+			event.TurnId == nil || *event.TurnId == "" || event.DispatchId == nil || *event.DispatchId == "" {
+			t.Fatalf("AGENT_RUN final snapshot lost provider item or turn/dispatch identity: %#v", event)
+		}
 		payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
 		if err != nil {
 			t.Fatalf("decode AGENT_RUN final response event payload: %v", err)

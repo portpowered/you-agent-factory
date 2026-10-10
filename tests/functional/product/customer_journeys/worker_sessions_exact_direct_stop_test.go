@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -350,6 +351,9 @@ func TestExactStopPublicResultsExcludeConfiguredSecrets(t *testing.T) {
 // Preserve the real store's bounded read and activation capabilities while
 // keeping this decorator's controlled write/activity faults.
 func (store *exactStopIntentGate) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if id == "unavailable-archive" {
+		return recordings.WorkerCapturedSummary{}, errors.New("archive storage unavailable")
+	}
 	summary, err := store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
 	if id == "corrupt-stop-target" {
 		for index := range summary.ControlOperations {
@@ -365,3 +369,180 @@ func (store *exactStopIntentGate) LookupWorkerSessionSummary(ctx context.Context
 func (store *exactStopIntentGate) RecoverWorkerOwners(ctx context.Context) error {
 	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
 }
+
+// The caller has its own empty registry and unprepared capture. Reuse that
+// process for every command while the selected host owns target and peer.
+func TestDefaultWorkerSessionCancelSeparateOwner(t *testing.T) {
+	t.Parallel()
+	runner := newFleetCharacterizationRunner()
+	sessionID := uuid.NewString()
+	server := startExactFactoryStopServer(t, runner, sessionID)
+	caller := support.BuildProcess(t, serviceedges.Edges{})
+	for index, id := range []string{"default-target", "default-peer"} {
+		response := postDirectWorkerSession(t, t.Context(), server.URL(), id+"-request", id, id+"-dispatch")
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusAccepted {
+			t.Fatalf("admit %s: %d", id, response.StatusCode)
+		}
+		waitFleetCharacterizationSignal(t, runner.slots[index].started, "owner admission")
+	}
+	joinedExactFactoryStop(t, server, runner.slots[0], routeCharacterizationDispatch{workerSessionID: "default-target", dispatchID: "default-target-dispatch"}, "cancel", true, caller)
+	assertDefaultOwnerTerminalAndMissing(t, caller, server, runner)
+	// Keep the peer live throughout target controls, then join its execution
+	// and durable terminal publication before closing the owning process.
+	joinedExactFactoryStop(t, server, runner.slots[1], routeCharacterizationDispatch{workerSessionID: "default-peer", dispatchID: "default-peer-dispatch"}, "cancel", false)
+	assertFleetCharacterizationTerminal(t, server, sessionID, "default-peer", "default-peer-dispatch", "CANCELED")
+	assertCapturedStopCause(t, server.URL(), "default-peer", "OPERATOR_CANCEL")
+	// Stop alone joins the daemon invocation; Close also drains resources
+	// retained by the reusable root before caller commands reuse this profile.
+	server.Close(t)
+	assertDefaultOwnerUnavailable(t, caller, server)
+}
+
+func assertDefaultOwnerTerminalAndMissing(t *testing.T, caller support.Process, server *fleetCharacterizationServer, runner *fleetCharacterizationRunner) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		result, err := executeDefaultOwnerCancel(t, caller, server, "default-target", remote)
+		if err != nil || string(result.Outcome) != "NOOP" || string(result.State) != "CANCELED" || result.DispatchId != "default-target-dispatch" {
+			t.Fatalf("terminal remote=%v: %+v %v", remote, result, err)
+		}
+	}
+	result, err := executeExactFactoryStop(t, server, t.Context(), "default-target", "cancel", false)
+	if err != nil || string(result.Outcome) != "NOOP" {
+		t.Fatalf("HTTP repeat: %+v %v", result, err)
+	}
+	assertFleetCharacterizationSnapshot(t, server, "default-peer", "default-peer-dispatch", "RUNNING")
+	select {
+	case <-runner.slots[1].canceled:
+		t.Fatal("peer canceled")
+	default:
+	}
+	for _, remote := range []bool{false, true} {
+		_, err := executeDefaultOwnerCancel(t, caller, server, "missing-worker", remote)
+		var typed *workercli.CLIError
+		if !errors.As(err, &typed) || typed.Code != "NOT_FOUND" {
+			t.Fatalf("unknown remote=%v: %v", remote, err)
+		}
+	}
+}
+
+func assertDefaultOwnerUnavailable(t *testing.T, caller support.Process, server *fleetCharacterizationServer) {
+	t.Helper()
+	for _, remote := range []bool{false, true} {
+		_, err := executeDefaultOwnerCancel(t, caller, server, "default-target", remote)
+		var typed *workercli.CLIError
+		code := "NOT_FOUND"
+		if remote {
+			code = "FACTORY_UNREACHABLE"
+		}
+		if !errors.As(err, &typed) || typed.Code != code {
+			t.Fatalf("unreachable remote=%v: %v", remote, err)
+		}
+	}
+}
+
+func executeDefaultOwnerCancel(t *testing.T, caller support.Process, server *fleetCharacterizationServer, id string, remote bool) (factoryapi.WorkerSessionControlResponse, error) {
+	t.Helper()
+	args := []string{"you", "--server", server.URL(), "--json", "worker-sessions", "cancel", id}
+	if remote {
+		args = append(args, "--remote")
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Env, inputs.WorkingDirectory = server.env, server.dir
+	var result factoryapi.WorkerSessionControlResponse
+	if err := caller.Execute(inputs.Input); err != nil {
+		return result, err
+	}
+	return result, json.Unmarshal([]byte(inputs.Stdout()), &result)
+}
+
+// Same-ID executions in separate profiles prove local ownership wins placement.
+// Explicit remote failure and stale-attempt requests precede any stop.
+// Foreign selected-profile refusal is covered by TestExactStopWrongSelectedProfileHasNoEffects.
+func TestDefaultWorkerSessionCancelLocalOwnershipAndFences(t *testing.T) {
+	t.Parallel()
+	localRunner, foreignRunner := newFleetCharacterizationRunner(), newFleetCharacterizationRunner()
+	local := startExactFactoryStopServer(t, localRunner, uuid.NewString())
+	foreign := startExactFactoryStopServer(t, foreignRunner, uuid.NewString())
+	for _, item := range []struct {
+		server *fleetCharacterizationServer
+		runner *fleetCharacterizationRunner
+	}{{local, localRunner}, {foreign, foreignRunner}} {
+		for index, id := range []string{"local-target", "local-peer"} {
+			response := postDirectWorkerSession(t, t.Context(), item.server.URL(), id+"-request", id, id+"-dispatch")
+			_ = response.Body.Close()
+			if response.StatusCode != http.StatusAccepted {
+				t.Fatalf("admission: %d", response.StatusCode)
+			}
+			waitFleetCharacterizationSignal(t, item.runner.slots[index].started, "local ownership admission")
+		}
+	}
+	assertDefaultOwnerRefusals(t, local)
+	for _, item := range []struct {
+		server *fleetCharacterizationServer
+		runner *fleetCharacterizationRunner
+	}{{local, localRunner}, {foreign, foreignRunner}} {
+		for index, id := range []string{"local-target", "local-peer"} {
+			assertFleetCharacterizationSnapshot(t, item.server, id, id+"-dispatch", "RUNNING")
+			select {
+			case <-item.runner.slots[index].canceled:
+				t.Fatal("refusal canceled peer")
+			default:
+			}
+		}
+	}
+	caller := ownerProcessFunc(func(input root.Input) error { return local.Execute(t, input) })
+	joinedExactFactoryStop(t, foreign, localRunner.slots[0], routeCharacterizationDispatch{workerSessionID: "local-target", dispatchID: "local-target-dispatch"}, "cancel", true, caller)
+	assertFleetCharacterizationSnapshot(t, foreign, "local-target", "local-target-dispatch", "RUNNING")
+	assertFleetCharacterizationSnapshot(t, local, "local-peer", "local-peer-dispatch", "RUNNING")
+}
+
+func TestDefaultWorkerSessionCancelArchiveFailureIsAuthoritative(t *testing.T) {
+	t.Parallel()
+	runner := newFleetCharacterizationRunner()
+	store := &exactStopIntentGate{committed: make(chan struct{}), proceed: make(chan struct{})}
+	server := startExactNaturalStopServer(t, runner, store, uuid.NewString())
+	caller := support.BuildProcess(t, serviceedges.Edges{})
+	response := postDirectWorkerSession(t, t.Context(), server.URL(), "archive-peer-request", "archive-peer", "archive-peer-dispatch")
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("admission: %d", response.StatusCode)
+	}
+	waitFleetCharacterizationSignal(t, runner.slots[0].started, "archive healthy peer")
+	for _, remote := range []bool{false, true} {
+		_, err := executeDefaultOwnerCancel(t, caller, server, "unavailable-archive", remote)
+		var typed *workercli.CLIError
+		if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_CONTROL_FAILED" {
+			t.Fatalf("archive remote=%v: %v", remote, err)
+		}
+	}
+	assertFleetCharacterizationSnapshot(t, server, "archive-peer", "archive-peer-dispatch", "RUNNING")
+	select {
+	case <-runner.slots[0].canceled:
+		t.Fatal("archive failure canceled peer")
+	default:
+	}
+}
+
+func assertDefaultOwnerRefusals(t *testing.T, local *fleetCharacterizationServer) {
+	t.Helper()
+	for index, args := range [][]string{
+		{"--remote", "--server", "http://127.0.0.1:1", "worker-sessions", "cancel", "local-target"},
+		{"--server", local.URL(), "worker-sessions", "terminate", "local-target", "--force", "--request-id", "stale-request", "--expected-attempt-id", "wrong-attempt"},
+	} {
+		inputs := support.FakeInputs(t.Context(), append([]string{"you", "--json"}, args...))
+		err := local.Execute(t, inputs.Input)
+		var typed *workercli.CLIError
+		code := "FACTORY_UNREACHABLE"
+		if index == 1 {
+			code = "WORKER_SESSION_CONTROL_CONFLICT"
+		}
+		if !errors.As(err, &typed) || typed.Code != code {
+			t.Fatalf("refusal: %v %s", err, inputs.Stderr())
+		}
+	}
+}
+
+type ownerProcessFunc func(root.Input) error
+
+func (call ownerProcessFunc) Execute(input root.Input) error { return call(input) }

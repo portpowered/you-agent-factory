@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 )
@@ -19,15 +20,16 @@ import (
 // must preserve the whole last turn, including the fields the agent runner's
 // decision-envelope normalization writes.
 type detachedRunnerStub struct {
-	mu       sync.Mutex
-	results  []workerexecution.RunnerExecutionResult
-	err      error
-	calls    int
-	requests []workerexecution.RunnerExecutionRequest
+	mu        sync.Mutex
+	results   []workerexecution.RunnerExecutionResult
+	err       error
+	calls     int
+	requests  []workerexecution.RunnerExecutionRequest
+	fragments [][]workerexecution.ProgressFragment
 }
 
 func (runner *detachedRunnerStub) Execute(
-	_ context.Context,
+	ctx context.Context,
 	request workerexecution.RunnerExecutionRequest,
 ) (workerexecution.RunnerExecutionResult, error) {
 	runner.mu.Lock()
@@ -35,6 +37,11 @@ func (runner *detachedRunnerStub) Execute(
 	runner.calls++
 	runner.requests = append(runner.requests, request)
 	runner.mu.Unlock()
+	if publish := workerinternal.ProgressPublisherFromContext(ctx, nil); publish != nil && index < len(runner.fragments) {
+		for _, fragment := range runner.fragments[index] {
+			publish(fragment)
+		}
+	}
 	if runner.err != nil {
 		return workerexecution.RunnerExecutionResult{}, runner.err
 	}
@@ -556,5 +563,83 @@ func TestLastRunnerResultSnapshotIsConcurrencySafe(t *testing.T) {
 	}
 	if result.Content != "turn" {
 		t.Fatalf("snapshot() Content = %q, want turn", result.Content)
+	}
+}
+
+func TestRecordingContentFinalIdentityBelongsToLastProviderTurn(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		turns     int
+		fragments [][]workerexecution.ProgressFragment
+		want      string
+	}{
+		{"stream snapshot", 1, [][]workerexecution.ProgressFragment{{{Kind: workerexecution.ProgressFragmentKind, Type: "message.completed", DispatchID: "attempt", Metadata: map[string]string{"item_id": "native-final"}}}}, "native-final"},
+		{"later final only", 2, [][]workerexecution.ProgressFragment{{{Kind: workerexecution.ProgressFragmentKind, Type: "message.completed", DispatchID: "attempt", Metadata: map[string]string{"item_id": "prior-turn"}}}}, "attempt-final-message"},
+		{"anonymous after identified", 1, [][]workerexecution.ProgressFragment{{{Kind: workerexecution.ProgressFragmentKind, Type: "message.completed", Metadata: map[string]string{"item_id": "earlier"}}, {Kind: workerexecution.ProgressFragmentKind, Type: "message.completed"}}}, "attempt-final-message"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			attempt := detachedAttempt()
+			attempt.Dispatch.DispatchID = "attempt"
+			var fragments []workerexecution.ProgressFragment
+			runner := &detachedRunnerStub{results: []workerexecution.RunnerExecutionResult{{Content: "equal text"}}, fragments: test.fragments}
+			_, err := ExecuteDetached(t.Context(), &inferencingHarnessStub{turns: test.turns}, runner, DetachedRequest{Attempt: attempt, ProgressPublisher: func(f workerexecution.ProgressFragment) { fragments = append(fragments, f) }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			draft, ok := fragments[len(fragments)-1].CanonicalDraft.(workerexecution.Draft)
+			if !ok || draft.ItemID != test.want || draft.Provenance.Delivery != workerexecution.DeliverySynthesized {
+				t.Fatalf("final identity/provenance = %+v", draft)
+			}
+		})
+	}
+}
+
+func TestRecordingContentReusedItemHasDistinctTurnAndAttemptIdentity(t *testing.T) {
+	t.Parallel()
+	for _, canonical := range []bool{false, true} {
+		t.Run(fmt.Sprintf("canonical=%t", canonical), func(t *testing.T) {
+			t.Parallel()
+			var all []workerexecution.Draft
+			metadata := map[string]string{"item_id": "reused-native-item"}
+			for _, attemptID := range []string{"first-attempt", "second-attempt"} {
+				attempt := detachedAttempt()
+				attempt.Dispatch.DispatchID = attemptID
+				fragment := workerexecution.ProgressFragment{Kind: workerexecution.ProgressFragmentKind, Type: "message.completed", DispatchID: attemptID, Metadata: metadata}
+				if canonical {
+					fragment.CanonicalDraft = workerexecution.Draft{Kind: workerexecution.KindMessage, Phase: workerexecution.PhaseCompleted, DispatchID: attemptID, ItemID: "reused-native-item", Payload: []byte(`{"role":"assistant","text":"equal text"}`)}
+				}
+				var observed []workerexecution.Draft
+				runner := &detachedRunnerStub{results: []workerexecution.RunnerExecutionResult{{Content: "equal text"}}, fragments: [][]workerexecution.ProgressFragment{{fragment}, {fragment}}}
+				_, err := ExecuteDetached(t.Context(), &inferencingHarnessStub{turns: 2}, runner, DetachedRequest{Attempt: attempt, ProgressPublisher: func(f workerexecution.ProgressFragment) {
+					identity, ok := assistantMessageIdentity(f)
+					if !ok || identity == nil {
+						t.Fatal("published message lost identity")
+					}
+					observed = append(observed, *identity)
+				}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertRecordingTurnIdentities(t, observed, attemptID)
+				all = append(all, observed...)
+			}
+			if all[0].DispatchID == all[3].DispatchID || metadata["turn_id"] != "" {
+				t.Fatal("attempt scope collapsed or provider metadata mutated")
+			}
+		})
+	}
+}
+
+func assertRecordingTurnIdentities(t *testing.T, observed []workerexecution.Draft, attemptID string) {
+	t.Helper()
+	if len(observed) != 3 || observed[0].TurnID == "" || observed[0].TurnID == observed[1].TurnID || observed[1].TurnID != observed[2].TurnID {
+		t.Fatalf("two turns and final snapshot lost scope: %+v", observed)
+	}
+	for _, message := range observed {
+		if message.ItemID != "reused-native-item" || message.DispatchID != attemptID {
+			t.Fatalf("native identity changed: %+v", message)
+		}
 	}
 }
