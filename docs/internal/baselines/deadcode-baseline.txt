@@ -788,8 +788,6 @@ pkg/services/factory_runtime/internal/services/orchestration/state/validation/ty
 pkg/services/factory_runtime/internal/services/orchestration/state/validation/typesafety.go: unreachable func: checkGuardFields
 pkg/services/factory_runtime/internal/services/orchestration/subsystems/noop_dispatcher.go: unreachable func: NewNoOpDispatcher
 pkg/services/factory_runtime/internal/services/orchestration/subsystems/noop_dispatcher.go: unreachable func: NoOpDispatcherSubsystem.Execute
-pkg/services/factory_runtime/internal/services/orchestration/subsystems/subsystem_dispatcher.go: unreachable func: NewDispatcher
-pkg/services/factory_runtime/internal/services/orchestration/subsystems/termination.go: unreachable func: NewTerminationCheck
 pkg/services/factory_runtime/internal/services/orchestration/token/lineage.go: unreachable func: CurrentChainingTraceIDFromColors
 pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior/descriptor.go: unreachable func: ExpectedInstalledPaths
 pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior/encode.go: unreachable func: MarshalInventory
