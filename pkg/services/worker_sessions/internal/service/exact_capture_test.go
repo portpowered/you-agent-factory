@@ -1018,3 +1018,7 @@ func TestWorkNameCaptureUsesPrimaryDispatchedWork(t *testing.T) {
 		})
 	}
 }
+
+func (*controlCaptureReader) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}

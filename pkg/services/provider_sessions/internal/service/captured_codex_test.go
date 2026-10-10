@@ -25,6 +25,11 @@ type capturedCodexFake struct {
 	preparedOnly  bool
 }
 
+func (f *capturedCodexFake) ListPreparedWorkerSessionCaptures(ctx context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	req.PreparedSummariesOnly = true
+	return f.ListWorkerSessionCaptures(ctx, req)
+}
+
 func (f *capturedCodexFake) ListWorkerSessionCaptures(ctx context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	f.calls++
 	if req.Limit != capturedPageLimit || !req.RequireCompleteMembership {

@@ -54,7 +54,7 @@ func (s *capturedProvider) inspectCaptures(ctx context.Context, ref providers.Se
 		if err := ctx.Err(); err != nil {
 			return nil, captureReadError(err)
 		}
-		page, err := s.reader.ListWorkerSessionCaptures(ctx, request)
+		page, err := s.reader.ListPreparedWorkerSessionCaptures(ctx, request)
 		if err != nil {
 			return nil, captureReadError(err)
 		}

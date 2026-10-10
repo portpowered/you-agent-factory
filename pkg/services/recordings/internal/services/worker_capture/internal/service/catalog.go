@@ -53,6 +53,17 @@ func (writer *FileWriter) acceptCatalogEntry(entry recordings.WorkerSessionCatal
 // No journal is scanned on subsequent pages. Like lookup, this read operation
 // intentionally avoids per-request logging on the high-volume capture path.
 func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	return writer.listWorkerSessionCaptures(ctx, request)
+}
+
+// ListPreparedWorkerSessionCaptures shares catalog membership and paging with
+// explicit recording reads, but cannot rebuild or hydrate missing summaries.
+func (writer *FileWriter) ListPreparedWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	request.PreparedSummariesOnly = true
+	return writer.listWorkerSessionCaptures(ctx, request)
+}
+
+func (writer *FileWriter) listWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	limit := request.Limit
 	if limit == 0 {
 		limit = defaultCatalogPageLimit
@@ -79,13 +90,9 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 	if err != nil {
 		return recordings.WorkerCapturedCatalogPage{}, err
 	}
-	start := 0
-	if after != "" {
-		start = sort.Search(len(entries), func(i int) bool { return entries[i].WorkerSessionID >= after })
-		if start == len(entries) || entries[start].WorkerSessionID != after {
-			return recordings.WorkerCapturedCatalogPage{}, recordings.ErrInvalidWorkerRecordingRequest
-		}
-		start++
+	start, err := catalogPageStart(entries, after)
+	if err != nil {
+		return recordings.WorkerCapturedCatalogPage{}, err
 	}
 	end := min(start+limit, len(entries))
 	items, err := writer.capturedCatalogItems(ctx, entries[start:end], generation, request.PreparedSummariesOnly)
@@ -104,6 +111,17 @@ func (writer *FileWriter) ListWorkerSessionCaptures(ctx context.Context, request
 		page.NextToken = base64.RawURLEncoding.EncodeToString(data)
 	}
 	return page, ctx.Err()
+}
+
+func catalogPageStart(entries []recordings.WorkerSessionCatalogEntry, after string) (int, error) {
+	if after == "" {
+		return 0, nil
+	}
+	start := sort.Search(len(entries), func(i int) bool { return entries[i].WorkerSessionID >= after })
+	if start == len(entries) || entries[start].WorkerSessionID != after {
+		return 0, recordings.ErrInvalidWorkerRecordingRequest
+	}
+	return start + 1, nil
 }
 
 func (writer *FileWriter) prepareCatalogRead(ctx context.Context, preparedOnly bool) error {

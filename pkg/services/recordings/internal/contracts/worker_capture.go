@@ -19,6 +19,9 @@ type WorkerCaptureClock interface{ Now() time.Time }
 type WorkerCapturePreparationOperation func(context.Context) error
 
 type WorkerCapturedActivityReader interface {
+	// ListPreparedWorkerSessionCaptures reads only activation-prepared metadata;
+	// it refuses unavailable summaries without hydrating recording history.
+	ListPreparedWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	ListWorkerSessionCaptures(context.Context, workerrecording.WorkerCapturedCatalogRequest) (workerrecording.WorkerCapturedCatalogPage, error)
 	LookupWorkerSessionCapture(context.Context, string) (workerrecording.WorkerSessionCatalogEntry, error)
 	ReadWorkerCapturedActivity(context.Context, workerrecording.WorkerCapturedActivityRequest) (workerrecording.WorkerCapturedActivityPage, error)

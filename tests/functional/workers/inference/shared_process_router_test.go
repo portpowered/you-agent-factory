@@ -495,7 +495,7 @@ func (router *inferenceWorkerRecordingRouter) ListWorkerSessionCaptures(ctx cont
 		if !ok {
 			return result, recordings.ErrMissingWorkerRecordingReader
 		}
-		page, err := reader.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{Limit: 1000})
+		page, err := reader.ListWorkerSessionCaptures(ctx, recordings.WorkerCapturedCatalogRequest{Limit: 1000, PreparedSummariesOnly: request.PreparedSummariesOnly})
 		if err != nil {
 			return result, err
 		}
@@ -547,4 +547,9 @@ func (router *inferenceWorkerRecordingRouter) LookupWorkerSessionSummary(ctx con
 		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
 	}
 	return reader.LookupWorkerSessionSummary(ctx, id)
+}
+
+func (router *inferenceWorkerRecordingRouter) ListPreparedWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	request.PreparedSummariesOnly = true
+	return router.ListWorkerSessionCaptures(ctx, request)
 }

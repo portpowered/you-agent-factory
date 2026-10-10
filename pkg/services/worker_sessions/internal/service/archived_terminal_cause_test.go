@@ -125,3 +125,7 @@ func corruptArchivedTerminal(variant string) []byte {
 	}
 	return []byte(payload)
 }
+
+func (*archivedCauseStore) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}

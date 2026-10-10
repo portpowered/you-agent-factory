@@ -3,6 +3,7 @@ package acceptance
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -250,7 +251,7 @@ func assertNativeContinuationCommand(t *testing.T, requests []platformprocess.Co
 // store. No native provider files exist; only the command edge is substituted.
 func TestCapturedProviderContinueAfterHostRestart(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"completed", "failed", "lost-input-ack", "uncertain-opening", "unadmitted-recipe", "missing-recipe", "stale-recipe"} {
+	for _, name := range []string{"completed", "failed", "lost-input-ack", "uncertain-opening", "unadmitted-recipe", "missing-recipe", "stale-recipe", "incomplete-capture"} {
 		t.Run(name, func(t *testing.T) { t.Parallel(); runCapturedProviderContinueAfterHostRestart(t, name) })
 	}
 }
@@ -485,7 +486,28 @@ func TestContinuationHeadSurvivesRepeatedContinuationAndHostRestart(t *testing.T
 	awaitContinuationRestartLogs(t, fresh, home, dir, "head-third-successor")
 	assertContinuationHeadCapability(t, fresh, home, dir, "head-third-successor")
 	assertOlderHeadRequestReplay(t, fresh, runner, home, dir, headArgs, second)
+	assertChangedHeadRequestRefusal(t, fresh, runner)
 	assertHeadContinuationExecution(t, runner, dir)
+}
+
+func assertChangedHeadRequestRefusal(t *testing.T, host invokeContinueStartedProcess, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+	for _, cell := range []struct {
+		source, successor, input string
+		head                     bool
+	}{
+		{"head-source", "head-second-successor", "changed follow-up", true},
+		{"head-source", "changed-successor", "second follow-up", true},
+		{"head-first-successor", "head-second-successor", "second follow-up", true},
+		{"head-source", "head-second-successor", "second follow-up", false},
+	} {
+		status, body := t7HTTP(t, t.Context(), http.MethodPost, host.baseURL+"/worker-sessions/"+cell.source+"/continue", map[string]any{
+			"resolveHead": cell.head, "requestId": "head-second", "successorWorkerSessionId": cell.successor, "followUpInput": cell.input,
+		})
+		if status != http.StatusConflict || !strings.Contains(body, "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT") || runner.CallCount() != 4 {
+			t.Fatalf("changed head tuple admitted/rebound request: %d %s calls=%d", status, body, runner.CallCount())
+		}
+	}
 }
 
 func assertHeadContinuationExecution(t *testing.T, runner *testutil.ProviderCommandRunner, dir string) {
@@ -525,7 +547,7 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	failed := name == "failed"
 	requestID := continuationRestartRequestID(name)
 	sourceID := "restart-source"
-	if name == "missing-recipe" || name == "stale-recipe" {
+	if name == "missing-recipe" || name == "stale-recipe" || name == "incomplete-capture" {
 		sourceID = "revival-" + name
 	}
 	dir, root := t.TempDir(), t.TempDir()
@@ -554,7 +576,9 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	if !source.Accepted || source.State != "COMPLETED" || runner.CallCount() != 1 {
 		t.Fatalf("source was not joined: %#v calls=%d", source, runner.CallCount())
 	}
-	awaitContinuationRestartLogs(t, first, home, dir, sourceID)
+	if name != "incomplete-capture" {
+		awaitContinuationRestartLogs(t, first, home, dir, sourceID)
+	}
 	var transcript *factoryapi.WorkerSessionTranscriptResponse
 	if name == "completed" {
 		captured := readCapturedRestartTranscript(t, first, home, dir)
@@ -577,7 +601,11 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	}
 
 	if sourceID != "restart-source" {
-		assertDurableRevivalRecipeRefusal(t, fresh, home, dir, sourceID, runner)
+		if name == "incomplete-capture" {
+			assertDurableRevivalRecipeRefusal(t, fresh, home, dir, sourceID, runner, "DEGRADED")
+		} else {
+			assertDurableRevivalRecipeRefusal(t, fresh, home, dir, sourceID, runner)
+		}
 		return
 	}
 	if successor := continuationRestartUnadmittedSuccessor(name); successor != "" {

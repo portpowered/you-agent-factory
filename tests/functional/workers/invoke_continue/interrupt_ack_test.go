@@ -27,6 +27,9 @@ func (store *interruptPhaseAckStore) PersistWorkerRecord(ctx context.Context, re
 	if strings.HasPrefix(record.WorkerSessionID, "t7-degraded-") && record.Record.ID.Position >= 3 {
 		return errors.New("private-t7-capture-failure")
 	}
+	if record.WorkerSessionID == "revival-incomplete-capture" && record.Record.ID.Position >= 3 {
+		return errors.New("private-revival-capture-failure")
+	}
 	if strings.HasPrefix(record.WorkerSessionID, "interrupt-admission-failure-") {
 		return errors.New("private-successor-opening-detail")
 	}

@@ -214,12 +214,17 @@ func (r *registry) reserveContinuation(
 		return existing, false, nil
 	}
 	addressed := req
+	// A durable request accepted with head resolution can be recorded on a
+	// descendant. Find its tuple even when a retry changes the head flag, so
+	// restart preserves the request-id conflict rather than losing that fact
+	// behind the original source's used-state conflict. Default requests still
+	// execute only their addressed source and retain its ordinary refusal.
+	head, replay, err := r.resolveContinuationHead(req)
+	if replay != nil || (err != nil && (req.ResolveHead || errors.Is(err, workersessions.ErrContinuationRequestIDConflict))) {
+		return replay, false, err
+	}
 	if req.ResolveHead {
-		var replay *continueReplay
-		req, replay, err = r.resolveContinuationHead(req)
-		if err != nil || replay != nil {
-			return replay, false, err
-		}
+		req = head
 	}
 	return r.reserveResolvedContinuation(req, addressed, tuple, callers...)
 }

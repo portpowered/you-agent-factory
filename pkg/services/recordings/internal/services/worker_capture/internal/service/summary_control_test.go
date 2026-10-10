@@ -132,11 +132,11 @@ func TestPreparedCatalogRefusesHydrationAndReturnsDetachedSummaries(t *testing.T
 		t.Fatal(err)
 	}
 	reader := reopened.(*FileWriter)
-	request := recordings.WorkerCapturedCatalogRequest{PreparedSummariesOnly: true, RequireCompleteMembership: true}
+	request := recordings.WorkerCapturedCatalogRequest{RequireCompleteMembership: true}
 	probe.mu.Lock()
 	before := probe.reads
 	probe.mu.Unlock()
-	if _, err := reader.ListWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+	if _, err := reader.ListPreparedWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
 		t.Fatalf("unprepared catalog=%v", err)
 	}
 	probe.mu.Lock()
@@ -150,13 +150,13 @@ func TestPreparedCatalogRefusesHydrationAndReturnsDetachedSummaries(t *testing.T
 	probe.mu.Lock()
 	before = probe.reads
 	probe.mu.Unlock()
-	page, err := reader.ListWorkerSessionCaptures(t.Context(), request)
+	page, err := reader.ListPreparedWorkerSessionCaptures(t.Context(), request)
 	if err != nil || len(page.Items) != 1 || page.Items[0].Health != recordings.WorkerRecordingStatusComplete {
 		t.Fatalf("prepared catalog=%+v err=%v", page, err)
 	}
 	want := page.Items[0].Opening.Detached()
 	page.Items[0].Opening.Payload[0] = '!'
-	page, err = reader.ListWorkerSessionCaptures(t.Context(), request)
+	page, err = reader.ListPreparedWorkerSessionCaptures(t.Context(), request)
 	if err != nil || !reflect.DeepEqual(page.Items[0].Opening, want) {
 		t.Fatalf("summary aliases caller=%+v err=%v", page, err)
 	}
@@ -164,7 +164,7 @@ func TestPreparedCatalogRefusesHydrationAndReturnsDetachedSummaries(t *testing.T
 	entry.mu.Lock()
 	entry.loaded = false
 	entry.mu.Unlock()
-	if _, err := reader.ListWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+	if _, err := reader.ListPreparedWorkerSessionCaptures(t.Context(), request); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
 		t.Fatalf("unavailable prepared summary=%v", err)
 	}
 	probe.mu.Lock()

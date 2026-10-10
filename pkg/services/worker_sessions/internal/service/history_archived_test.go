@@ -188,3 +188,7 @@ func TestArchivedHistoryUsesBoundedCommittedUsageAndTerminalConfirmation(t *test
 		})
 	}
 }
+
+func (*historyCatalogFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	panic("unexpected prepared catalog read")
+}
