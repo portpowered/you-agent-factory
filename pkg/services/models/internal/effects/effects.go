@@ -379,3 +379,11 @@ type InvocationArtifactFileSystem interface {
 type InvocationArtifactExporter interface {
 	ExportInvocationArtifact(sourcePath, destinationPath string) error
 }
+
+// AssetCreateTempFile supplies a writable executable staging file.
+type AssetCreateTempFile func(string, string) (interface {
+	io.Writer
+	io.Closer
+	Name() string
+	Chmod(os.FileMode) error
+}, error)

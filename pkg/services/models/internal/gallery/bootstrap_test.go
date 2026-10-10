@@ -1,4 +1,4 @@
-package wire
+package gallery
 
 import (
 	"context"
@@ -102,8 +102,10 @@ func TestDownloadLocalAIBinaryRejectsChecksumMismatch(t *testing.T) {
 }
 
 func TestResolveLocalAIBinaryUsesOverride(t *testing.T) {
-	t.Setenv(localAIBinaryEnvironment, "/custom/local-ai")
-	command, err := resolveLocalAIBinary(context.Background(), nil, "")
+	t.Parallel()
+	installer := fixtureInstaller()
+	installer.Environment = func(string) string { return "/custom/local-ai" }
+	command, err := installer.resolveLocalAIBinary(context.Background(), nil, "")
 	if err != nil || command != "/custom/local-ai" {
 		t.Fatalf("override = %q, %v", command, err)
 	}

@@ -34,15 +34,17 @@ type Root struct {
 	inference                  modelinference.Service
 	resolveHuggingFaceRevision func(context.Context, string) (string, error)
 	resolveBackendArtifact     modelseffects.BackendArtifactResolver
-	cacheLifecycleMu           sync.Mutex
-	runtimeMu                  sync.RWMutex
-	correlationSequence        uint64
-	catalog                    modelcatalog.Service
-	logger                     *zap.Logger
-	now                        func() time.Time
-	pullMetrics                modelseffects.PullMetricsRecorder
-	runtimeEvidence            modelseffects.RuntimeEvidenceRecorder
-	backendArtifactPlatform    models.AssetHostPlatform
+	// Cache removal excludes provisioning, host startup and lease changes.
+	// Those operations may overlap; Assets coordinates writes by cache path.
+	cacheLifecycleMu        sync.RWMutex
+	runtimeMu               sync.RWMutex
+	correlationSequence     uint64
+	catalog                 modelcatalog.Service
+	logger                  *zap.Logger
+	now                     func() time.Time
+	pullMetrics             modelseffects.PullMetricsRecorder
+	runtimeEvidence         modelseffects.RuntimeEvidenceRecorder
+	backendArtifactPlatform models.AssetHostPlatform
 }
 
 var _ models.Service = (*Root)(nil)
@@ -230,8 +232,8 @@ func (o *Root) PrepareModelAssets(
 	if o == nil || o.assets == nil {
 		return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	return o.assets.PrepareModelAssets(ctx, request)
 }
 
@@ -251,8 +253,8 @@ func (o *Root) PullModelForScope(
 	if err := ctx.Err(); err != nil {
 		return models.PullResult{}, err
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
 	if err != nil {
 		return models.PullResult{}, runtimeScopeError(err)
@@ -360,8 +362,8 @@ func (o *Root) EnsureModelHost(
 	if o == nil || o.runtimeHost == nil {
 		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.EnsureModelHost(ctx, request)
 }
 
@@ -379,8 +381,8 @@ func (o *Root) ensureModelHostWithConfiguration(
 	if o == nil || o.runtimeHost == nil {
 		return models.EnsureModelHostResult{}, models.ErrUnsupportedOperation
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	if handoff, ok := o.runtimeHost.(resolvedHostConfigurationHandoff); ok {
 		return handoff.EnsureModelHostWithConfiguration(ctx, configuration.Clone())
 	}
@@ -407,8 +409,8 @@ func (o *Root) StopModelHost(
 	if o == nil || o.runtimeHost == nil {
 		return models.StopModelHostResult{}, models.ErrUnsupportedOperation
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.StopModelHost(ctx, request)
 }
 
@@ -419,8 +421,8 @@ func (o *Root) AcquireModelLease(
 	if o == nil || o.runtimeHost == nil {
 		return models.AcquireModelLeaseResult{}, models.ErrUnsupportedOperation
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.AcquireModelLease(ctx, request)
 }
 
@@ -441,8 +443,8 @@ func (o *Root) ReleaseModelLease(
 	if o == nil || o.runtimeHost == nil {
 		return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 	}
-	o.cacheLifecycleMu.Lock()
-	defer o.cacheLifecycleMu.Unlock()
+	o.cacheLifecycleMu.RLock()
+	defer o.cacheLifecycleMu.RUnlock()
 	return o.runtimeHost.ReleaseModelLease(ctx, request)
 }
 

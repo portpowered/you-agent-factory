@@ -52,3 +52,5 @@ type RuntimeCreateTempFile = effects.RuntimeCreateTempFile
 
 type InvocationArtifactFileSystem = effects.InvocationArtifactFileSystem
 type InvocationArtifactExporter = effects.InvocationArtifactExporter
+
+type AssetCreateTempFile = effects.AssetCreateTempFile
