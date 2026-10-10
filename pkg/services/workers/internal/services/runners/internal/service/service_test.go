@@ -526,6 +526,23 @@ func TestCompletedStrategiesPreserveSelectionResultsAndFailure(t *testing.T) {
 					t.Fatal("construction/resolution executed strategy")
 				}
 			}
+			// A rejected request cannot execute its strategy or poison the
+			// completed registry used by the successful peers below.
+			_, denied := registry.Execute(t.Context(), runners.ExecuteRequest{
+				Identity: runners.ScriptIdentity,
+				RequiredCapabilities: []workers.RunnerOptionalCapability{
+					workers.RunnerOptionalCapabilityStructuredOutput,
+				},
+			})
+			var capabilityError *workers.UnsupportedRunnerCapabilityError
+			if !errors.As(denied, &capabilityError) ||
+				capabilityError.RunnerID != runners.ScriptIdentity ||
+				capabilityError.Capability != workers.RunnerOptionalCapabilityStructuredOutput {
+				t.Fatalf("denied request error = %v, want typed Script structured-output denial", denied)
+			}
+			if script.calls.Load() != 0 {
+				t.Fatal("denied request executed the Script strategy")
+			}
 			var joined sync.WaitGroup
 			for identity, strategy := range strategies {
 				joined.Add(1)

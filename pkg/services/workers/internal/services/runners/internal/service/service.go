@@ -89,13 +89,8 @@ func (s *service) Execute(
 	if err != nil {
 		return runners.ExecuteResult{}, err
 	}
-	if nilRunner(binding.Runner) {
-		return runners.ExecuteResult{}, fmt.Errorf(
-			"%w: runner %q has no implementation",
-			workers.ErrInvalidRunnerRegistration,
-			binding.Identity,
-		)
-	}
+	// Registration validates the implementation before publishing the immutable
+	// binding; dispatch only validates request selection and capabilities.
 	attempt := workers.CloneProviderInferenceRequest(request.Attempt)
 	return binding.Runner.Execute(ctx, attempt)
 }
