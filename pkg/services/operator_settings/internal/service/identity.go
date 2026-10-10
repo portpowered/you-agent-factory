@@ -34,9 +34,6 @@ func (s *Service) ensureLocalBackendScope(configPath string) (operatorsettings.R
 			ConfigPath:     configPath,
 		}, nil
 	}
-	if s.idGenerator == nil {
-		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("operator settings ID generator is required")
-	}
 	generated := operatorsettings.LocalBackendScopePrefix + s.idGenerator()
 	config.BackendScopeID = generated
 	if err := s.persistBackendScopeID(configPath, config); err != nil {
@@ -59,12 +56,6 @@ func (s *Service) persistBackendScopeID(configPath string, config operatorsettin
 	if !isLocalBackendScopeID(config.BackendScopeID) {
 		return fmt.Errorf("backend scope ID %q is not a valid local backend scope", config.BackendScopeID)
 	}
-	if s.encoder == nil {
-		return fmt.Errorf("global config encoder is required")
-	}
-	if s.createTemp == nil {
-		return fmt.Errorf("operator settings temporary-file creator is required")
-	}
 	data, err := s.encoder(config)
 	if err != nil {
 		return err
@@ -72,7 +63,7 @@ func (s *Service) persistBackendScopeID(configPath string, config operatorsettin
 	return s.publishBackendScopeConfig(configPath, data)
 }
 
-// publishBackendScopeConfig uses the effects validated by the identity
+// publishBackendScopeConfig uses the effects injected at construction for the identity
 // operation, without selecting defaults or repeating requiredness checks.
 func (s *Service) publishBackendScopeConfig(configPath string, data []byte) error {
 	dir := filepath.Dir(configPath)

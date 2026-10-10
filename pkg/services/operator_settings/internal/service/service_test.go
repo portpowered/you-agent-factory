@@ -13,107 +13,15 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
-	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
-	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"go.uber.org/zap/zapcore"
 )
-
-func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
-	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	documentService := documentwire.NewServiceWithPreserver(
-		&rootTestFileSystem{},
-		rootTestCreateTemporaryFile,
-		rootTestConfigDecoder,
-		rootTestConfigEncoder,
-		rootTestProviderCatalog,
-		nil,
-		nil,
-	)
-	resolutionService, err := resolutionwire.NewService(providersRoot)
-	if err != nil {
-		t.Fatalf("resolutionwire.NewService() = %v", err)
-	}
-	root, err := settingswire.NewService(
-		documentService,
-		resolutionService,
-		&rootTestFileSystem{},
-		rootTestCreateTemporaryFile,
-		rootTestConfigDecoder,
-		rootTestConfigEncoder,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("New() = %v", err)
-	}
-
-	configPath := "/home/operator/.you-agent-factory/config.json"
-	baseline := operatorsettings.DocumentDefaults{
-		WorkerModelProvider: "codex",
-		WorkerModel:         "gpt-5",
-	}
-	resolved, err := root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
-		DocumentBaseline: baseline,
-		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
-			WorkerModelProvider: "gemini",
-			WorkerModel:         "flag-model",
-		},
-		ConfigPath: configPath,
-	})
-	if err != nil {
-		t.Fatalf("ResolveEffective() = %v", err)
-	}
-	if resolved.Selection.WorkerModelProvider != "GEMINI" ||
-		resolved.Selection.WorkerModel != "flag-model" ||
-		resolved.Selection.ConfigPath != configPath {
-		t.Fatalf("ResolveEffective() = %#v", resolved.Selection)
-	}
-}
-
-func TestNew_RejectsNilDocument(t *testing.T) {
-	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	resolutionService, err := resolutionwire.NewService(providersRoot)
-	if err != nil {
-		t.Fatalf("resolutionwire.NewService() = %v", err)
-	}
-
-	service, err := settingswire.NewService(nil, resolutionService, nil, nil, nil, nil, nil, logging.NoopLogger{}, nil)
-	if err == nil || service != nil {
-		t.Fatalf("New(nil, resolution) = (%v, %v), want error", service, err)
-	}
-}
-
-func TestNew_RejectsNilResolution(t *testing.T) {
-	t.Parallel()
-
-	documentService := documentwire.NewServiceWithPreserver(
-		&rootTestFileSystem{},
-		rootTestCreateTemporaryFile,
-		rootTestConfigDecoder,
-		rootTestConfigEncoder,
-		rootTestProviderCatalog,
-		nil,
-		nil,
-	)
-
-	service, err := settingswire.NewService(documentService, nil, nil, nil, nil, nil, nil, logging.NoopLogger{}, nil)
-	if err == nil || service != nil {
-		t.Fatalf("New(document, nil) = (%v, %v), want error", service, err)
-	}
-}
 
 func TestRootEnsureLocalBackendScopeGeneratesAndThenReuses(t *testing.T) {
 	t.Parallel()
 
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
+	root := newIdentityRoot(t, testCreateTemporaryFile)
 	path := filepath.Join(t.TempDir(), "config.json")
 
 	first, err := root.EnsureLocalBackendScope(path)
@@ -139,7 +47,7 @@ func TestRootEnsureLocalBackendScopeGeneratesAndThenReuses(t *testing.T) {
 func TestRootEnsureLocalBackendScopeRejectsShortWriteWithoutReplacement(t *testing.T) {
 	t.Parallel()
 
-	root := newFilesystemRoot(t, func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+	root := newIdentityRoot(t, func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 		return shortWriteTemporaryFile{name: filepath.Join(dir, pattern)}, nil
 	})
 	path := filepath.Join(t.TempDir(), "config.json")
@@ -156,38 +64,30 @@ func TestRootEnsureLocalBackendScopeRejectsShortWriteWithoutReplacement(t *testi
 func TestRootResolveFromHomeWithEnvironmentWarnsForIgnoredConfigFields(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(config): %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{
-		"defaults": {
-			"workerModelProvider": "codex",
-			"workerModel": "gpt-5",
-			"futureDefault": "secret-value"
-		},
-		"futureTopLevel": true
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config): %v", err)
-	}
-
+	homeDir := "selected-home"
 	zapLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
-	root := newFilesystemRootWithOptions(t, filesystemRootOptions{
-		files:                 platformfilesystem.Local{},
-		createTemp:            testCreateTemporaryFile,
-		decode:                globalconfigmapping.Decode,
-		decodeWithDiagnostics: globalconfigmapping.DecodeWithDiagnostics,
-		encode:                globalconfigmapping.Encode,
-		logger:                logging.NewZapLogger(zapLogger, false),
-	})
-
-	resolved, err := root.ResolveFromHomeWithEnvironment(homeDir, operatorsettings.Defaults{}, operatorsettings.FlagOverrides{})
+	files := &configReadFileSystem{data: []byte("secret-value")}
+	root, err := operatorservice.New(&constructionDocument{}, forwardingResolution{
+		resolve: func(request operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error) {
+			if request.DocumentBaseline.WorkerModel != "gpt-5" || request.ConfigPath != filepath.Join(homeDir, ".you-agent-factory", "config.json") {
+				t.Errorf("resolution request = %#v", request)
+			}
+			return operatorsettings.ResolveEffectiveResult{Selection: operatorsettings.EffectiveSelection{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5"}}, nil
+		},
+	}, files, rootTestCreateTemporaryFile, rootTestConfigDecoder, rootTestConfigEncoder, rootTestIDGenerator,
+		logging.NewZapLogger(zapLogger, false), func(data []byte) (operatorsettings.Config, operatorsettings.ConfigDecodeDiagnostics, error) {
+			if string(data) != "secret-value" {
+				t.Errorf("decoder input = %q", data)
+			}
+			return operatorsettings.Config{Defaults: operatorsettings.Defaults{WorkerModelProvider: "codex", WorkerModel: "gpt-5"}},
+				operatorsettings.ConfigDecodeDiagnostics{IgnoredJSONPaths: []string{"$.defaults.futureDefault", "$.futureTopLevel"}}, nil
+		})
 	if err != nil {
-		t.Fatalf("ResolveFromHomeWithEnvironment() = %v", err)
+		t.Fatal(err)
 	}
-	if resolved.WorkerModelProvider != "CODEX" || resolved.WorkerModel != "gpt-5" {
-		t.Fatalf("resolved defaults = %#v, want CODEX/gpt-5", resolved)
+	resolved, err := root.ResolveFromHomeWithEnvironment(homeDir, operatorsettings.Defaults{}, operatorsettings.FlagOverrides{})
+	if err != nil || resolved.WorkerModelProvider != "CODEX" || resolved.WorkerModel != "gpt-5" {
+		t.Fatalf("resolved defaults = %#v, %v", resolved, err)
 	}
 
 	warnings := observed.FilterMessage("operator_settings.config.unknown_fields_ignored").All()
@@ -221,8 +121,9 @@ func TestRootResolveFromHomeWithEnvironmentWarnsForIgnoredConfigFields(t *testin
 func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	t.Parallel()
 
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
+	path := "config.json"
+	document := &profileDocument{path: path}
+	root := newControlledRoot(t, document, &constructionResolution{})
 	integration := operatorsettings.ACPIntegration{
 		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
 	}
@@ -246,7 +147,8 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 		t.Fatalf("ConfigureACPIntegrationDelete(missing) = %v, want ErrACPIntegrationNotFound", err)
 	}
 
-	defaultsPath := filepath.Join(t.TempDir(), "config.json")
+	defaultsPath := path
+	document.document = operatorsettings.Document{}
 	defaults := []operatorsettings.ACPIntegration{integration}
 	materialized, err := root.EnsurePackagedACPIntegrations(context.Background(), defaultsPath, defaults)
 	if err != nil {
@@ -265,46 +167,29 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	}
 }
 
-func TestRootUpdatePriceTablePersistsAndPreservesUnrelatedSettings(t *testing.T) {
+func TestRootUpdatePriceTablePassesNormalizedCandidateAndPreservesUnrelatedSettings(t *testing.T) {
 	t.Parallel()
-
-	root := newFilesystemRoot(t, testCreateTemporaryFile)
-	path := filepath.Join(t.TempDir(), "config.json")
-	initial := `{
-  "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
-  "defaults": {"workerModelProvider": "CODEX", "workerModel": "gpt-5"},
-  "models": {"llm": {"source": "hf://custom/gemma"}},
-  "runtime": {"logging": {"maxSizeMB": 11}, "metrics": {"maxSizeMB": 12}},
-  "workers": {"acp": {"integrations": [{"id":"entry-1","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}},
-  "workerPresets": [{"id":"build","modelProvider":"CODEX","model":"gpt-5"}]
-}`
-	if err := os.WriteFile(path, []byte(initial), 0o600); err != nil {
-		t.Fatalf("WriteFile() = %v", err)
-	}
-
+	source := "hf://custom/gemma"
+	document := &profileDocument{path: "config.json", document: operatorsettings.Document{
+		BackendScopeID: "local-11111111-1111-4111-8111-111111111111",
+		Defaults:       operatorsettings.DocumentDefaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5"},
+		Models:         map[string]operatorsettings.ModelConfig{"llm": {Source: &source}},
+		Runtime:        operatorsettings.DocumentRuntimeSettings{Logging: operatorsettings.DocumentRuntimeArtifactSettings{MaxSizeMB: 11}},
+		Workers:        operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{Integrations: []operatorsettings.ACPIntegration{{ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp"}}}},
+		WorkerPresets:  []operatorsettings.DocumentWorkerPreset{{ID: "build", ModelProvider: "CODEX", Model: "gpt-5"}},
+	}}
+	root := newControlledRoot(t, document, &constructionResolution{})
 	cached := "0"
-	updated, err := root.UpdatePriceTable(context.Background(), path, operatorsettings.PriceTable{
-		Currency: "USD",
-		Models: []operatorsettings.PriceTableModel{{
-			Provider: " openai ", Model: " gpt-5 ", InputPerMillionTokens: "1.25", OutputPerMillionTokens: "10",
-			CachedInputPerMillionTokens: &cached,
-		}},
+	updated, err := root.UpdatePriceTable(context.Background(), document.path, operatorsettings.PriceTable{
+		Currency: "USD", Models: []operatorsettings.PriceTableModel{{Provider: " openai ", Model: " gpt-5 ", InputPerMillionTokens: "1.25", OutputPerMillionTokens: "10", CachedInputPerMillionTokens: &cached}},
 	})
-	if err != nil {
-		t.Fatalf("UpdatePriceTable() = %v", err)
+	if err != nil || !document.published {
+		t.Fatalf("UpdatePriceTable() = %#v, %v; published=%v", updated, err, document.published)
 	}
-	if updated.Currency != operatorsettings.PriceTableCurrencyUSD {
-		t.Fatalf("updated price table currency = %q, want USD", updated.Currency)
+	if updated.Currency != operatorsettings.PriceTableCurrencyUSD || len(updated.Models) != 1 || updated.Models[0].Provider != "CODEX" {
+		t.Fatalf("normalized price = %#v", updated)
 	}
-	if len(updated.Models) != 1 || updated.Models[0].Provider != "CODEX" {
-		t.Fatalf("updated price table = %#v, want normalized replacement", updated)
-	}
-
-	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
-	if err != nil {
-		t.Fatalf("LoadDocument() = %v", err)
-	}
-	assertPreservedPriceTableSettings(t, loaded.Document)
+	assertPreservedPriceTableSettings(t, document.document)
 }
 
 func assertPreservedPriceTableSettings(t *testing.T, document operatorsettings.Document) {
@@ -325,65 +210,13 @@ func assertPreservedPriceTableSettings(t *testing.T, document operatorsettings.D
 	}
 }
 
-// newFilesystemRoot constructs a real-filesystem Operator Settings root Service
-// with the default codec, so tests can exercise persistence without
-// duplicating construction. See newFilesystemRootWithOptions for injecting
-// fault-injecting or observing fakes (filesystem, codec, logger).
-func newFilesystemRoot(t *testing.T, createTemp operatorsettings.CreateTemporaryFile) operatorsettings.Service {
+// Only backend identity publication owns filesystem effects in these root tests.
+func newIdentityRoot(t *testing.T, createTemp operatorsettings.CreateTemporaryFile) operatorsettings.Service {
 	t.Helper()
-
-	return newFilesystemRootWithOptions(t, filesystemRootOptions{
-		logger:                logging.NoopLogger{},
-		files:                 platformfilesystem.Local{},
-		createTemp:            createTemp,
-		decode:                globalconfigmapping.Decode,
-		decodeWithDiagnostics: globalconfigmapping.DecodeWithDiagnostics,
-		encode:                globalconfigmapping.Encode,
-	})
-}
-
-// filesystemRootOptions overrides the ports newFilesystemRootWithOptions
-// wires into a root Service, so tests can inject fault-injecting or
-// observing fakes (filesystem, codec, logger) without duplicating the whole
-// construction sequence.
-type filesystemRootOptions struct {
-	files                 operatorsettings.FileSystem
-	createTemp            operatorsettings.CreateTemporaryFile
-	decode                operatorsettings.ConfigDecoder
-	decodeWithDiagnostics operatorsettings.ConfigDiagnosticsDecoder
-	encode                operatorsettings.ConfigEncoder
-	logger                logging.Logger
-}
-
-func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) operatorsettings.Service {
-	t.Helper()
-
-	documentService := documentwire.NewServiceWithPreserver(
-		opts.files,
-		opts.createTemp,
-		opts.decode,
-		opts.encode,
-		rootTestProviderCatalog,
-		nil,
-		opts.decodeWithDiagnostics,
-	)
-	resolutionService, err := resolutionwire.NewService(internaltestproviders.StandardCatalog())
+	root, err := operatorservice.New(&constructionDocument{}, &constructionResolution{}, platformfilesystem.Local{}, createTemp,
+		globalconfigmapping.Decode, globalconfigmapping.Encode, rootTestIDGenerator, logging.NoopLogger{}, nil)
 	if err != nil {
-		t.Fatalf("resolutionwire.NewService() = %v", err)
-	}
-	root, err := settingswire.NewService(
-		documentService,
-		resolutionService,
-		opts.files,
-		opts.createTemp,
-		opts.decode,
-		opts.encode,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		opts.logger,
-		opts.decodeWithDiagnostics,
-	)
-	if err != nil {
-		t.Fatalf("settingswire.NewService() = %v", err)
+		t.Fatal(err)
 	}
 	return root
 }
@@ -440,8 +273,4 @@ func rootTestConfigDecoder([]byte) (operatorsettings.Config, error) {
 
 func rootTestConfigEncoder(operatorsettings.Config) ([]byte, error) {
 	panic("config encode during root service test")
-}
-
-func rootTestProviderCatalog(string) (string, bool) {
-	panic("provider catalog during root service test")
 }

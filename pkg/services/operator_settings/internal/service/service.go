@@ -64,9 +64,6 @@ func New(
 func (s *Service) LoadDocument(
 	request operatorsettings.LoadDocumentRequest,
 ) (operatorsettings.LoadDocumentResult, error) {
-	if s == nil {
-		return operatorsettings.LoadDocumentResult{}, fmt.Errorf("operator settings document service is required")
-	}
 	result, err := s.document.LoadDocument(request)
 	if err != nil {
 		return operatorsettings.LoadDocumentResult{}, err
@@ -78,9 +75,6 @@ func (s *Service) LoadDocument(
 func (s *Service) ApplyDocumentUpdate(
 	request operatorsettings.ApplyDocumentUpdateRequest,
 ) (operatorsettings.ApplyDocumentUpdateResult, error) {
-	if s == nil {
-		return operatorsettings.ApplyDocumentUpdateResult{}, fmt.Errorf("operator settings document service is required")
-	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.document.ApplyDocumentUpdate(request)
@@ -89,9 +83,6 @@ func (s *Service) ApplyDocumentUpdate(
 func (s *Service) ResolveEffective(
 	request operatorsettings.ResolveEffectiveRequest,
 ) (operatorsettings.ResolveEffectiveResult, error) {
-	if s == nil {
-		return operatorsettings.ResolveEffectiveResult{}, fmt.Errorf("operator settings resolution service is required")
-	}
 	return s.resolution.ResolveEffective(request)
 }
 
@@ -100,12 +91,6 @@ func (s *Service) DefaultConfigPath(homeDir string) string {
 }
 
 func (s *Service) LoadFileConfig(path string) (operatorsettings.Config, error) {
-	if s == nil || s.files == nil {
-		return operatorsettings.Config{}, fmt.Errorf("operator settings filesystem is required")
-	}
-	if s.decoder == nil {
-		return operatorsettings.Config{}, fmt.Errorf("operator settings decoder is required")
-	}
 	config, ignoredJSONPaths, err := loadFileConfigWithDiagnostics(
 		s.files,
 		s.decoder,
@@ -124,9 +109,6 @@ func (s *Service) ResolveFromHomeWithEnvironment(
 	environment operatorsettings.Defaults,
 	flags operatorsettings.FlagOverrides,
 ) (operatorsettings.ResolvedDefaults, error) {
-	if s == nil {
-		return operatorsettings.ResolvedDefaults{}, fmt.Errorf("operator settings service is required")
-	}
 	configPath := s.DefaultConfigPath(homeDir)
 	config, err := s.LoadFileConfig(configPath)
 	if err != nil {
@@ -184,18 +166,12 @@ func documentWorkerPresets(presets []operatorsettings.WorkerPreset) []operatorse
 }
 
 func (s *Service) EnsureLocalBackendScope(path string) (operatorsettings.ResolvedBackendScope, error) {
-	if s == nil {
-		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("operator settings service is required")
-	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	return s.ensureLocalBackendScope(path)
 }
 
 func (s *Service) ProjectInputInventory() operatorsettings.InputInventory {
-	if s == nil {
-		return operatorsettings.InputInventory{}
-	}
 	return identityinventory.ProjectInputInventory()
 }
 
@@ -265,9 +241,6 @@ func (s *Service) EnsurePackagedACPIntegrations(
 // resolves to the safe Factory Builder default; a malformed stored profile
 // fails explicitly instead of falling back silently.
 func (s *Service) ResolveACPAgentProfile(path string) (operatorsettings.ACPAgentProfile, error) {
-	if s == nil {
-		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
-	}
 	s.logger.Info("operator_settings.resolve_acp_agent_profile.started")
 	profile, err := s.resolveACPAgentProfile(path)
 	if err != nil {
@@ -305,9 +278,6 @@ func (s *Service) UpdateACPAgentProfile(
 	path string,
 	profile operatorsettings.ACPAgentProfile,
 ) (operatorsettings.ACPAgentProfile, error) {
-	if s == nil {
-		return operatorsettings.ACPAgentProfile{}, fmt.Errorf("operator settings document service is required")
-	}
 	s.logger.Info("operator_settings.update_acp_agent_profile.started")
 	updated, err := s.updateACPAgentProfile(ctx, path, profile)
 	if err != nil {
@@ -356,9 +326,6 @@ func (s *Service) UpdatePriceTable(
 	path string,
 	table operatorsettings.PriceTable,
 ) (operatorsettings.PriceTable, error) {
-	if s == nil {
-		return operatorsettings.PriceTable{}, fmt.Errorf("operator settings document service is required")
-	}
 	s.logger.Info("operator_settings.update_price_table.started")
 	normalized, err := table.Normalize()
 	if err != nil {
@@ -428,9 +395,6 @@ func (s *Service) mutateDocument(
 	}
 	if err := ctx.Err(); err != nil {
 		return operatorsettings.Document{}, err
-	}
-	if s == nil {
-		return operatorsettings.Document{}, fmt.Errorf("operator settings document service is required")
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()

@@ -96,6 +96,7 @@ func TestPersistDocument_PreCommitFailuresPreserveDestination(t *testing.T) {
 				t.Fatalf("PersistDocument() = %v, want %q", err, phase.want)
 			}
 			assertDocumentBytesUnchanged(t, path, original)
+			assertDocumentSemanticallyUnchanged(t, newDocumentPersistService(t, testLocalFilesystem, testCreateTemp), path, original)
 			assertNoTemporaryArtifacts(t, filepath.Dir(path))
 		})
 	}
@@ -340,7 +341,7 @@ func persistedDocumentFixture(t *testing.T) (string, []byte, operatorsettings.Do
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	original := readFixture(t, "valid/load-defaults.json")
+	original := []byte(`{"defaults":{"workerModelProvider":"claude","workerModel":"before"},"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/reviewer","allowedTargets":["factory:@you/reviewer","factory:@you/factory-builder"]}}}}`)
 	if err := os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatalf("WriteFile() = %v", err)
 	}
@@ -351,6 +352,8 @@ func persistedDocumentFixture(t *testing.T) (string, []byte, operatorsettings.Do
 	}
 	document := loaded.Document
 	document.Defaults.WorkerModel = "replacement-model"
+	profile := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/rejected", AllowedTargets: []string{"factory:@you/rejected"}}
+	document.Workers.ACP.AgentProfile = &profile
 	return path, original, document
 }
 
@@ -402,6 +405,7 @@ func documentFromConfigForTest(config operatorsettings.Config) operatorsettings.
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
 		PriceTable: config.PriceTable.Clone(),
+		Workers:    operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{AgentProfile: config.Workers.ACP.AgentProfile}},
 		Runtime:    operatorsettings.EmptyDocument.Runtime,
 	}
 	if config.WorkerPresets != nil {
@@ -416,4 +420,55 @@ func documentFromConfigForTest(config operatorsettings.Config) operatorsettings.
 		}
 	}
 	return document
+}
+
+func TestPersistDocument_EncoderFailurePreservesProfileBytesAndReload(t *testing.T) {
+	t.Parallel()
+	path, original, candidate := persistedDocumentFixture(t)
+	failure := errors.New("injected encode failure")
+	service := internalservice.NewWithPreserver(testLocalFilesystem, testCreateTemp, globalconfigmapping.Decode,
+		func(operatorsettings.Config) ([]byte, error) { return nil, failure }, controlledProviderCatalog, nil, nil)
+	err := service.PersistDocument(context.Background(), operatorsettings.PersistDocumentRequest{Path: path, Document: candidate})
+	if !errors.Is(err, failure) {
+		t.Fatalf("persist = %v, want encoder failure", err)
+	}
+	assertDocumentBytesUnchanged(t, path, original)
+	assertDocumentSemanticallyUnchanged(t, newDocumentPersistService(t, testLocalFilesystem, testCreateTemp), path, original)
+	assertNoTemporaryArtifacts(t, filepath.Dir(path))
+}
+
+func TestPersistDocument_ProfileAndPriceTableSurviveFreshOwnerReload(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.json")
+	source := "hf://custom/gemma"
+	profile := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/reviewer", AllowedTargets: []string{"factory:@you/reviewer", "factory:@you/factory-builder"}}
+	cached := "0"
+	document := operatorsettings.EmptyDocument.Clone()
+	document.BackendScopeID = "local-11111111-1111-4111-8111-111111111111"
+	document.Defaults = operatorsettings.DocumentDefaults{WorkerModelProvider: "CODEX", WorkerModel: "gpt-5"}
+	document.Models = map[string]operatorsettings.ModelConfig{"llm": {Source: &source}}
+	document.Runtime.Logging.MaxSizeMB = 11
+	document.Runtime.Metrics.MaxSizeMB = 12
+	document.WorkerPresets = []operatorsettings.DocumentWorkerPreset{{ID: "build", ModelProvider: "CODEX", Model: "gpt-5"}}
+	document.Workers.ACP.AgentProfile = &profile
+	document.Workers.ACP.Integrations = []operatorsettings.ACPIntegration{{ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp"}}
+	document.PriceTable = operatorsettings.PriceTable{Currency: "USD", Models: []operatorsettings.PriceTableModel{{Provider: "CODEX", Model: "gpt-5", InputPerMillionTokens: "1.25", OutputPerMillionTokens: "10", CachedInputPerMillionTokens: &cached}}}
+	writer := newDocumentPersistService(t, testLocalFilesystem, testCreateTemp)
+	if err := writer.PersistDocument(context.Background(), operatorsettings.PersistDocumentRequest{Path: path, Document: document}); err != nil {
+		t.Fatal(err)
+	}
+	reader := newDocumentPersistService(t, testLocalFilesystem, testCreateTemp)
+	loaded, err := reader.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path, RequireExisting: true})
+	if err != nil || !reflect.DeepEqual(loaded.Document, document) {
+		t.Fatalf("fresh owner reload = %#v, %v; want %#v", loaded.Document, err, document)
+	}
+	model := "gpt-5.2"
+	if _, err := writer.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{Path: path, ProviderModel: operatorsettings.DocumentProviderModelUpdate{Model: &model}}); err != nil {
+		t.Fatal(err)
+	}
+	document.Defaults.WorkerModel = model
+	loaded, err = reader.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path, RequireExisting: true})
+	if err != nil || !reflect.DeepEqual(loaded.Document, document) {
+		t.Fatalf("unrelated update reload = %#v, %v; want %#v", loaded.Document, err, document)
+	}
 }

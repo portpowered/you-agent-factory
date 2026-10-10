@@ -1,8 +1,6 @@
 package wire
 
 import (
-	"fmt"
-
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
@@ -18,7 +16,7 @@ type DocumentService = settingsdocument.Service
 type ResolutionService = resolution.Service
 
 // NewService binds completed owners and forwards the selected logger unchanged.
-// Supported owner nil classification is preserved; construction is inert.
+// Required owners and effects are supplied by composition; construction is inert.
 func NewService(
 	document DocumentService,
 	resolution ResolutionService,
@@ -30,12 +28,6 @@ func NewService(
 	logger logging.Logger,
 	diagnostics operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
-	if document == nil {
-		return nil, fmt.Errorf("construct Operator Settings: document is required")
-	}
-	if resolution == nil {
-		return nil, fmt.Errorf("construct Operator Settings: resolution is required")
-	}
 	return operatorservice.New(document, resolution, files, createTemp, decoder, encoder,
 		idGenerator, logger, diagnostics)
 }

@@ -37,9 +37,6 @@ func loadFileConfigWithDiagnostics(
 		}
 		return operatorsettings.Config{}, nil, fmt.Errorf("read operator config %s: %w", path, err)
 	}
-	if decode == nil && diagnosticDecoder == nil {
-		return operatorsettings.Config{}, nil, fmt.Errorf("parse operator config %s: global config decoder is required", path)
-	}
 	var config operatorsettings.Config
 	var ignoredJSONPaths []string
 	if diagnosticDecoder != nil {
