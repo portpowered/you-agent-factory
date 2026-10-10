@@ -45,7 +45,7 @@ func TestContinuationInspectionRefusesUnavailableExactReferenceBeforeReservation
 			r.supervisions[req.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
 			reference := r.sessions[req.SourceWorkerSessionID].ProviderSessionAssociation.Reference
 			r.inspection = continuationInspectionFake{inspect: func(got providersessions.InspectRequest) (providersessions.InspectResult, error) {
-				if got.Session != reference || got.Context == nil {
+				if got.Session != reference || got.Context == nil || got.WorkerSessionID != req.SourceWorkerSessionID || got.FactorySessionID != "" {
 					t.Errorf("inspection lost the exact reference/context: %+v", got)
 				}
 				// A peer read may call back into Get; admission must release its lock.

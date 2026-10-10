@@ -41,13 +41,16 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			if err != nil {
 				t.Fatal(err)
 			}
+			if source, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target); err == nil || source.Reference.ID != "" {
+				t.Fatalf("cold lookup hydrated execution authority: %+v, %v", source, err)
+			}
 			if err := reopened.(*FileWriter).RecoverWorkerOwners(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			if cell == "wrong-generation" {
 				target.RecordingGenerationID = "foreign-generation"
 			}
-			source, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			source, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
 			if cell != "captured" {
 				if err == nil || source.Reference.ID != "" {
 					t.Fatalf("unproved source returned continuation data: %+v, %v", source, err)
@@ -56,7 +59,7 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			}
 			assertCapturedContinuationSource(t, source, err)
 			source.Execution.Execution.Model = "mutated"
-			again, err := reopened.ReadWorkerContinuationSource(t.Context(), target)
+			again, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
 			if err != nil || again.Execution.Execution.Model != "captured-model" {
 				t.Fatalf("read mutated persisted source: %+v, %v", again, err)
 			}

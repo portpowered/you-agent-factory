@@ -26,13 +26,19 @@ var capturedProviderIdentifier = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // Inspect uses only activation-prepared metadata. Reusing an exact reference
 // is unambiguous only when every association forms one complete scoped chain.
-func (s *capturedProvider) inspectAssociation(ctx context.Context, ref providers.SessionRef) error {
+func (s *capturedProvider) inspectAssociation(ctx context.Context, req providersessions.InspectRequest) error {
+	ref := req.Session
 	if !capturedProviderIdentifier.MatchString(ref.ID) {
 		return providersessions.ErrInvalidIdentifier
 	}
-	items, err := s.inspectCaptures(ctx, ref)
+	items, err := s.inspectCaptures(ctx, req)
 	if err != nil {
 		return err
+	}
+	if req.WorkerSessionID != "" {
+		if _, exists := items[req.WorkerSessionID]; !exists {
+			return providersessions.ErrSessionNotFound
+		}
 	}
 	if err := validateCapturedChain(items); err != nil {
 		return err
@@ -43,7 +49,7 @@ func (s *capturedProvider) inspectAssociation(ctx context.Context, ref providers
 	return nil
 }
 
-func (s *capturedProvider) inspectCaptures(ctx context.Context, ref providers.SessionRef) (map[string]recordings.WorkerCapturedCatalogItem, error) {
+func (s *capturedProvider) inspectCaptures(ctx context.Context, req providersessions.InspectRequest) (map[string]recordings.WorkerCapturedCatalogItem, error) {
 	request := recordings.WorkerCapturedCatalogRequest{
 		Limit: capturedPageLimit, RequireCompleteMembership: true, PreparedSummariesOnly: true,
 	}
@@ -64,7 +70,10 @@ func (s *capturedProvider) inspectCaptures(ctx context.Context, ref providers.Se
 			return nil, providersessions.ErrSessionStorageUnavailable
 		}
 		for _, item := range page.Items {
-			if err := collectInspectionCapture(items, item, ref, generation); err != nil {
+			if req.WorkerSessionID != "" && item.Catalog.FactorySessionID != req.FactorySessionID {
+				continue
+			}
+			if err := collectInspectionCapture(items, item, req.Session, generation); err != nil {
 				return nil, err
 			}
 		}

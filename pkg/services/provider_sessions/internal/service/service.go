@@ -42,10 +42,10 @@ func (s *inspectionService) Inspect(req providersessions.InspectRequest) (provid
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if err := validateSessionRef(req.Session); err != nil {
+	if err := validateInspectionRef(req.Session); err != nil {
 		return providersessions.InspectResult{}, err
 	}
-	err := s.captured.inspectAssociation(ctx, req.Session)
+	err := s.captured.inspectAssociation(ctx, req)
 	if err != nil {
 		return providersessions.InspectResult{}, &providersessions.LookupError{
 			Provider: providersessions.Provider(req.Session.Provider), SessionID: req.Session.ID, Err: err,
@@ -103,6 +103,22 @@ func validateSessionRef(session providers.SessionRef) error {
 	switch session.Provider {
 	case providers.IDCodex, providers.IDCursor:
 	default:
+		return providersessions.ErrUnsupportedProvider
+	}
+	if session.Kind != providers.SessionIDKind {
+		return providersessions.ErrUnsupportedKind
+	}
+	return nil
+}
+
+// Inspect accepts captured references from any registered execution provider.
+// Providers owns resume capability and adapter negotiation; transcript support
+// remains restricted independently by validateSessionRef.
+func validateInspectionRef(session providers.SessionRef) error {
+	if strings.TrimSpace(session.ID) == "" {
+		return providersessions.ErrInvalidIdentifier
+	}
+	if session.Provider.Validate() != nil {
 		return providersessions.ErrUnsupportedProvider
 	}
 	if session.Kind != providers.SessionIDKind {

@@ -154,6 +154,11 @@ func (f *controlCaptureReader) LookupWorkerSessionCapture(_ context.Context, id 
 	return f.entry, f.err
 }
 
+func (f *controlCaptureReader) LookupWorkerSessionSummary(_ context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	f.id = id
+	return recordings.WorkerCapturedSummary{Capture: recordings.WorkerCapturedCatalogItem{Catalog: f.entry}}, f.err
+}
+
 func (*controlCaptureReader) ReadWorkerCapturedActivity(context.Context, recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
 	panic("opening identity must not read activity")
 }
@@ -452,7 +457,7 @@ func (store *restartRecipeStore) ReadWorkerRestartRecipe(context.Context, record
 	return store.execution, store.err
 }
 
-func (store *restartRecipeStore) ReadWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (store *restartRecipeStore) LookupPreparedWorkerContinuationSource(context.Context, recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return recordings.WorkerContinuationSource{Execution: store.execution, Reference: store.reference, Terminal: recordings.WorkerRecordingTerminal{Status: "COMPLETED"}}, store.err
 }
 

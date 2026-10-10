@@ -1005,3 +1005,20 @@ func TestBeginWorkerAttemptRejectsNilRequest(t *testing.T) {
 		t.Fatalf("terminal present = %v, error = %v; want invalid request", terminal != nil, err)
 	}
 }
+
+func TestRuntimeAttemptAdmissionDoesNotInventScriptInference(t *testing.T) {
+	t.Parallel()
+	planned := workers.WorkstationDispatchRequest{WorkstationName: "script"}
+	planned.Execution.WorkerType = "script"
+	execution := workers.ExecuteRequest{}
+	execution.Target.WorkerType = "script"
+	execution.Target.RunnerID = "script"
+	execution.Target.Provider.ID = "script"
+	execution.Target.Provider.Alias = "generic-runner"
+	execution.Target.Model.Provider = "codex"
+	execution.Target.ExecutorProvider = "SCRIPT_WRAP"
+	admitted := runtimeAttemptAdmissionRequest(planned, execution)
+	if admitted.Execution.ModelProvider != "" || admitted.Execution.Model != "" || admitted.Execution.RunnerID != "" || admitted.Execution.ExecutorProvider != "" {
+		t.Fatalf("script admission invented inference: %+v", admitted.Execution)
+	}
+}

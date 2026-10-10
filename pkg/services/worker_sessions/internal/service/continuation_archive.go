@@ -31,7 +31,7 @@ func (r *registry) withContinuationCapability(ctx context.Context, projected wor
 	}
 
 	snapshot, _, err := r.continuationCapabilitySnapshot(ctx, req)
-	if err != nil || r.inspectContinuationReference(ctx, snapshot.session.ProviderSessionAssociation.Reference) != nil {
+	if err != nil || r.inspectContinuationReference(ctx, snapshot.session.ProviderSessionAssociation.Reference, snapshot.session.ID, snapshot.execution.Execution.FactorySessionID) != nil {
 		return projected
 	}
 	// A peer read runs without the registry lock. Never describe a source that
@@ -177,7 +177,7 @@ func (r *registry) readArchivedContinuationSourceContext(ctx context.Context, re
 	if r.restart == nil {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
-	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
+	captured, err := r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
 	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
 		captured.Execution.Execution.Dispatch.DispatchID != target.ExpectedAttemptID ||
 		captured.Execution.Execution.FactorySessionID != target.FactorySessionID || captured.Terminal != *page.Terminal {

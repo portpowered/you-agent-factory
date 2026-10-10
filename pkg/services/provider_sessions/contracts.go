@@ -42,7 +42,8 @@ type Service interface {
 	// capability, or Workers selection-policy types.
 	// Inspection uses committed materialized association facts, without reading
 	// transcript activity. Captures sharing the exact tuple are unambiguous only
-	// when their complete facts establish one validated continuation chain.
+	// when their complete facts establish one validated continuation chain
+	// in the selected scope. Unscoped requests require a single profile chain.
 	Inspect(InspectRequest) (InspectResult, error)
 
 	// Project returns a provider-independent normalized transcript/detail
@@ -66,6 +67,11 @@ type SessionRef = providers.SessionRef
 // SessionRef without requiring filesystem/SQL/OS effect ports from the caller.
 type InspectRequest struct {
 	Session SessionRef
+	// WorkerSessionID selects the association in its exact Factory Session
+	// scope. When omitted, all profile associations must form one chain.
+	// An empty FactorySessionID with a worker selector means direct scope.
+	WorkerSessionID  string
+	FactorySessionID string
 	// Context carries cancellation for the inspection operation. When nil,
 	// context.Background is used.
 	Context context.Context

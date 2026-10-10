@@ -2943,8 +2943,6 @@ recording-read|pkg/services/recordings/internal/services/canonical_ledger/intern
 recording-read|pkg/services/recordings/internal/services/canonical_ledger/internal/service|pkg/services/recordings/internal/services/canonical_ledger/internal/service/service.go#Service.AppendWithValidation#CanonicalEvents::count=2
 recording-read|pkg/services/recordings/internal/services/projection_query/internal/service|pkg/services/recordings/internal/services/projection_query/internal/service/service.go#Service.ReconstructFactoryWorldState#ReconstructCanonicalFactoryWorldState::count=1
 recording-read|pkg/services/recordings/internal/services/recorded_session_inventory/internal/service|pkg/services/recordings/internal/services/recorded_session_inventory/internal/service/service.go#Service.summaryForPath#LoadReplayInput::count=1
-recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/restart_recipe.go#FileWriter.ReadWorkerContinuationSource#LoadWorkerRecording::count=1
-recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/restart_recipe.go#FileWriter.ReadWorkerContinuationSource#ReadWorkerRestartRecipe::count=1
 recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/service.go#capture.WorkerRecordingProjection#LoadWorkerRecording::count=1
 recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/service.go#capture.fail#ReduceWorkerRecording::count=1
 recording-read|pkg/services/recordings/internal/services/worker_capture/internal/service|pkg/services/recordings/internal/services/worker_capture/internal/service/service.go#capture.setExecutionTerminal#ReduceWorkerRecording::count=1
@@ -2961,8 +2959,6 @@ recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal
 recording-read|pkg/services/recordings/internal|pkg/services/recordings/internal/lifecycle_runtime_recorder.go#combinedService.ReconstructCanonicalFactoryWorldState#ReconstructFactoryWorldState::count=1
 recording-read|pkg/services/recordings/wire|pkg/services/recordings/wire/work_snapshot.go#workSnapshotReader.ReadWorkSnapshot#ReconstructWorldState::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/captured_replay.go#registry.replayCaptureTimes#LoadWorkerRecording::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_archive.go#registry.readArchivedContinuationSource#ReadWorkerCapturedActivity::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_archive.go#registry.readArchivedContinuationSource#ReadWorkerContinuationSource::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_input.go#registry.persistContinuationInput#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_replay.go#registry.readTerminalContinuationReplay#ReadWorkerCapturedActivity::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/continuation_stream.go#continuationCaptureStream.advance#ReadWorkerCapturedActivity::count=1
@@ -2970,8 +2966,6 @@ recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.bindOpeningCapture#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.capturedInterruptPlan#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.capturedInterruptPlan#ReadWorkerRestartRecipe::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.readCapturedContinuationRecipe#ReadWorkerContinuationSource::count=1
-recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.readContinuationRecipe#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/history_archived.go#LogReader.archivedHistory#ListWorkerSessionCaptures::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/interrupt_recorded.go#registry.readInterruptContext#ReadWorkerCapturedActivity::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/interrupt_recovery.go#registry.inspectPendingInterruptSuccessor#LookupWorkerSessionCapture::count=1

@@ -236,11 +236,11 @@ func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context
 	return execution, err
 }
 
-func (store *interruptPhaseAckStore) ReadWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (store *interruptPhaseAckStore) LookupPreparedWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	if target.WorkerSessionID == "revival-missing-recipe" {
 		return recordings.WorkerContinuationSource{}, errors.New("private-revival-missing-recipe")
 	}
-	source, err := store.WorkerRecordingStore.ReadWorkerContinuationSource(ctx, target)
+	source, err := store.WorkerRecordingStore.LookupPreparedWorkerContinuationSource(ctx, target)
 	if target.WorkerSessionID == "revival-stale-recipe" {
 		source.Execution.Execution.Dispatch.DispatchID = "stale-physical-attempt"
 	}

@@ -152,6 +152,16 @@ func runtimeAttemptAdmissionRequest(
 	// Capture those resolved facts while preserving the original admission scope.
 	planned := workers.CloneWorkstationExecutionRequest(request.Execution)
 	request.Execution = workstationDispatchRequestFromExecute(executeRequest).Execution
+	// Generic execution providers (for example a script runner) do not imply
+	// inference attribution. Only the resolved model selection supplies it.
+	request.Execution.ModelProvider = executeRequest.Target.Model.Provider
+	if executeRequest.Target.RunnerID == "script" {
+		request.Execution.RunnerID = planned.RunnerID
+		request.Execution.ExecutorProvider = planned.ExecutorProvider
+		request.Execution.ModelProvider = planned.ModelProvider
+		request.Execution.Model = planned.Model
+		request.Execution.ReasoningEffort = planned.ReasoningEffort
+	}
 	request.Execution.Dispatch = planned.Dispatch
 	request.Execution.FactorySessionID = firstRuntimeValue(planned.FactorySessionID, request.Execution.FactorySessionID)
 	request.Execution.RuntimeID = firstRuntimeValue(planned.RuntimeID, request.Execution.RuntimeID)

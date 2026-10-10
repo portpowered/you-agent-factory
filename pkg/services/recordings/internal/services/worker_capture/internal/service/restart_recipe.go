@@ -11,14 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// ReadWorkerContinuationSource requires a committed terminal for the exact
+// LookupPreparedWorkerContinuationSource requires a committed terminal for the exact
 // recipe attempt. Incomplete history and missing references never authorize
 // a native continuation, including after this writer is reopened.
-func (writer *FileWriter) ReadWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
-	execution, err := writer.ReadWorkerRestartRecipe(ctx, target)
-	if err != nil {
-		return recordings.WorkerContinuationSource{}, err
-	}
+func (writer *FileWriter) LookupPreparedWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	summary, err := writer.LookupWorkerSessionSummary(ctx, target.WorkerSessionID)
 	if err != nil {
 		return recordings.WorkerContinuationSource{}, err
@@ -26,6 +22,10 @@ func (writer *FileWriter) ReadWorkerContinuationSource(ctx context.Context, targ
 	capture := summary.Capture
 	if capture.Catalog.RecordingID != target.RecordingID || capture.Catalog.FactorySessionID != target.FactorySessionID {
 		return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
+	}
+	execution, err := writer.readWorkerRestartRecipe(ctx, target, true)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
 	}
 	return capturedContinuationSource(recordings.WorkerSessionRecordingSnapshot{
 		RecordingGenerationID: capture.Catalog.RecordingGenerationID, OwnerEpoch: capture.Catalog.OwnerEpoch,
@@ -62,6 +62,10 @@ func capturedContinuationSource(session recordings.WorkerSessionRecordingSnapsho
 // store's identity. The captured epoch is checked as data, never upgraded to
 // this host's epoch or used to restore execution authority.
 func (writer *FileWriter) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
+	return writer.readWorkerRestartRecipe(ctx, target, false)
+}
+
+func (writer *FileWriter) readWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, preparedOnly bool) (workers.WorkstationDispatchRequest, error) {
 	entry := writer.entry(target.RecordingID)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
@@ -69,7 +73,7 @@ func (writer *FileWriter) ReadWorkerRestartRecipe(ctx context.Context, target re
 		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
 		FactorySessionID: target.FactorySessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID,
 	}
-	identity, err := writer.controlInputIdentity(ctx, entry, key)
+	identity, err := writer.restartInputIdentity(ctx, entry, key, preparedOnly)
 	if err != nil {
 		return workers.WorkstationDispatchRequest{}, err
 	}
@@ -239,4 +243,22 @@ func restartRecipeContains(document any, secret string) bool {
 		}
 	}
 	return false
+}
+
+func (writer *FileWriter) restartInputIdentity(ctx context.Context, entry *recordingEntry, key recordings.WorkerControlOperationKey, preparedOnly bool) (controlInputArtifact, error) {
+	if !preparedOnly {
+		return writer.controlInputIdentity(ctx, entry, key)
+	}
+	if err := ctx.Err(); err != nil {
+		return controlInputArtifact{}, err
+	}
+	// Ordinary admission must never hydrate a journal, even on a cold read.
+	session := entry.sessions[key.WorkerSessionID]
+	if !entry.loaded || entry.damaged || session == nil || len(session.records) == 0 {
+		return controlInputArtifact{}, recordings.ErrWorkerRecordingReplay
+	}
+	if writer.catalogEntry(session).FactorySessionID != key.FactorySessionID {
+		return controlInputArtifact{}, recordings.ErrWorkerControlConflict
+	}
+	return controlInputArtifact{Key: key, Generation: session.generation}, nil
 }

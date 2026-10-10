@@ -298,12 +298,12 @@ func (router *inferenceWorkerRecordingRouter) ReadWorkerRestartRecipe(ctx contex
 	return store.ReadWorkerRestartRecipe(ctx, target)
 }
 
-func (router *inferenceWorkerRecordingRouter) ReadWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
+func (router *inferenceWorkerRecordingRouter) LookupPreparedWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	store, err := router.restartStore(target.RecordingID, target.WorkerSessionID)
 	if err != nil {
 		return recordings.WorkerContinuationSource{}, err
 	}
-	return store.ReadWorkerContinuationSource(ctx, target)
+	return store.LookupPreparedWorkerContinuationSource(ctx, target)
 }
 
 func (router *inferenceWorkerRecordingRouter) ReadWorkerContinuationInput(ctx context.Context, key recordings.WorkerControlOperationKey) (json.RawMessage, error) {

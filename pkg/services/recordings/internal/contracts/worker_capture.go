@@ -47,7 +47,9 @@ type WorkerRestartInputStore interface {
 	ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error
 	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
 	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
-	ReadWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
+	// LookupPreparedWorkerContinuationSource selects activated metadata and the
+	// bounded immutable recipe. It never hydrates recording history.
+	LookupPreparedWorkerContinuationSource(context.Context, workerrecording.WorkerControlTarget) (WorkerContinuationSource, error)
 	ReadWorkerContinuationInput(context.Context, workerrecording.WorkerControlOperationKey) (json.RawMessage, error)
 }
 

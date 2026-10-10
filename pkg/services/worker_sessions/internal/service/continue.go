@@ -292,7 +292,7 @@ func (r *registry) reserveAvailableContinuationLocked(
 	snapshot.session = snapshot.session.Clone()
 	reference := snapshot.session.ProviderSessionAssociation.Reference
 	r.mu.Unlock()
-	err := r.inspectContinuationReference(r.serverOwnedContext(), reference)
+	err := r.inspectContinuationReference(r.serverOwnedContext(), reference, snapshot.session.ID, snapshot.execution.Execution.FactorySessionID)
 	r.mu.Lock()
 	if replay, replayErr := r.existingContinuationReservationLocked(req.RequestID, tuple); replay != nil || replayErr != nil {
 		return replay, false, replayErr
@@ -331,11 +331,11 @@ func (r *registry) existingContinuationReservationLocked(requestID string, tuple
 	return nil, nil
 }
 
-func (r *registry) inspectContinuationReference(ctx context.Context, reference providers.SessionRef) error {
+func (r *registry) inspectContinuationReference(ctx context.Context, reference providers.SessionRef, workerID, factoryID string) error {
 	if r.inspection == nil || (reflect.ValueOf(r.inspection).Kind() == reflect.Pointer && reflect.ValueOf(r.inspection).IsNil()) {
 		return workersessions.ErrContinuationExecutionUnavailable
 	}
-	inspected, err := r.inspection.Inspect(providersessions.InspectRequest{Context: ctx, Session: reference.Clone()})
+	inspected, err := r.inspection.Inspect(providersessions.InspectRequest{Context: ctx, Session: reference.Clone(), WorkerSessionID: workerID, FactorySessionID: factoryID})
 	if err != nil {
 		return fmt.Errorf("%w: %w", workersessions.ErrContinuationExecutionUnavailable, err)
 	}

@@ -537,3 +537,164 @@ func capturedInspectRefusal(t *testing.T, name string, fake *capturedCodexFake) 
 	fake.catalog[""] = page
 	return ctx, want
 }
+
+func TestCapturedInspectSupportsExecutionProvidersAndValidatesReferences(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []providers.ID{providers.IDClaude, "cursor-acp", "custom-acp"} {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Parallel()
+			fake, ref := capturedInspectChain(t, provider)
+			service := inspectionService{captured: capturedProvider{reader: fake}}
+			got, err := service.Inspect(providersessions.InspectRequest{Session: ref})
+			if err != nil || got.Session != ref || fake.activityCalls != 0 {
+				t.Fatalf("exact execution reference unavailable: %+v, %v", got, err)
+			}
+		})
+	}
+	for _, cell := range []struct {
+		ref  providers.SessionRef
+		want error
+	}{
+		{providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind}, providersessions.ErrInvalidIdentifier},
+		{providers.SessionRef{Kind: providers.SessionIDKind, ID: "ref"}, providersessions.ErrUnsupportedProvider},
+		{providers.SessionRef{Provider: providers.IDClaude, Kind: "unknown", ID: "ref"}, providersessions.ErrUnsupportedKind},
+		{providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "../ref"}, providersessions.ErrInvalidIdentifier},
+	} {
+		fake, _ := capturedInspectChain(t, providers.IDClaude)
+		service := inspectionService{captured: capturedProvider{reader: fake}}
+		_, err := service.Inspect(providersessions.InspectRequest{Session: cell.ref})
+		if !errors.Is(err, cell.want) || fake.calls != 0 {
+			t.Fatalf("invalid reference reached storage: %v, calls=%d", err, fake.calls)
+		}
+	}
+}
+
+func TestCapturedInspectRejectsCorruptedCommittedMetadata(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"missing worker", "missing catalog generation", "no association", "bad opening", "out of prefix", "bad metadata", "bad payload", "foreign identity", "no root", "invalid lineage", "predecessor disagreement", "successor disagreement"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fake, ref := capturedInspectChain(t, providers.IDCodex)
+			page := fake.catalog[""]
+			mutateInspectionMetadata(t, name, &page)
+			fake.catalog[""] = page
+			_, err := (&inspectionService{captured: capturedProvider{reader: fake}}).Inspect(providersessions.InspectRequest{Session: ref})
+			if err == nil || fake.activityCalls != 0 {
+				t.Fatalf("corrupt metadata authorized reference: %v activity=%d", err, fake.activityCalls)
+			}
+		})
+	}
+}
+
+func mutateInspectionMetadata(t *testing.T, name string, page *recordings.WorkerCapturedCatalogPage) {
+	t.Helper()
+	item := &page.Items[0]
+	switch name {
+	case "missing worker":
+		item.Catalog.WorkerSessionID = ""
+	case "missing catalog generation":
+		page.GenerationID = ""
+	case "no association":
+		page.Items = nil
+	case "bad opening":
+		item.Opening.Payload = []byte(`{broken`)
+	case "out of prefix":
+		item.MetadataRecords[0].ID.Position = 100
+	case "bad metadata":
+		bad := item.Opening.Detached()
+		bad.ID.Position = 2
+		bad.Payload = []byte(`{broken`)
+		item.MetadataRecords = append([]events.Record{bad}, item.MetadataRecords...)
+	default:
+		mutateInspectionLineage(t, name, page)
+	}
+}
+
+func mutateInspectionLineage(t *testing.T, name string, page *recordings.WorkerCapturedCatalogPage) {
+	t.Helper()
+	item := &page.Items[0]
+	record := &item.MetadataRecords[0]
+	var draft workers.Draft
+	var payload workers.SessionPayload
+	if json.Unmarshal(record.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+		t.Fatal("invalid fixture")
+	}
+	switch name {
+	case "bad payload":
+		bad := item.Opening.Detached()
+		bad.ID.Position = 2
+		draft.Payload = []byte(`[]`)
+		bad.Payload = mustJSON(t, draft)
+		item.MetadataRecords = append([]events.Record{bad}, item.MetadataRecords...)
+		return
+	case "foreign identity":
+		payload.WorkerSessionID = "foreign"
+	case "no root":
+		payload.Lineage = &workers.SessionLineage{PredecessorWorkerSessionID: "third", PreviousDispatchID: "third-attempt", PreviousAttemptID: "third-attempt"}
+		item.Opening = inspectChainItem(t, *item, "source", "factory", "third", "third-attempt").Opening
+	case "invalid lineage":
+		payload.Lineage = &workers.SessionLineage{PredecessorWorkerSessionID: "source"}
+	case "predecessor disagreement":
+		item = &page.Items[1]
+		record = &item.MetadataRecords[0]
+		if json.Unmarshal(record.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+			t.Fatal("invalid fixture")
+		}
+		payload.Lineage.PredecessorWorkerSessionID = "foreign"
+	case "successor disagreement":
+		payload.Lineage = &workers.SessionLineage{SuccessorWorkerSessionID: "second"}
+		var opening workers.Draft
+		var openingPayload workers.SessionPayload
+		if json.Unmarshal(item.Opening.Payload, &opening) != nil || json.Unmarshal(opening.Payload, &openingPayload) != nil {
+			t.Fatal("invalid fixture")
+		}
+		openingPayload.Lineage = &workers.SessionLineage{SuccessorWorkerSessionID: "third"}
+		opening.Payload = mustJSON(t, openingPayload)
+		item.Opening.Payload = mustJSON(t, opening)
+	}
+	draft.Payload = mustJSON(t, payload)
+	record.Payload = mustJSON(t, draft)
+}
+
+func TestCapturedInspectScopesReusedOpaqueReferences(t *testing.T) {
+	t.Parallel()
+	for _, scope := range []string{"factory", ""} {
+		t.Run("scope="+scope, func(t *testing.T) {
+			t.Parallel()
+			fake, ref := capturedInspectChain(t, providers.IDCursor)
+			page := fake.catalog[""]
+			for i := range page.Items {
+				page.Items[i].Catalog.FactorySessionID = scope
+			}
+			for i, id := range []string{"source", "second", "third"} {
+				predecessor, attempt := "", ""
+				if i > 0 {
+					predecessor = []string{"source", "second"}[i-1]
+					attempt = predecessor + "-attempt"
+				}
+				page.Items[i] = inspectChainItem(t, page.Items[i], id, scope, predecessor, attempt)
+			}
+			peer := inspectChainItem(t, page.Items[0], "peer", "foreign", "", "")
+			peer.SuccessorWorkerSessionID = ""
+			page.Items = append(page.Items, peer)
+			fake.catalog[""] = page
+			service := inspectionService{captured: capturedProvider{reader: fake}}
+			_, err := service.Inspect(providersessions.InspectRequest{Session: ref})
+			if !errors.Is(err, providersessions.ErrAmbiguousSessionFile) {
+				t.Fatalf("unscoped ambiguity lost: %v", err)
+			}
+			for _, worker := range []string{"source", "third"} {
+				got, err := service.Inspect(providersessions.InspectRequest{Session: ref, WorkerSessionID: worker, FactorySessionID: scope})
+				if err != nil || got.Session != ref || fake.activityCalls != 0 {
+					t.Fatalf("scoped chain unavailable: %+v %v", got, err)
+				}
+			}
+			for _, worker := range []string{"absent", "peer"} {
+				_, err := service.Inspect(providersessions.InspectRequest{Session: ref, WorkerSessionID: worker, FactorySessionID: scope})
+				if !errors.Is(err, providersessions.ErrSessionNotFound) {
+					t.Fatalf("foreign association selected: %v", err)
+				}
+			}
+		})
+	}
+}

@@ -137,7 +137,12 @@ func (r *registry) readContinuationRecipeContext(ctx context.Context, req worker
 	if err := waitContinuationPublication(ctx, terminalPublished); err != nil {
 		return nil, err
 	}
-	catalog, err := r.logs.reader.LookupWorkerSessionCapture(ctx, source.ID)
+	reader, supported := r.logs.reader.(recordings.WorkerCapturedSummaryReader)
+	if !supported {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
+	summary, err := reader.LookupWorkerSessionSummary(ctx, source.ID)
+	catalog := summary.Capture.Catalog
 	if err != nil || catalog.WorkerSessionID != source.ID || catalog.FactorySessionID != factorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
@@ -179,7 +184,7 @@ func waitContinuationPublication(ctx context.Context, terminalPublished <-chan s
 }
 
 func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target recordings.WorkerControlTarget, source workersessions.Session) (*workers.WorkstationDispatchRequest, error) {
-	captured, err := r.restart.ReadWorkerContinuationSource(ctx, target)
+	captured, err := r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
 	if err != nil || !directRestartRecipeSafe(captured.Execution) ||
 		captured.Execution.Execution.FactorySessionID != target.FactorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
