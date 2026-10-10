@@ -60,17 +60,29 @@ This is partial classification, not repository-wide PASS or the complete S1-S9
 witness. Other owners, Platform effects and transport roles remain unclassified.
 
 PR #3132 removed Provider Sessions' named requiredness findings. PR #3133 removed
-the Settings root findings, but private document receiver/storage/codec guards
-and resolution.newProvidersRootQuery's required Providers guard survive. The
-dormant Settings HTTP NewAdapterFromRoot still calls NewAdapter outside Wire.
-Full Settings enabling remains BLOCKED pending the original owner's smallest
-delta; no suppression or T29 production edit is authorized. The exact sources
-and delivered merge references are reconciled in inventory.md.
+the Settings root findings; PR #3137 removed the private document and Providers
+query guards and retired RootBinding/NewAdapterFromRoot. Optional preservation
+and diagnostics, request validation and lifecycle/resource errors remain lawful.
+Settings still requires exact classification; source removal is not coverage.
 
-Required receiver/storage provenance follows exact constructor results. A public
-interface result does not currently prove the private implementation's receiver
-or stored origins merely because that concrete type is also classified. This
-limit joins the type/tag/platform/callable edges below and permits no exemption.
+Concrete receiver/storage identity behind an interface return follows authored
+literals, immutable result aliases and same-package helper returns. Required
+parameter propagation supplies helper storage origins. It does not classify all
+interface implementers; nested closure returns and unrelated concrete receivers
+remain excluded. Typed fixtures and maintained Provider Sessions smoke seeds
+protect guards behind interface returns. Named/bare or mutated returns,
+interface conversions, parameter-return helpers, imported/opaque helper bodies
+and recursive return paths remain incompletely analyzed. Known required origins
+still retain existing unresolved diagnostics; unsupported identity is unproved,
+not lawful. No analysis limit permits an allowance or exemption.
+
+Work's applicationService still guards its receiver and injected RuntimeResolver
+in runtime, and its injected SubmittedFileReader in SubmitFileForSession
+(work/internal/service.go). NewService stores both directly; canonical
+provideWorkService supplies the completed inputs and provideWorkSubmittedFileReader
+selects the host override or os.ReadFile. This is BLOCKED for original-owner
+T05 correction, not resource validation. Preserve the separate nil runtime
+returned by ResolveWorkRuntime, operation errors and request/domain checks.
 
 The maintained typed analyzer now recognizes unlisted constructor declarations
 and references with the existing `New`/`Build`/`Create`/`Ensure`/`Open`/`Provide`
@@ -109,11 +121,9 @@ full S1-S9 plugin matrix remain T29 obligations; no allowance or baseline growth
 is authorized.
 
 The formerly named Provider Sessions and Settings root guards are removed by
-PR #3132 and #3133 respectively. The surviving private Settings findings listed
-above remain blocking and require the original owner's correction while
-preserving supported boundary validation, context and domain checks. T29 must
-not suppress them, call them terminal, or make production changes in a
-checker-only lane.
+PR #3132 and #3133 respectively. PR #3137 closes the formerly blocked private
+Settings findings. The Work requiredness findings above remain blocked for original-owner correction. T29
+must not suppress them or make production changes in this checker-only lane.
 
 The constructor inventory names qualified service constructors, effects, their required parameters, returned service interfaces, and approved focused provider operations. It is enforcement metadata with exact semantic meaning, not a broad exception list. Validate references against source and reject stale entries. Derive provider references from authored Wire sets where possible and resolve exported aliases in owner Wire packages. Go internal visibility still applies: canonical composition consumes focused owner exports rather than importing private implementation packages.
 

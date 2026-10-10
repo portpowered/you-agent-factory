@@ -832,7 +832,9 @@ def provider_sessions_smoke_sources(root: Path, seeded: bool) -> list[tuple[str,
           "func New(reader recordings.WorkerCapturedActivityReader) (sessions.Service, error) {\n" +
           (" if reader == nil { return nil, nil }\n" if seeded else "") +
           " return &inspectionService{reader: reader}, nil\n}\n"
-          "func (s *inspectionService) Observe() { s.reader.Read() }\n" +
+          "func (s *inspectionService) Observe() {\n" +
+          (" if s == nil { return }\n if s.reader == nil { return }\n" if seeded else "") +
+          " s.reader.Read()\n}\n" +
           ("func Operation(reader recordings.WorkerCapturedActivityReader) { New(reader) }\n" if seeded else ""))
     write(root, owner + "/wire/provider.go", "package wire\n" +
           f'import sessions "{module}/{owner}"\n' +
@@ -872,6 +874,8 @@ def provider_sessions_smoke_sources(root: Path, seeded: bool) -> list[tuple[str,
         ("repolint", f"service-subpackage: {caller} -> {owner}/wire"),
         ("repolint", f"registered-construction: {caller} -> {module}/{caller}.Run->{module}/{owner}/wire.NewService"),
         ("repolint", f"required-dependency-guard: {private} -> {module}/{private}.New->{module}/{private}.New"),
+        ("repolint", f"required-receiver-guard: {private} -> {module}/{private}.(inspectionService).Observe->{module}/{private}.New"),
+        ("repolint", f"required-dependency-guard: {private} -> {module}/{private}.(inspectionService).Observe->{module}/{private}.New"),
         ("repolint", f"required-dependency-guard: {transport} -> {module}/{transport}.NewHandler->{module}/{transport}.NewHandler"),
         ("repolint", f"service-getter-locator: {transport} -> {module}/{transport}.(Adapter).Use->{module}/{transport}.(Adapter).Peer"),
         ("repolint", f"unresolved-service-getter-reference: {transport} -> {module}/{transport}.(Adapter).Escape->{module}/{transport}.(Adapter).Peer"),
