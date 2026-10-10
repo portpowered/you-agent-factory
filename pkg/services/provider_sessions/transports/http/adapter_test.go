@@ -143,7 +143,13 @@ func TestAdapterDetailsPreservesRootFailureIdentity(t *testing.T) {
 	failure := &providersessions.LookupError{Provider: providersessions.ProviderCodex, SessionID: "missing", Err: providersessions.ErrSessionNotFound}
 	fake := &rootServiceFake{detailErr: failure}
 	_, err := NewAdapter(fake).Details("codex", providersessions.SessionIDKind, "missing")
-	if err != failure || fake.lastProvider != "codex" || fake.lastKind != providersessions.SessionIDKind || fake.lastID != "missing" {
+	if !errors.Is(err, failure) {
+		t.Fatalf("Details error = %v, want supplied lookup failure", err)
+	}
+	if err != failure { //nolint:errorlint // Direct forwarding must preserve the supplied error object without wrapping.
+		t.Fatalf("Details error = %v, want exact supplied lookup failure", err)
+	}
+	if fake.lastProvider != "codex" || fake.lastKind != providersessions.SessionIDKind || fake.lastID != "missing" {
 		t.Fatalf("Details = %v, forwarded identity = (%q, %q, %q)", err, fake.lastProvider, fake.lastKind, fake.lastID)
 	}
 }
