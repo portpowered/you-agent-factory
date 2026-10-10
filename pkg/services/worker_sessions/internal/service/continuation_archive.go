@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -231,8 +232,14 @@ func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, ta
 	if json.Unmarshal(page.Opening.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil || opening.ValidateLineage() != nil {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
+	metadata, err := decodeSessionMetadata(captured.SessionMetadata)
+	openingMetadata, openingErr := decodeSessionMetadata(opening.SessionMetadata)
+	if err != nil || openingErr != nil || !reflect.DeepEqual(metadata, openingMetadata) {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
 	source := workersessions.Session{
-		ID: target.WorkerSessionID, State: workersessions.State(captured.Terminal.Status),
+		Metadata: metadata,
+		ID:       target.WorkerSessionID, State: workersessions.State(captured.Terminal.Status),
 		SuccessorWorkerSessionID: page.SuccessorWorkerSessionID,
 		ProviderSessionAssociation: &workersessions.ProviderSessionAssociation{
 			WorkerSessionID: target.WorkerSessionID, DispatchID: target.ExpectedAttemptID,

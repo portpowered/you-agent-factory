@@ -67,6 +67,7 @@ func TestTerminalCaptureKeepsExactAttemptReferenceWithoutCredentials(t *testing.
 }
 
 type restartRecipeStore struct {
+	metadata  json.RawMessage
 	target    recordings.WorkerControlTarget
 	execution workers.WorkstationDispatchRequest
 	calls     int
@@ -75,11 +76,14 @@ type restartRecipeStore struct {
 	input     func() json.RawMessage
 }
 
-func (store *restartRecipeStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+func (store *restartRecipeStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return store.err
 }
 
-func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
+func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
+	if len(metadata) == 1 {
+		store.metadata = append(json.RawMessage(nil), metadata[0]...)
+	}
 	store.calls++
 	store.target = target
 	store.execution = execution
@@ -1048,4 +1052,34 @@ func (*controlCaptureReader) ListPreparedWorkerSessionCaptures(context.Context, 
 
 func (store *restartRecipeStore) ValidateWorkerContinuationSource(ctx context.Context, target recordings.WorkerControlTarget) (recordings.WorkerContinuationSource, error) {
 	return store.LookupPreparedWorkerContinuationSource(ctx, target)
+}
+
+func TestRestartRecipeUsesDetachedReservedMetadata(t *testing.T) {
+	t.Parallel()
+	r, plan, _ := newDurableInterruptFixture(t)
+	store := &restartRecipeStore{}
+	r.restart = store
+	r.observations["worker"] = &observation{direct: true}
+	session := r.sessions["worker"]
+	session.Metadata = &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
+		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory"},
+		Labels:      []string{"tag:project=example"},
+	}
+	r.sessions["worker"] = session
+	if err := r.saveRestartRecipe(t.Context(), workersessions.InvokeSessionRequest{
+		ID: "worker", Execution: plan.execution,
+		Metadata: &workersessions.SessionMetadata{Labels: []string{"untrusted-replacement"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := decodeSessionMetadata(store.metadata)
+	if err != nil || !reflect.DeepEqual(metadata, session.Metadata) {
+		t.Fatalf("recipe lost reserved facts: %s %v", store.metadata, err)
+	}
+	session.Metadata.Requester.WorkerSessionID = "mutated"
+	session.Metadata.Labels[0] = "mutated"
+	if metadata.Requester.WorkerSessionID != "lead" || metadata.Labels[0] != "tag:project=example" {
+		t.Fatal("recipe shares reserved metadata")
+	}
 }

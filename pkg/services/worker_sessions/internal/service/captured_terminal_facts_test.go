@@ -219,3 +219,102 @@ func TestCapturedTerminalEnrichmentPreservesLiveTimingUntilCaptureComplete(t *te
 		})
 	}
 }
+
+func TestCapturedRequesterMetadataIsDetachedAndValidated(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead","workId":"project"},"correlation":{"workId":"lane","factorySessionId":"factory"},"labels":["tag:project=example"]}`,
+		`{"requester":null}`,
+		``,
+	} {
+		item := completedSummaryFixture(t, false)
+		var draft workers.Draft
+		var opening workers.SessionPayload
+		_ = json.Unmarshal(item.Opening.Payload, &draft)
+		_ = json.Unmarshal(draft.Payload, &opening)
+		opening.SessionMetadata = json.RawMessage(raw)
+		draft.Payload, _ = json.Marshal(opening)
+		item.Opening.Payload, _ = json.Marshal(draft)
+		fake := &terminalSummaryReader{item: item, historyCatalogFake: historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{item}}}
+		logs := &LogReader{reader: fake}
+		got, err := logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, err := logs.archivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{}, nil)
+		if err != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0], got) {
+			t.Fatalf("show/list metadata differs: %+v %v", rows, err)
+		}
+		if raw == "" || raw == `{"requester":null}` {
+			if got.Requester != nil || got.Correlation != nil || len(got.Labels) != 0 {
+				t.Fatalf("invented metadata: %+v", got)
+			}
+			continue
+		}
+		if got.Requester == nil || got.Requester.WorkerSessionID != "lead" || got.Requester.WorkID != "project" || got.Correlation == nil || got.Correlation.WorkID != "lane" || got.Labels[0] != "tag:project=example" {
+			t.Fatalf("lost requester facts: %+v", got)
+		}
+		got.Requester.WorkerSessionID, got.Correlation.WorkID, got.Labels[0] = "mutated", "mutated", "mutated"
+		again, err := logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+		if err != nil || !reflect.DeepEqual(again, rows[0]) {
+			t.Fatalf("read aliased metadata: %+v %v", again, err)
+		}
+	}
+}
+
+func TestCapturedMetadataDecoderRejectsUnknownDuplicateAndIncompleteFacts(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		`null`, `{}`, `{"requester":null,"token":"planted-secret"}`,
+		`{"requester":null,"requester":null}`,
+		`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead","token":"secret"}}`,
+		`{"requester":{"kind":"OPERATOR","workerSessionId":"lead"}}`,
+		`{"requester":null,"correlation":{"workId":"lane","workId":"foreign"}}`,
+		`{"requester":{"kind":"WORKER_SESSION","workerSessionId":""}}`,
+	} {
+		if got, err := decodeSessionMetadata(json.RawMessage(raw)); !errors.Is(err, workersessions.ErrInvalidSessionMetadata) || got != nil {
+			t.Fatalf("invalid captured metadata accepted: %s, %+v, %v", raw, got, err)
+		}
+	}
+}
+
+func TestArchivedContinuationMetadataMustMatchOpening(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"retained", "legacy", "changed", "invalid"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			item := completedSummaryFixture(t, false)
+			page := recordings.WorkerCapturedActivityPage{Opening: item.Opening, Terminal: item.Terminal}
+			metadata := json.RawMessage(`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead"},"labels":["tag:project=example"]}`)
+			if cell == "legacy" {
+				metadata = nil
+			}
+			var draft workers.Draft
+			var opening workers.SessionPayload
+			_ = json.Unmarshal(page.Opening.Payload, &draft)
+			_ = json.Unmarshal(draft.Payload, &opening)
+			opening.SessionMetadata = metadata
+			draft.Payload, _ = json.Marshal(opening)
+			page.Opening.Payload, _ = json.Marshal(draft)
+			captured := recordings.WorkerContinuationSource{SessionMetadata: metadata, Terminal: *item.Terminal,
+				Reference: providers.SessionRef{Provider: "codex", Kind: "session_id", ID: "opaque"}}
+			if cell == "changed" {
+				captured.SessionMetadata = json.RawMessage(`{"requester":null}`)
+			}
+			if cell == "invalid" {
+				captured.SessionMetadata = json.RawMessage(`{"requester":null,"token":"planted-secret"}`)
+			}
+			got, err := archivedContinuationSnapshot(page, recordings.WorkerControlTarget{WorkerSessionID: "worker", ExpectedAttemptID: "attempt"}, captured)
+			if cell == "changed" || cell == "invalid" {
+				if !errors.Is(err, workersessions.ErrContinuationExecutionUnavailable) || got != nil {
+					t.Fatalf("unproved requester admitted: %+v %v", got, err)
+				}
+				return
+			}
+			want, _ := decodeSessionMetadata(metadata)
+			if err != nil || !reflect.DeepEqual(got.snapshot.session.Metadata, want) {
+				t.Fatalf("archived requester lost: %+v %v", got, err)
+			}
+		})
+	}
+}

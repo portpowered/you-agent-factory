@@ -44,8 +44,8 @@ type WorkerRecordingStore interface {
 }
 
 type WorkerRestartInputStore interface {
-	ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error
-	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest) error
+	ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest, ...json.RawMessage) error
+	SaveWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget, workers.WorkstationDispatchRequest, ...json.RawMessage) error
 	ReadWorkerRestartRecipe(context.Context, workerrecording.WorkerControlTarget) (workers.WorkstationDispatchRequest, error)
 	// LookupPreparedWorkerContinuationSource selects activated metadata and the
 	// bounded immutable recipe. It never hydrates recording history.
@@ -59,10 +59,11 @@ type WorkerRestartInputStore interface {
 // WorkerContinuationSource is detached proof from committed source history.
 // It contains no execution handle and grants no admission or control authority.
 type WorkerContinuationSource struct {
-	Execution workers.WorkstationDispatchRequest
-	Reference providers.SessionRef
-	Terminal  workerrecording.WorkerRecordingTerminal
-	TurnID    string
+	SessionMetadata json.RawMessage
+	Execution       workers.WorkstationDispatchRequest
+	Reference       providers.SessionRef
+	Terminal        workerrecording.WorkerRecordingTerminal
+	TurnID          string
 }
 
 // WorkerControlOperationStore shares the recording journal's sync boundary.

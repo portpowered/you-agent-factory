@@ -217,12 +217,12 @@ func TestInterruptUncertainAcknowledgementKeepsPublicOutcome(t *testing.T) {
 	}
 }
 
-func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, request workers.WorkstationDispatchRequest) error {
+func (store *interruptPhaseAckStore) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, request workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
 	if target.WorkerSessionID == "restart-recipe-write-failure" || target.WorkerSessionID == "restart-recipe-unsafe" ||
 		target.WorkerSessionID == "continuation-unadmitted-recipe-successor" {
 		return errors.New("private-recipe-sync-detail")
 	}
-	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request)
+	return store.WorkerRecordingStore.SaveWorkerRestartRecipe(ctx, target, request, metadata...)
 }
 
 func (store *interruptPhaseAckStore) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {

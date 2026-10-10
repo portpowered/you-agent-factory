@@ -32,7 +32,8 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 			execution.Execution.Dispatch.WorkstationName = "direct"
 			execution.Execution.Model = "captured-model"
 			execution.Execution.WorkingDirectory = "captured-workspace"
-			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution); err != nil {
+			metadata := json.RawMessage(`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead","workId":"project"},"correlation":{"workId":"lane","factorySessionId":"factory"},"labels":["tag:project=example"]}`)
+			if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); err != nil {
 				t.Fatal(err)
 			}
 			if cell != "active" {
@@ -60,9 +61,13 @@ func TestContinuationSourceRequiresExactCommittedTerminalAcrossReopen(t *testing
 				return
 			}
 			assertCapturedContinuationSource(t, source, err)
+			if !bytes.Equal(source.SessionMetadata, metadata) {
+				t.Fatalf("restart lost metadata: %s", source.SessionMetadata)
+			}
+			source.SessionMetadata[0] = '!'
 			source.Execution.Execution.Model = "mutated"
 			again, err := reopened.LookupPreparedWorkerContinuationSource(t.Context(), target)
-			if err != nil || again.Execution.Execution.Model != "captured-model" {
+			if err != nil || again.Execution.Execution.Model != "captured-model" || !bytes.Equal(again.SessionMetadata, metadata) {
 				t.Fatalf("read mutated persisted source: %+v, %v", again, err)
 			}
 			if probe.reads != reads {
@@ -755,5 +760,22 @@ func TestContinuationAdmissionRefusesChangedImmutableArtifact(t *testing.T) {
 				t.Fatalf("changed artifact authorized admission: %+v, %v", admitted, err)
 			}
 		})
+	}
+}
+
+func TestRestartRecipeMetadataRejectsInheritedSecrets(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	target := controlIntent(t, writer, "recording", "worker", "request").Target
+	execution := workers.WorkstationDispatchRequest{WorkstationName: "direct"}
+	execution.Execution.Dispatch.DispatchID = target.ExpectedAttemptID
+	execution.Execution.Dispatch.WorkstationName = "direct"
+	execution.Execution.ProcessEnvironment = []string{"API_KEY=planted-secret"}
+	metadata := json.RawMessage(`{"requester":null,"labels":["planted-secret"]}`)
+	if err := writer.SaveWorkerRestartRecipe(t.Context(), target, execution, metadata); !errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
+		t.Fatalf("secret-bearing metadata accepted: %v", err)
+	}
+	if _, err := writer.ReadWorkerRestartRecipe(t.Context(), target); err == nil {
+		t.Fatal("rejected metadata persisted a recipe")
 	}
 }

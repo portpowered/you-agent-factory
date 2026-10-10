@@ -24,14 +24,19 @@ func (writer *FileWriter) LookupPreparedWorkerContinuationSource(ctx context.Con
 	if capture.Catalog.RecordingID != target.RecordingID || capture.Catalog.FactorySessionID != target.FactorySessionID {
 		return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
 	}
-	execution, err := writer.readWorkerRestartRecipe(ctx, target, true)
+	recipe, err := writer.readWorkerRestartRecipe(ctx, target, true)
 	if err != nil {
 		return recordings.WorkerContinuationSource{}, err
 	}
-	return capturedContinuationSource(recordings.WorkerSessionRecordingSnapshot{
+	source, err := capturedContinuationSource(recordings.WorkerSessionRecordingSnapshot{
 		RecordingGenerationID: capture.Catalog.RecordingGenerationID, OwnerEpoch: capture.Catalog.OwnerEpoch,
 		Status: capture.Health, ExecutionTerminal: capture.Terminal, Records: capture.MetadataRecords,
-	}, target, execution)
+	}, target, recipe.Execution)
+	if err != nil {
+		return recordings.WorkerContinuationSource{}, err
+	}
+	source.SessionMetadata = bytes.Clone(recipe.SessionMetadata)
+	return source, nil
 }
 
 // ValidateWorkerContinuationSource keeps immutable input validation with its
@@ -46,7 +51,7 @@ func (writer *FileWriter) ValidateWorkerContinuationSource(ctx context.Context, 
 	if err != nil {
 		return recordings.WorkerContinuationSource{}, err
 	}
-	if !reflect.DeepEqual(persisted, source.Execution) {
+	if !reflect.DeepEqual(persisted.Execution, source.Execution) || !bytes.Equal(persisted.SessionMetadata, source.SessionMetadata) {
 		return recordings.WorkerContinuationSource{}, recordings.ErrWorkerRecordingReplay
 	}
 	return source, nil
@@ -81,47 +86,48 @@ func capturedContinuationSource(session recordings.WorkerSessionRecordingSnapsho
 // store's identity. The captured epoch is checked as data, never upgraded to
 // this host's epoch or used to restore execution authority.
 func (writer *FileWriter) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {
-	return writer.readWorkerRestartRecipe(ctx, target, false)
+	recipe, err := writer.readWorkerRestartRecipe(ctx, target, false)
+	return recipe.Execution, err
 }
 
-func (writer *FileWriter) readWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, preparedOnly bool) (workers.WorkstationDispatchRequest, error) {
+func (writer *FileWriter) readWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, preparedOnly bool) (workerRestartRecipe, error) {
 	entry := writer.entry(target.RecordingID)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	return writer.readWorkerRestartRecipeLocked(ctx, entry, target, preparedOnly)
 }
 
-func (writer *FileWriter) readWorkerRestartRecipeLocked(ctx context.Context, entry *recordingEntry, target recordings.WorkerControlTarget, preparedOnly bool) (workers.WorkstationDispatchRequest, error) {
+func (writer *FileWriter) readWorkerRestartRecipeLocked(ctx context.Context, entry *recordingEntry, target recordings.WorkerControlTarget, preparedOnly bool) (workerRestartRecipe, error) {
 	key := recordings.WorkerControlOperationKey{
 		RecordingID: target.RecordingID, WorkerSessionID: target.WorkerSessionID,
 		FactorySessionID: target.FactorySessionID, RequestID: "restart-recipe/" + target.ExpectedAttemptID,
 	}
 	identity, err := writer.restartInputIdentity(ctx, entry, key, preparedOnly)
 	if err != nil {
-		return workers.WorkstationDispatchRequest{}, err
+		return workerRestartRecipe{}, err
 	}
 	session := entry.sessions[target.WorkerSessionID]
 	if target.ExpectedAttemptID == "" || session.generation != target.RecordingGenerationID || session.ownerEpoch != target.OwnerEpoch {
-		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerControlConflict
+		return workerRestartRecipe{}, recordings.ErrWorkerControlConflict
 	}
 	var input []byte
 	if preparedOnly {
 		input = bytes.Clone(session.restartRecipes[target.ExpectedAttemptID])
 		if len(input) == 0 {
-			return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+			return workerRestartRecipe{}, recordings.ErrWorkerRecordingReplay
 		}
 	} else {
 		path := writer.controlInputPath(controlInputRef(identity))
 		if err := writer.checkControlInputPath(path); err != nil {
-			return workers.WorkstationDispatchRequest{}, err
+			return workerRestartRecipe{}, err
 		}
 		data, err := writer.storage.ReadFile(path)
 		if err != nil {
-			return workers.WorkstationDispatchRequest{}, err
+			return workerRestartRecipe{}, err
 		}
 		input, err = decodeControlInput(data, identity)
 		if err != nil {
-			return workers.WorkstationDispatchRequest{}, err
+			return workerRestartRecipe{}, err
 		}
 	}
 	var recipe workerRestartRecipe
@@ -130,27 +136,28 @@ func (writer *FileWriter) readWorkerRestartRecipeLocked(ctx context.Context, ent
 	// Preserve their JSON numbers through canonical validation and continuation.
 	decoder.UseNumber()
 	if decoder.Decode(&recipe) != nil || recipe.Version != 1 || recipe.Target != target {
-		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+		return workerRestartRecipe{}, recordings.ErrWorkerRecordingReplay
 	}
-	canonical, err := encodeWorkerRestartRecipe(target, recipe.Execution)
+	canonical, err := encodeWorkerRestartRecipe(target, recipe.Execution, recipe.SessionMetadata)
 	// Canonical bytes also reject unknown fields and data excluded by the
 	// detached execution contract rather than silently discarding them.
 	if err != nil || !bytes.Equal(canonical, input) {
-		return workers.WorkstationDispatchRequest{}, recordings.ErrWorkerRecordingReplay
+		return workerRestartRecipe{}, recordings.ErrWorkerRecordingReplay
 	}
-	return recipe.Execution, nil
+	return recipe, nil
 }
 
 type workerRestartRecipe struct {
-	Version   int                                `json:"version"`
-	Target    recordings.WorkerControlTarget     `json:"target"`
-	Execution workers.WorkstationDispatchRequest `json:"execution"`
+	SessionMetadata json.RawMessage                    `json:"sessionMetadata,omitempty"`
+	Version         int                                `json:"version"`
+	Target          recordings.WorkerControlTarget     `json:"target"`
+	Execution       workers.WorkstationDispatchRequest `json:"execution"`
 }
 
 // ValidateWorkerRestartRecipe checks the same serializer used by admission,
 // without opening capture or persisting input. New capture generations are
 // SHA-256 hex strings; their contents do not change the serialized size.
-func (writer *FileWriter) ValidateWorkerRestartRecipe(ctx context.Context, workerID string, execution workers.WorkstationDispatchRequest) error {
+func (writer *FileWriter) ValidateWorkerRestartRecipe(ctx context.Context, workerID string, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -160,15 +167,15 @@ func (writer *FileWriter) ValidateWorkerRestartRecipe(ctx context.Context, worke
 		RecordingGenerationID: strings.Repeat("0", 64), OwnerEpoch: writer.captureOwnerEpoch(),
 		ExpectedAttemptID: execution.Execution.Dispatch.DispatchID,
 	}
-	_, err := encodeWorkerRestartRecipe(target, execution)
+	_, err := encodeWorkerRestartRecipe(target, execution, metadata...)
 	return err
 }
 
 // SaveWorkerRestartRecipe shares the journal's sync acknowledgement and keeps
 // capture validation locked through persistence. No caller-selected path or
 // independent ledger is introduced. The attempt is part of the immutable key.
-func (writer *FileWriter) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
-	input, err := encodeWorkerRestartRecipe(target, execution)
+func (writer *FileWriter) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
+	input, err := encodeWorkerRestartRecipe(target, execution, metadata...)
 	if err != nil {
 		return err
 	}
@@ -196,7 +203,17 @@ func (writer *FileWriter) SaveWorkerRestartRecipe(ctx context.Context, target re
 	return err
 }
 
-func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) ([]byte, error) {
+func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) ([]byte, error) {
+	var sessionMetadata json.RawMessage
+	if len(metadata) > 1 {
+		return nil, recordings.ErrInvalidWorkerControlOperation
+	}
+	if len(metadata) == 1 {
+		sessionMetadata = metadata[0]
+	}
+	if len(sessionMetadata) != 0 && (!json.Valid(sessionMetadata) || bytes.Equal(bytes.TrimSpace(sessionMetadata), []byte("null"))) {
+		return nil, recordings.ErrInvalidWorkerControlOperation
+	}
 	request := execution.Execution
 	redaction := request.PromptRedaction
 	if len(request.EnvVars) != 0 || request.WorkflowContext != nil ||
@@ -224,7 +241,7 @@ func encodeWorkerRestartRecipe(target recordings.WorkerControlTarget, execution 
 	if decoder.Decode(&normalized) != nil {
 		return nil, recordings.ErrInvalidWorkerControlOperation
 	}
-	input, err := json.Marshal(workerRestartRecipe{Version: 1, Target: target, Execution: normalized})
+	input, err := json.Marshal(workerRestartRecipe{Version: 1, Target: target, Execution: normalized, SessionMetadata: sessionMetadata})
 	if err != nil {
 		return nil, recordings.ErrInvalidWorkerControlOperation
 	}
@@ -318,11 +335,11 @@ func (writer *FileWriter) prepareRestartRecipe(ctx context.Context, entry *recor
 	}
 	target := recordings.WorkerControlTarget{RecordingID: catalog.RecordingID, WorkerSessionID: catalog.WorkerSessionID,
 		FactorySessionID: catalog.FactorySessionID, RecordingGenerationID: session.generation, OwnerEpoch: session.ownerEpoch, ExpectedAttemptID: opening.AttemptID}
-	execution, err := writer.readWorkerRestartRecipeLocked(ctx, entry, target, false)
+	recipe, err := writer.readWorkerRestartRecipeLocked(ctx, entry, target, false)
 	if err != nil {
 		return
 	}
-	input, err := encodeWorkerRestartRecipe(target, execution)
+	input, err := encodeWorkerRestartRecipe(target, recipe.Execution, recipe.SessionMetadata)
 	if err != nil {
 		return
 	}

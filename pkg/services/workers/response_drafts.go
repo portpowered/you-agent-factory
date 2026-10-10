@@ -257,6 +257,7 @@ type ContentBlock struct {
 }
 
 type SessionPayload struct {
+	SessionMetadata   json.RawMessage           `json:"sessionMetadata,omitempty"`
 	Status            string                    `json:"status,omitempty"`
 	StartedAt         *time.Time                `json:"startedAt,omitempty"`
 	WorkerSessionID   string                    `json:"workerSessionId,omitempty"`

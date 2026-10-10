@@ -868,6 +868,12 @@ func (r *registry) publishOpeningRecord(
 	provider string,
 	recordingsForSession ...recordings.WorkerSessionRecording,
 ) error {
+	session, _, _ := r.loadObservationState(id)
+	metadata, err := encodeSessionMetadata(session.Metadata)
+	if err != nil {
+		return err
+	}
+	payload.SessionMetadata = metadata
 	pub := r.publicationFor(id)
 	pub.mu.Lock()
 	recording := firstWorkerRecording(recordingsForSession)
