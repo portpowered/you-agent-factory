@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
 
-func (*lifecycleControlFactory) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (*lifecycleControlFactory) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	return request, nil, nil
 }
 

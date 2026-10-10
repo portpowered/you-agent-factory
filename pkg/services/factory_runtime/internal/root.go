@@ -702,7 +702,7 @@ func (service *boundRuntimeService) SubmitWorkRequest(ctx context.Context, reque
 	return ingress.SubmitWorkRequest(ctx, request)
 }
 
-func (service *boundRuntimeService) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (service *boundRuntimeService) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	owner := service.target()
 	if owner == nil {
 		return work.SubmitRequest{}, nil, factoryruntime.ErrNotRunning
@@ -710,7 +710,7 @@ func (service *boundRuntimeService) PrepareInvocation(ctx context.Context, reque
 	return owner.PrepareInvocation(ctx, request, caller)
 }
 
-func (r *Root) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (r *Root) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	owner := r.delegate()
 	if owner == nil {
 		return work.SubmitRequest{}, nil, factoryruntime.ErrNotRunning

@@ -59,7 +59,7 @@ func (a *invocationAuthority) SubmitWork(ctx context.Context, sessionID string, 
 	return ingress.SubmitWorkRequest(ctx, work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}))
 }
 
-func (a *invocationAuthority) SubmitInvocation(ctx context.Context, sessionID string, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error) {
+func (a *invocationAuthority) SubmitInvocation(ctx context.Context, sessionID string, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error) {
 	runtime, err := runtimebinding.FactoryForSession(a.state, sessionID)
 	if err != nil {
 		return work.WorkRequestSubmitResult{}, nil, err

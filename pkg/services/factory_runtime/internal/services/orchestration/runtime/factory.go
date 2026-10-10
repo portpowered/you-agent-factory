@@ -80,7 +80,7 @@ type runtimePromptRenderer interface {
 }
 type runtimeConfig struct {
 	invocationCallerMu                 sync.RWMutex
-	invocationCallers                  map[string]*workersessions.CallerIdentity
+	invocationCallers                  map[string]*invocationCallerScope
 	requestFactoryDirectory            string
 	requestRuntimeBaseDir              string
 	net                                *state.Net
@@ -656,7 +656,7 @@ func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request work.WorkRe
 
 // PrepareInvocation keeps caller authority beside execution, never inside
 // canonical Work. Submission still uses the ordinary decorated ingress.
-func (f *factoryImpl) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (f *factoryImpl) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	caller = caller.Clone()
 	if caller == nil {
 		return request, nil, nil
@@ -680,22 +680,44 @@ func (f *factoryImpl) PrepareInvocation(ctx context.Context, request work.Submit
 	return request, release, nil
 }
 
-func (cfg *runtimeConfig) retainInvocationCaller(workID string, caller *workersessions.CallerIdentity) (func(), error) {
+// invocationCallerScope retains execution-only authority and its admission outcome.
+// Release clears credentials; the typed refusal never enters canonical Work.
+type invocationCallerScope struct {
+	caller  *workersessions.CallerIdentity
+	refusal error
+}
+
+func (cfg *runtimeConfig) refuseInvocationCaller(inputs []workers.WorkInput) {
+	cfg.invocationCallerMu.Lock()
+	defer cfg.invocationCallerMu.Unlock()
+	for _, input := range inputs {
+		if input.Kind == string(workers.DataTypeResource) {
+			continue
+		}
+		if scope := cfg.invocationCallers[input.WorkID]; scope != nil {
+			scope.refusal = workersessions.ErrCallerInvalid
+		}
+	}
+}
+
+func (cfg *runtimeConfig) retainInvocationCaller(workID string, caller *workersessions.CallerIdentity) (func() error, error) {
 	cfg.invocationCallerMu.Lock()
 	defer cfg.invocationCallerMu.Unlock()
 	if cfg.invocationCallers == nil {
-		cfg.invocationCallers = make(map[string]*workersessions.CallerIdentity)
+		cfg.invocationCallers = make(map[string]*invocationCallerScope)
 	}
 	if _, exists := cfg.invocationCallers[workID]; exists {
 		return nil, work.ErrWorkRequestConflict
 	}
-	cfg.invocationCallers[workID] = caller.Clone()
-	return func() {
+	scope := &invocationCallerScope{caller: caller.Clone()}
+	cfg.invocationCallers[workID] = scope
+	return func() error {
 		cfg.invocationCallerMu.Lock()
 		defer cfg.invocationCallerMu.Unlock()
 		// Retain a credential-free denial for late queued dispatches. Removing
 		// the entry would silently turn them into unattributed invocations.
-		cfg.invocationCallers[workID] = &workersessions.CallerIdentity{}
+		scope.caller = &workersessions.CallerIdentity{}
+		return scope.refusal
 	}, nil
 }
 
@@ -709,10 +731,10 @@ func (cfg *runtimeConfig) invocationCaller(inputs []workers.WorkInput) *workerse
 			continue
 		}
 		if next, exists := cfg.invocationCallers[input.WorkID]; exists {
-			if caller != nil && *caller != *next {
+			if caller != nil && *caller != *next.caller {
 				return &workersessions.CallerIdentity{}
 			}
-			caller = next
+			caller = next.caller
 		} else {
 			unattributed = true
 		}

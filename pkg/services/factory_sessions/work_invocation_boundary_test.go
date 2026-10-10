@@ -12,7 +12,7 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
-func (a boundaryInvocationAuthority) SubmitInvocation(ctx context.Context, id string, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error) {
+func (a boundaryInvocationAuthority) SubmitInvocation(ctx context.Context, id string, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error) {
 	result, err := a.SubmitWork(ctx, id, request)
 	return result, nil, err
 }

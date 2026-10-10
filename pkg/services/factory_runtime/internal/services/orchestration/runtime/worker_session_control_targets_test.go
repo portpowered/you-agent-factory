@@ -1091,13 +1091,50 @@ func TestInvocationCallerScopeDetachesAndRefusesReleasedOrConflictingWork(t *tes
 	if got := cfg.invocationCaller(append(inputs, workers.WorkInput{WorkID: "peer"})); got == nil || got.Token != "" {
 		t.Fatal("mixed Work inputs borrowed one invocation's authority")
 	}
-	release()
-	release()
+	assertInvocationScopeReleasedWithoutRefusal(t, release)
+	assertInvocationScopeReleasedWithoutRefusal(t, release)
 	if got := cfg.invocationCaller(inputs); got == nil || got.WorkerSessionID != "" || got.Token != "" {
 		t.Fatal("released pending invocation kept credentials or became unattributed")
 	}
 	if _, err := cfg.retainInvocationCaller("source", caller); !errors.Is(err, work.ErrWorkRequestConflict) {
 		t.Fatal("released Work acquired new caller authority")
+	}
+}
+
+func assertInvocationScopeReleasedWithoutRefusal(t *testing.T, release func() error) {
+	t.Helper()
+	if err := release(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestInvocationCallerScopeReportsOnlyItsAdmissionRefusal(t *testing.T) {
+	t.Parallel()
+	cfg := &runtimeConfig{}
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	releases := make(map[string]func() error)
+	for _, workID := range []string{"refused", "peer", "resource"} {
+		release, err := cfg.retainInvocationCaller(workID, caller)
+		if err != nil {
+			t.Fatal(err)
+		}
+		releases[workID] = release
+	}
+	cfg.refuseInvocationCaller([]workers.WorkInput{
+		{WorkID: "refused", Kind: string(workers.DataTypeWork)},
+		{WorkID: "resource", Kind: string(workers.DataTypeResource)},
+		{WorkID: "unattributed", Kind: string(workers.DataTypeWork)},
+	})
+	for workID, release := range releases {
+		for range 2 {
+			err := release()
+			if (workID == "refused" && !errors.Is(err, workersessions.ErrCallerInvalid)) || (workID != "refused" && err != nil) {
+				t.Fatalf("%s scope release error = %v", workID, err)
+			}
+		}
+		if got := cfg.invocationCaller([]workers.WorkInput{{WorkID: workID}}); got == nil || got.Token != "" || got.WorkerSessionID != "" {
+			t.Fatal("scope completion retained credentials or removed its late-dispatch denial")
+		}
 	}
 }
 
@@ -1141,7 +1178,7 @@ func TestPrepareInvocationCallerValidatesBeforeRetainingAuthority(t *testing.T) 
 			if err != nil || release == nil || request.WorkID != "child-work" || request.RequestID != "request" {
 				t.Fatal("prepared invocation changed ordinary request facts")
 			}
-			defer release()
+			defer assertInvocationScopeReleasedWithoutRefusal(t, release)
 			assertRetainedInvocationCaller(t, f.cfg, inputs, original, request)
 		})
 	}

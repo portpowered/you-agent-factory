@@ -214,16 +214,14 @@ func requesterPreparationOperation(t *testing.T, fixture *invokeContinuePackageF
 	return requesterPreparationInvoke(fixture, child, ctx, mode, path, parentID, token)
 }
 
-// This protects dispatch completion and owner cleanup. The existing terminal
-// transport classification is permanent_bad_request; preserving caller-invalid
-// as the invocation's public error code remains a separate retained obligation.
+// This protects typed caller refusal, terminal dispatch completion and exact child cleanup.
 func assertRequesterRuntimePreparationFailure(t *testing.T, mode, result, token string) {
 	t.Helper()
 	assertRequesterTokenAbsent(t, token, result)
 	if mode == "factory" {
-		var response api.InvocationResponse
-		if !strings.HasPrefix(result, "200") || json.Unmarshal([]byte(result[3:]), &response) != nil || response.Status != api.InvocationTerminalStatusFailed || response.FailureReason == nil || *response.FailureReason != api.WorkFailureTypePermanentBadRequest {
-			t.Fatalf("Factory preparation refusal did not complete its failed Work: %s", result)
+		var response api.ErrorResponse
+		if !strings.HasPrefix(result, "403") || json.Unmarshal([]byte(result[3:]), &response) != nil || response.Code != api.ErrorResponseCodeWORKERSESSIONCALLERINVALID {
+			t.Fatalf("Factory preparation refusal lost its typed admission error: %s", result)
 		}
 		return
 	}
@@ -231,7 +229,7 @@ func assertRequesterRuntimePreparationFailure(t *testing.T, mode, result, token 
 	if !strings.HasPrefix(result, "<nil>") || json.Unmarshal([]byte(result[5:]), &response) != nil || response.Error == nil || response.Result != nil {
 		t.Fatal("MCP preparation loss did not return a terminal error")
 	}
-	if response.Error.Code != "factory_session.subagent.provider_request_rejected" || response.Error.Retryable || response.Error.Details["failureReason"] != string(api.WorkFailureTypePermanentBadRequest) || response.Error.Details["sessionClosed"] != true {
+	if response.Error.Code != "WORKER_SESSION_CALLER_INVALID" || response.Error.Retryable || response.Error.Details["sessionClosed"] != true {
 		t.Fatalf("MCP preparation loss did not complete/retire its child: %#v", response.Error)
 	}
 }

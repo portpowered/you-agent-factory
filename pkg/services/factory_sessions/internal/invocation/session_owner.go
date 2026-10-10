@@ -76,7 +76,7 @@ type (
 type InvocationAuthority interface {
 	FactoryConfig(string) (*factorydefinitions.FactoryConfig, error)
 	SubmitWork(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	SubmitInvocation(context.Context, string, work.SubmitRequest, *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error)
+	SubmitInvocation(context.Context, string, work.SubmitRequest, *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error)
 	Observe(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitSession(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
 }
@@ -131,7 +131,7 @@ func (o *SessionOwner) Invoke(
 	ctx context.Context,
 	sessionID string,
 	request InvocationRequest,
-) (FactoryInvocationResult, error) {
+) (result FactoryInvocationResult, invocationErr error) {
 	request.Caller = request.Caller.Clone()
 	prepared, err := o.prepareInvocation(ctx, sessionID, request)
 	if err != nil {
@@ -139,7 +139,7 @@ func (o *SessionOwner) Invoke(
 	}
 	submitResult, release, terminal, err := o.submitInvocation(ctx, sessionID, request, prepared)
 	if release != nil {
-		defer release()
+		defer func() { invocationErr = errors.Join(invocationErr, release()) }()
 	}
 	if terminal != nil || err != nil {
 		if terminal != nil {
@@ -204,7 +204,7 @@ func (o *SessionOwner) submitInvocation(
 	sessionID string,
 	request InvocationRequest,
 	prepared invocationPreparation,
-) (work.WorkRequestSubmitResult, func(), *FactoryInvocationResult, error) {
+) (work.WorkRequestSubmitResult, func() error, *FactoryInvocationResult, error) {
 	submissionContextErr := contextError(ctx)
 	if submissionContextErr != nil {
 		return work.WorkRequestSubmitResult{}, nil, nil, submissionContextErr
@@ -216,7 +216,7 @@ func (o *SessionOwner) submitInvocation(
 		InvocationArguments: work.RuntimeInvocationArguments(prepared.factoryConfig.InvocationSignature, prepared.resolved.NormalizedArguments),
 	}
 	var submitResult work.WorkRequestSubmitResult
-	var release func()
+	var release func() error
 	var err error
 	if request.Caller != nil {
 		submitResult, release, err = o.authority.SubmitInvocation(ctx, sessionID, submission, request.Caller)

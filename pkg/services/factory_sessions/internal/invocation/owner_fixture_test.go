@@ -14,7 +14,7 @@ import (
 type sessionOwnerFixture struct {
 	FactoryConfig    func(string) (*interfaces.FactoryConfig, error)
 	SubmitWork       func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	SubmitInvocation func(context.Context, string, work.SubmitRequest, *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error)
+	SubmitInvocation func(context.Context, string, work.SubmitRequest, *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error)
 	Observe          func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitNext         func(context.Context) error
 	WaitSession      func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
@@ -88,7 +88,7 @@ func (a fixtureAuthority) SubmitWork(ctx context.Context, id string, req work.Su
 	return a.fixture.SubmitWork(ctx, id, req)
 }
 
-func (a fixtureAuthority) SubmitInvocation(ctx context.Context, id string, req work.SubmitRequest, caller *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error) {
+func (a fixtureAuthority) SubmitInvocation(ctx context.Context, id string, req work.SubmitRequest, caller *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error) {
 	return a.fixture.SubmitInvocation(ctx, id, req, caller)
 }
 func (a fixtureAuthority) Observe(ctx context.Context, id string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {

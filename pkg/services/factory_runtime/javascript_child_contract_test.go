@@ -18,7 +18,7 @@ type rootOnlyPeer struct {
 
 var _ factory.Service = (*rootOnlyPeer)(nil)
 
-func (p *rootOnlyPeer) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (p *rootOnlyPeer) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	return request, nil, p.err
 }
 

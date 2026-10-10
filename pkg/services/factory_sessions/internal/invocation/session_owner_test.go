@@ -23,7 +23,7 @@ import (
 
 func TestSessionOwnerCallerRemainsDetachedAndReleasesOnEveryExit(t *testing.T) {
 	t.Parallel()
-	for _, outcome := range []string{"completed", "refused", "canceled"} {
+	for _, outcome := range []string{"completed", "refused", "late-refused", "canceled"} {
 		t.Run(outcome, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithCancel(t.Context())
@@ -40,7 +40,7 @@ func TestSessionOwnerCallerRemainsDetachedAndReleasesOnEveryExit(t *testing.T) {
 					t.Fatal("attributed invocation used ordinary submission")
 					return work.WorkRequestSubmitResult{}, nil
 				},
-				SubmitInvocation: func(_ context.Context, id string, submitted work.SubmitRequest, got *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func(), error) {
+				SubmitInvocation: func(_ context.Context, id string, submitted work.SubmitRequest, got *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error) {
 					assertInvocationCallerSubmission(t, id, submitted, got, caller, original)
 					var submitErr error
 					if outcome == "refused" {
@@ -49,7 +49,13 @@ func TestSessionOwnerCallerRemainsDetachedAndReleasesOnEveryExit(t *testing.T) {
 					if outcome == "canceled" {
 						cancel()
 					}
-					return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, func() { released++ }, submitErr
+					return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, func() error {
+						released++
+						if outcome == "late-refused" {
+							return workersessions.ErrCallerInvalid
+						}
+						return nil
+					}, submitErr
 				},
 				Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 					if released != 0 {
@@ -64,7 +70,7 @@ func TestSessionOwnerCallerRemainsDetachedAndReleasesOnEveryExit(t *testing.T) {
 				SourceKind: &sourceKind,
 				Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
 			})
-			if released != 1 || (outcome == "completed" && err != nil) || (outcome == "refused" && !errors.Is(err, workersessions.ErrCallerInvalid)) {
+			if released != 1 || (outcome == "completed" && err != nil) || ((outcome == "refused" || outcome == "late-refused") && !errors.Is(err, workersessions.ErrCallerInvalid)) {
 				t.Fatalf("release count %d, error %v", released, err)
 			}
 		})

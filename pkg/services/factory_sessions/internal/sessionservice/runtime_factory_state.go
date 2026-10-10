@@ -385,7 +385,7 @@ func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWo
 	return a.scopedInvokeWorker(fs, ctx, req)
 }
 
-func (fs *SessionRuntime) PrepareInvocation(ctx context.Context, request factory.InvocationWork, caller *factory.InvocationCaller) (factory.InvocationWork, func(), error) {
+func (fs *SessionRuntime) PrepareInvocation(ctx context.Context, request factory.InvocationWork, caller *factory.InvocationCaller) (factory.InvocationWork, func() error, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
 		return factory.InvocationWork{}, nil, factory.ErrNotFound

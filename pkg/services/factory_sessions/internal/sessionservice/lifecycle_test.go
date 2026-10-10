@@ -14,7 +14,7 @@ import (
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
 
-func (*gatewayLifecycleFactory) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (*gatewayLifecycleFactory) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	return request, nil, nil
 }
 

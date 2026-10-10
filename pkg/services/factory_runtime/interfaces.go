@@ -47,7 +47,9 @@ type Service interface {
 	// PrepareInvocation retains execution-only caller authority before ordinary
 	// Work submission. Release ends that invocation's authority and must run on
 	// every exit from invocation waiting. Credentials never enter durable state.
-	PrepareInvocation(context.Context, InvocationWork, *InvocationCaller) (InvocationWork, func(), error)
+	// PrepareInvocation retains execution-only caller scope. Its release clears
+	// credentials and returns any typed admission refusal recorded by dispatch.
+	PrepareInvocation(context.Context, InvocationWork, *InvocationCaller) (InvocationWork, func() error, error)
 
 	// ControlPause pauses the factory loop. No transitions fire until resumed.
 	// Returns ErrNotRunning when the instance is not running.

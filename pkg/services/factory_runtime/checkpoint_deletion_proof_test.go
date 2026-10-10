@@ -274,7 +274,7 @@ type externalConsumerPeer struct{}
 
 var _ factory.Service = (*externalConsumerPeer)(nil)
 
-func (externalConsumerPeer) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func(), error) {
+func (externalConsumerPeer) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
 	return request, nil, nil
 }
 

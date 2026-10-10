@@ -95,6 +95,9 @@ func runtimeAttemptPreparation(
 			},
 		)
 		if err != nil {
+			if errors.Is(err, workersessions.ErrCallerInvalid) {
+				cfg.refuseInvocationCaller(executeRequest.Input.Work)
+			}
 			return nil, err
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) (workers.ExecuteResult, error) {
