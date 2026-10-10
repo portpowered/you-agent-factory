@@ -121,18 +121,7 @@ func assertDefinitionSaveOutcome(t *testing.T, endpoint string, before factoryap
 	if err := json.Unmarshal(raw, &updated); err != nil {
 		t.Fatal(err)
 	}
-	updated.Name = "accepted-update"
-	if cell == "save-denied" {
-		updated.Name = "blocked"
-	} else if cell == "save-write-denied" {
-		updated.Name = "write-blocked"
-	} else if cell == "save-corrupt-create" {
-		updated.Name = "corrupt-write"
-	} else if cell == "save-corrupt-replace" {
-		updated.Name = before.Name
-		updated.Version.Logical++
-		updated.Version.Physical = updated.Version.Physical.Add(1)
-	}
+	selectSaveTarget(&updated, before, cell)
 	body := "definition-after {{ (index .Inputs 0).Payload }}"
 	(*updated.Workstations)[0].Body = &body
 	mode := factoryapi.FactorySaveModeUpsertNamedAndActivate
@@ -357,5 +346,20 @@ func assertNoDefinitionStaging(t *testing.T, root string) {
 		if strings.Contains(entry.Name(), ".staging-") || entry.Name() == "blocked" || entry.Name() == "write-blocked" {
 			t.Fatalf("failed save left owned artifact %q", entry.Name())
 		}
+	}
+}
+
+func selectSaveTarget(updated *factoryapi.Factory, before factoryapi.Factory, cell string) {
+	updated.Name = "accepted-update"
+	if cell == "save-denied" {
+		updated.Name = "blocked"
+	} else if cell == "save-write-denied" {
+		updated.Name = "write-blocked"
+	} else if cell == "save-corrupt-create" {
+		updated.Name = "corrupt-write"
+	} else if cell == "save-corrupt-replace" {
+		updated.Name = before.Name
+		updated.Version.Logical++
+		updated.Version.Physical = updated.Version.Physical.Add(1)
 	}
 }

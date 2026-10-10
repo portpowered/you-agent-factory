@@ -231,10 +231,10 @@ func TestEmptySnapshotRequestsRejectBeforeCallingPorts(t *testing.T) {
 			return nil
 		},
 	)
-	if _, err := svc.PrepareFactorySnapshotImport(t.Context(), factorydefinitions.PrepareFactorySnapshotImportRequest{}); err != factorydefinitions.ErrInvalidFactorySnapshotPayload {
+	if _, err := svc.PrepareFactorySnapshotImport(t.Context(), factorydefinitions.PrepareFactorySnapshotImportRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
 		t.Fatalf("empty import error = %v, want ErrInvalidFactorySnapshotPayload", err)
 	}
-	if _, err := svc.MaterializeFactorySnapshot(t.Context(), factorydefinitions.MaterializeFactorySnapshotRequest{}); err != factorydefinitions.ErrUnsafeFactorySnapshotMaterialize {
+	if _, err := svc.MaterializeFactorySnapshot(t.Context(), factorydefinitions.MaterializeFactorySnapshotRequest{}); !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
 		t.Fatalf("empty materialization error = %v, want ErrUnsafeFactorySnapshotMaterialize", err)
 	}
 }

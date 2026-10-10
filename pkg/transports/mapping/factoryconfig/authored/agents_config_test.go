@@ -38,11 +38,7 @@ func TestRenderWorkstationMarkdownPreservesRoutesAndSchedule(t *testing.T) {
 	if got.Body != want.Body || got.WorkerTypeName != "model" || got.Cron == nil || got.Cron.Every != "1h" || !got.Cron.TriggerAtStart || got.Env["MODE"] != "test" || len(got.Guards) != 1 || got.Guards[0].LogicalRoundTrip.MaxRawVisits != 4 {
 		t.Fatalf("station round trip = %+v", got)
 	}
-	for _, routes := range [][]interfaces.IOConfig{got.Inputs, got.Outputs, got.OnContinue, got.OnRejection, got.OnFailure} {
-		if len(routes) != 1 || routes[0].WorkTypeName != "task" || routes[0].StateName != "done" || routes[0].Guard == nil || routes[0].Guard.MatchInput != "task" {
-			t.Fatalf("routes = %+v", routes)
-		}
-	}
+	assertWorkstationRoutes(t, got)
 }
 
 func TestAuthoredExpandedLayoutOmitsSplitBodiesWithoutMutatingInput(t *testing.T) {
@@ -579,6 +575,15 @@ Produce the declared files.
 	for index := range want {
 		if cfg.ExpectedArtifacts[index] != want[index] {
 			t.Fatalf("artifact declaration %d = %#v, want %#v", index, cfg.ExpectedArtifacts[index], want[index])
+		}
+	}
+}
+
+func assertWorkstationRoutes(t *testing.T, got *interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+	for _, routes := range [][]interfaces.IOConfig{got.Inputs, got.Outputs, got.OnContinue, got.OnRejection, got.OnFailure} {
+		if len(routes) != 1 || routes[0].WorkTypeName != "task" || routes[0].StateName != "done" || routes[0].Guard == nil || routes[0].Guard.MatchInput != "task" {
+			t.Fatalf("routes = %+v", routes)
 		}
 	}
 }

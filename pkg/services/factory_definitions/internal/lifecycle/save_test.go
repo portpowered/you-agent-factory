@@ -232,12 +232,7 @@ func TestReplaceCurrentSaveSequencesSelectedLayoutAndRollback(t *testing.T) {
 				got, err := service.SaveReplaceCurrentSnapshotForSession(h.ctx, h.session.ID, request)
 				want := []string{"session", "current", "validate", "idle", "version", "prepare", "replace", "activate", "discard", "readback"}
 				if failure != "" {
-					for i, stage := range want {
-						if stage == failure {
-							want = want[:i+1]
-							break
-						}
-					}
+					want = effectsThroughFailure(want, failure)
 					if failure == "activate" {
 						want = append(want, "restore")
 					}
@@ -283,24 +278,13 @@ func TestNamedUpsertSaveCreatesOrReplacesAndActivatesChosenTarget(t *testing.T) 
 				}
 				want = append(want, "prepare", write, "pointer", "activate", "runtime")
 				if failure != "" {
-					for i, stage := range want {
-						if stage == h.fail {
-							want = want[:i+1]
-							break
-						}
-					}
+					want = effectsThroughFailure(want, h.fail)
 					if !errors.Is(err, h.cause) || got.Snapshot != nil {
 						t.Fatalf("failure = %#v, %v", got, err)
 					}
 				} else {
 					want = append(want, "version")
-					if err != nil || got.Name != h.name || got.Version == nil || got.Version.Logical != h.version.Logical || !got.Version.Physical.Equal(h.version.Physical) {
-						t.Fatalf("upsert = %#v, %v", got, err)
-					}
-					var decoded map[string]any
-					if err := got.Snapshot.Decode(&decoded); err != nil || !reflect.DeepEqual(decoded, map[string]any{"name": h.name, "body": "replacement"}) {
-						t.Fatalf("upsert payload = %#v, %v", decoded, err)
-					}
+					assertNamedUpsertReadback(t, h, got, err)
 				}
 				if !reflect.DeepEqual(h.events, want) || h.locked {
 					t.Fatalf("effects = %v, want %v", h.events, want)
@@ -324,7 +308,29 @@ func TestSaveRejectsInvalidNamesAndRetainsTopologyError(t *testing.T) {
 	}
 	h, service, request = newSaveFixture(t, "alpha", true)
 	h.fail, h.cause = "validate", &definitions.ValidationTopologyError{}
-	if err := service.ValidateEditableFactoryTopology(h.ctx, request.Snapshot); err != h.cause || h.validated != request.Snapshot {
+	err := service.ValidateEditableFactoryTopology(h.ctx, request.Snapshot)
+	assertForwardedErrorIdentity(t, err, h.cause)
+	if !errors.Is(err, h.cause) || h.validated != request.Snapshot {
 		t.Fatalf("topology error/request identity lost: %v", err)
+	}
+}
+
+func effectsThroughFailure(events []string, failure string) []string {
+	for i, stage := range events {
+		if stage == failure {
+			return events[:i+1]
+		}
+	}
+	return events
+}
+
+func assertNamedUpsertReadback(t *testing.T, h *saveHost, got definitions.EditableFactory, err error) {
+	t.Helper()
+	if err != nil || got.Name != h.name || got.Version == nil || got.Version.Logical != h.version.Logical || !got.Version.Physical.Equal(h.version.Physical) {
+		t.Fatalf("upsert = %#v, %v", got, err)
+	}
+	var decoded map[string]any
+	if err := got.Snapshot.Decode(&decoded); err != nil || !reflect.DeepEqual(decoded, map[string]any{"name": h.name, "body": "replacement"}) {
+		t.Fatalf("upsert payload = %#v, %v", decoded, err)
 	}
 }

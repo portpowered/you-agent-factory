@@ -278,9 +278,7 @@ func TestNamedFactory_CommitsPreparedPayloadAndCleansOwnedBackup(t *testing.T) {
 	if string(effects.directories[target]) != "replacement canonical" {
 		t.Fatal("replacement payload not committed")
 	}
-	if len(effects.directories) != 1 || len(effects.removed) != 1 || effects.removed[0] != filepath.Join(root, ".owned-backup") {
-		t.Fatalf("owned backup cleanup = %#v; retained = %#v", effects.removed, effects.directories)
-	}
+	assertOwnedBackupCleanup(t, effects, root)
 }
 
 func TestNamedFactory_FailedWriteRetainsPreviousAndCleansOwnedStage(t *testing.T) {
@@ -336,19 +334,7 @@ func TestNamedFactory_FailedWriteRetainsPreviousAndCleansOwnedStage(t *testing.T
 				if failure != "commit" && !errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
 					t.Fatalf("error = %v, want invalid named Factory", err)
 				}
-				if replace {
-					if string(effects.directories[target]) != "old payload" {
-						t.Fatal("rejected replacement changed old payload")
-					}
-				} else if _, exists := effects.directories[target]; exists {
-					t.Fatal("rejected create left partial target")
-				}
-				if string(effects.directories[peer]) != "peer payload" {
-					t.Fatal("failure changed peer payload")
-				}
-				if len(effects.removed) != 1 || effects.removed[0] != filepath.Join(root, ".owned-stage") {
-					t.Fatalf("owned stage cleanup = %#v", effects.removed)
-				}
+				assertRejectedLayoutRetainsTargetsAndCleansStage(t, effects, root, replace)
 			})
 		}
 	}
@@ -409,9 +395,35 @@ func TestPrepareFactoryLayout_UsesPrePersistValidationAndRetainsFailure(t *testi
 			if !called || !errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) || result.Prepared.Config != nil {
 				t.Fatalf("rejected preparation = %#v, %v; validation called = %v", result, err, called)
 			}
-			if cause == factorydefinitions.ErrInvalidNamedFactory && err != cause {
+			if errors.Is(cause, factorydefinitions.ErrInvalidNamedFactory) && err != cause { //nolint:errorlint // The domain sentinel must be returned unchanged, without wrapping.
 				t.Fatal("typed validation sentinel identity lost")
 			}
 		})
+	}
+}
+
+func assertOwnedBackupCleanup(t *testing.T, effects *memoryLayoutEffects, root string) {
+	t.Helper()
+	if len(effects.directories) != 1 || len(effects.removed) != 1 || effects.removed[0] != filepath.Join(root, ".owned-backup") {
+		t.Fatalf("owned backup cleanup = %#v; retained = %#v", effects.removed, effects.directories)
+	}
+}
+
+func assertRejectedLayoutRetainsTargetsAndCleansStage(t *testing.T, effects *memoryLayoutEffects, root string, replace bool) {
+	t.Helper()
+	target := filepath.Join(root, "alpha")
+	peer := filepath.Join(root, "peer")
+	if replace {
+		if string(effects.directories[target]) != "old payload" {
+			t.Fatal("rejected replacement changed old payload")
+		}
+	} else if _, exists := effects.directories[target]; exists {
+		t.Fatal("rejected create left partial target")
+	}
+	if string(effects.directories[peer]) != "peer payload" {
+		t.Fatal("failure changed peer payload")
+	}
+	if len(effects.removed) != 1 || effects.removed[0] != filepath.Join(root, ".owned-stage") {
+		t.Fatalf("owned stage cleanup = %#v", effects.removed)
 	}
 }

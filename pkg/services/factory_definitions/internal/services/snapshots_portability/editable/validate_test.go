@@ -147,7 +147,7 @@ func TestValidateSnapshotPreservesDomainErrorsAndWrapsOtherFailures(t *testing.T
 			if !errors.Is(err, fd.ErrInvalidNamedFactory) || !strings.Contains(err.Error(), failure.Error()) {
 				t.Fatalf("ValidateSnapshot = %v, want domain classification and %v diagnostic", err, failure)
 			}
-			if failure == domainErr && err != domainErr {
+			if errors.Is(failure, domainErr) && err != domainErr { //nolint:errorlint // Existing domain errors must be returned unchanged, including their identity.
 				t.Fatal("domain error identity lost")
 			}
 		})

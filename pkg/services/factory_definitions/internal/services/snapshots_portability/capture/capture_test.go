@@ -132,7 +132,8 @@ func TestExplicitCaptureDelegatesToCompletedLoadedCapture(t *testing.T) {
 				t.Fatal("construction invoked capture")
 			}
 			result, gotErr := capture("selected-dir", config, lookup, "source-dir", metadata)
-			if result != snapshot || gotErr != cause || calls != 1 || metadata["observed"] != "yes" {
+			assertCaptureErrorIdentity(t, gotErr, cause)
+			if result != snapshot || !errors.Is(gotErr, cause) || calls != 1 || metadata["observed"] != "yes" {
 				t.Fatalf("delegation = %p, %v, calls=%d, metadata=%v", result, gotErr, calls, metadata)
 			}
 		})
@@ -432,4 +433,11 @@ func snapshotMetadata(t *testing.T, snapshot *factorydefinitions.FactorySnapshot
 		t.Fatalf("decode snapshot metadata: %v", err)
 	}
 	return object.Metadata
+}
+
+func assertCaptureErrorIdentity(t *testing.T, got, want error) {
+	t.Helper()
+	if got != want { //nolint:errorlint // The capture adapter forwards the selected operation's exact error.
+		t.Fatalf("capture error = %v, want identical %v", got, want)
+	}
 }

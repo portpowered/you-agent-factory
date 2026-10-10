@@ -41,28 +41,7 @@ func TestFactoryConfigReadbackMergesAuthoredWorkerAndWorkstation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var directoryValue, fileValue any
-	if err := json.Unmarshal(fromDirectory, &directoryValue); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(fromFile, &fileValue); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(directoryValue, fileValue) {
-		t.Fatalf("directory and file readback differ: %s versus %s", fromDirectory, fromFile)
-	}
-	loaded, err := support.DecodeFactoryDefinition(fromDirectory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	worker, ok := support.FindFactoryWorker(loaded, compilationWorkerName)
-	if !ok || worker.Command == nil || *worker.Command != "go" || stringValue(worker.Body) != "Run tests." {
-		t.Fatalf("loaded worker = %#v; want authored command and body", worker)
-	}
-	workstation, ok := support.FindFactoryWorkstation(loaded, compilationWorkstationName)
-	if !ok || stringValue(workstation.Worker) != compilationWorkerName || stringValue(workstation.Body) != "Implement the story." || workstation.StopWords == nil || !reflect.DeepEqual(*workstation.StopWords, []string{"CANONICAL", "RUNTIME"}) {
-		t.Fatalf("loaded workstation = %#v; want authored binding/body and ordered canonical/runtime stop words", workstation)
-	}
+	assertAuthoredCompilationReadback(t, fromDirectory, fromFile)
 }
 
 const (
@@ -149,4 +128,30 @@ func compilationInvalidFactoryConfig() map[string]any {
 		"outputs": []map[string]string{{"workType": compilationWorkTypeName, "state": "complete"}},
 	}}
 	return config
+}
+
+func assertAuthoredCompilationReadback(t *testing.T, fromDirectory, fromFile []byte) {
+	t.Helper()
+	var directoryValue, fileValue any
+	if err := json.Unmarshal(fromDirectory, &directoryValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(fromFile, &fileValue); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(directoryValue, fileValue) {
+		t.Fatalf("directory and file readback differ: %s versus %s", fromDirectory, fromFile)
+	}
+	loaded, err := support.DecodeFactoryDefinition(fromDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker, ok := support.FindFactoryWorker(loaded, compilationWorkerName)
+	if !ok || worker.Command == nil || *worker.Command != "go" || stringValue(worker.Body) != "Run tests." {
+		t.Fatalf("loaded worker = %#v; want authored command and body", worker)
+	}
+	workstation, ok := support.FindFactoryWorkstation(loaded, compilationWorkstationName)
+	if !ok || stringValue(workstation.Worker) != compilationWorkerName || stringValue(workstation.Body) != "Implement the story." || workstation.StopWords == nil || !reflect.DeepEqual(*workstation.StopWords, []string{"CANONICAL", "RUNTIME"}) {
+		t.Fatalf("loaded workstation = %#v; want authored binding/body and ordered canonical/runtime stop words", workstation)
+	}
 }

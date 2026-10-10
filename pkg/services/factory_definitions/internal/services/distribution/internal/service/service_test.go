@@ -63,7 +63,9 @@ func TestDistributionDelegatesCatalogRequestsResultsAndFailures(t *testing.T) {
 				wantList = factorydefinitions.ListBuiltInPackagedFactoriesResult{}
 				wantResult = factorydefinitions.ResolveBuiltInPackagedFactoryResult{}
 			}
-			if !reflect.DeepEqual(listResult, wantList) || listErr != wantErr || resolveErr != wantErr || !reflect.DeepEqual(result, wantResult) || !reflect.DeepEqual(calls, []string{"list", "resolve"}) {
+			assertCatalogErrorIdentity(t, listErr, wantErr)
+			assertCatalogErrorIdentity(t, resolveErr, wantErr)
+			if !reflect.DeepEqual(listResult, wantList) || !errors.Is(listErr, wantErr) || !errors.Is(resolveErr, wantErr) || !reflect.DeepEqual(result, wantResult) || !reflect.DeepEqual(calls, []string{"list", "resolve"}) {
 				t.Fatalf("catalog result=%#v errors=%v/%v calls=%v", result, listErr, resolveErr, calls)
 			}
 		})
@@ -526,13 +528,25 @@ func TestScaffoldResolvesNameAfterInitializationAndPreservesResolutionFailure(t 
 			if !reflect.DeepEqual(calls, []string{"initialize", "resolve"}) {
 				t.Fatalf("calls=%v", calls)
 			}
-			if tc.err != nil || tc.resolved == " " {
-				if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) || (tc.err != nil && !errors.Is(err, tc.err)) || !reflect.DeepEqual(result, factorydefinitions.CreateFactoryScaffoldResult{}) {
-					t.Fatalf("result=%#v error=%v", result, err)
-				}
-			} else if err != nil || result.Definition.Name != tc.resolved || result.Definition.FactoryDir != "/target" || result.ScaffoldType != factorydefinitions.DefaultScaffoldType {
-				t.Fatalf("result=%#v error=%v", result, err)
-			}
+			assertScaffoldResolution(t, result, err, tc.resolved, tc.err)
 		})
+	}
+}
+
+func assertCatalogErrorIdentity(t *testing.T, got, want error) {
+	t.Helper()
+	if got != want { //nolint:errorlint // Catalog delegation must forward the identical error without wrapping.
+		t.Fatalf("catalog error = %v, want identical %v", got, want)
+	}
+}
+
+func assertScaffoldResolution(t *testing.T, result factorydefinitions.CreateFactoryScaffoldResult, err error, resolved string, resolutionErr error) {
+	t.Helper()
+	if resolutionErr != nil || resolved == " " {
+		if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) || (resolutionErr != nil && !errors.Is(err, resolutionErr)) || !reflect.DeepEqual(result, factorydefinitions.CreateFactoryScaffoldResult{}) {
+			t.Fatalf("result=%#v error=%v", result, err)
+		}
+	} else if err != nil || result.Definition.Name != resolved || result.Definition.FactoryDir != "/target" || result.ScaffoldType != factorydefinitions.DefaultScaffoldType {
+		t.Fatalf("result=%#v error=%v", result, err)
 	}
 }

@@ -98,18 +98,14 @@ func TestNamedActivationGatesLookupAndSwapAndRetainsSelectedSession(t *testing.T
 				t.Fatal("construction performed activation effects")
 			}
 			err := service.ActivateNamedFactory(t.Context(), "alpha")
-			if err != wantError || host.lookupCalls != wantLookup || gateway.swapCalls != wantSwap || gateway.locked {
+			assertForwardedErrorIdentity(t, err, wantError)
+			if !errors.Is(err, wantError) || host.lookupCalls != wantLookup || gateway.swapCalls != wantSwap || gateway.locked {
 				t.Fatalf("activation = %v, lookup %d, swap %d, lock %t; want %v, %d, %d, false", err, host.lookupCalls, gateway.swapCalls, gateway.locked, wantError, wantLookup, wantSwap)
 			}
 			if wantSwap != 0 && gateway.swappedName != "alpha" {
 				t.Fatalf("swapped name = %q", gateway.swappedName)
 			}
-			if stage == "busy" {
-				gateway.idleError = nil
-				if err := service.ActivateNamedFactory(t.Context(), "alpha"); err != nil || gateway.swapCalls != 1 || gateway.swappedName != "alpha" {
-					t.Fatalf("activation after idle = %v, swap %d, name %q", err, gateway.swapCalls, gateway.swappedName)
-				}
-			}
+			assertActivationAfterIdle(t, stage, service, gateway)
 		})
 	}
 }
@@ -375,20 +371,17 @@ func TestPersistViewDelegationStripsVersionAndPreservesSelectedResult(t *testing
 				t.Fatal(err)
 			}
 			got, err := service.PrepareEditableFactoryPersistView("alpha", snapshot)
-			if got != view || err != host.err || host.calls != 1 {
+			assertForwardedErrorIdentity(t, err, host.err)
+			if got != view || !errors.Is(err, host.err) || host.calls != 1 {
 				t.Fatalf("prepare = %p, %v, calls %d", got, err, host.calls)
 			}
 			stamped, err := service.PreparePersistedFactoryPayload("alpha", snapshot, definitions.FactoryVersion{Logical: 9, Physical: time.Unix(100, 0)})
-			if host.calls != 2 || err != host.err {
+			assertForwardedErrorIdentity(t, err, host.err)
+			if host.calls != 2 || !errors.Is(err, host.err) {
 				t.Fatalf("stamped prepare = %v, calls %d", err, host.calls)
 			}
-			if failure {
-				if stamped != nil {
-					t.Fatal("preparation failure returned persisted payload")
-				}
-			} else if stamped.Config != view.Config || !strings.Contains(string(stamped.Canonical), `"logical":"9"`) {
-				t.Fatalf("stamped payload lost selected config/version: %#v", stamped)
-			}
+			assertStampedPreparation(t, failure, stamped, view)
+
 			if _, err := service.PreparePersistedFactoryPayload("alpha", nil, definitions.FactoryVersion{}); err == nil || !strings.Contains(err.Error(), "editable factory snapshot is required") || host.calls != 2 {
 				t.Fatalf("missing snapshot = %v, calls %d", err, host.calls)
 			}
@@ -485,26 +478,61 @@ func TestNamedSerializationRetainsPreparedSourceAndRejectsFailedPreparation(t *t
 				} else {
 					snapshot, err = service.SerializeNamedFactory("alpha", &source, mode == "inline")
 				}
-				wantPrepare, wantCapture := 1, 1
-				if mode == "disk" {
-					wantPrepare = 0
-				}
-				if failure == "prepare" && mode != "disk" {
-					wantCapture = 0
-				}
-				if host.prepareCalls != wantPrepare || host.captureCalls != wantCapture || host.inline != (mode == "inline") {
-					t.Fatalf("calls = %d/%d, inline %t", host.prepareCalls, host.captureCalls, host.inline)
-				}
-				if failure == "capture" || (failure == "prepare" && mode != "disk") {
-					if !errors.Is(err, cause) || snapshot != nil {
-						t.Fatalf("serialization failure = %v, snapshot %v", err, snapshot)
-					}
-				} else if err != nil {
-					t.Fatal(err)
-				} else {
-					assertReadSnapshot(t, snapshot, "alpha")
-				}
+				assertSerializationOutcome(t, mode, failure, host, snapshot, err, cause)
 			})
 		}
+	}
+}
+
+// Forwarding contracts preserve the exact error, including absence; classification
+// alone would accept a new wrapper and weaken these delegation witnesses.
+func assertForwardedErrorIdentity(t *testing.T, got, want error) {
+	t.Helper()
+	if got != want { //nolint:errorlint // These ports must forward the identical error without wrapping.
+		t.Fatalf("forwarded error = %v (%T), want identical %v (%T)", got, got, want, want)
+	}
+}
+
+func assertActivationAfterIdle(t *testing.T, stage string, service *lifecycle.Service, gateway *activationGateway) {
+	t.Helper()
+	if stage == "busy" {
+		gateway.idleError = nil
+		if err := service.ActivateNamedFactory(t.Context(), "alpha"); err != nil || gateway.swapCalls != 1 || gateway.swappedName != "alpha" {
+			t.Fatalf("activation after idle = %v, swap %d, name %q", err, gateway.swapCalls, gateway.swappedName)
+		}
+	}
+}
+
+func assertStampedPreparation(t *testing.T, failure bool, stamped, view *definitions.PreparedFactoryLayoutPayload) {
+	t.Helper()
+	if failure {
+		if stamped != nil {
+			t.Fatal("preparation failure returned persisted payload")
+		}
+	} else if stamped.Config != view.Config || !strings.Contains(string(stamped.Canonical), `"logical":"9"`) {
+		t.Fatalf("stamped payload lost selected config/version: %#v", stamped)
+	}
+}
+
+func assertSerializationOutcome(t *testing.T, mode, failure string, host *serializationHost, snapshot *definitions.FactorySnapshot, err, cause error) {
+	t.Helper()
+	wantPrepare, wantCapture := 1, 1
+	if mode == "disk" {
+		wantPrepare = 0
+	}
+	if failure == "prepare" && mode != "disk" {
+		wantCapture = 0
+	}
+	if host.prepareCalls != wantPrepare || host.captureCalls != wantCapture || host.inline != (mode == "inline") {
+		t.Fatalf("calls = %d/%d, inline %t", host.prepareCalls, host.captureCalls, host.inline)
+	}
+	if failure == "capture" || (failure == "prepare" && mode != "disk") {
+		if !errors.Is(err, cause) || snapshot != nil {
+			t.Fatalf("serialization failure = %v, snapshot %v", err, snapshot)
+		}
+	} else if err != nil {
+		t.Fatal(err)
+	} else {
+		assertReadSnapshot(t, snapshot, "alpha")
 	}
 }

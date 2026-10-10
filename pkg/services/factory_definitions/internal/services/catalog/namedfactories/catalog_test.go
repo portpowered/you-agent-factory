@@ -57,9 +57,10 @@ func checkSelectedResolution(t *testing.T, scenario string) {
 	got, err := catalognamedfactories.ResolveAcrossRoots(paths, "project", "global", name)
 	checkResolutionOutcome(t, scenario, got, err, cause)
 	wantCalls := []string{"project", "global"}
-	if scenario == "invalid" {
+	switch scenario {
+	case "invalid":
 		wantCalls = nil
-	} else if scenario == "failure" {
+	case "failure":
 		wantCalls = []string{"project"}
 	}
 	if !reflect.DeepEqual(calls, wantCalls) {
@@ -89,9 +90,10 @@ func checkResolutionOutcome(t *testing.T, scenario string, got *factorydefinitio
 		ProjectRoot: "project", GlobalRoot: "global",
 		PrecedenceDecision: factorydefinitions.NamedFactoryPrecedenceDecisionNone,
 	}
-	if scenario == "project-over-global" {
+	switch scenario {
+	case "project-over-global":
 		want.PrecedenceDecision = factorydefinitions.NamedFactoryPrecedenceDecisionProjectOverGlobal
-	} else if scenario == "global" {
+	case "global":
 		want.FactoryDir = "global/shared"
 		want.Source = factorydefinitions.NamedFactoryResolutionSourceGlobal
 	}
