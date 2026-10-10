@@ -664,14 +664,17 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	// happen AFTER all subsystems (including TerminationCheck) have run, so
 	// dispatch entries remain visible throughout the tick — preventing false
 	// deadlock detection when async results arrive mid-tick.
-	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, totalDispatches, completedDispatches, rtSnapshot, mutated)
+	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
+	e.runtimeState.Results = nil
 	// Results enrich the first following canonical relocation. Publish only
-	// after accepted mutations and dispatch retirement, in mutation order.
+	// after accepted mutations and dispatch retirement, in mutation order,
+	// before the resulting snapshot becomes observable to readers.
 	if e.recordWorkStateChange != nil {
 		for _, change := range stateChanges {
 			e.recordWorkStateChange(e.runtimeState.TickCount, change)
 		}
 	}
+	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, totalDispatches, rtSnapshot, mutated)
 	return mutated, shouldTerminate, nil
 }
 
@@ -855,9 +858,7 @@ func containsHumanApprovalDispatch(net *state.Net, records []interfaces.Dispatch
 	return false
 }
 
-func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
-	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
-	e.runtimeState.Results = nil
+func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
 	e.publishRuntimeSnapshotLocked()
 	e.signalPendingObservableProjections()
 	if keepAlive {
