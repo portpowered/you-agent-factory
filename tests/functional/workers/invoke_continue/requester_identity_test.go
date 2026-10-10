@@ -329,3 +329,191 @@ func requesterEnvironment(environment []string) map[string]string {
 	}
 	return facts
 }
+
+// M10: both supported interruption modes preserve the admitted requester and
+// issue a fresh execution credential. The requester remains an active peer.
+func TestRequesterInterruptedSuccessor(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct{ name, mode string }{
+		{"provider", "provider"}, {"recorded", "recorded"}, {"ack-input", "provider"}, {"ack-source", "recorded"},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			runRequesterInterruptedSuccessor(t, cell.name, cell.mode)
+		})
+	}
+	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.show", "cli/you.worker-sessions.list", "cli/you.worker-sessions.interrupt", "rest/interruptWorkerSession")
+}
+
+func runRequesterInterruptedSuccessor(t *testing.T, name, mode string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx, "requester-interrupt-"+name)
+	defer scenario.runner.releaseAll()
+	if strings.HasPrefix(name, "ack-") {
+		// The real journal commits, then the existing storage edge loses only
+		// this operation's response. Admission must recover the stored metadata.
+		scenario.ids.interruptRequest = "interrupt-" + name + "-" + scenario.ids.interruptRequest
+	}
+	ids := scenario.ids
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestB, workerSessionID: ids.workerB, dispatchID: ids.dispatchB,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryB.path, workID: ids.workB, message: s8MessageB,
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryB.path, s8InterruptCallBInitial)
+	parentEnv := requesterEnvironment(scenario.runner.requests()[0].Env)
+	parentBefore := requesterInterruptObservation(t, scenario, ids.workerB)
+	callerEnv := append(append([]string(nil), scenario.env...), "YOU_WORKER_SESSION_ID="+ids.workerB, "YOU_WORKER_SESSION_TOKEN="+parentEnv["YOU_WORKER_SESSION_TOKEN"])
+	invokeS8RemoteWorker(t, ctx, scenario.manager, callerEnv, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
+	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	source := requesterInterruptObservation(t, scenario, ids.workerA)
+	sourceEnv := requesterEnvironment(scenario.runner.requests()[1].Env)
+	assertRequesterSuccessorEnvironment(t, sourceEnv, ids.workerA, ids.workerB, parentEnv["YOU_WORKER_SESSION_TOKEN"])
+	if source.Requester == nil || source.Requester.WorkerSessionId != ids.workerB || source.Labels == nil || !reflect.DeepEqual(*source.Labels, []string{"parent:" + ids.workerB}) {
+		t.Fatal("interruption source did not retain its verified requester")
+	}
+	first := interruptRequesterSource(t, scenario, mode)
+	assertRequesterInterruptReplay(t, scenario, mode, first)
+	assertRequesterInterruptedMetadata(t, scenario, source, sourceEnv, parentBefore, parentEnv)
+	assertRequesterInterruptCallerRefused(t, scenario, ids.workerA, sourceEnv["YOU_WORKER_SESSION_TOKEN"])
+	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
+	_ = replayS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
+	assertRequesterInterruptCallerRefused(t, scenario, ids.successor, requesterEnvironment(scenario.runner.requests()[2].Env)["YOU_WORKER_SESSION_TOKEN"])
+	assertS8WorkNotAdvanced(t, scenario.fixture, scenario.session.id, ids.workA, ids.workB)
+	scenario.close(t)
+}
+
+func assertRequesterInterruptReplay(t *testing.T, scenario s8InterruptScenario, mode string, first s8InterruptResult) {
+	t.Helper()
+	ids := scenario.ids
+	replay := postS8Interrupt(t, scenario.ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage, mode)
+	if !reflect.DeepEqual(s8InterruptResultFromAPI(replay), first) {
+		t.Fatal("attributed interrupt replay changed its admission snapshot")
+	}
+	otherMode := "provider"
+	if mode == "provider" {
+		otherMode = "recorded"
+	}
+	status, body, _, err := sendS8InterruptHTTP(scenario.ctx, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor, s8ReplacementMessage, otherMode)
+	if err != nil || status != 409 || !strings.Contains(body, "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT") || scenario.runner.CallCount() != 3 {
+		t.Fatal("changed attributed interrupt replay was not refused before execution")
+	}
+}
+
+func interruptRequesterSource(t *testing.T, scenario s8InterruptScenario, mode string) s8InterruptResult {
+	t.Helper()
+	ids := scenario.ids
+	input := support.FakeInputs(scenario.ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "interrupt", ids.workerA,
+		"--request-id", ids.interruptRequest, "--successor-worker-session-id", ids.successor,
+		"--replacement-message", s8ReplacementMessage, "--resume-mode", mode, "--async"})
+	input.Input.Env, input.Input.WorkingDirectory = scenario.env, scenario.repositoryA.path
+	if err := scenario.manager.Execute(input.Input); err != nil {
+		t.Fatal("attributed interruption failed")
+	}
+	var first s8InterruptResult
+	decodeS8JSON(t, input.Stdout(), &first)
+	assertS8InterruptAdmission(t, first, ids)
+	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
+	scenario.runner.assertOrder(t, "start:"+s8InterruptCallAInitial, "cancel:"+s8InterruptCallAInitial, "start:"+s8InterruptCallASuccessor)
+	for _, request := range scenario.runner.requests() {
+		token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+		if token != "" && strings.Contains(input.Stdout()+input.Stderr(), token) {
+			t.Fatal("interruption response disclosed execution credentials")
+		}
+	}
+	return first
+}
+
+func assertRequesterInterruptedMetadata(t *testing.T, scenario s8InterruptScenario, source api.WorkerSessionObservation, sourceEnv map[string]string, parentBefore api.WorkerSessionObservation, parentEnv map[string]string) {
+	t.Helper()
+	ids := scenario.ids
+	successor := requesterInterruptObservation(t, scenario, ids.successor)
+	if !reflect.DeepEqual(source.Requester, successor.Requester) || !reflect.DeepEqual(source.Correlation, successor.Correlation) || !reflect.DeepEqual(source.Labels, successor.Labels) {
+		t.Fatal("interrupted successor changed admitted requester metadata")
+	}
+	assertInterruptModeLineage(t, scenario.ctx, scenario)
+	requests := scenario.runner.requests()
+	if len(requests) != 3 || scenario.runner.cancellationCount(s8InterruptCallBInitial) != 0 {
+		t.Fatal("interruption replay launched a duplicate or stopped the requester")
+	}
+	environment := requesterEnvironment(requests[2].Env)
+	assertRequesterSuccessorEnvironment(t, environment, ids.successor, ids.workerB, sourceEnv["YOU_WORKER_SESSION_TOKEN"])
+	if environment["YOU_WORKER_SESSION_TOKEN"] == parentEnv["YOU_WORKER_SESSION_TOKEN"] || environment["YOU_WORK_ID"] != sourceEnv["YOU_WORK_ID"] || environment["YOU_FACTORY_SESSION_ID"] != sourceEnv["YOU_FACTORY_SESSION_ID"] {
+		t.Fatal("successor reused requester authority or changed retained correlation")
+	}
+	parentAfter := requesterInterruptObservation(t, scenario, ids.workerB)
+	if parentBefore.DurationMillis == nil || parentAfter.DurationMillis == nil || *parentAfter.DurationMillis < *parentBefore.DurationMillis {
+		t.Fatal("active requester lost its elapsed duration")
+	}
+	parentBefore.DurationMillis, parentAfter.DurationMillis = nil, nil
+	if !reflect.DeepEqual(parentBefore, parentAfter) {
+		t.Fatal("interruption changed the active requester observation")
+	}
+	assertRequesterInterruptListedMetadata(t, scenario, successor)
+}
+
+func assertRequesterInterruptCallerRefused(t *testing.T, scenario s8InterruptScenario, id, token string) {
+	t.Helper()
+	invocation := s8RemoteWorkerInvocation{requestID: id + "-refused-request", workerSessionID: id + "-refused-child", dispatchID: id + "-refused-dispatch",
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: scenario.ids.workA, message: s8MessageA}
+	path := s8ExecutionDocument(t, invocation)
+	input := support.FakeInputs(scenario.ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "invoke", "--execution", path, "--async"})
+	input.Input.Env = append(append([]string(nil), scenario.env...), "YOU_WORKER_SESSION_ID="+id, "YOU_WORKER_SESSION_TOKEN="+token)
+	input.Input.WorkingDirectory = scenario.repositoryA.path
+	if err := scenario.manager.Execute(input.Input); err == nil {
+		t.Fatal("interrupted or terminal credential retained requester authority")
+	}
+	assertDirectWorkerSessionCLIError(t, input, "WORKER_SESSION_CALLER_INVALID")
+	if strings.Contains(input.Stdout()+input.Stderr(), token) || scenario.runner.CallCount() != 3 {
+		t.Fatal("retired credential refusal disclosed authority or launched a provider")
+	}
+}
+
+func assertRequesterInterruptListedMetadata(t *testing.T, scenario s8InterruptScenario, expected api.WorkerSessionObservation) {
+	t.Helper()
+	args := []string{"--json", "worker-sessions", "list", "--scope", "direct"}
+	seen := make(map[string]bool)
+	for {
+		input := executeS8RemoteCLI(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, args...)
+		var page api.ListWorkerSessionsResponse
+		decodeS8JSON(t, input.Stdout(), &page)
+		for _, row := range page.Sessions {
+			if row.WorkerSessionId != expected.WorkerSessionId {
+				continue
+			}
+			if !reflect.DeepEqual(row.Requester, expected.Requester) || !reflect.DeepEqual(row.Correlation, expected.Correlation) || !reflect.DeepEqual(row.Labels, expected.Labels) {
+				t.Fatal("interrupted successor show/list metadata disagreed")
+			}
+			return
+		}
+		if page.PaginationContext == nil || page.PaginationContext.NextToken == nil || *page.PaginationContext.NextToken == "" || seen[*page.PaginationContext.NextToken] {
+			t.Fatal("interrupted successor absent from public list or cursor repeated")
+		}
+		next := *page.PaginationContext.NextToken
+		seen[next] = true
+		args = []string{"--json", "worker-sessions", "list", "--scope", "direct", "--next-token", next}
+	}
+}
+
+func requesterInterruptObservation(t *testing.T, scenario s8InterruptScenario, id string) api.WorkerSessionObservation {
+	t.Helper()
+	input := support.FakeInputs(scenario.ctx, []string{"you", "--remote", "--server", scenario.serverURL, "--json", "worker-sessions", "show", "--worker-session-id", id})
+	input.Input.Env, input.Input.WorkingDirectory = scenario.env, scenario.factoryDir
+	if err := scenario.manager.Execute(input.Input); err != nil {
+		t.Fatal("interrupted requester observation unavailable")
+	}
+	var observation api.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, input.Stdout(), &observation)
+	for _, request := range scenario.runner.requests() {
+		token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+		if token != "" && strings.Contains(input.Stdout()+input.Stderr(), token) {
+			t.Fatal("interrupted requester observation disclosed execution credentials")
+		}
+	}
+	return observation
+}

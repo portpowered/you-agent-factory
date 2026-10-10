@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -382,8 +383,8 @@ type s8ProviderSession struct {
 }
 
 type s8WorkerList struct {
-	Sessions  []s8WorkerObservation `json:"sessions"`
-	NextToken string                `json:"nextToken"`
+	Sessions          []s8WorkerObservation         `json:"sessions"`
+	PaginationContext *factoryapi.PaginationContext `json:"paginationContext"`
 }
 
 func listS8RemoteWorkers(
@@ -408,14 +409,15 @@ func listS8RemoteWorkers(
 		var result s8WorkerList
 		decodeS8JSON(t, inputs.Stdout(), &result)
 		observations = append(observations, result.Sessions...)
-		if result.NextToken == "" {
+		if result.PaginationContext == nil || result.PaginationContext.NextToken == nil || *result.PaginationContext.NextToken == "" {
 			return observations
 		}
-		if seen[result.NextToken] {
+		next := *result.PaginationContext.NextToken
+		if seen[next] {
 			t.Fatal("public Worker Session list repeated a continuation cursor")
 		}
-		seen[result.NextToken] = true
-		args = []string{"--json", "worker-sessions", "list", "--scope", "direct", "--next-token", result.NextToken}
+		seen[next] = true
+		args = []string{"--json", "worker-sessions", "list", "--scope", "direct", "--next-token", next}
 		for _, state := range states {
 			args = append(args, "--state", state)
 		}

@@ -324,6 +324,16 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+      "stableIds": [
+        "cli/you.worker-sessions.interrupt",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.show",
+        "rest/interruptWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
       "stableIds": [
         "cli/you.worker-sessions.cancel",

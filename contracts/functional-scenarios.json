@@ -659,6 +659,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
         }
       ]
     },
@@ -730,6 +734,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
         }
       ]
     },
@@ -744,6 +752,10 @@
       "evidence": [
         {
           "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
           "boundary": "cli"
         }
       ]
@@ -840,6 +852,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
           "boundary": "cli"
         }
       ]
@@ -1415,6 +1431,10 @@
       "evidence": [
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
           "boundary": "rest"
         }
       ]

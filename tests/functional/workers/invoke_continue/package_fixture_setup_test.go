@@ -304,6 +304,10 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 	writeS8CodexRollout(t, homeDir, s8InterruptProviderSessionB, rollout, s8OutputB)
 	for _, name := range []string{
 		"manager-interrupt",
+		"requester-interrupt-provider",
+		"requester-interrupt-recorded",
+		"requester-interrupt-ack-input",
+		"requester-interrupt-ack-source",
 		"interrupt-mode-provider",
 		"interrupt-mode-recorded",
 		"interrupt-mode-empty",
