@@ -15,6 +15,7 @@ import (
 // each request, so a customer's direct file edits take effect without a tool
 // that mutates their configuration.
 func TestMCPConfigurationResourcesRereadTheOperatorFile(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	server := startRuntimeBackedMCPServerWithHome(t, t.TempDir(), home)
 	defer server.cleanup()
@@ -85,5 +86,60 @@ func TestMCPConfigurationResourcesRereadTheOperatorFile(t *testing.T) {
 	}
 	if len(decoded) == 0 {
 		t.Fatalf("provider catalog resource is empty: %s", catalog)
+	}
+	assertMCPResourceFailuresAndRecovery(t, server, configPath, encoded, catalog, readResource)
+}
+
+// W5 resource failures are ordered because these reads observe successive edits
+// to one operator-owned document. The same live protocol invocation must recover
+// without replacing its process or returning content for a missing resource.
+func assertMCPResourceFailuresAndRecovery(t *testing.T, server *stdioMCPServer, configPath string, encoded []byte, catalog string, readResource func(string) string) {
+	t.Helper()
+	const privatePayload = "private-provider-settings-payload"
+	if err := os.WriteFile(configPath, []byte(`{"workers":`+privatePayload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertMCPResourceFailure(t, server, "you://providers/catalog", privatePayload)
+	if err := os.Remove(configPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(configPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, uri := range []string{"you://providers/catalog", "you://operator/config/current"} {
+		assertMCPResourceFailure(t, server, uri, privatePayload)
+	}
+	if err := os.Remove(configPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, uri := range []string{"skill://subagent-configuration/missing.md", "you://operator/config/missing"} {
+		assertMCPResourceFailure(t, server, uri, privatePayload)
+	}
+	if got := readResource("you://operator/config/current"); got != string(encoded) {
+		t.Fatalf("recovered operator resource = %q, want original document %q", got, encoded)
+	}
+	if got := readResource("you://providers/catalog"); got != catalog {
+		t.Fatalf("recovered provider catalog = %s, want original catalog %s", got, catalog)
+	}
+	if got := readResource("skill://subagent-configuration/SKILL.md"); !strings.Contains(got, "subagent") {
+		t.Fatalf("published skill unavailable after resource failures: %q", got)
+	}
+	retained, err := os.ReadFile(configPath)
+	if err != nil || string(retained) != string(encoded) {
+		t.Fatalf("resource reads mutated operator document: %q: %v", retained, err)
+	}
+}
+
+func assertMCPResourceFailure(t *testing.T, server *stdioMCPServer, uri, privatePayload string) {
+	t.Helper()
+	result := server.client.call("resources/read", map[string]any{"uri": uri})
+	if result.Error == nil || result.Result != nil {
+		t.Fatalf("resource %q must fail without successful content: %#v", uri, result)
+	}
+	if result.Error.Message == "" || strings.Contains(result.Error.Message, privatePayload) {
+		t.Fatalf("resource %q lacks a safe diagnostic: %#v", uri, result.Error)
 	}
 }
