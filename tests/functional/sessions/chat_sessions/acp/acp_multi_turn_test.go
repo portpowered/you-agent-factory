@@ -110,6 +110,117 @@ func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 	}
 }
 
+// W5 selection and command failures share the production process with a healthy
+// peer. Requests remain ordered on this connection because recovery must retain
+// each Chat Session's selected target after its rejected customer action.
+func TestACPMissingTargetRejectsWithoutAdmittingPeerWork(t *testing.T) {
+	t.Parallel()
+	cohort := controlledACPCohortForTest(t)
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "missing-target")
+	stdin, stdout := startControlledServeACPHarness(t, cohort, cwd)
+	selected := driveServeACPSessionNew(t, stdin, stdout, cwd)
+	peer := driveServeACPSessionNew(t, stdin, stdout, cwd)
+	if selected == peer {
+		t.Fatal("independent Chat Sessions shared an identity")
+	}
+	for _, sessionID := range []string{selected, peer} {
+		assertACPTargetSelection(t, stdin, stdout, sessionID, "factory:"+controlledACPFactory)
+	}
+	marker := "missing-target-" + filepath.Base(cwd)
+	target := "factory:@missing/" + marker
+	params, err := json.Marshal(map[string]string{
+		"sessionId": selected, "configId": "target", "value": target,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":4,"method":"session/set_config_option","params":%s}`+"\n", params)
+	if _, err := stdin.Write([]byte(line)); err != nil {
+		t.Fatal(err)
+	}
+	assertMissingACPTargetError(t, readServeACPResponse(t, stdout, "4"), target, cwd)
+	failed, notifications := driveIdentifiedSessionPrompt(t, stdin, stdout, "missing-target", selected, "/factory "+target)
+	assertMissingACPTargetError(t, failed, target, cwd)
+	if workerToolCallText(notifications) != "" || agentMessageText(t, notifications) != "" {
+		t.Fatal("rejected target command published successful Work or assistant output")
+	}
+	if got := cohort.runner.requestCountContaining(marker); got != 0 {
+		t.Fatalf("rejected target reached provider %d times", got)
+	}
+
+	// Both the untouched peer and the rejected session must still resolve their
+	// configured Factory and deliver only their own later turn's output.
+	for _, turn := range []struct{ session, prompt, answer, peerAnswer string }{
+		{peer, "pursue the first goal", "first turn answer", "second turn answer"},
+		{selected, "pursue the second goal", "second turn answer", "first turn answer"},
+	} {
+		assertACPTargetTurn(t, stdin, stdout, turn.session, turn.prompt, turn.answer, turn.peerAnswer)
+	}
+}
+
+func assertACPTargetTurn(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID, prompt, answer, peerAnswer string) {
+	t.Helper()
+	response, updates := driveIdentifiedSessionPrompt(t, stdin, stdout, "healthy-"+sessionID, sessionID, prompt)
+	if response.Error != nil {
+		t.Fatalf("healthy selected target failed: %+v", response.Error)
+	}
+	var result acpsdk.PromptResponse
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	text := agentMessageText(t, updates)
+	if result.StopReason != acpsdk.StopReasonEndTurn || !strings.Contains(text, answer) || strings.Contains(text, peerAnswer) {
+		t.Fatalf("selected-session result = %#v, text = %q", result, text)
+	}
+	if !strings.Contains(workerToolCallText(updates), answer) {
+		t.Fatal("selected Factory did not produce this turn's Work output")
+	}
+	for _, update := range updates {
+		if string(update.SessionId) != sessionID {
+			t.Fatalf("notification belongs to peer %q, want %q", update.SessionId, sessionID)
+		}
+	}
+}
+
+func assertMissingACPTargetError(t *testing.T, response serveACPLine, target, cwd string) {
+	t.Helper()
+	if response.Error == nil || response.Error.Code != -32602 || len(response.Result) != 0 {
+		t.Fatalf("missing target result = %#v, want invalid-params rejection without success", response)
+	}
+	encoded, err := json.Marshal(response.Error)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, private := range []string{target, filepath.Base(cwd)} {
+		if strings.Contains(string(encoded), private) {
+			t.Fatalf("target error exposes private selection: %s", encoded)
+		}
+	}
+}
+
+func assertACPTargetSelection(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID, target string) {
+	t.Helper()
+	params, err := json.Marshal(map[string]string{"sessionId": sessionID, "configId": "target", "value": target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":5,"method":"session/set_config_option","params":%s}`+"\n", params)
+	if _, err := stdin.Write([]byte(line)); err != nil {
+		t.Fatal(err)
+	}
+	response := readServeACPResponse(t, stdout, "5")
+	if response.Error != nil {
+		t.Fatalf("valid target selection failed: %+v", response.Error)
+	}
+	var result acpsdk.SetSessionConfigOptionResponse
+	if err := json.Unmarshal(response.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ConfigOptions) != 1 || result.ConfigOptions[0].Select == nil || string(result.ConfigOptions[0].Select.CurrentValue) != target {
+		t.Fatalf("selected target = %#v, want %q", result.ConfigOptions, target)
+	}
+}
+
 // driveIdentifiedSessionPrompt is driveServeACPSessionPrompt with a
 // caller-chosen request id, so several turns can run on one connection
 // without two of them sharing an id.
