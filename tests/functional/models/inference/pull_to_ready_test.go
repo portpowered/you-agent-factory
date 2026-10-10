@@ -140,13 +140,19 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 	backend := pullToReadyBackendSelection(backendBody)
 	clients := map[string]*pullToReadyAssetClient{}
 	selections := []scopedPullSelection{}
-	for _, name := range []string{"selected", "peer", "fault"} {
+	for _, name := range []string{"selected", "peer", "fault", "checksum", "truncated"} {
 		home := t.TempDir()
 		repository := "fixture/" + name
 		body := []byte("scoped pull " + name + " weights")
 		source := "hf://" + repository + "/" + pullToReadyAsset + "@" + pullToReadyRevision
 		writeGenericModelSourceOverride(t, home, pullToReadyModelName, source, "localai-whisper")
 		client := newPullToReadyAssetClientForRepository(body, backendBody, backend.Location, repository)
+		switch name {
+		case "checksum":
+			client.model = bytes.Repeat([]byte("x"), len(body))
+		case "truncated":
+			client.model = body[:len(body)-1]
+		}
 		clients[repository] = client
 		config := builtInOnlyModelFactoryConfig()
 		config["name"] = "scoped-pull-" + name
@@ -173,8 +179,16 @@ func TestModelsScopedPullInterleavesOperatorSourcesAndCachesOnOneProcess(t *test
 		}
 	}
 	t.Run("T11-PULL-FAIL preserves peer readiness and retries", func(t *testing.T) {
-		assertScopedPullFailureAndRecovery(t, process, selections[2], selections[1], clients, backend.Location)
+		clients[selections[2].repository].failModel.Store(true)
+		assertScopedPullFailureAndRecovery(t, process, selections[2], selections[1], clients, backend, factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED)
 	})
+	// Local Models commands bind ~default. Keep this small causal cohort
+	// serial on its reusable graph while independent top-level groups overlap.
+	for _, selected := range selections[3:] {
+		t.Run("W2 rejected "+selected.repository+" preserves peer and recovers", func(t *testing.T) {
+			assertScopedPullFailureAndRecovery(t, process, selected, selections[1], clients, backend, factoryapi.ManagedRuntimePullOutcomeINTEGRITYVERIFICATIONFAILED)
+		})
+	}
 }
 
 type scopedPullSelection struct {
@@ -206,10 +220,9 @@ func assertScopedPullSelectionReady(t *testing.T, process rootProcess, selected 
 	t.Logf("T11-PULL round=%d repository=%s cache=%s downloadedFacts=%d readiness=READY", round, selected.repository, cache, pull.downloadedBytes)
 }
 
-func assertScopedPullFailureAndRecovery(t *testing.T, process rootProcess, fault, peer scopedPullSelection, clients map[string]*pullToReadyAssetClient, backendLocation string) {
+func assertScopedPullFailureAndRecovery(t *testing.T, process rootProcess, fault, peer scopedPullSelection, clients map[string]*pullToReadyAssetClient, backend serviceedges.ModelBackendArtifactSelection, outcome factoryapi.ManagedRuntimePullOutcome) {
 	t.Helper()
 	client := clients[fault.repository]
-	client.failModel.Store(true)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "pull", pullToReadyModelName})
 	inputs.Input.Env = isolatedModelEnvironment(fault.home, filepath.Join(fault.home, "managed-cache"))
 	inputs.Input.WorkingDirectory = fault.directory
@@ -220,10 +233,10 @@ func assertScopedPullFailureAndRecovery(t *testing.T, process rootProcess, fault
 	}
 	var failed factoryapi.ModelPullResponse
 	decodePullToReadyJSON(t, inputs.Stdout(), &failed)
-	if failed.Outcome != factoryapi.ModelPullOutcomeFAILED || len(failed.DownloadedFiles) != 0 || failed.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED || failed.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+	if failed.Outcome != factoryapi.ModelPullOutcomeFAILED || len(failed.DownloadedFiles) != 0 || failed.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED || failed.ManagedRuntimePull.PullOutcome != outcome {
 		t.Fatalf("failed pull published success facts: %#v", failed)
 	}
-	assertPullToReadySafeOutput(t, map[string]string{"error": err.Error(), "stdout": inputs.Stdout(), "stderr": inputs.Stderr()}, "secret-source-body", string(fault.body), backendLocation)
+	assertPullToReadySafeOutput(t, map[string]string{"error": err.Error(), "stdout": inputs.Stdout(), "stderr": inputs.Stderr()}, "secret-source-body", string(fault.body), backend.Location)
 	missing := executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect")
 	var detail factoryapi.ModelDetail
 	decodePullToReadyJSON(t, missing.raw, &detail)
@@ -234,10 +247,14 @@ func assertScopedPullFailureAndRecovery(t *testing.T, process rootProcess, fault
 	assertPullToReadyAlreadyPresent(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "pull"), peer.body, peerCache)
 	assertPullToReadyInspect(t, executeScopedPullSelection(t, process, peer.home, peer.directory, "inspect"), peerCache, peer.body)
 	client.failModel.Store(false)
+	// The synchronous failed command has joined its asset operations. Restore
+	// only this route's response; the peer source and persisted cache stay intact.
+	valid := newPullToReadyAssetClientForRepository(fault.body, client.backend, backend.Location, fault.repository)
+	client.model, client.manifest = valid.model, valid.manifest
 	faultCache := filepath.Join(fault.home, "managed-cache")
 	assertPullToReadySuccess(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "pull"), fault.body, faultCache)
 	assertPullToReadyInspect(t, executeScopedPullSelection(t, process, fault.home, fault.directory, "inspect"), faultCache, fault.body)
-	t.Log("T11-PULL-FAIL: MODEL_PULL_FAILED, no success output, MISSING/NOT_INSTALLED, healthy peer READY, recovered selection READY")
+	t.Logf("rejected pull: %s, no success output, MISSING/NOT_INSTALLED, healthy peer READY, recovered selection READY", outcome)
 }
 
 func executeScopedPullSelection(t *testing.T, process rootProcess, home, directory, command string) pullToReadyCapture {
