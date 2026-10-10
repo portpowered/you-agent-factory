@@ -1,15 +1,19 @@
 package runtime_metrics_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -386,3 +390,219 @@ func functionalMetricsSessionEvent(
 func stringPointer(value string) *string { return &value }
 
 func int64Pointer(value int64) *int64 { return &value }
+
+// M3-S: local retained history is read through the customer CLI, including
+// compressed backups and an interrupted final write. Exact sums detect both
+// dropped and duplicated records; the component reader owns ordering proof.
+func TestMetricsRetainedHistoryThroughRootProcess(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	root := platformmetrics.RuntimeMetricsRoot(home)
+	session := uuid.NewString()
+	server := startRetainedMetricsHost(t, home, session)
+	record := func(dispatch string, value int) map[string]any {
+		return map[string]any{"metric_name": runtimeProviderInputTokens, "value": value,
+			"session_id": session, "dispatch_id": dispatch, "provider": "codex"}
+	}
+	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-history.log"), false,
+		[]map[string]any{record("active", 3)}, `{"private-tail":`)
+	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-history-2026-08-20T12-01-00.000.log"), false,
+		[]map[string]any{record("plain", 5)})
+	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-history-2026-08-20T12-02-00.000.log.gz"), true,
+		[]map[string]any{record("gzip", 7)})
+	writeRuntimeMetricsArtifact(t, filepath.Join(root, "130000.000000000-runtime-metrics-peer.log"), false,
+		[]map[string]any{{"metric_name": runtimeProviderInputTokens, "value": 100,
+			"session_id": "other", "dispatch_id": "foreign", "provider": "codex"}})
+	assertRetainedMetricsTokens(t, home, server, session, 15)
+}
+
+// M3-F: a bad complete record or gzip backup fails atomically after a valid
+// artifact. Public diagnostics fail safely; component tests own artifact/line context.
+func TestMetricsRetainedHistoryFailuresThroughRootProcess(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, suffix, content string
+	}{
+		{"complete record", ".log", "{\"private-secret\":}\n"},
+		{"gzip backup", "-2026-08-20T12-02-00.000.log.gz", "private-secret-invalid-gzip"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			root := platformmetrics.RuntimeMetricsRoot(home)
+			server := startRetainedMetricsHost(t, home, uuid.NewString())
+			writeRuntimeMetricsArtifact(t, filepath.Join(root, "110000.000000000-runtime-metrics-valid.log"), false,
+				[]map[string]any{{"metric_name": runtimeProviderInputTokens, "value": 3}})
+			path := filepath.Join(root, "120000.000000000-runtime-metrics-invalid"+test.suffix)
+			writeFunctionalFile(t, path, test.content)
+			inputs := retainedMetricsInputs(t, home, server)
+			err := runtimeMetricsProcess(t).Execute(inputs.Input)
+			assertBoundaryCodedFailure(t, err, inputs, "METRICS_QUERY_FAILED")
+			assertMetricsDiagnostic(t, inputs.Stderr(), "METRICS_QUERY_FAILED", "query runtime metrics: server returned HTTP 500")
+			if strings.Contains(inputs.Stderr(), "private-secret") {
+				t.Fatalf("metrics diagnostic disclosed artifact contents: %s", inputs.Stderr())
+			}
+			assertFunctionalFileContents(t, path, test.content)
+		})
+	}
+}
+
+type damagedMetricsHistoryCase struct {
+	name        string
+	compressed  bool
+	multistream bool
+	tornTail    string
+	damage      func([]byte) []byte
+}
+
+// Damaged backups and complete non-object records must fail the customer read
+// atomically, even after a valid artifact. Repairing that same selected file
+// restores the report without duplicating earlier facts or including a peer.
+func TestMetricsDamagedHistoryFailsClosedAndRecoversThroughRootProcess(t *testing.T) {
+	t.Parallel()
+	for _, test := range []damagedMetricsHistoryCase{
+		{name: "gzip checksum", compressed: true, damage: func(data []byte) []byte {
+			data[len(data)-8] ^= 1
+			return data
+		}},
+		{name: "gzip truncated trailer", compressed: true, damage: func(data []byte) []byte {
+			return data[:len(data)-4]
+		}},
+		{name: "second gzip member header", compressed: true, multistream: true, damage: func(data []byte) []byte {
+			data[len(data)/2] ^= 1
+			return data
+		}},
+		{name: "second gzip member checksum", compressed: true, multistream: true, damage: func(data []byte) []byte {
+			data[len(data)-8] ^= 1
+			return data
+		}},
+		{name: "second gzip member truncated trailer", compressed: true, multistream: true, damage: func(data []byte) []byte {
+			return data[:len(data)-4]
+		}},
+		{name: "complete null record", damage: func(data []byte) []byte {
+			return append(data, []byte("null\n")...)
+		}},
+		{name: "complete array record", damage: func(data []byte) []byte {
+			return append(data, []byte("[]\n")...)
+		}},
+		{name: "complete scalar record", damage: func(data []byte) []byte {
+			return append(data, []byte("42\n")...)
+		}},
+		{name: "completed malformed final write", tornTail: `{"selected-private-secret":`, damage: func(data []byte) []byte {
+			return append(data, []byte("{\"selected-private-secret\":\n")...)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assertDamagedMetricsHistoryRecovers(t, test)
+		})
+	}
+}
+
+func assertDamagedMetricsHistoryRecovers(t *testing.T, test damagedMetricsHistoryCase) {
+	t.Helper()
+	t.Parallel()
+	home := t.TempDir()
+	root := platformmetrics.RuntimeMetricsRoot(home)
+	session := uuid.NewString()
+	server := startRetainedMetricsHost(t, home, session)
+	record := func(id string, value int) map[string]any {
+		return map[string]any{"metric_name": runtimeProviderInputTokens, "value": value,
+			"session_id": id, "dispatch_id": "selected-history", "provider": "codex",
+			"private_note": "selected-private-secret"}
+	}
+	prefix := filepath.Join(root, "110000.000000000-runtime-metrics-prefix.log")
+	writeRuntimeMetricsArtifact(t, prefix, false, []map[string]any{record(session, 3)})
+	suffix := ".log"
+	if test.compressed {
+		suffix = "-2026-08-20T12-02-00.000.log.gz"
+	}
+	path := filepath.Join(root, "120000.000000000-runtime-metrics-selected"+suffix)
+	writeRuntimeMetricsArtifact(t, path, test.compressed,
+		[]map[string]any{record(session, 7), record(uuid.NewString(), 100)})
+	unknown := filepath.Join(root, "customer-note.txt")
+	writeFunctionalFile(t, unknown, "customer content")
+	assertRetainedMetricsTokens(t, home, server, session, 10)
+	healthy, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 10
+	if test.multistream {
+		// Concatenated gzip members are one readable artifact. The second
+		// member repeats selected and peer records, so only selected tokens
+		// contribute twice. Later-member damage must discard both members.
+		healthy = append(healthy, healthy...)
+		writeFunctionalFile(t, path, string(healthy))
+		want = 17
+		assertRetainedMetricsTokens(t, home, server, session, want)
+	}
+	if test.tornTail != "" {
+		torn := string(healthy) + test.tornTail
+		writeFunctionalFile(t, path, torn)
+		assertRetainedMetricsTokens(t, home, server, session, want)
+		assertFunctionalFileContents(t, path, torn)
+		assertFunctionalFileContents(t, unknown, "customer content")
+	}
+	damaged := test.damage(append([]byte(nil), healthy...))
+	writeFunctionalFile(t, path, string(damaged))
+	inputs := retainedMetricsInputs(t, home, server, "--session", session)
+	err = runtimeMetricsProcess(t).Execute(inputs.Input)
+	assertBoundaryCodedFailure(t, err, inputs, "METRICS_QUERY_FAILED")
+	assertMetricsDiagnostic(t, inputs.Stderr(), "METRICS_QUERY_FAILED", "query runtime metrics: server returned HTTP 500")
+	if strings.Contains(inputs.Stderr(), "selected-private-secret") || strings.Contains(inputs.Stderr(), path) {
+		t.Fatalf("metrics diagnostic disclosed artifact details: %s", inputs.Stderr())
+	}
+	assertFunctionalFileContents(t, path, string(damaged))
+	assertFunctionalFileContents(t, unknown, "customer content")
+	writeFunctionalFile(t, path, string(healthy))
+	assertRetainedMetricsTokens(t, home, server, session, want)
+	assertFunctionalFileContents(t, path, string(healthy))
+	assertFunctionalFileContents(t, unknown, "customer content")
+}
+
+func retainedMetricsInputs(t *testing.T, home, server string, selectors ...string) *support.CapturedInputs {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--json", "--server", server, "metrics"}, selectors...))
+	inputs.Input.Env = []string{"HOME=" + home, "USERPROFILE=" + home}
+	inputs.Input.WorkingDirectory = home
+	return inputs
+}
+
+func assertRetainedMetricsTokens(t *testing.T, home, server, session string, want int) {
+	t.Helper()
+	inputs := retainedMetricsInputs(t, home, server, "--session", session)
+	if err := runtimeMetricsProcess(t).Execute(inputs.Input); err != nil {
+		t.Fatalf("metrics query: %v; stderr=%s", err, inputs.Stderr())
+	}
+	var document struct {
+		Scope struct {
+			FactorySessionID string `json:"factory_session_id"`
+		} `json:"scope"`
+		Totals struct {
+			InputTokens int `json:"input_tokens"`
+		} `json:"totals"`
+	}
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Scope.FactorySessionID != session || document.Totals.InputTokens != want || inputs.Stderr() != "" {
+		t.Fatalf("metrics = %+v, stderr=%q; want session %q with %d tokens", document, inputs.Stderr(), session, want)
+	}
+}
+
+// One immutable server edge routes each invocation to its own listener; the
+// process graph is shared while sessions, homes and transport cleanup are owned
+// by parallel scenarios. Empty factories keep provider facts out of history sums.
+func startRetainedMetricsHost(t *testing.T, home, session string) string {
+	t.Helper()
+	server := support.NewProcessAPIServer()
+	ctx := context.WithValue(t.Context(), retainedMetricsServerKey{}, server)
+	factory := support.ScaffoldSingleStepFactory(t, "retained-metrics")
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--dir", factory,
+		"--session", session, "--continuously", "--with-server", "--server", "http://127.0.0.1:1",
+		"--quiet", "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = home
+	support.StartProcessCommand(t, runtimeMetricsProcess(t), inputs.Input)
+	return server.WaitForURL(t)
+}

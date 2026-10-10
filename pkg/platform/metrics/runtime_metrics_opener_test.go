@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -123,6 +124,96 @@ func TestRuntimeMetricsOpenerClosesLifecycle(t *testing.T) {
 	}
 	if _, err := nilOpener.Open(valid); err == nil || !strings.Contains(err.Error(), "opener is required") {
 		t.Fatalf("nil opener Open() = %v, want configuration error", err)
+	}
+}
+
+// Startup failures must retain cleanup causes and leave the opener usable.
+// The reservation and lifecycle edges are controlled; only the sink's selected
+// file is real. These component witnesses do not measure functional coverage.
+func TestRuntimeMetricsOpenerStartupFailurePreservesCausesAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, stage := range []string{"root lock", "reservation", "claim", "root release"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			opener, paths, lifecycle, coordination, request := newTestRuntimeMetricsOpener(t)
+			primary := errors.New("selected startup rejected")
+			rootClose := errors.New("root release rejected")
+			claimClose := errors.New("claim release rejected")
+			leaseClose := errors.New("retention release rejected")
+			root := &metricsTestCloser{err: rootClose}
+			claim := &metricsTestCloser{err: claimClose}
+			lease := &metricsTestCloser{err: leaseClose}
+			coordination.rootLock, coordination.claim, lifecycle.lease = root, claim, lease
+			wantCauses := []error{primary, leaseClose}
+			switch stage {
+			case "root lock":
+				coordination.lockRootErr = primary
+			case "reservation":
+				paths.err = primary
+				wantCauses = append(wantCauses, rootClose)
+			case "claim":
+				coordination.claimErr = primary
+				wantCauses = append(wantCauses, rootClose)
+			case "root release":
+				root.err = primary
+				wantCauses = append(wantCauses, claimClose)
+			}
+			sink, err := opener.Open(request)
+			if sink != nil {
+				t.Fatalf("rejected Open() = (%#v, %v), want no sink and an error", sink, err)
+			}
+			for _, cause := range wantCauses {
+				if !errors.Is(err, cause) {
+					t.Fatalf("Open() = %v, lost cause %v", err, cause)
+				}
+			}
+			wantRoot, wantClaim := 1, 0
+			if stage == "root lock" {
+				wantRoot = 0
+			}
+			if stage == "root release" {
+				wantClaim = 1
+			}
+			if root.closed != wantRoot || claim.closed != wantClaim || lease.closed != 1 {
+				t.Fatalf("release counts root=%d claim=%d lease=%d, want %d/%d/1", root.closed, claim.closed, lease.closed, wantRoot, wantClaim)
+			}
+			if _, err := os.Stat(paths.path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("rejected startup created metrics output: %v", err)
+			}
+			paths.err, coordination.lockRootErr, coordination.claimErr = nil, nil, nil
+			assertRuntimeMetricsOpenerRecovery(t, opener, coordination, lifecycle, request)
+		})
+	}
+}
+
+func assertRuntimeMetricsOpenerRecovery(t *testing.T, opener *RuntimeMetricsOpener, coordination *metricsTestCoordination, lifecycle *metricsTestRetentionLifecycle, request RuntimeMetricsOpeningRequest) {
+	t.Helper()
+	root, claim, lease := &metricsTestCloser{}, &metricsTestCloser{}, &metricsTestCloser{}
+	coordination.rootLock, coordination.claim, lifecycle.lease = root, claim, lease
+	sink, err := opener.Open(request)
+	if err != nil {
+		t.Fatalf("healthy retry Open(): %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sink.Close(); err != nil {
+			t.Errorf("cleanup recovered sink: %v", err)
+		}
+	})
+	if root.closed != 1 || claim.closed != 0 || lease.closed != 0 {
+		t.Fatalf("healthy startup releases = %d/%d/%d, want 1/0/0", root.closed, claim.closed, lease.closed)
+	}
+	if err := sink.WriteMetric(context.Background(), map[string]string{"session_id": "recovered"}); err != nil {
+		t.Fatalf("write recovered metrics: %v", err)
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("close recovered metrics: %v", err)
+	}
+	if root.closed != 1 || claim.closed != 1 || lease.closed != 1 {
+		t.Fatalf("healthy close releases = %d/%d/%d, want 1/1/1", root.closed, claim.closed, lease.closed)
+	}
+	content, err := os.ReadFile(sink.Path())
+	if err != nil || string(content) != "{\"session_id\":\"recovered\"}\n" {
+		t.Fatalf("recovered metrics = %q, %v", content, err)
 	}
 }
 

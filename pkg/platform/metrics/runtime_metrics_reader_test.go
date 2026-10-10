@@ -111,6 +111,110 @@ func TestRuntimeMetricsReaderReportsGzipDecoderFailureWithArtifactContext(t *tes
 	}
 }
 
+func TestRuntimeMetricsReaderRejectsDamagedStreamsAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		compressed bool
+		damage     func([]byte) []byte
+		cause      error
+	}{
+		{name: "gzip checksum", compressed: true, cause: gzip.ErrChecksum, damage: func(data []byte) []byte {
+			data[len(data)-8] ^= 1
+			return data
+		}},
+		{name: "gzip truncated trailer", compressed: true, cause: io.ErrUnexpectedEOF, damage: func(data []byte) []byte {
+			return data[:len(data)-4]
+		}},
+		{name: "plain read failure after valid prefix", cause: errors.New("selected artifact read failed")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			name := readerActiveName
+			data := []byte(`{"record_id":"selected-secret"}` + "\n")
+			if test.compressed {
+				name = readerCompressedName
+				data = gzipReaderTestData(t, data)
+			}
+			path := filepath.Join(root, name)
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			filesystem := &damagedStreamArtifactFileSystem{}
+			if test.damage != nil {
+				if err := os.WriteFile(path, test.damage(bytes.Clone(data)), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				filesystem.readErr = test.cause
+			}
+			reader, err := NewRuntimeMetricsReader(filesystem)
+			if err != nil {
+				t.Fatal(err)
+			}
+			records, err := reader.Read(context.Background(), root)
+			assertDamagedStreamRejected(t, records, err, test.cause, path, filesystem)
+			filesystem.readErr = nil
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			records, err = reader.Read(context.Background(), root)
+			if err != nil || len(records) != 1 || records[0]["record_id"] != "selected-secret" ||
+				filesystem.opened != 2 || filesystem.closed != 2 {
+				t.Fatalf("recovered Read() = (%#v, %v), handles=%d/%d", records, err, filesystem.opened, filesystem.closed)
+			}
+		})
+	}
+}
+
+func assertDamagedStreamRejected(t *testing.T, records []RuntimeMetricRecord, err, cause error, path string, filesystem *damagedStreamArtifactFileSystem) {
+	t.Helper()
+	var typed *RuntimeMetricsReadError
+	if records != nil || !errors.Is(err, cause) || !errors.As(err, &typed) ||
+		typed.Path != path || typed.Operation != "decode runtime metrics artifact" {
+		t.Fatalf("damaged Read() = (%#v, %v), want no partial result and selected decode cause", records, err)
+	}
+	if strings.Contains(err.Error(), "selected-secret") || filesystem.opened != 1 || filesystem.closed != 1 {
+		t.Fatalf("error=%v opened=%d closed=%d, want safe diagnostic and released handle", err, filesystem.opened, filesystem.closed)
+	}
+}
+
+func gzipReaderTestData(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return compressed.Bytes()
+}
+
+type damagedStreamArtifactFileSystem struct {
+	trackingArtifactFileSystem
+	readErr error
+}
+
+func (filesystem *damagedStreamArtifactFileSystem) Open(path string) (io.ReadCloser, error) {
+	file, err := filesystem.trackingArtifactFileSystem.Open(path)
+	if err != nil || filesystem.readErr == nil {
+		return file, err
+	}
+	return &damagedStreamReadCloser{Reader: io.MultiReader(file, artifactFailureReader{err: filesystem.readErr}), Closer: file}, nil
+}
+
+type damagedStreamReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
+type artifactFailureReader struct{ err error }
+
+func (reader artifactFailureReader) Read([]byte) (int, error) { return 0, reader.err }
+
 func TestRuntimeMetricsReaderHonorsCancellationAndMissingRoot(t *testing.T) {
 	root := installReaderFixtureTree(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -382,6 +486,37 @@ func TestRuntimeMetricsReaderReportsOpenAndVisitorFailures(t *testing.T) {
 	assertRuntimeMetricsReaderClosesArtifactsAfterSuccessAndVisitorFailure(t)
 }
 
+func TestRuntimeMetricsReaderPreservesTypedVisitorFailureAndRecovers(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, readerActiveName)
+	content := []byte(`{"record_id":"selected"}` + "\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader := newRuntimeMetricsReader(t)
+	cause := errors.New("selected consumer stopped")
+	want := &RuntimeMetricsReadError{Operation: "consume selected record", Path: path, Cause: cause}
+	err := reader.Stream(t.Context(), root, func(RuntimeMetricRecord) error { return want })
+	var got *RuntimeMetricsReadError
+	if !errors.As(err, &got) || got != want || !errors.Is(err, cause) || err.Error() != want.Error() {
+		t.Fatalf("visitor failure = %v, want original typed error %v", err, want)
+	}
+	var records []RuntimeMetricRecord
+	if err := reader.Stream(t.Context(), root, func(record RuntimeMetricRecord) error {
+		records = append(records, record)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0]["record_id"] != "selected" {
+		t.Fatalf("recovered records = %#v", records)
+	}
+	if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("retained history = %q, %v", got, err)
+	}
+}
+
 func TestRuntimeMetricsReaderReportsCloseFailure(t *testing.T) {
 	root := t.TempDir()
 	artifactPath := filepath.Join(root, readerActiveName)
@@ -410,6 +545,87 @@ func TestRuntimeMetricsReadErrorPreservesCause(t *testing.T) {
 	}
 }
 
+func TestRuntimeMetricsReaderSelectedEnvelopeRejectsCompleteInvalidRecords(t *testing.T) {
+
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		tail string
+		want string
+	}{
+		{name: "torn tail", tail: `{"record_id":`, want: ""},
+		{name: "complete malformed", tail: `{"record_id":` + "\n", want: "decode runtime metrics envelope"},
+		{name: "null object", tail: "null\n", want: "runtime metrics envelope must be an object"},
+		{name: "array", tail: "[]\n", want: "decode runtime metrics envelope"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			path := filepath.Join(root, readerActiveName)
+			if err := os.WriteFile(path, []byte(`{"record_id":"keep"}`+"\n"+test.tail), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			filesystem := &trackingArtifactFileSystem{}
+			reader, err := NewRuntimeMetricsReader(filesystem)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var records []RuntimeMetricRecord
+			envelopes := 0
+			err = reader.StreamSelected(context.Background(), root, StreamSelection{
+				EnvelopeFields: []string{"record_id"},
+				IncludeEnvelope: func(envelope RuntimeMetricRecordEnvelope) bool {
+					envelopes++
+					return envelope.Fields["record_id"] == "keep"
+				},
+			}, func(record RuntimeMetricRecord) error {
+				records = append(records, record)
+				return nil
+			})
+			if test.want == "" {
+				if err != nil {
+					t.Fatalf("torn-tail stream: %v", err)
+				}
+			} else {
+				var typed *RuntimeMetricsReadError
+				if !errors.As(err, &typed) || typed.Path != path || !strings.Contains(err.Error(), test.want) {
+					t.Fatalf("invalid-envelope error = %v, want typed artifact context and %q", err, test.want)
+				}
+			}
+			if len(records) != 1 || records[0]["record_id"] != "keep" || envelopes != 1 {
+				t.Fatalf("records=%#v envelopes=%d, want only the valid record", records, envelopes)
+			}
+			if filesystem.opened != 1 || filesystem.closed != 1 {
+				t.Fatalf("opened=%d closed=%d, want released artifact", filesystem.opened, filesystem.closed)
+			}
+		})
+	}
+}
+
+func TestRuntimeMetricsReaderCloseFailureDiscardsCollectedRecordsAndPreservesVisitorError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, readerActiveName), []byte(`{"record_id":"one"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	closeErr := errors.New("close failed")
+	reader, err := NewRuntimeMetricsReader(&closeErrorArtifactFileSystem{closeErr: closeErr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, err := reader.Read(context.Background(), root)
+	if records != nil || !errors.Is(err, closeErr) {
+		t.Fatalf("Read() = (%#v, %v), want no partial records and close failure", records, err)
+	}
+	visitorErr := errors.New("consumer rejected record")
+	err = reader.Stream(context.Background(), root, func(RuntimeMetricRecord) error { return visitorErr })
+	if !errors.Is(err, visitorErr) || errors.Is(err, closeErr) {
+		t.Fatalf("Stream() error = %v, want original visitor failure", err)
+	}
+	if got, err := newRuntimeMetricsReader(t).Read(context.Background(), root); err != nil || len(got) != 1 || got[0]["record_id"] != "one" {
+		t.Fatalf("healthy reread = (%#v, %v), want preserved artifact", got, err)
+	}
+}
+
 func containsPath(paths []string, want string) bool {
 	for _, path := range paths {
 		if path == want {
@@ -421,6 +637,117 @@ func containsPath(paths []string, want string) bool {
 
 type walkErrorArtifactFileSystem struct {
 	err error
+}
+
+// Discovery can fail after earlier artifacts have already been consumed. The
+// collecting boundary must discard those records and release their handles;
+// the same reader must remain usable for a fresh, healthy operation.
+func TestRuntimeMetricsReaderLateDiscoveryFailureDiscardsRecordsAndRecovers(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		cause   error
+		missing bool
+		cancel  bool
+	}{
+		{name: "permission", cause: fs.ErrPermission},
+		{name: "vanished entry", cause: fs.ErrNotExist, missing: true},
+		{name: "cancellation during traversal", cause: context.Canceled, cancel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertLateMetricsDiscoveryRecovery(t, test.cause, test.missing, test.cancel)
+		})
+	}
+}
+
+func assertLateMetricsDiscoveryRecovery(t *testing.T, cause error, missing, cancelScan bool) {
+	t.Helper()
+	root := t.TempDir()
+	prefix := filepath.Join(root, "110000.000000000-runtime-metrics-prefix.log")
+	last := filepath.Join(root, readerActiveName)
+	want := []RuntimeMetricRecord{{"record_id": "prefix"}, {"record_id": "last"}}
+	contents := map[string]string{prefix: "{\"record_id\":\"prefix\"}\n", last: "{\"record_id\":\"last\"}\n"}
+	for path, content := range contents {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	filesystem := &lateDiscoveryArtifactFileSystem{path: last, cause: cause, missing: missing}
+	reader, err := NewRuntimeMetricsReader(filesystem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecoveredMetricsDiscovery(t, reader, root, want)
+	filesystem.opened, filesystem.closed = 0, 0
+	filesystem.fail = true
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if cancelScan {
+		filesystem.cancel = cancel
+	}
+	records, err := reader.Read(ctx, root)
+	assertLateMetricsDiscoveryFailure(t, records, err, cause, root, last, cancelScan)
+	if filesystem.opened != 1 || filesystem.closed != 1 {
+		t.Fatalf("failed traversal handles = %d opened/%d closed, want exactly one of each", filesystem.opened, filesystem.closed)
+	}
+	filesystem.fail = false
+	assertRecoveredMetricsDiscovery(t, reader, root, want)
+	if filesystem.opened != 3 || filesystem.closed != 3 {
+		t.Fatalf("recovery handles = %d opened/%d closed, want three of each", filesystem.opened, filesystem.closed)
+	}
+	for path, content := range contents {
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != content {
+			t.Fatalf("artifact %q = %q, %v; want unchanged %q", path, data, err, content)
+		}
+	}
+}
+
+func assertLateMetricsDiscoveryFailure(t *testing.T, records []RuntimeMetricRecord, err, cause error, root, last string, cancelScan bool) {
+	t.Helper()
+	operation, path := "inspect runtime metrics path", last
+	if cancelScan {
+		operation, path = "discover runtime metrics under", root
+	}
+	var typed *RuntimeMetricsReadError
+	if records != nil || !errors.Is(err, cause) || !errors.As(err, &typed) ||
+		typed.Operation != operation || typed.Path != path {
+		t.Fatalf("failed discovery = (%#v, %v), want no records and %s at %q with cause %v", records, err, operation, path, cause)
+	}
+}
+
+func assertRecoveredMetricsDiscovery(t *testing.T, reader *RuntimeMetricsReader, root string, want []RuntimeMetricRecord) {
+	t.Helper()
+	records, err := reader.Read(t.Context(), root)
+	if err != nil || !reflect.DeepEqual(records, want) {
+		t.Fatalf("healthy discovery = (%#v, %v), want %#v", records, err, want)
+	}
+}
+
+type lateDiscoveryArtifactFileSystem struct {
+	trackingArtifactFileSystem
+	path    string
+	cause   error
+	missing bool
+	fail    bool
+	cancel  context.CancelFunc
+}
+
+func (filesystem *lateDiscoveryArtifactFileSystem) WalkDir(root string, visit fs.WalkDirFunc) error {
+	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if filesystem.fail && path == filesystem.path {
+			if filesystem.cancel != nil {
+				filesystem.cancel()
+			} else {
+				err = filesystem.cause
+			}
+			if filesystem.missing {
+				entry = nil
+			}
+		}
+		return visit(path, entry, err)
+	})
 }
 
 func (filesystem *walkErrorArtifactFileSystem) Stat(string) (fs.FileInfo, error) {

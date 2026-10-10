@@ -29,14 +29,18 @@ type factorySessionCommands struct {
 	routes map[string]platformprocess.CommandRunner
 }
 
-func newFactorySessionHost(t *testing.T) *factorySessionHost {
+func newFactorySessionHost(t *testing.T, replacements ...serviceedges.Edges) *factorySessionHost {
 	t.Helper()
 	commands := &factorySessionCommands{routes: make(map[string]platformprocess.CommandRunner)}
+	effects := serviceedges.Edges{ProviderCommandRunner: commands}
+	for _, replacement := range replacements {
+		effects = serviceedges.Merge(effects, replacement)
+	}
 	idle := support.ScaffoldFactory(t, map[string]any{"workTypes": []map[string]any{{"name": "idle", "states": []map[string]string{{"name": "init", "type": "INITIAL"}, {"name": "done", "type": "TERMINAL"}}}}})
 	support.ClearSeedInputs(t, idle)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: idle, WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{ProviderCommandRunner: commands},
+		Edges: effects,
 	})
 	return &factorySessionHost{server: server, commands: commands}
 }

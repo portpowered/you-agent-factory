@@ -22,8 +22,8 @@ import (
 // through production wiring, with a private home owned by each scenario.
 func TestLongWorkerPrompt(t *testing.T) {
 	t.Parallel()
-	for _, oversizedOptions := range []bool{false, true} {
-		t.Run(fmt.Sprintf("fixed_options_%t", oversizedOptions), func(t *testing.T) {
+	for _, failure := range []string{"none", "fixed-options", "home-config-read", "home-config-malformed", "project-config-read", "profile-create"} {
+		t.Run(failure, func(t *testing.T) {
 			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			home := t.TempDir()
@@ -33,15 +33,28 @@ func TestLongWorkerPrompt(t *testing.T) {
 			body := strings.Repeat("exact developer café 😀 ", 1800) + "\nquoted \"text\" C:\\workspace\\file\tend"
 			config := sharedInferenceWithExecutorProvider(support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "long-prompt-model"), "CODEX")
 			config = strings.Replace(config, "Process the input task.", body, 1)
-			if oversizedOptions {
+			if failure == "fixed-options" {
 				config = strings.Replace(config, "stopToken: COMPLETE", "args:\n  - "+strings.Repeat("x", 33000)+"\nstopToken: COMPLETE", 1)
 			}
 			support.WriteAgentConfig(t, dir, "worker", config)
 			support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\nenv:\n  CODEX_HOME: "+fmt.Sprintf("%q", home)+"\n---\nuser café 😀 with quoted \"text\" and trailing whitespace  \n")
+			protected := seedLongPromptFailure(t, dir, home, failure)
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"long-prompt-public-work"}`))
 			runner := &longPromptRunner{delegate: testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")})}
 			result := runLongPromptFactory(t, dir, runner)
-			assertLongPromptOutcome(t, result, runner, body, oversizedOptions)
+			assertLongPromptOutcome(t, result, runner, body, failure != "none")
+			if protected != "" {
+				content, err := os.ReadFile(protected)
+				if err != nil || string(content) != "customer configuration remains intact" {
+					t.Fatalf("failed prompt preparation changed customer file: %q (%v)", content, err)
+				}
+			}
+			if failure == "home-config-malformed" {
+				content, err := os.ReadFile(filepath.Join(home, "config.toml"))
+				if err != nil || string(content) != "[unterminated" {
+					t.Fatalf("malformed customer config changed: %q (%v)", content, err)
+				}
+			}
 			residue, err := filepath.Glob(filepath.Join(home, "you-prompt-*.config.toml"))
 			if err != nil || len(residue) != 0 {
 				t.Fatalf("own instruction profiles remain: %v (%v)", residue, err)
@@ -50,11 +63,53 @@ func TestLongWorkerPrompt(t *testing.T) {
 	}
 }
 
-func assertLongPromptOutcome(t *testing.T, result sharedInferenceFactoryResult, runner *longPromptRunner, body string, oversizedOptions bool) {
+// W7-F drives real configuration reads and profile creation through the
+// Providers boundary. Each parallel session owns its home and project files;
+// unreadable paths are directories so this proof is independent of host UID.
+func seedLongPromptFailure(t *testing.T, dir, home, failure string) string {
+	t.Helper()
+	var path string
+	switch failure {
+	case "home-config-read":
+		path = filepath.Join(home, "config.toml")
+	case "project-config-read":
+		path = filepath.Join(dir, ".codex", "config.toml")
+	case "home-config-malformed":
+		path = filepath.Join(home, "config.toml")
+		if err := os.WriteFile(path, []byte("[unterminated"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return ""
+	case "profile-create":
+		// A missing selected home has no conflicting config, but cannot accept
+		// the private profile. Preserve a customer file beside that home.
+		if err := os.Remove(home); err != nil {
+			t.Fatal(err)
+		}
+		protected := home + "-customer.txt"
+		t.Cleanup(func() { _ = os.Remove(protected) })
+		if err := os.WriteFile(protected, []byte("customer configuration remains intact"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return protected
+	default:
+		return ""
+	}
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	protected := filepath.Join(path, "customer.txt")
+	if err := os.WriteFile(protected, []byte("customer configuration remains intact"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return protected
+}
+
+func assertLongPromptOutcome(t *testing.T, result sharedInferenceFactoryResult, runner *longPromptRunner, body string, failed bool) {
 	t.Helper()
 	session, listed, events := result.session, result.work, result.events
 	wantDone, wantFailed, wantCalls := 1, 0, 1
-	if oversizedOptions {
+	if failed {
 		wantDone, wantFailed, wantCalls = 0, 1, 0
 		failure := terminalInferenceFailureObservation(t, events)
 		if failure.FailureDetail == nil || failure.FailureDetail.Reason != "command_line_too_long" {
@@ -72,7 +127,7 @@ func assertLongPromptOutcome(t *testing.T, result sharedInferenceFactoryResult, 
 	if runner.delegate.CallCount() != wantCalls {
 		t.Fatalf("provider attempts = %d, want %d", runner.delegate.CallCount(), wantCalls)
 	}
-	if !oversizedOptions {
+	if !failed {
 		assertLongPromptDelivery(t, runner, body)
 	}
 }

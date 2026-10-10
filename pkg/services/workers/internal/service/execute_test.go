@@ -852,8 +852,19 @@ func TestExecuteRunnerPanicBecomesSafeFailedResult(t *testing.T) {
 
 func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *testing.T) {
 	t.Parallel()
+	for _, failure := range []string{"none", "temporary", "worktree", "both"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			assertExecuteCleanupOutcome(t, failure)
+		})
+	}
+}
+
+func assertExecuteCleanupOutcome(t *testing.T, failure string) {
+	t.Helper()
 
 	cleanupError := errors.New("temporary cleanup failed")
+	releaseError := errors.New("private checkout release failed")
 	var eventsMu sync.Mutex
 	var events []string
 	appendEvent := func(event string) {
@@ -863,15 +874,24 @@ func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *te
 	}
 	worktree := &recordingWorktree{
 		preparation: workers.FactoryWorktreePreparation{CheckoutPath: "C:/fixture/worktree"},
-		release: func(context.Context, workers.FactoryWorktreePreparation) error {
+		release: func(ctx context.Context, preparation workers.FactoryWorktreePreparation) error {
 			appendEvent("worktree-release")
+			if ctx.Err() != nil || preparation.CheckoutPath != "C:/fixture/worktree" || preparation.Reused {
+				t.Errorf("release context=%v preparation=%#v", ctx.Err(), preparation)
+			}
+			if failure == "worktree" || failure == "both" {
+				return releaseError
+			}
 			return nil
 		},
 	}
 	temporaryFiles := &recordingTemporaryFiles{
 		remove: func(string) error {
 			appendEvent("temporary-cleanup")
-			return cleanupError
+			if failure == "temporary" || failure == "both" {
+				return cleanupError
+			}
+			return nil
 		},
 	}
 	service := mustExecuteServiceWithEdges(
@@ -908,21 +928,33 @@ func TestExecuteCleanupRunsBeforeTerminalAndCleanupFailureNormalizesResult(t *te
 	if err != nil {
 		t.Fatalf("Execute() error = %v, want normalized result", err)
 	}
-	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
-		t.Fatalf("result = %#v, want cleanup FAILED result", result)
-	}
-	if result.Failure.Type != workers.WorkFailureTypeInternalServerError ||
-		result.Failure.Message != "execution cleanup failed" {
-		t.Fatalf("failure = %#v, want typed cleanup failure", result.Failure)
+	assertCleanupResultAndEffects(t, result, request, failure, &eventsMu, &events)
+}
+
+func assertCleanupResultAndEffects(t *testing.T, result workers.ExecuteResult, request workers.ExecuteRequest, failure string, eventsMu *sync.Mutex, events *[]string) {
+	t.Helper()
+	terminal := "observation-COMPLETED"
+	if failure == "none" {
+		assertAcceptedResult(t, result, request.Correlation.DispatchID, request.Correlation.AttemptID, "output")
+	} else {
+		terminal = "observation-FAILED"
+		if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil ||
+			result.Failure.Type != workers.WorkFailureTypeInternalServerError ||
+			result.Failure.Message != "execution cleanup failed" {
+			t.Fatalf("result = %#v, want typed cleanup failure", result)
+		}
+		if result.Correlation != request.Correlation {
+			t.Fatalf("cleanup failure lost attempt identity: %#v", result.Correlation)
+		}
 	}
 
 	eventsMu.Lock()
 	defer eventsMu.Unlock()
-	if got, want := events, []string{
+	if got, want := *events, []string{
 		"observation-STARTED",
 		"worktree-release",
 		"temporary-cleanup",
-		"observation-FAILED",
+		terminal,
 	}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("events = %#v, want %#v", got, want)
 	}

@@ -36,29 +36,57 @@ func runWebhookJourney(t *testing.T, c *timeCohort, specialized bool) {
 	runWebhookTerminal(t, c, specialized, "badstatus", 1, http.StatusBadRequest, "non_retryable_http_status")
 	assertHealthyWebhook(t, c, peer, specialized)
 	t.Log("W05: single non-retryable 400 terminalizes with redacted attributed dead letter; peer delivers")
+	runWebhookRedirect(t, c, specialized)
+	assertHealthyWebhook(t, c, peer, specialized)
 	runWebhookTerminal(t, c, specialized, "storefail", 3, http.StatusServiceUnavailable, "retry_exhausted")
 	assertWebhookDiagnostic(t, c, "factory webhook dead-letter append failed", "storefail")
 	assertHealthyWebhook(t, c, peer, specialized)
 	t.Log("W07: append edge failure diagnosed safely, no persisted-letter claim or recursive retry; peer delivers")
-	id := openWebhookSession(t, c, "secretfail")
-	emitWebhookWork(t, c, id)
-	support.CloseFactorySessionAt(t, c.url, id)
+	secretFailures := []string{"secretfail"}
+	if !specialized {
+		secretFailures = append(secretFailures, "secretempty", "secretdirectory")
+	}
+	for _, key := range secretFailures {
+		runWebhookSecretFailure(t, c, key)
+		assertHealthyWebhook(t, c, peer, specialized)
+	}
 	assertWebhookSuccess(t, c, "recover")
-	assertWebhookDiagnostic(t, c, "factory webhook secret resolution failed", "secretfail")
-	c.webhookEffects.routes["secretfail"].assertHeld(t)
-	assertHealthyWebhook(t, c, peer, specialized)
 	t.Log("W06: secret failure produces redacted diagnostic, no HTTP, public close joins; peer delivers")
+	if !specialized {
+		t.Log("W8-S/F: default relative file secret is trimmed and signs canonical terminal Work; missing, whitespace-only and directory secrets disable delivery without changing terminal Work or borrowing a healthy peer's secret")
+	}
 	runWebhookClose(t, c, peer, specialized)
 	assertWebhookRedaction(t, c)
+}
+
+func runWebhookSecretFailure(t *testing.T, c *timeCohort, key string) {
+	t.Helper()
+	id := openWebhookSession(t, c, key)
+	workID := emitWebhookWork(t, c, id)
+	assertWebhookTerminalWork(t, c, id, workID)
+	support.CloseFactorySessionAt(t, c.url, id)
+	assertWebhookDiagnostic(t, c, "factory webhook secret resolution failed", key)
+	c.webhookEffects.routes[key].assertHeld(t)
+	assertWebhookNoSuccess(t, c, key)
+	assertNoWebhookLetters(t, c)
+}
+
+func assertWebhookTerminalWork(t *testing.T, c *timeCohort, id, workID string) {
+	t.Helper()
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(c.url, id, "/work"))
+	if len(listed.Results) != 1 || !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("story", "queued")) {
+		t.Fatalf("selected terminal Work missing: %#v", listed.Results)
+	}
 }
 
 func runWebhookRecovery(t *testing.T, c *timeCohort, specialized bool) {
 	t.Helper()
 	id := openWebhookSession(t, c, "recover")
-	emitWebhookWork(t, c, id)
+	workID := emitWebhookWork(t, c, id)
 	route := c.webhookEffects.routes["recover"]
 	first := route.await(t)
 	body := assertWebhookRequest(t, c, id, first, webhookNow(c, specialized))
+	assertWebhookTerminalWork(t, c, id, workID)
 	first.reply <- journeyReply{status: http.StatusServiceUnavailable, header: http.Header{"Retry-After": {webhookNow(c, specialized).Add(2 * time.Second).Format(http.TimeFormat)}}}
 	wait := c.webhook.await(t, 2*time.Second)
 	// Advancing only the observation source must not release default scheduling.

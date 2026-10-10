@@ -114,4 +114,5 @@ func TestFactoryRoutingGuardAndRetryJourneys(t *testing.T) {
 	t.Run("Routing", func(t *testing.T) { runWorkflowRoutingJourneys(t, host) })
 	t.Run("Guards", func(t *testing.T) { runWorkflowGuardJourneys(t, host) })
 	t.Run("ProviderRetryRecovery", func(t *testing.T) { runProviderRetryRecoveryJourneys(t, host) })
+	t.Run("SelectedProviderRoute", func(t *testing.T) { runSelectedProviderRouteJourneys(t, host) })
 }

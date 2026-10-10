@@ -68,7 +68,7 @@ func BuildRuntimeMetricsSink(
 	if err != nil {
 		return nil, err
 	}
-	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

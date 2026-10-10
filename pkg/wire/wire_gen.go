@@ -486,7 +486,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	factoryRuntimeMetricsOwner, err := provideRuntimeMetricsOwner(logger, wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver, runtimeMetricsRetentionFileSystem, runtimeMetricsCoordination)
+	factoryRuntimeMetricsOwner, err := provideRuntimeMetricsOwner(logger, wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver, runtimeMetricsRetentionFileSystem, runtimeMetricsCoordination, timerSource)
 	if err != nil {
 		return nil, err
 	}

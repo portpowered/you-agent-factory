@@ -198,6 +198,7 @@ func provideRuntimeMetricsOwner(
 	paths platformruntimeartifact.Reserver,
 	retentionFileSystem platformmetrics.RuntimeMetricsRetentionFileSystem,
 	coordination platformmetrics.RuntimeMetricsCoordination,
+	schedulingClock platformclock.TimerSource,
 ) (factoryruntime.RuntimeMetricsOwner, error) {
 	retention, err := platformmetrics.NewRuntimeMetricsRetention(
 		retentionFileSystem, clock, coordination,
@@ -206,7 +207,7 @@ func provideRuntimeMetricsOwner(
 		return nil, err
 	}
 	scheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(
-		retention, nil, runtimeMetricsRetentionReporter(baseLogger),
+		retention, nil, runtimeMetricsRetentionReporter(baseLogger), schedulingClock,
 	)
 	if err != nil {
 		return nil, err

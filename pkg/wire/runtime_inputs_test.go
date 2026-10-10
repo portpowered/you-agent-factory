@@ -23,6 +23,7 @@ import (
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -820,6 +821,7 @@ func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwn
 		func() string { return "metric-" + strconv.Itoa(int(metricCollision.Add(1))) }, reserver,
 		metricsFileSystem,
 		metricsCoordination,
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("provideRuntimeMetricsOwner(): %v", err)
@@ -1013,6 +1015,70 @@ func TestRuntimeObservabilityOwnerRejectsUnwritableDestination(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "runtime artifact") {
 		t.Fatalf("unwritable log destination error = %v, want actionable runtime artifact error", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionReporterDistinguishesFailureAndRecovery(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		name    string
+		failed  int
+		cause   error
+		message string
+	}{
+		{"artifact rejection", 1, nil, "runtime metrics retention sweep completed with failures"},
+		{"sweep rejection", 0, os.ErrPermission, "runtime metrics retention sweep failed"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			core, logs := observer.New(zap.DebugLevel)
+			reporter := runtimeMetricsRetentionReporter(zap.New(core))
+			report := platformmetrics.RuntimeMetricsRetentionReport{
+				RootDirectory: filepath.Join(t.TempDir(), "selected-metrics"),
+				Scanned:       platformmetrics.RuntimeMetricsRetentionTotals{Files: 5, Bytes: 500},
+				Before:        platformmetrics.RuntimeMetricsRetentionTotals{Files: 4, Bytes: 400},
+				After:         platformmetrics.RuntimeMetricsRetentionTotals{Files: 2, Bytes: 200},
+				Removed:       platformmetrics.RuntimeMetricsRetentionTotals{Files: 2, Bytes: 200},
+				Protected:     platformmetrics.RuntimeMetricsRetentionTotals{Files: 1, Bytes: 100},
+				Failed:        platformmetrics.RuntimeMetricsRetentionTotals{Files: scenario.failed, Bytes: int64(scenario.failed * 100)},
+			}
+			reporter(report, scenario.cause)
+			entries := logs.TakeAll()
+			if len(entries) != 1 || entries[0].Level != zap.WarnLevel || entries[0].Message != scenario.message {
+				t.Fatalf("rejection records = %#v, want one selected warning", entries)
+			}
+			assertRetentionReportFields(t, entries[0].ContextMap(), report)
+			if scenario.cause != nil && entries[0].ContextMap()["error"] != scenario.cause.Error() {
+				t.Fatalf("sweep cause = %#v, want %v", entries[0].ContextMap()["error"], scenario.cause)
+			}
+			report.Failed = platformmetrics.RuntimeMetricsRetentionTotals{}
+			reporter(report, nil)
+			entries = logs.TakeAll()
+			if len(entries) != 1 || entries[0].Level != zap.DebugLevel || entries[0].Message != "runtime metrics retention sweep completed" {
+				t.Fatalf("recovery records = %#v, want one healthy debug record", entries)
+			}
+			assertRetentionReportFields(t, entries[0].ContextMap(), report)
+			if _, exists := entries[0].ContextMap()["error"]; exists {
+				t.Fatal("healthy report retained the previous sweep error")
+			}
+		})
+	}
+}
+
+func assertRetentionReportFields(t *testing.T, fields map[string]interface{}, report platformmetrics.RuntimeMetricsRetentionReport) {
+	t.Helper()
+	want := map[string]interface{}{"root": report.RootDirectory, "skipped": report.Skipped}
+	for name, totals := range map[string]platformmetrics.RuntimeMetricsRetentionTotals{
+		"scanned": report.Scanned, "before": report.Before, "after": report.After,
+		"removed": report.Removed, "protected": report.Protected, "failed": report.Failed,
+	} {
+		want[name+"_files"] = int64(totals.Files)
+		want[name+"_bytes"] = totals.Bytes
+	}
+	for name, value := range want {
+		if fields[name] != value {
+			t.Fatalf("report field %s = %#v, want %#v", name, fields[name], value)
+		}
 	}
 }
 

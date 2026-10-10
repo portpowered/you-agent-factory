@@ -231,6 +231,70 @@ func TestServiceReleaseLeavesReusedWorktreeUntouched(t *testing.T) {
 	}
 }
 
+// W7 release proof stays at the owning component boundary: the public Factory
+// journey retains its checkout, while request-scoped Workers may remove theirs.
+func TestServiceReleaseReportsGitFailuresWithoutRemovingPeer(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("selected Git execution rejected")
+	cases := []struct {
+		name     string
+		response gitResponse
+		want     string
+	}{
+		{"success", gitResponse{}, ""},
+		{"execution-error", gitResponse{err: cause}, "git worktree remove"},
+		{"stderr", gitResponse{exitCode: 1, stderr: "  selected checkout busy\n", stdout: "ignored detail"}, "git worktree remove failed: selected checkout busy"},
+		{"stdout", gitResponse{exitCode: 2, stdout: "  selected checkout locked\n"}, "git worktree remove failed: selected checkout locked"},
+		{"status", gitResponse{exitCode: 3}, "git worktree remove failed: git worktree remove exited with status 3"},
+	}
+	for _, scenario := range cases {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			checkout := filepath.Join(root, "selected")
+			peer := filepath.Join(root, "customer.txt")
+			if err := os.WriteFile(peer, []byte("unrelated customer content"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			git := &recordingGitCommander{next: []gitResponse{scenario.response, {}}}
+			service, err := New(platformfilesystem.Local{}, git)
+			if err != nil {
+				t.Fatal(err)
+			}
+			preparation := PrepareFactoryGitWorktreeResult{CheckoutPath: checkout}
+			assertReleaseGitFailure(t, service.Release(t.Context(), preparation), scenario.want, scenario.response.err)
+			if err := service.Release(t.Context(), preparation); err != nil {
+				t.Fatalf("healthy retry: %v", err)
+			}
+			for _, call := range git.calls {
+				if call.dir != root || strings.Join(call.args, "|") != strings.Join([]string{"worktree", "remove", "--force", checkout}, "|") {
+					t.Fatalf("release affected an unselected checkout: %#v", call)
+				}
+			}
+			if len(git.calls) != 2 {
+				t.Fatalf("Git calls = %d, want two explicit releases", len(git.calls))
+			}
+			if data, err := os.ReadFile(peer); err != nil || string(data) != "unrelated customer content" {
+				t.Fatalf("peer content = %q (%v)", data, err)
+			}
+		})
+	}
+}
+
+func assertReleaseGitFailure(t *testing.T, err error, want string, cause error) {
+	t.Helper()
+	if want == "" {
+		if err != nil {
+			t.Fatal(err)
+		}
+	} else if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("release error = %v, want %q", err, want)
+	}
+	if cause != nil && !errors.Is(err, cause) {
+		t.Fatalf("release lost Git cause: %v", err)
+	}
+}
+
 func TestPrepareFactoryGitWorktree_UsesExistingWorktreesParent(t *testing.T) {
 	requireGitIntegration(t)
 	repoRoot := initGitRepository(t)

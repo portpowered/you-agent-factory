@@ -46,12 +46,13 @@ type genericCLIHostClock interface {
 }
 
 type genericCLIOutputFailureEffects struct {
-	failedTarget string
-	failed       atomic.Bool
-	createCalls  atomic.Int32
-	inspectCalls atomic.Int32
-	removeCalls  atomic.Int32
-	renameCalls  atomic.Int32
+	failedTarget          string
+	failedCreateDirectory string
+	failed                atomic.Bool
+	createCalls           atomic.Int32
+	inspectCalls          atomic.Int32
+	removeCalls           atomic.Int32
+	renameCalls           atomic.Int32
 }
 
 func (effects *genericCLIOutputFailureEffects) CreateTemp(dir, pattern string) (interface {
@@ -60,7 +61,105 @@ func (effects *genericCLIOutputFailureEffects) CreateTemp(dir, pattern string) (
 	Name() string
 }, error) {
 	effects.createCalls.Add(1)
+	if dir == effects.failedCreateDirectory {
+		return nil, errors.New("injected output creation failure")
+	}
 	return os.CreateTemp(dir, pattern)
+}
+
+// File input and output publication are standalone Models CLI operations. This
+// smallest local cohort is serial because the public commands bind ~default;
+// they do not accept an explicit Factory Session selector. The parent remains
+// parallel with independent groups and reuses one process across owned profiles.
+func TestModelsCLIFileInputPreservesDestinationOnFailure(t *testing.T) {
+	t.Parallel()
+	failedCreateDirectory := filepath.Join(functionalTempDir(t), "creation")
+	failedRenameTarget := filepath.Join(functionalTempDir(t), "rename", "answer.txt")
+	effects := &genericCLIOutputFailureEffects{
+		failedCreateDirectory: failedCreateDirectory, failedTarget: failedRenameTarget,
+	}
+	process, _, _ := buildGenericCLIProcess(t, singleOutputModelFactoryConfig, effects, nil, nil, nil, nil)
+	for _, scenario := range []string{"success", "missing input", "directory input", "empty input", "create failure", "rename failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			runModelsCLIFileInputScenario(t, process, scenario, failedCreateDirectory, failedRenameTarget)
+		})
+	}
+}
+
+func runModelsCLIFileInputScenario(t *testing.T, process support.Process, scenario, createDirectory, renameTarget string) {
+	t.Helper()
+	home := functionalTempDir(t)
+	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
+	writeGenericBackendCache(t, home, "localai-llamacpp", genericLlamaBackendSelection(), []byte("localai-llamacpp/linux-amd64"))
+	directory := functionalScaffoldFactory(t, singleOutputModelFactoryConfig("http://127.0.0.1:1"))
+	inputPath := filepath.Join(functionalTempDir(t), "prompt.txt")
+	const payload = "customer input bytes\nsecond line\n"
+	if err := os.WriteFile(inputPath, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outputPath := filepath.Join(functionalTempDir(t), "answer.txt")
+	switch scenario {
+	case "missing input":
+		inputPath += ".missing"
+	case "directory input":
+		inputPath = filepath.Dir(inputPath)
+	case "empty input":
+		if err := os.WriteFile(inputPath, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	case "create failure":
+		outputPath = filepath.Join(createDirectory, "answer.txt")
+	case "rename failure":
+		outputPath = renameTarget
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outputPath, []byte("prior destination"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--operation", "OMNI",
+		"--input", "prompt=@" + inputPath, "--output-map", "text=" + outputPath,
+		"--output-map", "usage=" + filepath.Join(filepath.Dir(outputPath), "usage.json"),
+	})
+	inputs.Input.Env = functionalHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = directory
+	err := process.Execute(inputs.Input)
+	if scenario == "success" {
+		if err != nil {
+			t.Fatalf("file input invocation: %v; stderr=%s", err, inputs.Stderr())
+		}
+		assertFunctionalFile(t, outputPath, payload)
+		return
+	}
+	assertModelsCLIFileFailure(t, inputs, err, scenario, outputPath)
+}
+
+func assertModelsCLIFileFailure(t *testing.T, inputs *support.CapturedInputs, err error, scenario, outputPath string) {
+	t.Helper()
+	if err == nil || inputs.Stdout() != "" {
+		t.Fatalf("%s: error=%v stdout=%q, want failure without successful output", scenario, err, inputs.Stdout())
+	}
+	want := "CLI_LOCAL_INPUT_FAILED"
+	if scenario == "create failure" {
+		want = "injected output creation failure"
+	} else if scenario == "rename failure" {
+		want = "injected mapped publication failure"
+	}
+	if !strings.Contains(inputs.Stderr()+err.Error(), want) {
+		t.Fatalf("%s: error=%v stderr=%q, want %q", scenario, err, inputs.Stderr(), want)
+	}
+	assertFunctionalFile(t, outputPath, "prior destination")
+	entries, readErr := os.ReadDir(filepath.Dir(outputPath))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".you-model-output-") {
+			t.Fatalf("unpublished output %q remains after %s", entry.Name(), scenario)
+		}
+	}
 }
 
 func (effects *genericCLIOutputFailureEffects) Inspect(path string) (os.FileInfo, error) {
