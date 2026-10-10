@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"reflect"
@@ -10,6 +12,66 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// callerMetadataLocked resolves credentials against this process's running
+// owner. The token disambiguates equal public IDs in different Factory Sessions.
+// No archived observation or ambient identity can restore caller authority.
+func (r *registry) callerMetadataLocked(caller *workersessions.CallerIdentity, metadata *workersessions.SessionMetadata) (*workersessions.SessionMetadata, error) {
+	if caller == nil {
+		return metadata.Clone(), nil
+	}
+	entropy, err := base64.RawURLEncoding.Strict().DecodeString(caller.Token)
+	if err != nil || len(entropy) != 32 || r.stopping {
+		return nil, workersessions.ErrCallerInvalid
+	}
+	var owner *workersessions.Session
+	for address, token := range r.executionTokens {
+		session := r.sessions[address]
+		if publicWorkerID(address) != caller.WorkerSessionID || session.State != workersessions.StateRunning ||
+			subtle.ConstantTimeCompare([]byte(token), []byte(caller.Token)) != 1 {
+			continue
+		}
+		if owner != nil {
+			return nil, workersessions.ErrCallerInvalid
+		}
+		owner = &session
+	}
+	if owner == nil {
+		return nil, workersessions.ErrCallerInvalid
+	}
+	derived := owner.Metadata.Clone()
+	if derived == nil {
+		derived = &workersessions.SessionMetadata{}
+	}
+	derived.Requester = &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: caller.WorkerSessionID}
+	if derived.Correlation != nil {
+		derived.Requester.WorkID = derived.Correlation.WorkID
+	}
+	return derived, nil
+}
+
+func (r *registry) resolveCallerMetadata(caller *workersessions.CallerIdentity, metadata *workersessions.SessionMetadata) (*workersessions.SessionMetadata, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.callerMetadataLocked(caller, metadata)
+}
+
+// Caller verification and metadata capture share the reservation lock,
+// including when reusing an identity with already authoritative metadata.
+func (r *registry) reserveWithCaller(id string, metadata *workersessions.SessionMetadata, caller *workersessions.CallerIdentity) error {
+	if caller == nil {
+		r.reserveIfAbsent(id, metadata)
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	derived, err := r.callerMetadataLocked(caller, metadata)
+	if err != nil {
+		return err
+	}
+	r.reserveIfAbsentLocked(id, derived)
+	return nil
+}
 
 func (r *registry) lookupStart(req workersessions.StartRequest) (*startReplay, error) {
 	tuple := startTupleFor(req)

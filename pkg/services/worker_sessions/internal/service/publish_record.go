@@ -237,7 +237,9 @@ func (r *registry) prepareInvocation(
 		return invocationPreparation{}, ErrMissingScheduler
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
-	r.reserveIfAbsent(req.ID, req.Metadata)
+	if err := r.reserveWithCaller(req.ID, req.Metadata, req.Caller); err != nil {
+		return invocationPreparation{}, err
+	}
 	acceptedFields := []any{
 		"sessionID", publicWorkerID(req.ID),
 		"attemptID", attemptID,

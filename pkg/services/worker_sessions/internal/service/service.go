@@ -320,6 +320,11 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		callerCtx = context.Background()
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	metadata, callerErr := r.resolveCallerMetadata(req.Caller, req.Metadata)
+	if callerErr != nil {
+		return workersessions.StartResult{}, callerErr
+	}
+	req.Metadata = metadata
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.StartResult{}, err
@@ -364,6 +369,9 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		return result, replayErr
 	}
 
+	// Authority was checked at reservation. Do not carry credentials into the
+	// detached supervision or its retained restart execution.
+	req.Caller = nil
 	outcomes := make(chan asyncStartCompletion, 1)
 	go func() {
 		result, startErr := r.startReservedWithEffects(req, executor, clock, scheduler)
@@ -392,6 +400,10 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 	tuple := startTupleFor(req)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	metadata, err := r.callerMetadataLocked(req.Caller, req.Metadata)
+	if err != nil {
+		return nil, false, err
+	}
 
 	if r.startReplays == nil {
 		r.startReplays = make(map[string]*startReplay)
@@ -422,7 +434,7 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 		r.startsDone = make(chan struct{})
 	}
 	r.activeStarts++
-	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved, Metadata: req.Metadata.Clone()}
+	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved, Metadata: metadata}
 	r.publications[req.ID] = &publication{}
 	r.startReplays[req.RequestID] = replay
 	r.logger.Info("worker session start", "sessionID", publicWorkerID(req.ID), "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
@@ -504,7 +516,10 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 func (r *registry) reserveIfAbsent(id string, metadata *workersessions.SessionMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.reserveIfAbsentLocked(id, metadata)
+}
 
+func (r *registry) reserveIfAbsentLocked(id string, metadata *workersessions.SessionMetadata) {
 	if _, exists := r.sessions[id]; exists {
 		return
 	}

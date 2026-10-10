@@ -449,6 +449,11 @@ func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 // req.Execution.WorkstationName routes into the runtime binding already
 // assembled by Workers, allowing Petri and JavaScript children to share it.
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
+	metadata, callerErr := r.resolveCallerMetadata(req.Caller, req.Metadata)
+	if callerErr != nil {
+		return workersessions.InvokeSessionResult{}, callerErr
+	}
+	req.Metadata = metadata
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")

@@ -402,6 +402,7 @@ type InvokeSessionRequest struct {
 	// Any other existing state is a conflicting invocation.
 	ID       string
 	Metadata *SessionMetadata
+	Caller   *CallerIdentity `json:"-"`
 	// Execution is the already-resolved Workers execution request.
 	// InvokeSession hands a detached clone of Execution to the injected
 	// workers.Service, so the caller retains exclusive
@@ -435,6 +436,7 @@ type StartRequest struct {
 	Execution workers.WorkstationDispatchRequest
 	Retry     RetryPolicy
 	Metadata  *SessionMetadata
+	Caller    *CallerIdentity `json:"-"`
 }
 
 // Validate reports whether req carries the required caller request identity

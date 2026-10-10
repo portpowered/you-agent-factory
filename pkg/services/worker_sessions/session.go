@@ -10,6 +10,15 @@ import (
 // ErrInvalidSessionMetadata rejects malformed descriptive admission facts.
 var ErrInvalidSessionMetadata = errors.New("worker sessions: invalid session metadata")
 
+// ErrCallerInvalid refuses credentials without revealing whether an owner exists.
+var ErrCallerInvalid = errors.New("worker sessions: invalid caller identity")
+
+// CallerIdentity is execution-only authority, never descriptive session metadata.
+type CallerIdentity struct {
+	WorkerSessionID string `json:"-"`
+	Token           string `json:"-"`
+}
+
 // Requester identifies the Worker Session that produced or invoked this work.
 // These nonsecret facts describe lineage; they do not authorize messaging.
 type Requester struct {
