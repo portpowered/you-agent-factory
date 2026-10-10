@@ -178,6 +178,12 @@ func TestCapturedArchivedSummaryPersistsOwnerLossCause(t *testing.T) {
 	if err != nil || got.TerminalCause == nil || *got.TerminalCause != "OWNER_LOST" || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone {
 		t.Fatalf("owner loss observation=%+v error=%v", got, err)
 	}
+	// The recorded owner-loss terminal is a witness, unlike an epoch-only prefix.
+	reader.reader = &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{item}}
+	rows, err := reader.archivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{}, nil)
+	if err != nil || len(rows) != 1 || rows[0].TerminalCause == nil || *rows[0].TerminalCause != "OWNER_LOST" || rows[0].Failure == nil || rows[0].Failure.Kind != workersessions.FailureCauseProcessGone || rows[0].EndedAt != nil || rows[0].Duration != nil {
+		t.Fatalf("witnessed owner loss catalog=%+v error=%v", rows, err)
+	}
 }
 
 // The component fake supplies the new capability independently of history IO.

@@ -304,12 +304,12 @@ func TestTerminalDraftPreservesKnownFailureOverControlDefault(t *testing.T) {
 	}
 }
 
-func TestCapturedOwnerLossLeavesEndAndFailureTimingUnknown(t *testing.T) {
+func TestCapturedUnwitnessedPrefixLeavesTerminalCauseAndTimingUnknown(t *testing.T) {
 	t.Parallel()
 	item := historyCapture(t, "worker", "factory", "attempt", false)
 	got, err := capturedHistoryIdentity(item, nil)
-	if err != nil || got.State != workersessions.StateFailed || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone || got.TerminalCause == nil || *got.TerminalCause != "OWNER_LOST" || got.RecordingHealth != recordings.WorkerRecordingStatusIncomplete || got.RecordingHealthReason != "OWNER_LOST" || got.EndedAt != nil || got.Duration != nil {
-		t.Fatalf("owner loss: %+v %v", got, err)
+	if err != nil || got.State != workersessions.StateFailed || got.ConfirmationState != workersessions.ConfirmationStateUnconfirmed || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone || got.TerminalCause != nil || got.RecordingHealth != recordings.WorkerRecordingStatusIncomplete || got.RecordingHealthReason != item.HealthReason || got.EndedAt != nil || got.Duration != nil {
+		t.Fatalf("unwitnessed retained prefix: %+v %v", got, err)
 	}
 }
 

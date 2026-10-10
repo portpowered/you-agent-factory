@@ -257,7 +257,9 @@ func assertControlledRestartFacts(t *testing.T, action string, row api.WorkerSes
 func assertRestartOwnerLostPrefix(t *testing.T, host invokeContinueStartedProcess, id string) {
 	t.Helper()
 	row := support.GetJSON[api.WorkerSessionObservation](t, host.baseURL+"/worker-sessions/"+id)
-	if row.State != "FAILED" || row.RecordingHealth == nil || *row.RecordingHealth != "INCOMPLETE" || row.TerminalCause == nil || *row.TerminalCause != "OWNER_LOST" || row.Failure == nil || row.Failure.Kind != "PROCESS_GONE" {
+	// Suppressed terminal writes leave an epoch-only prefix, with no recorded
+	// execution-death witness. PROCESS_GONE is diagnostic, not a terminal cause.
+	if row.State != "FAILED" || row.ConfirmationState != "UNCONFIRMED" || row.RecordingHealth == nil || *row.RecordingHealth != "INCOMPLETE" || row.TerminalCause != nil || row.Failure == nil || row.Failure.Kind != "PROCESS_GONE" {
 		t.Fatalf("owner loss invented complete facts: %+v", row)
 	}
 	assertRestartUnknownTerminalTiming(t, row)
