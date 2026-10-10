@@ -41,7 +41,7 @@ func TestConstructionRejectsMissingWorkerRestartStore(t *testing.T) {
 	}{{name: "nil"}, {name: "typed nil", store: (*nilWorkerControlStore)(nil)}} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, cell.store)
+			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, cell.store, continuationInspectionFake{})
 			if service != nil || !errors.Is(err, recordings.ErrMissingWorkerRestartInputStore) {
 				t.Fatalf("construction = (%v, %v), want missing restart store refusal", service, err)
 			}
@@ -60,7 +60,7 @@ func TestConstructionRejectsMissingWorkerControlStore(t *testing.T) {
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
-			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, cell.store, unavailableWorkerControlStore{})
+			service, err := New(unusedExecution{t: t}, nil, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, cell.store, unavailableWorkerControlStore{}, continuationInspectionFake{})
 			if service != nil || !errors.Is(err, recordings.ErrMissingWorkerControlOperationStore) {
 				t.Fatalf("construction = (%v, %v), want missing control store refusal", service, err)
 			}
@@ -124,7 +124,7 @@ func (l *controlClaimLogger) Info(message string, _ ...any) {
 // and transitionToStarting directly.
 func newTestRegistry(t *testing.T) *registry {
 	t.Helper()
-	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatalf("New() error = %v, want nil", err)
 	}
@@ -460,7 +460,7 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 		var err error
 		service, err = New(unusedExecution{t: t}, sink, logging.NoopLogger{},
 			coverageClock{now: now}, platformclock.Real{}, capture, unavailableWorkerControlStore{},
-			unavailableWorkerControlStore{})
+			unavailableWorkerControlStore{}, continuationInspectionFake{})
 		if err != nil {
 			t.Fatalf("New(%s): %v", suffix, err)
 		}
@@ -1659,7 +1659,7 @@ func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string, keyed
 		})
 		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 	}}
-	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(execution, sink, logging.NoopLogger{}, coverageClock{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1937,7 +1937,7 @@ func newRuntimeIdentityRegistry(t *testing.T) *registry {
 	t.Helper()
 	service, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{},
 		coverageClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}, platformclock.Real{}, nil, unavailableWorkerControlStore{},
-		unavailableWorkerControlStore{})
+		unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -6836,7 +6836,7 @@ func TestKeyedRuntimeInvocationRetainsSelectedEffects(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			t.Parallel()
 			defaults := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, defaults, defaults, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, defaults, defaults, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -6930,7 +6930,7 @@ func TestKeyedRuntimeCompatibilityRejectionPreservesLivePeer(t *testing.T) {
 			t.Parallel()
 			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
 			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -7106,7 +7106,7 @@ func assertSelectedEffectsResult(t *testing.T, outcome string, result workersess
 func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
 	t.Parallel()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
-	svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	svc, err := New(unusedExecution{t: t}, sink, logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7171,7 +7171,7 @@ func TestKeyedRuntimeDirectExecutionPublishesThroughOwnedAttempt(t *testing.T) {
 				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 			}}
 			facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-			service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+			service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -7231,7 +7231,7 @@ func TestKeyedRuntimeDirectRetryRejectsEarlierAttemptProgress(t *testing.T) {
 		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
 	}}
 	facts := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-	service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(execution, sink, logging.NoopLogger{}, facts, facts, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7394,7 +7394,7 @@ func TestKeyedRuntimeSupervisorUsesSuppliedDeadlineScheduler(t *testing.T) {
 		<-ctx.Done()
 		return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
 	}}
-	svc, err := New(execution, newInternalTestEventsService(), logging.NoopLogger{}, facts, scheduler, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	svc, err := New(execution, newInternalTestEventsService(), logging.NoopLogger{}, facts, scheduler, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -8670,7 +8670,7 @@ func TestBeginRuntimeAttempt_ContradictoryAcceptedResultWithDispatchErrorIsAdapt
 func newService(execution any, eventsAppender EventsAppender, logger logging.Logger) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
 	// Fixtures explicitly supply disabled logging when no observer is selected.
-	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		return nil, err
 	}
@@ -8688,7 +8688,7 @@ func newServiceWithRecording(
 	recording recordings.WorkerSessionRecordingService,
 ) (*registry, error) {
 	workersExecution, _ := execution.(workers.Service)
-	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := New(workersExecution, eventsAppender, logging.EnsureLogger(logger), platformclock.Real{}, platformclock.Real{}, recording, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		return nil, err
 	}

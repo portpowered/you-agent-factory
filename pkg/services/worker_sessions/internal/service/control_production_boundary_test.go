@@ -41,7 +41,7 @@ func newObservationService(
 	clock platformclock.Source,
 ) workersessions.Service {
 	t.Helper()
-	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{})
+	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}

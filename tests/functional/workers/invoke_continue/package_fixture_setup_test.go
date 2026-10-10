@@ -433,11 +433,11 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 	command := startInvokeContinuePackageCommand(process, inputs)
 	baseURL, err := api.WaitForBaseURL(invokeContinuePackageFixtureTimeout)
 	if err != nil {
-		_ = command.stop()
+		commandErr := command.stop()
 		closeCtx, cancel := context.WithTimeout(context.Background(), invokeContinuePackageFixtureTimeout)
 		_ = process.Close(closeCtx)
 		cancel()
-		return invokeContinueStartedProcess{}, fmt.Errorf("wait for package fixture API: %w", err)
+		return invokeContinueStartedProcess{}, fmt.Errorf("wait for package fixture API: %w; command result: %v", err, commandErr)
 	}
 	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds}, nil
 }
