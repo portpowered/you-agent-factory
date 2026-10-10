@@ -326,3 +326,81 @@ func TestT7ConcurrentPreflightReservesAndExecutesOnce(t *testing.T) {
 		t.Fatalf("concurrent attempts = %d", executor.executions.Load())
 	}
 }
+
+// Hold opening preparation after reservation so owner loss cannot be hidden by
+// an early preflight check. The final credential binding must refuse the launch.
+func TestCallerLossDuringOpeningRefusesExecution(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"start", "invoke"} {
+		for _, loss := range []string{"ended", "lost-token", "healthy-detached"} {
+			t.Run(mode+"/"+loss, func(t *testing.T) {
+				t.Parallel()
+				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+				defer cancel()
+				executor := &preflightExecution{}
+				r, req := newPreflightRegistry(t, executor)
+				caller := runningCaller(t, r, "source")
+				req.Caller = caller
+				gate := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{}), message: "worker session start accepted"}
+				r.logger = gate
+				result := make(chan error, 1)
+				go func() {
+					if mode == "start" {
+						_, err := r.Start(ctx, req)
+						result <- err
+					} else {
+						_, err := r.InvokeSession(ctx, workersessions.InvokeSessionRequest{ID: req.ID, Execution: req.Execution, Caller: caller})
+						result <- err
+					}
+				}()
+				select {
+				case <-gate.claimed:
+				case <-ctx.Done():
+					close(gate.release)
+					t.Fatal(ctx.Err())
+				}
+				switch loss {
+				case "ended":
+					r.commitControlTerminal("source", workersessions.StateCanceled)
+				case "lost-token":
+					r.mu.Lock()
+					delete(r.executionTokens, "source")
+					r.mu.Unlock()
+				default:
+					caller.Token = "changed-after-reservation"
+				}
+				close(gate.release)
+				select {
+				case err := <-result:
+					assertCallerOpeningOutcome(t, r, req.ID, loss, executor, err)
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			})
+		}
+	}
+}
+
+func assertCallerOpeningOutcome(t *testing.T, r *registry, id, loss string, executor *preflightExecution, err error) {
+	t.Helper()
+	if loss == "healthy-detached" {
+		if err != nil || executor.executions.Load() != 1 {
+			t.Fatalf("detached valid caller failed: %v", err)
+		}
+	} else if !errors.Is(err, workersessions.ErrCallerInvalid) || executor.executions.Load() != 0 {
+		t.Fatalf("opening owner loss launched execution or lost refusal: %v", err)
+	}
+	if err := r.waitForSupervisionDriver(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	child, err := r.Get(t.Context(), workersessions.GetRequest{ID: id})
+	if err != nil || !child.Terminal() || child.Metadata == nil || child.Metadata.Requester == nil || child.Metadata.Requester.WorkerSessionID != "source" {
+		t.Fatalf("child outcome or detached requester changed: %+v, %v", child, err)
+	}
+	r.mu.RLock()
+	sourceMetadata, childToken := r.sessions["source"].Metadata.Clone(), r.executionTokens[id]
+	r.mu.RUnlock()
+	if !reflect.DeepEqual(sourceMetadata, callerSourceMetadata()) || childToken != "" {
+		t.Fatal("admission changed source facts or retained child authority")
+	}
+}

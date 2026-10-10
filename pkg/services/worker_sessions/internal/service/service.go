@@ -353,6 +353,10 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		callerCtx = context.Background()
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
 	metadata, callerErr := r.resolveCallerMetadata(req.Caller, req.Metadata)
 	if callerErr != nil {
 		return workersessions.StartResult{}, callerErr
@@ -402,9 +406,8 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		return result, replayErr
 	}
 
-	// Authority was checked at reservation. Do not carry credentials into the
-	// detached supervision or its retained restart execution.
-	req.Caller = nil
+	// Keep a detached caller only through execution admission. It never enters
+	// the replay tuple, supervision, or retained restart execution.
 	outcomes := make(chan asyncStartCompletion, 1)
 	go func() {
 		result, startErr := r.startReservedWithEffects(req, executor, clock, scheduler)

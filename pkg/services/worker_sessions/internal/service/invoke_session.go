@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"time"
@@ -449,6 +448,10 @@ func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 // req.Execution.WorkstationName routes into the runtime binding already
 // assembled by Workers, allowing Petri and JavaScript children to share it.
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
 	metadata, callerErr := r.resolveCallerMetadata(req.Caller, req.Metadata)
 	if callerErr != nil {
 		return workersessions.InvokeSessionResult{}, callerErr
@@ -551,9 +554,13 @@ func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersess
 	}
 	for {
 		result, retry := r.publishRegisteredAttempt(
-			ctx, req.ID, handoff, supervision, r.beginExecutionPublish(req.ID, supervision),
+			ctx, req.ID, handoff, supervision, r.beginExecutionPublish(req.ID, supervision), req.Caller,
 		)
+		req.Caller = nil // Caller authority is needed only for the initial admission.
 		if !retry {
+			if errors.Is(result.DispatchErr, workersessions.ErrCallerInvalid) {
+				return result, workersessions.ErrCallerInvalid
+			}
 			result.Attempts = supervision.attemptCount()
 			return result, nil
 		}
@@ -614,6 +621,7 @@ func (r *registry) publishRegisteredAttempt(
 	handoff workers.WorkstationDispatchRequest,
 	supervision *supervision,
 	canPublish bool,
+	caller *workersessions.CallerIdentity,
 ) (workersessions.InvokeSessionResult, bool) {
 	attemptID := handoff.Execution.Dispatch.DispatchID
 	if !canPublish {
@@ -633,6 +641,7 @@ func (r *registry) publishRegisteredAttempt(
 		sessionID,
 		handoff,
 		supervision,
+		caller,
 	)
 	if publishErr != nil {
 		r.finishSupervisionPublication(supervision)
@@ -1101,38 +1110,4 @@ func observationWorkerSessionIDFromTopic(topic events.Topic) string {
 	value = strings.TrimPrefix(value, "worker-session/")
 	value = strings.TrimSuffix(value, "/events")
 	return value
-}
-
-// bindExecutionIdentityEnvironment runs only after the safe restart recipe has
-// been prepared. Tokens are process-local, never Session or recipe fields.
-func (r *registry) bindExecutionIdentityEnvironment(id string) ([]string, error) {
-	entropy := make([]byte, 32)
-	r.tokenEntropyMu.Lock()
-	_, err := io.ReadFull(r.tokenEntropy, entropy)
-	r.tokenEntropyMu.Unlock()
-	if err != nil {
-		return nil, errors.New("worker sessions: token entropy unavailable")
-	}
-	token := base64.RawURLEncoding.EncodeToString(entropy)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	session, exists := r.sessions[id]
-	if !exists || (session.State != workersessions.StateStarting && session.State != workersessions.StateRunning) || r.stopping {
-		return nil, workersessions.ErrSessionNotStartable
-	}
-	if r.executionTokens == nil {
-		r.executionTokens = make(map[string]string)
-	}
-	if r.executionSecrets == nil {
-		r.executionSecrets = make(map[string][]string)
-	}
-	r.executionTokens[id] = token
-	r.executionSecrets[id] = append(r.executionSecrets[id], token)
-	session = cloneSession(session)
-	session.ID = publicWorkerID(id)
-	environment := append(session.IdentityEnvironment(), "YOU_WORKER_SESSION_TOKEN="+token)
-	if endpoint := r.executionEndpointLocked(); endpoint != "" {
-		environment = append(environment, "YOU_SERVER="+endpoint)
-	}
-	return environment, nil
 }

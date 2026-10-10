@@ -2952,7 +2952,7 @@ func TestDriveInvocation_ControlAndPublishFailureHaveTerminalObservableOutcomes(
 			t.Fatal("commit control terminal did not win before boundary publication")
 		}
 		result, retry := r.publishRegisteredAttempt(
-			context.Background(), "worker-1", dispatchHandoff("dispatch-1"), supervision, false,
+			context.Background(), "worker-1", dispatchHandoff("dispatch-1"), supervision, false, nil,
 		)
 		if retry || result.Session.State != workersessions.StateCanceled {
 			t.Fatalf("publishRegisteredAttempt() = %#v, retry %v, want retained CANCELED session and no retry", result, retry)
@@ -3399,7 +3399,7 @@ func TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal(t 
 	}
 	release()
 
-	result, retry := r.publishRegisteredAttempt(context.Background(), sessionID, request, supervision, true)
+	result, retry := r.publishRegisteredAttempt(context.Background(), sessionID, request, supervision, true, nil)
 	if retry || result.Session.State != workersessions.StateCanceled ||
 		result.Dispatch.DispatchID != dispatchID ||
 		!errors.Is(result.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
@@ -8077,7 +8077,7 @@ func TestWorkerExecutionHandoff_PublishExecutionReportsPreAdmissionFailure(t *te
 	r := newTestRegistry(t)
 	r.execution = nil
 	request := dispatchHandoff("publish-failure")
-	err := r.publishExecution(nil, "missing-session", request, newSupervision("publish-failure", "", request))
+	err := r.publishExecution(t.Context(), "missing-session", request, newSupervision("publish-failure", "", request), nil)
 	if !errors.Is(err, workers.ErrExecuteUnavailable) {
 		t.Fatalf("publishExecution(nil execution) error = %v, want execute unavailable", err)
 	}

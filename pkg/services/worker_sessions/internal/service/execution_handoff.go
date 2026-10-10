@@ -77,6 +77,7 @@ func (r *registry) publishExecution(
 	sessionID string,
 	request workers.WorkstationDispatchRequest,
 	supervision *supervision,
+	caller *workersessions.CallerIdentity,
 ) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -96,7 +97,7 @@ func (r *registry) publishExecution(
 		cancel()
 		return workers.ErrExecuteUnavailable
 	}
-	identity, identityErr := r.bindExecutionIdentityEnvironment(sessionID)
+	identity, identityErr := r.bindExecutionIdentityEnvironment(sessionID, caller)
 	if identityErr != nil {
 		cancel()
 		return identityErr
@@ -886,7 +887,7 @@ func (r *registry) BeginRuntimeAttempt(
 		}
 		return nil, err
 	}
-	identity, identityErr := r.bindExecutionIdentityEnvironment(req.ID)
+	identity, identityErr := r.bindExecutionIdentityEnvironment(req.ID, nil)
 	if identityErr != nil {
 		_ = handle.Complete(ctx, workers.WorkstationDispatchResult{DispatchID: attemptID, TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed}, identityErr)
 		return nil, identityErr

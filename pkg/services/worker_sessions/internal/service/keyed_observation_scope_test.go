@@ -464,7 +464,7 @@ func TestTokenBindingFreshnessRevocationAndRedaction(t *testing.T) {
 	if r.executionTokens["source"] != "" || r.executionTokens["successor"] != next {
 		t.Fatal("terminal transition did not revoke only its owner")
 	}
-	if _, err := r.bindExecutionIdentityEnvironment("source"); err == nil {
+	if _, err := r.bindExecutionIdentityEnvironment("source", nil); err == nil {
 		t.Fatal("terminal session acquired another token")
 	}
 	safe, err := r.redactExecutionFragment("source", workers.ProgressFragment{Payload: token})
@@ -543,7 +543,7 @@ func bindTestSessionToken(t *testing.T, r *registry, id string) string {
 	if _, err := r.transitionToStarting(id); err != nil {
 		t.Fatal(err)
 	}
-	environment, err := r.bindExecutionIdentityEnvironment(id)
+	environment, err := r.bindExecutionIdentityEnvironment(id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestExecutionEndpointBindingsRemainExecutionOnlyAndReleaseIndependently(t *
 		if _, err := r.transitionToStarting(id); err != nil {
 			t.Fatal(err)
 		}
-		environment, err := r.bindExecutionIdentityEnvironment(id)
+		environment, err := r.bindExecutionIdentityEnvironment(id, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

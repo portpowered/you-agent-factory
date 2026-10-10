@@ -1008,7 +1008,7 @@ func (r *registry) publishResumeDispatch(
 	supervision *supervision,
 	continuation workers.WorkstationDispatchRequest,
 ) error {
-	return r.publishExecution(context.WithoutCancel(ctx), req.ID, continuation, supervision)
+	return r.publishExecution(context.WithoutCancel(ctx), req.ID, continuation, supervision, nil)
 }
 
 func (r *registry) resumePublicationFailure(

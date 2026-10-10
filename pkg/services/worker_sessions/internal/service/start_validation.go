@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -99,4 +100,43 @@ func (r *registry) validateStartExecution(ctx context.Context, executor workers.
 		return fmt.Errorf("%w: %w", workersessions.ErrStartAdmissionFailed, err)
 	}
 	return fmt.Errorf("%w: %w", workersessions.ErrInvalidExecutionRequest, err)
+}
+
+// bindExecutionIdentityEnvironment runs only after the safe restart recipe has
+// been prepared. Caller revalidation and credential installation share the
+// registry lock, fencing owner loss before execution admission. Tokens are
+// process-local, never Session or recipe fields.
+func (r *registry) bindExecutionIdentityEnvironment(id string, caller *workersessions.CallerIdentity) ([]string, error) {
+	entropy := make([]byte, 32)
+	r.tokenEntropyMu.Lock()
+	_, err := io.ReadFull(r.tokenEntropy, entropy)
+	r.tokenEntropyMu.Unlock()
+	if err != nil {
+		return nil, errors.New("worker sessions: token entropy unavailable")
+	}
+	token := base64.RawURLEncoding.EncodeToString(entropy)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, err := r.callerMetadataLocked(caller, nil); err != nil {
+		return nil, err
+	}
+	session, exists := r.sessions[id]
+	if !exists || (session.State != workersessions.StateStarting && session.State != workersessions.StateRunning) || r.stopping {
+		return nil, workersessions.ErrSessionNotStartable
+	}
+	if r.executionTokens == nil {
+		r.executionTokens = make(map[string]string)
+	}
+	if r.executionSecrets == nil {
+		r.executionSecrets = make(map[string][]string)
+	}
+	r.executionTokens[id] = token
+	r.executionSecrets[id] = append(r.executionSecrets[id], token)
+	session = cloneSession(session)
+	session.ID = publicWorkerID(id)
+	environment := append(session.IdentityEnvironment(), "YOU_WORKER_SESSION_TOKEN="+token)
+	if endpoint := r.executionEndpointLocked(); endpoint != "" {
+		environment = append(environment, "YOU_SERVER="+endpoint)
+	}
+	return environment, nil
 }

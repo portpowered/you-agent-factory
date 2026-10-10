@@ -372,6 +372,7 @@ func (r *registry) startReservedWithEffects(
 	invokeReq := workersessions.InvokeSessionRequest{
 		ID:        req.ID,
 		Metadata:  req.Metadata.Clone(),
+		Caller:    req.Caller,
 		Execution: req.Execution,
 		Retry:     req.Retry,
 	}
