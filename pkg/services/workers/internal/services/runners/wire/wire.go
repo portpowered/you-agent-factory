@@ -119,7 +119,7 @@ func newProductionRegistry(
 	if mockConfig != nil {
 		mockImplementation, mockErr := mock.New(
 			mock.Config{WorkersConfig: mockConfig.WorkersConfig},
-			mock.Dependencies{Next: mockDependencies.Next, Files: mockDependencies.Files},
+			mockDependencies.Next, mockDependencies.Files,
 		)
 		if mockErr != nil {
 			return nil, invalidRunnerConstruction(runners.MockIdentity, mockErr)
@@ -203,12 +203,7 @@ func inferenceImplementation(
 			),
 			Scope: config.Scope,
 		},
-		inference.Dependencies{
-			Models:              dependencies.Models,
-			Delegate:            dependencies.Delegate,
-			ContentMaterializer: dependencies.ContentMaterializer,
-			MediaFiles:          dependencies.MediaFiles,
-		},
+		dependencies.Models, dependencies.Delegate, dependencies.ContentMaterializer, dependencies.MediaFiles,
 	)
 }
 

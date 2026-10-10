@@ -24,13 +24,6 @@ type Config struct {
 	WorkersConfig *workers.MockWorkersConfig
 }
 
-// Dependencies are optional effects for mock script passthrough. Production
-// Workers construction must leave this registry unregistered.
-type Dependencies struct {
-	Next  workerprocess.CommandRunner
-	Files mockworkerbehavior.GateFileSystem
-}
-
 type runner struct {
 	config *workers.MockWorkersConfig
 	next   workerprocess.CommandRunner
@@ -40,11 +33,11 @@ type runner struct {
 var _ workers.Runner = (*runner)(nil)
 
 // New validates and snapshots one mock Strategy. Construction is inert.
-func New(config Config, dependencies Dependencies) (workers.Runner, error) {
+func New(config Config, next workerprocess.CommandRunner, files mockworkerbehavior.GateFileSystem) (workers.Runner, error) {
 	if config.WorkersConfig == nil {
 		return nil, errors.New("construct mock runner: mock workers config is required")
 	}
-	return &runner{config: config.WorkersConfig.Clone(), next: dependencies.Next, files: dependencies.Files}, nil
+	return &runner{config: config.WorkersConfig.Clone(), next: next, files: files}, nil
 }
 
 // Execute evaluates one request-scoped mock decision without retaining caller

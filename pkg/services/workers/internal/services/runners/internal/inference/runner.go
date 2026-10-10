@@ -31,14 +31,6 @@ type ModelInvoker interface {
 	InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
-// Dependencies are the exact effects used by one Inference Runner.
-type Dependencies struct {
-	Models              ModelInvoker
-	Delegate            workers.Runner
-	ContentMaterializer work.ContentMaterializer
-	MediaFiles          platformfilesystem.ReadOpener
-}
-
 type runner struct {
 	worker              models.LocalWorker
 	resources           []models.LocalResource
@@ -52,8 +44,14 @@ type runner struct {
 var _ workers.Runner = (*runner)(nil)
 
 // New validates and snapshots an Inference Runner and its exact Models edge.
-func New(config Config, dependencies Dependencies) (workers.Runner, error) {
-	if dependencies.Models == nil {
+func New(
+	config Config,
+	modelsService ModelInvoker,
+	delegate workers.Runner,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
+) (workers.Runner, error) {
+	if modelsService == nil {
 		return nil, misconfigured("inference Models service is required", nil)
 	}
 	worker := snapshotWorker(config.Worker)
@@ -64,10 +62,10 @@ func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 		worker:              worker,
 		resources:           snapshotResources(config.Resources),
 		scope:               config.Scope,
-		models:              dependencies.Models,
-		delegate:            dependencies.Delegate,
-		contentMaterializer: dependencies.ContentMaterializer,
-		mediaFiles:          dependencies.MediaFiles,
+		models:              modelsService,
+		delegate:            delegate,
+		contentMaterializer: contentMaterializer,
+		mediaFiles:          mediaFiles,
 	}, nil
 }
 
