@@ -947,7 +947,7 @@ func TestProcessDurableScopeRetainsSelectedCapabilitiesAndDetachedSettings(t *te
 				t.Fatal(err)
 			}
 			assertDetachedResumeSettings(t, again.WorkerSettings, again.MockWorkers)
-			if _, err := got.WorkerAttemptStarter(context.Background(), &workers.ExecuteRequest{}); !errors.Is(err, failure) {
+			if _, err := got.WorkerAttemptStarter(context.Background(), &workers.ExecuteRequest{}, nil); !errors.Is(err, failure) {
 				t.Fatalf("selected worker error = %v", err)
 			}
 			got.WorkerProgressPublisher(workers.ProgressFragment{})

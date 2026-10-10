@@ -438,6 +438,7 @@ func CanonicalDurableStartRequest(
 	}
 	legacy := factorysessions.StartRequest{
 		RequestID:               strings.TrimSpace(request.Correlation.RequestID),
+		Caller:                  request.Caller.Clone(),
 		Source:                  source,
 		Args:                    cloneCanonicalAnyMap(request.Args),
 		RequestedPolicy:         cloneCanonicalAnyMap(request.Policy),
@@ -477,7 +478,7 @@ func runtimeSelectionMockWorkers(selection *factorysessions.SessionRuntimeSelect
 func canonicalInvocationRequest(
 	request factorysessions.SessionInvokeRequest,
 ) factorysessions.InvocationRequest {
-	legacy := factorysessions.InvocationRequest{}
+	legacy := factorysessions.InvocationRequest{Caller: request.Caller.Clone()}
 	if request.Args != nil {
 		args := cloneCanonicalAnyMap(request.Args)
 		legacy.Args = &args

@@ -19,6 +19,15 @@ type CallerIdentity struct {
 	Token           string `json:"-"`
 }
 
+// Clone detaches invocation-local credentials without granting caller authority.
+func (caller *CallerIdentity) Clone() *CallerIdentity {
+	if caller == nil {
+		return nil
+	}
+	detached := *caller
+	return &detached
+}
+
 // Requester identifies the Worker Session that produced or invoked this work.
 // These nonsecret facts describe lineage; they do not authorize messaging.
 type Requester struct {

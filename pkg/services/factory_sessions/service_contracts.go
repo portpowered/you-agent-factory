@@ -9,6 +9,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"strings"
@@ -30,6 +31,7 @@ const InvocationInputSourceKindText InvocationInputSourceKind = "text"
 // InvocationRequest carries one normalized transport request into the Factory
 // Session invocation owner.
 type InvocationRequest struct {
+	Caller          *workersessions.CallerIdentity `json:"-"`
 	Args            *map[string]any
 	Content         []work.WorkContentPart
 	ContentProvided bool
@@ -637,6 +639,7 @@ type SessionRecordingSelection struct {
 // and normalized values; the internal Worker capabilities are attached by the
 // process root after transport mapping.
 type SessionStartRequest struct {
+	Caller         *workersessions.CallerIdentity `json:"-"`
 	SessionID      string
 	Mode           SessionOperationMode
 	Correlation    SessionOperationCorrelation
@@ -670,6 +673,7 @@ type SessionStartRequest struct {
 // Session. Raw Content is normalized by the owner against the active Factory
 // signature; Input carries already prepared Work input.
 type SessionInvokeRequest struct {
+	Caller          *workersessions.CallerIdentity `json:"-"`
 	SessionID       string
 	Correlation     SessionOperationCorrelation
 	Input           *work.PreparedInvocationInput

@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -21,6 +22,7 @@ import (
 // can leave a durable session waiting forever.
 type missingChildExecutor struct {
 	sessionID string
+	cause     error
 }
 
 func (e missingChildExecutor) Execute(
@@ -30,13 +32,17 @@ func (e missingChildExecutor) Execute(
 	if err := ctx.Err(); err != nil {
 		return factory.JavaScriptChildExecutionResult{}, err
 	}
+	if e.cause != nil {
+		return factory.JavaScriptChildExecutionResult{}, e.cause
+	}
 	return factory.JavaScriptChildExecutionResult{}, fmt.Errorf(
 		"child session %q cannot execute: Workers Execute capability is required",
 		strings.TrimSpace(e.sessionID),
 	)
 }
 
-func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID string, mockWorkers *workers.MockWorkersConfig, attemptStarter factorysessions.WorkerAttemptStarter, resourceAdmission factory.ResourceCapacityLeaseAdmission, progressPublisher workers.ProgressPublisher) factory.JavaScriptRuntimeHooks {
+func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID string, mockWorkers *workers.MockWorkersConfig, attemptStarter factorysessions.WorkerAttemptStarter, resourceAdmission factory.ResourceCapacityLeaseAdmission, progressPublisher workers.ProgressPublisher, caller *workersessions.CallerIdentity) factory.JavaScriptRuntimeHooks {
+	caller = caller.Clone()
 	hooks := factory.JavaScriptRuntimeHooks{
 		OnRecord: func(record factory.JavaScriptRuntimeRecord) {
 			s.applyRunningRuntimeRecord(sessionID, record)
@@ -48,6 +54,9 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID st
 	// Capture this opening's handles before any later opening or replacement.
 	binding := s.workerExecutionBinding(sessionID)
 	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
+		if caller != nil && attemptStarter == nil {
+			return missingChildExecutor{sessionID: childSessionID, cause: workersessions.ErrCallerInvalid}
+		}
 		workingDir := s.projectRootForSession(sessionID)
 		// Runtime-backed and standalone children use the fixed Workers Execute
 		// operation. Request handles retain the owning session's policy and routes.
@@ -82,7 +91,9 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID st
 			executor.commandRunnerOverride = binding.commandRunnerOverride
 			executor.attemptStarter = binding.attemptStarter
 			if attemptStarter != nil {
-				executor.attemptStarter = childWorkerAttemptStarter(attemptStarter)
+				executor.attemptStarter = func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+					return attemptStarter(ctx, request, caller.Clone())
+				}
 			}
 			executor.publish = binding.publish
 			if progressPublisher != nil {

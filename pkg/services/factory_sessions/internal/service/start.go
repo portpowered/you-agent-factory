@@ -23,6 +23,7 @@ import (
 
 // Start delegates admission and opening to the injected operation.
 func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
 	}
@@ -32,6 +33,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 // Start admits a Factory Session through fixed opening collaborators.
 // The selected runtime is published to the canonical Assembly registry.
 func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("factory sessions opening owner is required")
 	}
@@ -120,7 +122,7 @@ func currentWorkerAttemptStarter(selected *livesession.LiveSession) factorysessi
 	if selected == nil {
 		return nil
 	}
-	return factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(runtimebinding.BundleFromSession(selected)))
+	return runtimeCallerAttemptStarter(runtimebinding.BundleFromSession(selected))
 }
 
 func currentWorkerResourceAdmission(selected *livesession.LiveSession) factoryruntime.ResourceCapacityLeaseAdmission {
@@ -142,6 +144,7 @@ func currentWorkerResourceAdmission(selected *livesession.LiveSession) factoryru
 // StartSync carries the opened Factory's operator worker settings to the
 // process-owned durable service as one detached request value.
 func (r *Root) StartSync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}
@@ -158,6 +161,7 @@ func (r *Root) StartSync(ctx context.Context, request factorysessions.StartReque
 }
 
 func (r *Root) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
 	}

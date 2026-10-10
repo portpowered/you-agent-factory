@@ -79,10 +79,8 @@ func (s *processDurableScope) workerAttemptStarter(instance runtimebinding.Runti
 	if provider == nil {
 		return nil
 	}
-	// Reconstruction cannot restore a caller's former execution credentials.
-	return func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
-		return provider.BeginWorkerAttempt(ctx, request, nil)
-	}
+	// The reconstructed request contains no former caller credentials.
+	return provider.BeginWorkerAttempt
 }
 
 func (s *processDurableScope) progressPublisher(instance runtimebinding.RuntimeInstance) workers.ProgressPublisher {

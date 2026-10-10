@@ -848,9 +848,21 @@ type runtimeWorkerAttemptStarterProvider interface {
 	) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 }
 
+// runtimeWorkerAttemptStarter preserves the legacy registered scope boundary.
+// Registered and replayed scopes never retain invocation-local credentials.
 func runtimeWorkerAttemptStarter(
 	runtime interface{ RuntimeService() factoryruntime.Service },
 ) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+	starter := runtimeCallerAttemptStarter(runtime)
+	if starter == nil {
+		return nil
+	}
+	return func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		return starter(ctx, request, nil)
+	}
+}
+
+func runtimeCallerAttemptStarter(runtime interface{ RuntimeService() factoryruntime.Service }) factorysessions.WorkerAttemptStarter {
 	if runtime == nil {
 		return nil
 	}
@@ -861,10 +873,7 @@ func runtimeWorkerAttemptStarter(
 	if provider == nil {
 		return nil
 	}
-	// Legacy and resumed starts have no invocation-local caller authority.
-	return func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
-		return provider.BeginWorkerAttempt(ctx, request, nil)
-	}
+	return provider.BeginWorkerAttempt
 }
 
 type historicalRecordingReader interface {

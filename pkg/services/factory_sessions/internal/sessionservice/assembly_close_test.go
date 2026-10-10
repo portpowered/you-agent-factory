@@ -3,16 +3,19 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -886,5 +889,28 @@ func assertProcessHostStopRecords(t *testing.T, host Host, owners map[string]*Se
 	}
 	if active := owners["peer"].runtimeState.Active(); active == nil || active.SessionID != "peer" {
 		t.Fatalf("peer owner active = %#v", active)
+	}
+}
+
+func TestCanonicalFactoryRequestsDetachExecutionOnlyCaller(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-canonical-token"}
+	started := CanonicalDurableStartRequest(factorysessions.SessionStartRequest{Caller: caller})
+	invoked := CanonicalInvocationRequest(factorysessions.SessionInvokeRequest{Caller: caller})
+	caller.WorkerSessionID = "mutated-caller"
+	caller.Token = "mutated-token"
+	for _, got := range []*workersessions.CallerIdentity{started.Caller, invoked.Caller} {
+		if got == nil || got == caller || got.WorkerSessionID != "exact-caller" || got.Token != "planted-canonical-token" {
+			t.Fatal("canonical mapping lost detached caller")
+		}
+	}
+	for _, value := range []any{started, invoked, factorysessions.SessionStartRequest{Caller: started.Caller}, factorysessions.SessionInvokeRequest{Caller: invoked.Caller}} {
+		encoded, err := json.Marshal(value)
+		if err != nil || strings.Contains(string(encoded), "planted-canonical-token") || strings.Contains(string(encoded), "exact-caller") {
+			t.Fatal("Factory request serialized caller authority")
+		}
+	}
+	if CanonicalDurableStartRequest(factorysessions.SessionStartRequest{}).Caller != nil || CanonicalInvocationRequest(factorysessions.SessionInvokeRequest{}).Caller != nil {
+		t.Fatal("absent caller acquired authority")
 	}
 }

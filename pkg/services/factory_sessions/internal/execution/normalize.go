@@ -33,6 +33,7 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 
 	normalized := StartRequest{
 		RequestID:               requestID,
+		Caller:                  req.Caller.Clone(),
 		Source:                  source,
 		Args:                    cloneArgs(req.Args),
 		RequestedPolicy:         cloneArgs(req.RequestedPolicy),

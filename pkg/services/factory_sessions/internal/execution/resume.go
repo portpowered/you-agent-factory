@@ -570,7 +570,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 		Policy:         policyResolution.Policy,
 		Resume:         resume,
 		WorkerSettings: workerSettings,
-	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.modeForSession(sessionID), normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.modeForSession(sessionID), normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher, nil))
 }
 
 func mergeRuntimeRecords(existing, resumed []workflowresult.JavaScriptRuntimeRecord) []workflowresult.JavaScriptRuntimeRecord {
@@ -1245,6 +1245,8 @@ func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
 
 func cloneStartRequest(req StartRequest) *StartRequest {
 	cloned := req
+	// Replay and retained session state cannot restore caller authority.
+	cloned.Caller = nil
 	cloned.Source = cloneStartSource(req.Source)
 	cloned.Args = cloneArgs(req.Args)
 	cloned.RequestedPolicy = cloneArgs(req.RequestedPolicy)
