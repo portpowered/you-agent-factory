@@ -257,12 +257,13 @@ type listJSONObservation struct {
 }
 
 type listJSONTokenUsage struct {
-	CacheWriteTokens      *int `json:"cacheWriteTokens"`
-	CachedInputTokens     *int `json:"cachedInputTokens"`
-	InputTokens           *int `json:"inputTokens"`
-	OutputTokens          *int `json:"outputTokens"`
-	ReasoningOutputTokens *int `json:"reasoningOutputTokens"`
-	TotalTokens           *int `json:"totalTokens"`
+	Origin                *factoryapi.ProviderSessionTokenUsageOrigin `json:"origin,omitempty"`
+	CacheWriteTokens      *int                                        `json:"cacheWriteTokens"`
+	CachedInputTokens     *int                                        `json:"cachedInputTokens"`
+	InputTokens           *int                                        `json:"inputTokens"`
+	OutputTokens          *int                                        `json:"outputTokens"`
+	ReasoningOutputTokens *int                                        `json:"reasoningOutputTokens"`
+	TotalTokens           *int                                        `json:"totalTokens"`
 }
 
 type listJSONTurnUsage struct {

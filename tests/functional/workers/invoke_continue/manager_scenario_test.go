@@ -396,7 +396,7 @@ func listS8RemoteWorkers(
 	states ...string,
 ) []s8WorkerObservation {
 	t.Helper()
-	args := []string{"--json", "worker-sessions", "list", "--scope", "direct"}
+	args := []string{"--json", "worker-sessions", "list", "--scope", "direct", "--limit", "2"}
 	for _, state := range states {
 		args = append(args, "--state", state)
 	}

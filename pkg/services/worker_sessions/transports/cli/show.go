@@ -213,6 +213,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 	var tokenUsage *listJSONTokenUsage
 	if session.TokenUsage != nil {
 		tokenUsage = &listJSONTokenUsage{
+			Origin:           session.TokenUsage.Origin,
 			CacheWriteTokens: session.TokenUsage.CacheWriteTokens, CachedInputTokens: session.TokenUsage.CachedInputTokens,
 			InputTokens: session.TokenUsage.InputTokens, OutputTokens: session.TokenUsage.OutputTokens,
 			ReasoningOutputTokens: session.TokenUsage.ReasoningOutputTokens, TotalTokens: session.TokenUsage.TotalTokens,
@@ -320,6 +321,11 @@ func writeTokenUsage(output io.Writer, usage *factoryapi.ProviderSessionTokenUsa
 	if usage == nil {
 		_, err := fmt.Fprintln(output, "Token usage:\tunavailable")
 		return err
+	}
+	if usage.Origin != nil && *usage.Origin == factoryapi.ProviderSessionTokenUsageOriginSYNTHETIC {
+		if _, err := fmt.Fprintln(output, "Token usage origin:\tsynthetic (configured mock counters)"); err != nil {
+			return err
+		}
 	}
 	_, err := fmt.Fprintf(output, "Token usage:\tinput=%s cached-input=%s cache-write=%s output=%s reasoning=%s total=%s\n",
 		intOrDash(usage.InputTokens), intOrDash(usage.CachedInputTokens), intOrDash(usage.CacheWriteTokens),

@@ -97,6 +97,11 @@ func (operation *directJavaScriptRun) Run(
 		},
 		RuntimeOptions: &factorysessions.RuntimeOptions{ChildExecutorMode: childMode},
 	}
+	if request.RecordPath != "" {
+		start.RuntimeSelection = &factorysessions.SessionRuntimeSelection{
+			Recording: factorysessions.SessionRecordingSelection{RecordPath: request.RecordPath},
+		}
+	}
 	completion := func(runCtx context.Context) error {
 		return sessionexecution.RunCanonicalSync(runCtx, operation.sessions, start, request.JSONOutput, scope.Output)
 	}

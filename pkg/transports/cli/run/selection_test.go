@@ -87,13 +87,14 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
 	err = factory(RunConfig{
+		RecordPath: "native.json", RecordingsCLI: ensureTestRecordingsCLI(RunConfig{}).RecordingsCLI,
 		FactoryConfigPath: "workflow.cjs", MockWorkersEnabled: true,
 		JSONOutput: true, Output: output,
 	}).Run(t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if direct.request.SourcePath != "workflow.cjs" || !direct.request.MockWorkersEnabled || !direct.request.JSONOutput {
+	if direct.request.SourcePath != "workflow.cjs" || !direct.request.MockWorkersEnabled || !direct.request.JSONOutput || direct.request.RecordPath != "native.json" {
 		t.Fatalf("direct opening request = %#v", direct.request)
 	}
 	if !scopeRegistered || scope.Output != output {
@@ -118,6 +119,7 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
 	err = factory(RunConfig{
+		DisableDefaultRecording: true, RecordingsCLI: ensureTestRecordingsCLI(RunConfig{}).RecordingsCLI,
 		FactoryConfigPath: "workflow.cjs", Port: 7437,
 	}).Run(t.Context(), processcontract.RunIntent{
 		APIEnabled: true, WorkerSidecarsEnabled: true, Cancellation: want,
@@ -185,7 +187,8 @@ func TestRunSelectionDirectJavaScriptClosesPresentationAfterRunFailure(t *testin
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
-	err = factory(RunConfig{FactoryConfigPath: "workflow.cjs"}).Run(
+	err = factory(RunConfig{DisableDefaultRecording: true, RecordingsCLI: ensureTestRecordingsCLI(RunConfig{}).RecordingsCLI,
+		FactoryConfigPath: "workflow.cjs"}).Run(
 		t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true},
 	)
 	if !errors.Is(err, want) {
@@ -247,7 +250,8 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnRunFailure(t *testing.T
 			if err != nil {
 				t.Fatalf("NewSelectionFactory: %v", err)
 			}
-			selection := factory(RunConfig{FactoryConfigPath: "workflow.cjs", Output: &bytes.Buffer{}})
+			selection := factory(RunConfig{DisableDefaultRecording: true, RecordingsCLI: ensureTestRecordingsCLI(RunConfig{}).RecordingsCLI,
+				FactoryConfigPath: "workflow.cjs", Output: &bytes.Buffer{}})
 			err = selection.Run(t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true})
 			if err == nil {
 				t.Fatal("direct selection Run error = nil")
@@ -271,7 +275,8 @@ func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
-	err = factory(RunConfig{FactoryConfigPath: "workflow.cjs"}).Run(
+	err = factory(RunConfig{DisableDefaultRecording: true, RecordingsCLI: ensureTestRecordingsCLI(RunConfig{}).RecordingsCLI,
+		FactoryConfigPath: "workflow.cjs"}).Run(
 		t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true},
 	)
 	if err != nil {

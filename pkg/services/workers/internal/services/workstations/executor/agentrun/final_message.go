@@ -2,9 +2,11 @@ package agentrun
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
 )
 
 // publishAgentFinalMessage delivers the authoritative final assistant turn to
@@ -15,6 +17,7 @@ func publishAgentFinalMessage(
 	dispatchID string,
 	correlation workerexecution.ExecutionCorrelation,
 	content string,
+	identity ...*workerexecution.Draft,
 ) {
 	if publisher == nil || strings.TrimSpace(content) == "" {
 		return
@@ -37,13 +40,44 @@ func publishAgentFinalMessage(
 		Provenance: workerexecution.Provenance{
 			Provider:        "agent-run",
 			NativeEventType: "agent_final_response",
-			Delivery:        workerexecution.DeliveryNativeFinal,
+			Delivery:        workerexecution.DeliverySynthesized,
 			Representation:  workerexecution.RepresentationSnapshot,
 			Fidelity:        workerexecution.FidelityFinalOnly,
 		},
 		Payload: payload,
 	}
+	if len(identity) > 0 && identity[0] != nil {
+		message := identity[0]
+		draft.RunID, draft.TurnID, draft.ItemID = message.RunID, message.TurnID, message.ItemID
+		draft.DispatchID = message.DispatchID
+		draft.ParentItemID = message.ParentItemID
+		draft.DeclaredSecretJSONPointers = append([]string(nil), message.DeclaredSecretJSONPointers...)
+		draft.Provenance.Fidelity = workerexecution.FidelityNormalized
+	}
 	fragment := workerexecution.CanonicalDraftFragment(dispatchID, draft)
 	fragment.Correlation = correlation
 	publisher(fragment)
+}
+
+func capturedFinalContent(content string, request workerexecution.RunnerExecutionRequest) string {
+	var secrets []string
+	for key, value := range request.EnvVars {
+		if diagnostics.ClassifyCommandEnvKey(key) == diagnostics.CommandEnvClassificationRedacted {
+			secrets = append(secrets, value)
+		}
+	}
+	for _, entry := range request.ProcessEnvironment {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok && diagnostics.ClassifyCommandEnvKey(key) == diagnostics.CommandEnvClassificationRedacted {
+			secrets = append(secrets, value)
+		}
+	}
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	var replacements []string
+	for _, secret := range secrets {
+		if secret != "" {
+			replacements = append(replacements, secret, diagnostics.RedactedCommandEnvValue)
+		}
+	}
+	return strings.NewReplacer(replacements...).Replace(content)
 }

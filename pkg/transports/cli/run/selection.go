@@ -164,6 +164,14 @@ func (s *selection) runDirectJavaScript(
 	cfg RunConfig,
 	intent processcontract.RunIntent,
 ) error {
+	cfg, err := prepareCanonicalSessionIDForRun(cfg)
+	if err != nil {
+		return err
+	}
+	recordPath, err := resolveRecordPathForRun(cfg)
+	if err != nil {
+		return err
+	}
 	startupDisclosure, err := prepareStartupBeforeRuntime(ctx, cfg)
 	if err != nil {
 		return err
@@ -172,6 +180,7 @@ func (s *selection) runDirectJavaScript(
 		Caller:     cfg.Caller.Clone(),
 		SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
 		JSONOutput: cfg.JSONOutput,
+		RecordPath: recordPath.servicePath,
 	}
 	var observer factorysessions.RuntimeHostObserver
 	if intent.APIEnabled {
@@ -200,7 +209,13 @@ func (s *selection) runDirectJavaScript(
 	if !intent.APIEnabled || s.presentations == nil {
 		discloseStartup = startupDisclosure.commit
 	}
-	return s.directJavaScript.Run(ctx, request, cfg.Cancellation, discloseStartup)
+	if err := s.directJavaScript.Run(ctx, request, cfg.Cancellation, discloseStartup); err != nil {
+		return err
+	}
+	if !cfg.JSONOutput {
+		reportRecordingPathOnShutdown(cfg.Output, recordPath, cfg.RecordingsCLI)
+	}
+	return nil
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {

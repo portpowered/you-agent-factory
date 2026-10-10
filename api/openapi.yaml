@@ -9449,6 +9449,11 @@ components:
       type: object
       additionalProperties: false
       properties:
+        origin:
+          type: string
+          enum:
+            - SYNTHETIC
+          description: Configured mock counters. Absence makes no origin claim.
         inputTokens:
           type: integer
           minimum: 0
@@ -12201,6 +12206,11 @@ components:
       additionalProperties: false
       description: Token or model usage accounting payload.
       properties:
+        origin:
+          type: string
+          enum:
+            - SYNTHETIC
+          description: Configured mock counters. Absence makes no origin claim.
         inputTokens:
           type: integer
           format: int64

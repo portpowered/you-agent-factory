@@ -1,6 +1,10 @@
 type: object
 additionalProperties: false
 properties:
+  origin:
+    type: string
+    enum: [SYNTHETIC]
+    description: Configured mock counters. Absence makes no origin claim.
   inputTokens:
     type: integer
     minimum: 0

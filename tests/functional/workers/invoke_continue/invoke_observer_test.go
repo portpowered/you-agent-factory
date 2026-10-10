@@ -48,7 +48,19 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 	r.requests = append(r.requests, cloneS8CommandRequest(request))
 	r.mu.Unlock()
 	progress := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-progress\",\"type\":\"command_execution\",\"command\":\"synthetic inspection\",\"aggregated_output\":\"T7 progress before detach\",\"exit_code\":0}}\n")
-	if filepath.Base(request.WorkDir) == "t7-secrets" {
+	if strings.HasPrefix(filepath.Base(request.WorkDir), "recording-") {
+		progress = []byte("{\"type\":\"thread.started\",\"thread_id\":\"recording-content-thread\"}\n{\"type\":\"item.updated\",\"item\":{\"id\":\"unassociated-message\",\"type\":\"agent_message\",\"text\":\"DIRECT_CAPTURE_BETA\"}}\n")
+	}
+	if filepath.Base(request.WorkDir) == "recording-snapshot" {
+		progress = []byte(strings.ReplaceAll(string(progress), "DIRECT_CAPTURE_BETA", "DIRECT_CAPTURE_"))
+	}
+	if filepath.Base(request.WorkDir) == "recording-final-only" {
+		progress = []byte("{\"type\":\"thread.started\",\"thread_id\":\"recording-content-thread\"}\n")
+	}
+	if filepath.Base(request.WorkDir) == "recording-factory" {
+		progress = []byte(strings.ReplaceAll(string(progress), "DIRECT_CAPTURE_BETA", "FACTORY_CAPTURE_ALPHA COMPLETE"))
+	}
+	if filepath.Base(request.WorkDir) == "t7-secrets" || filepath.Base(request.WorkDir) == "recording-failure" {
 		item := map[string]any{"type": "item.completed", "item": map[string]any{
 			"id": "t7-private-progress", "type": "command_execution", "exit_code": 0,
 			"command": "synthetic inspection", "aggregated_output": "public progress " + t7SecretPrompt + " " + t7SecretSystem + " " + t7SecretToken,
@@ -58,6 +70,19 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 			return platformprocess.CommandResult{}, err
 		}
 		progress = append(encoded, '\n')
+		if filepath.Base(request.WorkDir) == "recording-failure" {
+			progress = append([]byte("{\"type\":\"thread.started\",\"thread_id\":\"recording-failed-thread\"}\n"), progress...)
+			message, err := json.Marshal(map[string]any{"type": "item.updated", "item": map[string]any{
+				"id": "private-message", "type": "agent_message", "text": "ordinary prefix " + t7SecretToken,
+			}})
+			if err != nil {
+				return platformprocess.CommandResult{}, err
+			}
+			progress = append(progress, append(message, '\n')...)
+		}
+	}
+	if filepath.Base(request.WorkDir) == "recording-equal" {
+		progress = append(progress, []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"distinct-peer-message\",\"type\":\"agent_message\",\"text\":\"DIRECT_CAPTURE_BETA\"}}\n")...)
 	}
 	if observer != nil {
 		observer(platformprocess.OutputStreamStdout, progress)
@@ -76,13 +101,29 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-privacy-") {
 			return requesterPrivacyResult(request, observer)
 		}
+		if filepath.Base(request.WorkDir) == "recording-failure" {
+			terminal := []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"controlled provider failure\"}}\n")
+			if observer != nil {
+				observer(platformprocess.OutputStreamStdout, terminal)
+			}
+			return platformprocess.CommandResult{Stdout: append(progress, terminal...), Stderr: []byte(t7SecretToken), ExitCode: 1}, nil
+		}
 		output := "T7 detached attempt completed"
+		if strings.HasPrefix(filepath.Base(request.WorkDir), "recording-") {
+			output = "DIRECT_CAPTURE_BETA"
+		}
 		if filepath.Base(request.WorkDir) == "t7-factory" || strings.Contains(string(request.Stdin), "durable occupied peer input") {
 			output = "T7 Factory sibling COMPLETE"
 		}
 		terminal := directCodexOutputWithoutSession(output)
 		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-factory-lane") || strings.HasPrefix(filepath.Base(request.WorkDir), "requester-batch-lane") {
 			terminal = directCodexSessionOutput("requester-lineage-thread", "Requester lane COMPLETE")
+		}
+		if strings.HasPrefix(filepath.Base(request.WorkDir), "recording-") {
+			terminal = []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"unassociated-message\",\"type\":\"agent_message\",\"text\":\"DIRECT_CAPTURE_BETA\"}}\n{\"type\":\"turn.completed\"}\n")
+		}
+		if filepath.Base(request.WorkDir) == "recording-factory" {
+			terminal = []byte(strings.ReplaceAll(string(terminal), "DIRECT_CAPTURE_BETA", "FACTORY_CAPTURE_ALPHA COMPLETE"))
 		}
 		if observer != nil {
 			observer(platformprocess.OutputStreamStdout, terminal)

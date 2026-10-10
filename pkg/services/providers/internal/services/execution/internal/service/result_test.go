@@ -2,12 +2,13 @@ package service
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestT7LiveProgressUsesBoundedDiagnosticRedaction(t *testing.T) {
+func TestRecordingContentPreservesOrdinaryEchoAndRedactsDeclaredSecrets(t *testing.T) {
 	t.Parallel()
 	var observed []providers.ExecuteProgress
 	request := providers.ExecuteRequest{
@@ -21,12 +22,46 @@ func TestT7LiveProgressUsesBoundedDiagnosticRedaction(t *testing.T) {
 	for count := 0; count < maxProgressFacts+1; count++ {
 		safe.ObserveProgress(progress)
 	}
-	if len(observed) != maxProgressFacts || observed[0].Detail != "visible <redacted> <redacted> <redacted> <redacted> <redacted>" ||
+	if len(observed) != maxProgressFacts || observed[0].Detail != "visible system-secret prompt-secret schema-secret <redacted> <redacted>" ||
 		observed[0].Metadata["safe"] != "<redacted>" || observed[0].Metadata["api_key"] != "<redacted>" {
 		t.Fatalf("live bounded redaction = %+v", observed)
 	}
 	if progress.Metadata["safe"] != "environment-secret" {
 		t.Fatal("observer mutated provider metadata")
+	}
+}
+
+func TestRecordingContentKeepsAdmittedDetailAndShortSecrets(t *testing.T) {
+	t.Parallel()
+	ordinary := strings.Repeat("ordinary echo ", 100)
+	request := providers.ExecuteRequest{UserMessage: ordinary, EnvVars: map[string]string{"API_KEY": "xyz"}}
+	progress := sanitizeCapturedProgress(providers.ExecuteProgress{Phase: "message.completed", Detail: ordinary + "xyz"}, request)
+	if progress.Detail != ordinary+redactedValue {
+		t.Fatal("capture lost ordinary text or retained a short declared secret")
+	}
+	diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{Phase: "message.completed", Detail: ordinary}}}, request)
+	if diagnostics.Progress[0].Detail != redactedValue {
+		t.Fatal("diagnostic prompt redaction was weakened")
+	}
+}
+
+func TestRecordingContentRedactsInheritedCredentialsWithoutMutatingMetadata(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{ProcessEnvironment: []string{"API_TOKEN=inherited-secret", "LANG=ordinary", "NO_EQUALS"}}
+	metadata := map[string]string{"safe": "inherited-secret ordinary", "authorization": "credential", "input_tokens": "0"}
+	progress := sanitizeCapturedProgress(providers.ExecuteProgress{
+		Phase: "message.completed", Detail: "inherited-secret ordinary", Metadata: metadata,
+	}, request)
+	if progress.Detail != "<redacted> ordinary" || progress.Metadata["safe"] != "<redacted> ordinary" ||
+		progress.Metadata["authorization"] != redactedValue || progress.Metadata["input_tokens"] != "0" {
+		t.Fatalf("inherited credential capture = %+v", progress)
+	}
+	if metadata["safe"] != "inherited-secret ordinary" || metadata["authorization"] != "credential" {
+		t.Fatal("capture sanitizer mutated adapter metadata")
+	}
+	diagnostic := normalizeDiagnostics(providers.ExecuteDiagnostics{Metadata: metadata}, request)
+	if diagnostic.Metadata["safe"] != "<redacted> ordinary" {
+		t.Fatal("inherited credential escaped diagnostics")
 	}
 }
 

@@ -134,7 +134,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
-	for _, name := range []string{"requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race"} {
+	for _, name := range []string{"requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race", "recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure"} {
 		gated := &t7GatedProviderRunner{}
 		gated.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {
@@ -142,6 +142,13 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		}
 	}
 	unreachable := newInvokeContinueResettableProviderCommandRunner()
+	factoryRetryOutput := directCodexSessionOutput("reused-thread", "FACTORY_CAPTURE_ALPHA COMPLETE")
+	factoryRetryPrefix := []byte("{\"type\":\"thread.started\",\"thread_id\":\"reused-thread\"}\n{\"type\":\"item.updated\",\"item\":{\"id\":\"reused-thread-message\",\"type\":\"agent_message\",\"text\":\"FACTORY_CAPTURE_ALPHA COMPLETE\"}}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"provider timeout\"}}\n")
+	factoryRetryFailure := platformprocess.CommandResult{Stdout: factoryRetryPrefix, Stderr: []byte("controlled provider timeout"), ExitCode: 124}
+	factoryRetry := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(factoryRetryFailure, platformprocess.CommandResult{Stdout: factoryRetryOutput})}
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "recording-factory-retry", factoryRetry, factoryRetry, nil, nil, nil, factoryRetry.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}

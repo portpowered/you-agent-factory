@@ -296,3 +296,17 @@ func TestSessionPayloadValidateLineageRejectsContradictoryRelationships(t *testi
 		})
 	}
 }
+
+func TestUsageOriginOptionalCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, origin := range []string{"", "SYNTHETIC", "NATIVE"} {
+		payload, err := json.Marshal(UsagePayload{Origin: origin, InputTokens: 17})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = ValidateDraft(Draft{Kind: KindUsage, Phase: PhaseUpdated, Payload: payload})
+		if (err == nil) != (origin != "NATIVE") {
+			t.Fatalf("origin %q validation = %v", origin, err)
+		}
+	}
+}

@@ -13,6 +13,7 @@ import (
 // canonical Worker draft preserves omitted token classes while retaining
 // explicit zeroes.
 type mockWorkerUsageObservationPayload struct {
+	Origin                string `json:"origin,omitempty"`
 	InputTokens           *int64 `json:"inputTokens,omitempty"`
 	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
 	OutputTokens          *int64 `json:"outputTokens,omitempty"`
@@ -38,6 +39,7 @@ func PublishMockWorkerUsage(
 		return
 	}
 	payload := mockWorkerUsageObservationPayload{
+		Origin:                "SYNTHETIC",
 		InputTokens:           cloneInt64Pointer(usage.InputTokens),
 		CachedInputTokens:     cloneInt64Pointer(usage.CachedInputTokens),
 		OutputTokens:          cloneInt64Pointer(usage.OutputTokens),
@@ -57,6 +59,15 @@ func PublishMockWorkerUsage(
 		Payload:     string(encoded),
 		Provider:    strings.TrimSpace(usage.Provider),
 		Metadata:    map[string]string{"model": strings.TrimSpace(usage.Model)},
+		CanonicalDraft: workers.Draft{
+			Kind: workers.KindUsage, Phase: workers.PhaseUpdated,
+			DispatchID: correlation.DispatchID, Payload: encoded,
+			Provenance: workers.Provenance{
+				Provider: strings.TrimSpace(usage.Provider), NativeEventType: "usage.updated",
+				Delivery: workers.DeliverySynthesized, Representation: workers.RepresentationSnapshot,
+				Fidelity: workers.FidelityNormalized,
+			},
+		},
 	})
 }
 

@@ -1026,10 +1026,13 @@ func TestRestartRecipeUnsafeOverrideKeepsInvocationCompatible(t *testing.T) {
 	}
 	var result directWorkerSessionCLIResult
 	decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
-	// Explicit environment overrides already redact the submitted prompt in
-	// captured output. Preserve that privacy behavior while allowing execution.
-	if !result.Accepted || result.State != "COMPLETED" || result.Output != "<redacted> COMPLETE" || scenario.providerRunner.CallCount() != 1 {
+	// Ordinary echoed input stays visible; the private override still cannot
+	// become a reconstructable continuation recipe or leak through diagnostics.
+	if !result.Accepted || result.State != "COMPLETED" || result.Output != "ordinary invocation COMPLETE" || scenario.providerRunner.CallCount() != 1 {
 		t.Fatalf("unsafe recipe changed ordinary invocation: %#v, calls=%d", result, scenario.providerRunner.CallCount())
+	}
+	if strings.Contains(inputs.Stdout()+inputs.Stderr(), "accepted-private-override") {
+		t.Fatal("ordinary invocation leaked the private override")
 	}
 	continued := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "restart-recipe-unsafe",
 		"--request-id", "unsafe-continue", "--successor-worker-session-id", "unsafe-successor", "--user-message", "follow-up", "--async"})

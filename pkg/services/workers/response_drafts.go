@@ -426,6 +426,7 @@ type ProgressPayload struct {
 	PercentComplete *float64 `json:"percentComplete,omitempty"`
 }
 type UsagePayload struct {
+	Origin                string `json:"origin,omitempty"`
 	InputTokens           int64  `json:"inputTokens,omitempty"`
 	CachedInputTokens     int64  `json:"cachedInputTokens,omitempty"`
 	OutputTokens          int64  `json:"outputTokens,omitempty"`

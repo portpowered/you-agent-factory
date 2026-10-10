@@ -108,7 +108,13 @@ func validatePayload(kind Kind, phase Phase, payload json.RawMessage) error {
 		return validateProgressKindPayload(payload)
 	case KindUsage:
 		var body UsagePayload
-		return decodePayload(payload, &body, "UsagePayload")
+		if err := decodePayload(payload, &body, "UsagePayload"); err != nil {
+			return err
+		}
+		if body.Origin != "" && body.Origin != "SYNTHETIC" {
+			return validationError("payload.origin", "unsupported usage origin")
+		}
+		return nil
 	case KindError:
 		return validateErrorKindPayload(payload)
 	case KindStreamGap:

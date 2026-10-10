@@ -758,6 +758,10 @@ func mapWorkerSessionUsage(result *factoryapi.WorkerSessionObservation, observat
 			ReasoningOutputTokens: cloneInt(observation.TokenUsage.ReasoningOutputTokens),
 			TotalTokens:           cloneInt(observation.TokenUsage.TotalTokens),
 		}
+		if observation.TokenUsage.Origin != "" {
+			origin := factoryapi.ProviderSessionTokenUsageOrigin(observation.TokenUsage.Origin)
+			result.TokenUsage.Origin = &origin
+		}
 	}
 	if observation.TurnUsage != nil {
 		result.TurnUsage = &factoryapi.WorkerSessionTurnUsage{
