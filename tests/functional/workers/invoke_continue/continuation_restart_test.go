@@ -286,6 +286,9 @@ func runDurableRevivalFactorySource(t *testing.T, restart bool) {
 	first := startContinuationRestartHost(t, root, host, home, route)
 	t7WriteFactorySibling(t, dir)
 	opened := support.OpenFactorySessionAt(t, first.baseURL, dir)
+	if !restart {
+		defer support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+	}
 	work := support.SubmitSessionWorkAt(t, first.baseURL, opened.Session.Id, factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task", Payload: "durable Factory source input",
 	})
@@ -311,23 +314,72 @@ func runDurableRevivalFactorySource(t *testing.T, restart bool) {
 		fresh = startContinuationRestartHost(t, root, host, home, route)
 	}
 	var factoryEvents []factoryapi.FactoryEvent
+	var factoryWork factoryapi.ListWorkResponse
 	if !restart {
 		factoryEvents = support.GetFactoryEventsForSessionAt(t, first.baseURL, opened.Session.Id)
+		factoryWork = support.GetJSON[factoryapi.ListWorkResponse](t, first.baseURL+"/factory-sessions/"+opened.Session.Id+"/work")
 	}
-	request := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", sourceID,
+	args := []string{"worker-sessions", "continue", sourceID,
 		"--session", opened.Session.Id, "--request-id", "factory-revival-request",
-		"--successor-worker-session-id", "factory-revival-successor", "--user-message", "fresh host follow-up"})
-	request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
-	if err := fresh.process.Execute(request.Input); err != nil {
-		t.Fatalf("Factory revival: %v %s %s providerCalls=%d", err, request.Stdout(), request.Stderr(), runner.CallCount())
+		"--successor-worker-session-id", "factory-revival-successor", "--user-message", "fresh host follow-up"}
+	requests := raceFactoryRevivalCLI(t, fresh, home, dir, args)
+	for _, request := range requests {
+		assertFactoryRevivalResult(t, fresh, runner, request.Stdout(), dir, sourceID)
 	}
-	assertFactoryRevivalResult(t, fresh, runner, request.Stdout(), dir, sourceID)
+	replay := executeHeadRestartCLI(t, fresh, home, dir, args...)
+	if replay.SuccessorWorkerSessionID != "factory-revival-successor" || runner.CallCount() != 2 {
+		t.Fatalf("Factory revival retry launched another attempt: %+v calls=%d", replay, runner.CallCount())
+	}
 	if !restart {
-		if after := support.GetFactoryEventsForSessionAt(t, first.baseURL, opened.Session.Id); !reflect.DeepEqual(factoryEvents, after) {
-			t.Fatal("direct Factory revival changed canonical Factory history")
-		}
-		support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+		assertFactoryRevivalIndependence(t, first, opened.Session.Id, *work.WorkId, rows.Sessions[0], factoryEvents, factoryWork)
 	}
+}
+
+func assertFactoryRevivalIndependence(t *testing.T, host invokeContinueStartedProcess, sessionID, workID string, source factoryapi.WorkerSessionObservation, events []factoryapi.FactoryEvent, work factoryapi.ListWorkResponse) {
+	t.Helper()
+	if after := support.GetFactoryEventsForSessionAt(t, host.baseURL, sessionID); !reflect.DeepEqual(events, after) {
+		t.Fatal("direct Factory revival changed canonical Factory history")
+	}
+	if after := support.GetJSON[factoryapi.ListWorkResponse](t, host.baseURL+"/factory-sessions/"+sessionID+"/work"); !reflect.DeepEqual(work, after) {
+		t.Fatal("direct Factory revival changed source Work")
+	}
+	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.baseURL+"/factory-sessions/"+sessionID+"/worker-sessions?workId="+workID)
+	// Correlation is retained by the independent direct successor. It does not
+	// replace the source attempt or imply a new Runtime-owned Work attempt.
+	for _, row := range rows.Sessions {
+		if row.WorkerSessionId == source.WorkerSessionId {
+			if row.AttemptId != source.AttemptId || row.State != source.State || row.Direct != source.Direct {
+				t.Fatalf("direct revival changed the Factory source attempt: %+v", row)
+			}
+			return
+		}
+	}
+	t.Fatal("Factory source attempt disappeared after direct revival")
+}
+
+// Local and remote callers race one exact Factory-origin address and immutable
+// request tuple. The provider boundary must see only one direct revival.
+func raceFactoryRevivalCLI(t *testing.T, host invokeContinueStartedProcess, home, dir string, args []string) []*support.CapturedInputs {
+	t.Helper()
+	start, done := make(chan struct{}), make(chan error, 2)
+	requests := make([]*support.CapturedInputs, 0, 2)
+	for _, flags := range [][]string{{"you", "--json"}, {"you", "--json", "--remote", "--server", host.baseURL}} {
+		request := support.FakeInputs(t.Context(), append(flags, args...))
+		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+		requests = append(requests, request)
+		go func() { <-start; done <- host.process.Execute(request.Input) }()
+	}
+	close(start)
+	var failure error
+	for range requests {
+		if err := <-done; err != nil {
+			failure = err
+		}
+	}
+	if failure != nil {
+		t.Fatalf("concurrent Factory revival: %v local=%s remote=%s", failure, requests[0].Stdout()+requests[0].Stderr(), requests[1].Stdout()+requests[1].Stderr())
+	}
+	return requests
 }
 
 func assertFactoryRevivalResult(t *testing.T, host invokeContinueStartedProcess, runner *testutil.ProviderCommandRunner, stdout, dir, sourceID string) {
@@ -395,11 +447,28 @@ func TestContinuationHeadSurvivesRepeatedContinuationAndHostRestart(t *testing.T
 	if third.SourceWorkerSessionID != "head-second-successor" || third.PredecessorWorkerSessionID != "head-second-successor" || runner.CallCount() != 4 {
 		t.Fatalf("restart did not resolve newest head: %+v calls=%d", third, runner.CallCount())
 	}
+	awaitContinuationRestartLogs(t, fresh, home, dir, "head-third-successor")
+	assertOlderHeadRequestReplay(t, fresh, runner, home, dir, headArgs, second)
+	assertHeadContinuationExecution(t, runner, dir)
+}
+
+func assertHeadContinuationExecution(t *testing.T, runner *testutil.ProviderCommandRunner, dir string) {
+	t.Helper()
 	for index, request := range runner.Requests()[1:] {
 		command := strings.Join(request.Args, " ")
 		input := []string{"first follow-up", "second follow-up", "third follow-up"}[index]
 		if request.WorkDir != dir || !strings.Contains(command, "resume opaque-restart-thread") || !strings.Contains(command, "functional-model") || !strings.Contains(command+string(request.Stdin), input) {
 			t.Fatalf("head continuation replaced exact execution: %+v", request)
+		}
+	}
+}
+
+func assertOlderHeadRequestReplay(t *testing.T, fresh invokeContinueStartedProcess, runner *testutil.ProviderCommandRunner, home, dir string, headArgs []string, second directWorkerSessionCLIResult) {
+	t.Helper()
+	for _, flags := range [][]string{nil, {"--remote", "--server", fresh.baseURL}} {
+		replayed := executeHeadRestartCLI(t, fresh, home, dir, append(append([]string(nil), headArgs...), flags...)...)
+		if replayed.SourceWorkerSessionID != second.SourceWorkerSessionID || replayed.SuccessorWorkerSessionID != second.SuccessorWorkerSessionID || runner.CallCount() != 4 {
+			t.Fatalf("older request retry followed the advanced head: %+v calls=%d", replayed, runner.CallCount())
 		}
 	}
 }

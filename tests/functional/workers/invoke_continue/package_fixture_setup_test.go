@@ -425,6 +425,10 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("BuildProcess: %w", err)
 	}
+	// These scenarios test continuation, not first-run package installation.
+	// Bootstrap the isolated profile through the same public process before
+	// starting the hosted readiness clock; reuse it for the actual API host.
+	support.InitializeCustomerHomeWithProcess(t, process, invokeContinueEnvironment(homeDir), hostDir)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--server", "http://127.0.0.1:1", "--quiet", "--no-record",
 	})
