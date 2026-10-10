@@ -447,6 +447,73 @@ func TestMetricsRetainedHistoryFailuresThroughRootProcess(t *testing.T) {
 	}
 }
 
+// Damaged backups and complete non-object records must fail the customer read
+// atomically, even after a valid artifact. Repairing that same selected file
+// restores the report without duplicating earlier facts or including a peer.
+func TestMetricsDamagedHistoryFailsClosedAndRecoversThroughRootProcess(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		compressed bool
+		damage     func([]byte) []byte
+	}{
+		{name: "gzip checksum", compressed: true, damage: func(data []byte) []byte {
+			data[len(data)-8] ^= 1
+			return data
+		}},
+		{name: "gzip truncated trailer", compressed: true, damage: func(data []byte) []byte {
+			return data[:len(data)-4]
+		}},
+		{name: "complete null record", damage: func(data []byte) []byte {
+			return append(data, []byte("null\n")...)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			root := platformmetrics.RuntimeMetricsRoot(home)
+			session := uuid.NewString()
+			server := startRetainedMetricsHost(t, home, session)
+			record := func(id string, value int) map[string]any {
+				return map[string]any{"metric_name": runtimeProviderInputTokens, "value": value,
+					"session_id": id, "dispatch_id": "selected-history", "provider": "codex",
+					"private_note": "selected-private-secret"}
+			}
+			prefix := filepath.Join(root, "110000.000000000-runtime-metrics-prefix.log")
+			writeRuntimeMetricsArtifact(t, prefix, false, []map[string]any{record(session, 3)})
+			suffix := ".log"
+			if test.compressed {
+				suffix = "-2026-08-20T12-02-00.000.log.gz"
+			}
+			path := filepath.Join(root, "120000.000000000-runtime-metrics-selected"+suffix)
+			writeRuntimeMetricsArtifact(t, path, test.compressed,
+				[]map[string]any{record(session, 7), record(uuid.NewString(), 100)})
+			unknown := filepath.Join(root, "customer-note.txt")
+			writeFunctionalFile(t, unknown, "customer content")
+			assertRetainedMetricsTokens(t, home, server, session, 10)
+			healthy, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			damaged := test.damage(append([]byte(nil), healthy...))
+			writeFunctionalFile(t, path, string(damaged))
+			inputs := retainedMetricsInputs(t, home, server, "--session", session)
+			err = runtimeMetricsProcess(t).Execute(inputs.Input)
+			assertBoundaryCodedFailure(t, err, inputs, "METRICS_QUERY_FAILED")
+			assertMetricsDiagnostic(t, inputs.Stderr(), "METRICS_QUERY_FAILED", "query runtime metrics: server returned HTTP 500")
+			if strings.Contains(inputs.Stderr(), "selected-private-secret") || strings.Contains(inputs.Stderr(), path) {
+				t.Fatalf("metrics diagnostic disclosed artifact details: %s", inputs.Stderr())
+			}
+			assertFunctionalFileContents(t, path, string(damaged))
+			assertFunctionalFileContents(t, unknown, "customer content")
+			writeFunctionalFile(t, path, string(healthy))
+			assertRetainedMetricsTokens(t, home, server, session, 10)
+			assertFunctionalFileContents(t, path, string(healthy))
+			assertFunctionalFileContents(t, unknown, "customer content")
+		})
+	}
+}
+
 func retainedMetricsInputs(t *testing.T, home, server string, selectors ...string) *support.CapturedInputs {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--json", "--server", server, "metrics"}, selectors...))
