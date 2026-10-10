@@ -9,10 +9,12 @@ package wire
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -72,13 +74,13 @@ func NewService(
 	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
 	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock, nil)
-	runnerRegistry, err := runnerswire.NewProductionRegistry(
-		agentDependencies,
-		scriptConfig,
-		privateScriptDependencies,
-		inferenceConfig,
-		inferenceDependencies,
+	agentRunner, scriptRunner, inferenceRunner, err := productionStrategies(
+		agentDependencies, scriptConfig, privateScriptDependencies, inferenceConfig, inferenceDependencies,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Workers: %w", err)
+	}
+	runnerRegistry, err := runnerswire.NewProductionRegistry(agentRunner, scriptRunner, inferenceRunner)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
@@ -132,18 +134,20 @@ func NewMockService(
 		return nil, fmt.Errorf("construct mock Workers: mock workers config is required")
 	}
 	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock, agentToolFiles)
-	runnerRegistry, err := runnerswire.NewMockProductionRegistry(
-		agentDependencies,
-		scriptConfig,
-		privateScriptDependencies,
-		inferenceConfig,
-		inferenceDependencies,
-		MockConfig{WorkersConfig: mockWorkers},
-		runners.MockDependencies{
-			Next:  workerprocess.AdaptPlatformCommandRunner(mockDependencies.Next),
-			Files: agentToolFiles,
-		},
+	agentRunner, scriptRunner, inferenceRunner, err := productionStrategies(
+		agentDependencies, scriptConfig, privateScriptDependencies, inferenceConfig, inferenceDependencies,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("construct mock Workers: %w", err)
+	}
+	mockRunner, err := runnerswire.NewMockRunner(
+		runnerswire.MockRunnerConfig{WorkersConfig: mockWorkers},
+		workerprocess.AdaptPlatformCommandRunner(mockDependencies.Next), agentToolFiles,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct mock Workers: %w", invalidRunnerConstruction(runners.MockIdentity, err))
+	}
+	runnerRegistry, err := runnerswire.NewMockProductionRegistry(agentRunner, scriptRunner, inferenceRunner, mockRunner)
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
@@ -201,3 +205,98 @@ var NewFactoryDocsLoader = workerprompting.NewFactoryDocsLoader
 
 var NewExecutor = invocation.NewExecutor
 var NewLibraryHarnessAdapter = agentrun.NewLibraryHarnessAdapter
+
+// productionStrategies is the retained outer construction boundary pending the
+// canonical Wire cutover. The registry receives only completed strategies.
+func productionStrategies(
+	agentDependencies runners.AgentDependencies,
+	scriptConfig runners.ScriptConfig,
+	scriptDependencies runners.ScriptDependencies,
+	inferenceConfig runners.InferenceConfig,
+	inferenceDependencies runners.InferenceDependencies,
+) (workers.Runner, workers.Runner, workers.Runner, error) {
+	agent, err := agentImplementation(agentDependencies)
+	if err != nil {
+		return nil, nil, nil, invalidRunnerConstruction(runners.AgentIdentity, err)
+	}
+	script, err := scriptImplementation(scriptConfig, scriptDependencies)
+	if err != nil {
+		return nil, nil, nil, invalidRunnerConstruction(runners.ScriptIdentity, err)
+	}
+	delegate := inferenceDependencies.Delegate
+	if delegate == nil {
+		delegate = agent
+	}
+	inferenceDependencies.Delegate = delegate
+	inference, err := inferenceImplementation(inferenceConfig, inferenceDependencies)
+	if err != nil {
+		return nil, nil, nil, invalidRunnerConstruction(runners.InferenceIdentity, err)
+	}
+	return agent, script, inference, nil
+}
+func invalidRunnerConstruction(identity string, err error) error {
+	return fmt.Errorf(
+		"%w: %s runner construction failed: %w",
+		workers.ErrInvalidRunnerRegistration,
+		identity,
+		err,
+	)
+}
+
+func scriptImplementation(
+	config runners.ScriptConfig,
+	dependencies runners.ScriptDependencies,
+) (workers.Runner, error) {
+	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command is required", nil)
+	}
+	commandRunner, ok := dependencies.CommandRunner.(workerprocess.StreamingCommandRunner)
+	if !ok {
+		return nil, workers.NewProviderError(workers.WorkFailureTypeMisconfigured, "script command runner must support streaming", nil)
+	}
+	return runnerswire.NewScriptRunner(
+		runnerswire.ScriptRunnerConfig{
+			Command:          config.Command,
+			Args:             append([]string(nil), config.Args...),
+			Stdin:            config.Stdin,
+			FactoryDirectory: config.FactoryDirectory,
+			RequestSelected:  config.RequestSelected,
+		},
+		commandRunner,
+		dependencies.FactoryDocs,
+		dependencies.Now,
+		dependencies.Publish,
+		dependencies.Record,
+	), nil
+}
+func inferenceImplementation(
+	config runners.InferenceConfig,
+	dependencies runners.InferenceDependencies,
+) (workers.Runner, error) {
+	return runnerswire.NewInferenceRunner(
+		runnerswire.InferenceRunnerConfig{
+			Worker: snapshotInferenceWorker(config.Worker),
+			Resources: append(
+				[]models.LocalResource(nil),
+				config.Resources...,
+			),
+			Scope: config.Scope,
+		},
+		dependencies.Models, dependencies.Delegate, dependencies.ContentMaterializer, dependencies.MediaFiles,
+	)
+}
+
+func agentImplementation(
+	dependencies runners.AgentDependencies,
+) (workers.Runner, error) {
+	return runnerswire.NewAgentRunner(
+		dependencies.Providers,
+		dependencies.Publish,
+		dependencies.DecisionEnvelopes,
+	)
+}
+
+func snapshotInferenceWorker(worker models.LocalWorker) models.LocalWorker {
+	worker.Resources = append([]models.LocalResource(nil), worker.Resources...)
+	return worker
+}

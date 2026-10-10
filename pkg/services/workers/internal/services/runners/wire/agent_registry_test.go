@@ -389,11 +389,16 @@ func assertAgentResult(t *testing.T, result workers.RunnerExecutionResult) {
 func newTestAgentRegistry(
 	dependencies runners.AgentDependencies,
 ) (runners.Service, error) {
-	implementation, err := agentImplementation(dependencies)
+	implementation, err := NewAgentRunner(dependencies.Providers, dependencies.Publish, dependencies.DecisionEnvelopes)
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.AgentIdentity,
-		Metadata: agentMetadata(),
-		Runner:   implementation,
+		Metadata: workers.RunnerMetadata{ID: runners.AgentIdentity, DisplayName: "Agent", Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityStructuredOutput, Status: workers.RunnerOptionalCapabilityStatusSupported},
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilitySessionResume, Status: workers.RunnerOptionalCapabilityStatusSupported},
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityWorkingDirectory, Status: workers.RunnerOptionalCapabilityStatusSupported},
+			workers.RunnerOptionalCapabilitySupport{Capability: workers.RunnerOptionalCapabilityWorktree, Status: workers.RunnerOptionalCapabilityStatusSupported},
+		)},
+		Runner: implementation,
 	}})
 	return service, errors.Join(err, registryErr)
 }

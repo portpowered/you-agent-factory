@@ -339,7 +339,7 @@ func resolveServiceAgentRunner(
 	publish workers.ProgressPublisher,
 ) runners.Strategy {
 	t.Helper()
-	runner, err := agentImplementation(runners.AgentDependencies{Providers: providersService, Publish: publish})
+	runner, err := NewAgentRunner(providersService, publish, nil)
 	if err != nil {
 		t.Fatalf("construct Agent Runner: %v", err)
 	}
