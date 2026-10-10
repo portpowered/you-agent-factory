@@ -164,6 +164,11 @@ func runTypedEmptyMockAcceptance(t *testing.T, host *support.FunctionalAPIServer
 	base := host.URL() + "/factory-sessions/" + url.PathEscape(id)
 	assertDeclaredWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work"), false)
 	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	assertEmptyMockAcceptanceDispatches(t, dispatches)
+}
+
+func assertEmptyMockAcceptanceDispatches(t *testing.T, dispatches []support.DispatchEventObservation) {
+	t.Helper()
 	if len(dispatches) != 2 {
 		t.Fatalf("default acceptance dispatch count = %d, want two", len(dispatches))
 	}
@@ -315,6 +320,17 @@ func assertMatchedMockGatedFailure(t *testing.T, host *support.FunctionalAPIServ
 	t.Helper()
 	gate.WaitForArrival(t, 30*time.Second)
 	base := host.URL() + "/factory-sessions/" + url.PathEscape(id)
+	assertMatchedMockTargetHeld(t, host, id, base)
+	gate.Release()
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work")
+	assertDeclaredWork(t, listed, true)
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	assertMatchedMockTerminalDispatches(t, dispatches)
+}
+
+func assertMatchedMockTargetHeld(t *testing.T, host *support.FunctionalAPIServer, id, base string) {
+	t.Helper()
 	active := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, base+"/worker-sessions?workId=target")
 	if len(active.Sessions) != 1 || active.Sessions[0].EndedAt != nil {
 		t.Fatalf("matched gate did not hold target execution: %+v", active)
@@ -324,11 +340,10 @@ func assertMatchedMockGatedFailure(t *testing.T, host *support.FunctionalAPIServ
 			t.Fatalf("target returned before gate release: %+v", dispatch.Response)
 		}
 	}
-	gate.Release()
-	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
-	listed := support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work")
-	assertDeclaredWork(t, listed, true)
-	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+}
+
+func assertMatchedMockTerminalDispatches(t *testing.T, dispatches []support.DispatchEventObservation) {
+	t.Helper()
 	if len(dispatches) != 2 {
 		t.Fatalf("matched dispatch count = %d, want target and sibling", len(dispatches))
 	}

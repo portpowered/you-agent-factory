@@ -44,14 +44,7 @@ func testTypedWorkersPreserveNativeStructuredResult(t *testing.T) {
 			if terminal.RequestId != requestID {
 				t.Fatalf("terminal request ID = %q, want %q", terminal.RequestId, requestID)
 			}
-			payload, err := correlation.dispatchResponse.Payload.AsDispatchResponseEventPayload()
-			var want any
-			if decodeErr := json.Unmarshal([]byte(body), &want); decodeErr != nil {
-				t.Fatal(decodeErr)
-			}
-			if err != nil || payload.Outcome != factoryapi.WorkOutcomeAccepted || !reflect.DeepEqual(payload.StructuredResult, want) {
-				t.Fatalf("native dispatch result = %+v, decode=%v, want structured=%+v", payload, err, want)
-			}
+			assertModesNativeStructuredDispatch(t, correlation.dispatchResponse, body)
 			if result.providerCalls != 1 || len(result.requests) != 1 {
 				t.Fatalf("native command calls=%d requests=%d, want one", result.providerCalls, len(result.requests))
 			}
@@ -60,6 +53,18 @@ func testTypedWorkersPreserveNativeStructuredResult(t *testing.T) {
 				t.Fatalf("native command/correlation = %+v", request)
 			}
 		})
+	}
+}
+
+func assertModesNativeStructuredDispatch(t *testing.T, event *factoryapi.FactoryEvent, body string) {
+	t.Helper()
+	payload, err := event.Payload.AsDispatchResponseEventPayload()
+	var want any
+	if decodeErr := json.Unmarshal([]byte(body), &want); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if err != nil || payload.Outcome != factoryapi.WorkOutcomeAccepted || !reflect.DeepEqual(payload.StructuredResult, want) {
+		t.Fatalf("native dispatch result = %+v, decode=%v, want structured=%+v", payload, err, want)
 	}
 }
 
