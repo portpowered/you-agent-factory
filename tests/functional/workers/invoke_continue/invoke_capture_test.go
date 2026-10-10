@@ -6,14 +6,106 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
+
+// M13 uses the real recording store except for the selected recipe write.
+// Each attributed failure owns separate routes and Factory Sessions, so a
+// parallel peer cannot supply the credential or mask a provider launch.
+func TestRequesterRecipeFailureBeforeAdmission(t *testing.T) {
+	t.Cleanup(func() {
+		if !t.Failed() {
+			functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.continue", "cli/you.worker-sessions.show")
+		}
+	})
+	for _, operation := range []string{"start", "continue"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			runRequesterRecipeFailure(t, operation)
+		})
+	}
+}
+
+func runRequesterRecipeFailure(t *testing.T, operation string) {
+	t.Helper()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	parent := fixture.scenario(t, "requester-recipe-parent-"+operation)
+	child := fixture.scenario(t, "requester-recipe-child-"+operation)
+	defer parent.close(t)
+	defer child.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := parent.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	parentID := scenarioScopedID(parent, "requester-recipe-parent")
+	start := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatal("recipe-failure requester did not start")
+	}
+	t19AwaitSignal(t, ctx, runner.started, "recipe-failure requester running")
+	token := requesterSourceToken(t, runner, parentID)
+	parentBefore := requesterObservation(t, fixture, parent, ctx, parentID)
+	failedID := "requester-recipe-failed-" + scenarioScopedID(child, operation)
+	args := []string{"invoke", "--execution", requesterExecutionPath(t, child, failedID), "--async"}
+	expectedCode, expectedCalls := "WORKER_SESSION_START_OPENING_FAILED", 0
+	if operation == "continue" {
+		sourceID := scenarioScopedID(child, "requester-recipe-source")
+		invoke := t7RemoteCLIInputs(child, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, child, sourceID))
+		invoke.Input.Env = append(invoke.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
+		if err := fixture.process.Execute(invoke.Input); err != nil {
+			t.Fatal("attributed recipe-failure source did not complete")
+		}
+		assertRequesterChild(t, fixture, child, ctx, sourceID, parentID, token)
+		source := requesterObservation(t, fixture, child, ctx, sourceID)
+		if source.ProviderSession == nil {
+			t.Fatal("attributed source did not retain its provider identity")
+		}
+		awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, child.homeDirectory, child.workingDirectory, sourceID, source.ProviderSession.Id)
+		defer assertRequesterRecipeSourceUnchanged(t, fixture, child, ctx, sourceID, source)
+		args = []string{"continue", sourceID, "--request-id", failedID + "-request", "--successor-worker-session-id", failedID, "--user-message", "recipe failure follow-up", "--async"}
+		expectedCode, expectedCalls = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", 1
+	}
+	for range 2 {
+		input := t7RemoteCLIInputs(child, ctx, fixture.baseURL, args...)
+		input.Input.Env = append(input.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
+		if err := fixture.process.Execute(input.Input); err == nil {
+			t.Fatal("failed recipe write admitted a provider execution")
+		}
+		assertDirectWorkerSessionCLIError(t, input, expectedCode)
+		assertRequesterTokenAbsent(t, token, input.Stdout()+input.Stderr())
+		if strings.Contains(input.Stdout()+input.Stderr(), "private-recipe-sync-detail") {
+			t.Fatal("recipe failure disclosed private storage diagnostics")
+		}
+	}
+	if child.providerRunner.CallCount() != expectedCalls || runner.CallCount() != 1 {
+		t.Fatal("recipe failure or replay launched a provider or changed its peer")
+	}
+	failed := requesterObservation(t, fixture, child, ctx, failedID)
+	if string(failed.State) != "FAILED" || failed.Revivable == nil || *failed.Revivable {
+		t.Fatal("unadmitted recipe failure fabricated a runnable retained session")
+	}
+	parentAfter := requesterObservation(t, fixture, parent, ctx, parentID)
+	parentBefore.DurationMillis, parentAfter.DurationMillis = nil, nil
+	if !reflect.DeepEqual(parentBefore, parentAfter) {
+		t.Fatal("recipe failure mutated the independent running requester")
+	}
+}
+
+func assertRequesterRecipeSourceUnchanged(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, id string, before api.WorkerSessionObservation) {
+	t.Helper()
+	after := requesterObservation(t, fixture, child, ctx, id)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("unadmitted successor changed source metadata, state or continuation head")
+	}
+}
 
 // M11 observes the actual admitted credential echoed by the native command
 // edge, through live capture and terminal public CLI/HTTP representations.

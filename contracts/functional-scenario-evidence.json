@@ -220,6 +220,14 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterRecipeFailureBeforeAdmission",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
