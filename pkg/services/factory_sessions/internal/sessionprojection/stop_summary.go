@@ -51,7 +51,9 @@ func ProjectFactorySessionStopSummary(sessionID string, snapshot *legacysnapshot
 
 // ProjectWorkStopSummary derives the canonical stopped-state inspect summary
 // for one Work read when that Work explains the current stop condition.
-func ProjectWorkStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, token *workerexecution.Token, sessionStopSummary *StopSummary) *StopSummary {
+// A supplied index belongs to this detached snapshot and uses the first token
+// for each Work ID, matching ordinary single-Work lookup semantics.
+func ProjectWorkStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot, token *workerexecution.Token, sessionStopSummary *StopSummary, indexes ...map[string]*workerexecution.Token) *StopSummary {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" || token == nil {
 		return nil
@@ -68,7 +70,16 @@ func ProjectWorkStopSummary(sessionID string, snapshot *legacysnapshot.Snapshot,
 	if summary := stopSummaryForWorkState(sessionID, target, snapshot, interrupted); summary != nil {
 		return summary
 	}
-	if matching := workByID(materializedPublicWork(snapshot), target.id); matching != nil && matching.state != "" {
+	var matching *stopSummaryWork
+	if len(indexes) > 0 {
+		if indexed := indexes[0][target.id]; indexed != nil {
+			work := workFromToken(indexed, snapshotTopology(snapshot))
+			matching = &work
+		}
+	} else {
+		matching = workByID(materializedPublicWork(snapshot), target.id)
+	}
+	if matching != nil && matching.state != "" {
 		if summary := stopSummaryForWorkState(sessionID, *matching, snapshot, interrupted); summary != nil {
 			return summary
 		}

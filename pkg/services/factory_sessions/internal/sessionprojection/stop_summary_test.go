@@ -1,6 +1,7 @@
 package sessionprojection_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -90,4 +91,48 @@ func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snaps
 		Marking:  factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{runtimeToken.ID: runtimeToken}},
 		Topology: &factoryruntime.Net{Places: map[string]*factoryruntime.PetriPlace{placeID: {ID: placeID, TypeID: "goal", State: stateName}}},
 	}, token
+}
+
+func TestProjectWorkStopSummaryIndexedPreservesStatesAndPausePrecedence(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		state  string
+		paused bool
+		want   StopKind
+	}{
+		{state: "init"}, {state: "blocked", want: StopKindBlocked}, {state: "needs-human", want: StopKindNeedsHuman}, {state: "interrupted", want: StopKindInterrupted}, {state: "blocked", paused: true, want: StopKindPaused},
+	} {
+		t.Run(tc.state+fmt.Sprint(tc.paused), func(t *testing.T) {
+			t.Parallel()
+			snapshot, token := stoppedWorkSnapshot(time.Unix(0, 0), tc.state)
+			token.History.LastError = "safe failure"
+			if tc.paused {
+				snapshot.LifecycleControlStatus = "PAUSED"
+			}
+			snapshot.DispatchHistory = []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", WorkstationName: "review", Outcome: workerexecution.OutcomeFailed, EndTime: time.Unix(1, 0), ConsumedTokens: []workerexecution.Token{*token}}}
+			index := map[string]*workerexecution.Token{"work-1": token}
+			summary := sessionprojection.ProjectWorkStopSummary("session-1", snapshot, token, nil, index)
+			if tc.want == "" {
+				if summary != nil {
+					t.Fatalf("running Work has stop: %#v", summary)
+				}
+				return
+			}
+			if summary == nil || summary.StopKind != tc.want || summary.WorkID == nil || *summary.WorkID != "work-1" || summary.LatestDispatch == nil || summary.LatestDispatch.DispatchID != "dispatch-1" || summary.SuggestedRecoveryAction == nil {
+				t.Fatalf("stop summary: %#v", summary)
+			}
+		})
+	}
+}
+
+func TestProjectWorkStopSummaryIndexedUsesFirstMatchingWorkState(t *testing.T) {
+	t.Parallel()
+	snapshot, blocked := stoppedWorkSnapshot(time.Unix(0, 0), "blocked")
+	running := *blocked
+	running.ID = "token-2"
+	running.State = "init"
+	index := map[string]*workerexecution.Token{"work-1": blocked}
+	if summary := sessionprojection.ProjectWorkStopSummary("session-1", snapshot, &running, nil, index); summary == nil || summary.StopKind != StopKindBlocked {
+		t.Fatalf("matching stopped state: %#v", summary)
+	}
 }

@@ -692,7 +692,9 @@ jobs:
           go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
           test -x .artifacts/integration/bin/platform-conformance-helper
       - name: Run backend integration tests with shared CLI artifact
-        run: make test-integration
+        run: |
+          make test-work-list-load
+          make test-integration
         env:
           INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
           INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
