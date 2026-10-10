@@ -196,6 +196,7 @@ type perRuntimeAttemptFixture struct {
 	clock   time.Time
 	capture *perRuntimeRecordingCapture
 	control *perRuntimeCancellation
+	summary *perRuntimeSummaryReader
 }
 
 // These captures inspect detached collaborator requests, not durable replay.
@@ -232,6 +233,75 @@ type perRuntimeRecordingCapture struct {
 	awaitErr error
 }
 
+// Model the selected committed metadata boundary for these admitted captures.
+// Requests are isolated collaborator observations; no durable journal is read.
+type perRuntimeSummaryReader struct {
+	historyCatalogFake
+	t       *testing.T
+	sink    *perRuntimeAppendCapture
+	capture *perRuntimeRecordingCapture
+}
+
+func (reader *perRuntimeSummaryReader) LookupWorkerSessionCapture(_ context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
+	reader.capture.mu.Lock()
+	defer reader.capture.mu.Unlock()
+	for _, request := range reader.capture.requests {
+		if request.WorkerSessionID == id {
+			return recordings.WorkerSessionCatalogEntry{
+				WorkerSessionID: id, FactorySessionID: request.FactorySessionID, RecordingID: request.RecordingID,
+				RecordingGenerationID: "generation-" + id, OwnerEpoch: "epoch-" + id,
+			}, nil
+		}
+	}
+	return recordings.WorkerSessionCatalogEntry{}, recordings.ErrMissingWorkerRecordingReader
+}
+
+func (reader *perRuntimeSummaryReader) LookupWorkerSessionSummary(_ context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	reader.capture.delegate.mu.Lock()
+	handle := reader.capture.delegate.handles[id]
+	reader.capture.delegate.mu.Unlock()
+	if handle == nil {
+		return recordings.WorkerCapturedSummary{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	handle.mu.Lock()
+	terminals := append([]recordings.WorkerRecordingTerminal(nil), handle.terminals...)
+	handle.mu.Unlock()
+	var item recordings.WorkerCapturedCatalogItem
+	entry, err := reader.LookupWorkerSessionCapture(context.Background(), id)
+	if err != nil {
+		return recordings.WorkerCapturedSummary{}, err
+	}
+	var topic events.Topic
+	var started time.Time
+	for _, request := range reader.sink.requestsFor("") {
+		draft := decodePerRuntimeDraft(reader.t, request)
+		var payload workers.SessionPayload
+		if draft.Kind != workers.KindSession || json.Unmarshal(draft.Payload, &payload) != nil {
+			continue
+		}
+		if draft.Phase == workers.PhaseStarted && payload.WorkerSessionID == id {
+			item = historyCapture(reader.t, id, payload.FactorySessionID, payload.AttemptID, false)
+			item.Catalog.RecordingID = entry.RecordingID
+			item.Opening = events.Record{ID: events.RecordID{Position: 1}, Payload: request.Payload}
+			topic = request.Topic
+			if payload.StartedAt != nil {
+				started = *payload.StartedAt
+			}
+		}
+		if request.Topic == topic && draft.Phase != workers.PhaseStarted && len(terminals) > 0 && draft.Phase == terminals[0].Phase {
+			terminal := terminals[0]
+			terminal.Position = 2
+			item.Terminal = &terminal
+			item.Health, item.OwnerLost = recordings.WorkerRecordingStatusComplete, false
+			item.Catalog.CommittedPosition = 2
+			item.MetadataRecords = []events.Record{{ID: events.RecordID{Position: 2}, Payload: request.Payload}}
+			item.CapturedAt = map[string]time.Time{"2": started}
+			break
+		}
+	}
+	return recordings.WorkerCapturedSummary{Capture: item}, nil
+}
+
 func (capture *perRuntimeRecordingCapture) StartWorkerSessionRecording(ctx context.Context, request recordings.WorkerSessionRecordingRequest) (recordings.WorkerSessionRecording, error) {
 	capture.mu.Lock()
 	capture.requests = append(capture.requests, request)
@@ -257,6 +327,11 @@ func (recording *perRuntimeOpeningRecording) AwaitOpening(context.Context) error
 
 func assertPerRuntimeObservation(t *testing.T, fixture *perRuntimeAttemptFixture, state workersessions.State) workersessions.Observation {
 	t.Helper()
+	// Admission/control ownership is covered by the existing capture fake.
+	// Select its committed metadata only once terminal capture has completed.
+	if (state == workersessions.StateCompleted || state == workersessions.StateFailed) && fixture.summary != nil {
+		fixture.service.logs = &LogReader{reader: fixture.summary}
+	}
 	observation, err := fixture.service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: fixture.request.ID})
 	if err != nil {
 		t.Fatalf("GetObservationByWorkerSessionID(%s): %v", fixture.request.ID, err)
@@ -482,6 +557,9 @@ func preparePerRuntimeAttemptFixture(t *testing.T, suffix string, sink EventsApp
 	}
 	fixture.request.Execution.Execution.RecordingID = "recording-" + suffix
 	fixture.request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-" + suffix}
+	if observed, ok := sink.(*perRuntimeAppendCapture); ok {
+		fixture.summary = &perRuntimeSummaryReader{t: t, sink: observed, capture: capture}
+	}
 	return fixture
 }
 

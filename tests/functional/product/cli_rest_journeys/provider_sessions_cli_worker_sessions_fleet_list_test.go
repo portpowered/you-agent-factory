@@ -102,8 +102,7 @@ func testProvidersessionscliWorkerSessionsFleetListBoundedRootPages(t *testing.T
 	assertNormalizedFleetJSONEqual(t, "first page", firstCLI.raw, firstHTTP.raw)
 	assertNormalizedFleetJSONEqual(t, "continuation page", secondCLI.raw, secondHTTP.raw)
 	assertBoundedFleetCompleteSelection(t, firstHTTP.list, secondHTTP.list, expected)
-	// These command fixtures publish turn.completed usage, captured separately
-	// from the optional native transcript used by compatibility reads.
+	// These command fixtures commit associated captured transcripts and usage.
 	for _, want := range expected {
 		if want.State == "COMPLETED" {
 			assertSuccessfulWorkerSessionWithProvider(t, ctx, process, env, factoryDir, baseURL, want.FactorySessionID, want.WorkID, want.ProviderSessionID)
@@ -275,8 +274,8 @@ func assertBoundedFleetObservation(t *testing.T, label string, session workerSes
 	if session.AttemptID == "" || session.StartedAt == nil || session.EndedAt == nil || session.DurationMillis == nil || *session.DurationMillis < 0 || session.DurationBasis != "RECORDED_TIMESTAMPS" {
 		t.Fatalf("%s row %q omitted recorded timing facts: %#v", label, session.WorkerSessionID, session)
 	}
-	if session.Transcript != "UNAVAILABLE" || session.ConfirmationState != "UNCONFIRMED" || session.Parse.EventCount != 0 || session.Parse.MalformedLineCount != 0 || session.Parse.UnknownEventCount != 0 || len(session.Parse.Errors) != 0 {
-		t.Fatalf("%s row %q invented native transcript/recording/parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
+	if session.Transcript != "AVAILABLE" || session.ConfirmationState != "UNCONFIRMED" || session.Parse.EventCount != 0 || session.Parse.MalformedLineCount != 0 || session.Parse.UnknownEventCount != 0 || len(session.Parse.Errors) != 0 {
+		t.Fatalf("%s row %q lost committed transcript availability or invented confirmation/parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
 	}
 	if !containsString(session.WorkIDs, want.WorkID) {
 		t.Fatalf("%s row %q Work IDs=%v, want %q", label, session.WorkerSessionID, session.WorkIDs, want.WorkID)
