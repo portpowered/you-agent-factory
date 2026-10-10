@@ -113,7 +113,7 @@ func TestRunCommand_LocalSessionSelectsIsolatedSession(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() { runCLI = originalRunCLI }()
 
-	const sessionID = "session-explicit"
+	const sessionID = "12345678-1234-1234-1234-1234567890ab"
 	var captured runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
 		captured = cfg
@@ -133,7 +133,7 @@ func TestRunCommand_LocalSessionSelectsIsolatedSession(t *testing.T) {
 }
 
 func TestRunCommand_LocalBatchSessionSelectsIsolatedSession(t *testing.T) {
-	const sessionID = "session-batch-explicit"
+	const sessionID = "12345678-1234-1234-1234-1234567890ac"
 	var captured runcli.RunConfig
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),

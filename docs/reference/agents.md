@@ -17,7 +17,7 @@ For `you run --session <session-id>`, use `~default`, a lowercase hyphenated
 UUID, or `dur-sess-` followed by 32 lowercase hexadecimal digits. Omission or
 blank input selects `~default` locally. Unsupported names such as
 `validation-factory` fail before Work starts with `BAD_REQUEST` and exit code 1.
-Local runs open the selected session; remote runs target an already-open
+Local runs open the selected session. Remote runs target an already-open
 session. For example, use `--session 12345678-1234-1234-1234-1234567890ab`.
 
 ## Read order
