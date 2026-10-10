@@ -1629,7 +1629,10 @@ func TestRuntimeMetricsRetentionPreservesOrphanMarkerOnFailureAndReapsAfterRecov
 // Marker cleanup never removes customer content or traverses a replacement
 // directory. Repairing the selected path must permit the same owner to recover.
 func TestRuntimeMetricsRetentionProtectsUnsafeMarkerPathsAndRecovers(t *testing.T) {
-	for _, replacement := range []string{"nonempty marker", "marker directory", "claims directory file"} {
+	for _, replacement := range []string{
+		"nonempty marker", "marker directory", "claims directory file",
+		"nonhex digest", "uppercase digest",
+	} {
 		t.Run(replacement, func(t *testing.T) {
 			t.Parallel()
 			assertUnsafeMarkerRecovery(t, replacement)
@@ -1695,6 +1698,14 @@ func replaceRetentionMarkerPath(t *testing.T, replacement, marker string) (selec
 		t.Fatal(err)
 	}
 	switch replacement {
+	case "nonhex digest", "uppercase digest":
+		digest := strings.Repeat("g", sha256HexLength)
+		if replacement == "uppercase digest" {
+			digest = strings.Repeat("A", sha256HexLength)
+		}
+		selected = filepath.Join(filepath.Dir(marker), digest+runtimeMetricsClaimSuffix)
+		contentPath = selected
+		diagnostic = "unexpected claim marker entry"
 	case "marker directory":
 		if err := os.Mkdir(marker, 0o700); err != nil {
 			t.Fatal(err)
