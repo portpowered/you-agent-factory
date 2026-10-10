@@ -219,3 +219,128 @@ func TestCapturedTerminalEnrichmentPreservesLiveTimingUntilCaptureComplete(t *te
 		})
 	}
 }
+
+func controlledSummaryFixture(t *testing.T, state workersessions.State) recordings.WorkerCapturedCatalogItem {
+	t.Helper()
+	item := completedSummaryFixture(t, false)
+	phase, err := terminalPhase(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item.Terminal.Status, item.Terminal.Phase = string(state), phase
+	draft, err := terminalDraft(state, workersessions.TerminalResult{}, "attempt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	item.MetadataRecords[1].Payload, _ = json.Marshal(draft)
+	return item
+}
+
+func TestCapturedControlledTerminalSelectedCatalogAndLiveAgree(t *testing.T) {
+	t.Parallel()
+	for _, state := range []workersessions.State{workersessions.StateCanceled, workersessions.StateTerminated} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			item := controlledSummaryFixture(t, state)
+			reader := &terminalSummaryReader{item: item, historyCatalogFake: historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{item}}}
+			logs := &LogReader{reader: reader}
+			archived, err := logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+			want := controlTerminalCause[state]
+			if err != nil || archived.Failure == nil || *archived.Failure != want || archived.Duration == nil || *archived.Duration != time.Second {
+				t.Fatalf("controlled terminal facts: %+v %v", archived, err)
+			}
+			rows, err := logs.archivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{}, nil)
+			if err != nil || len(rows) != 1 || !reflect.DeepEqual(rows[0], archived) {
+				t.Fatalf("catalog differs: %+v %v", rows, err)
+			}
+			lifecycleEnd := archived.StartedAt.Add(5 * time.Second)
+			lifecycleDuration := 5 * time.Second
+			original := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: state, StartedAt: archived.StartedAt, EndedAt: &lifecycleEnd, Duration: &lifecycleDuration, Failure: &want}
+			r := &registry{logs: logs, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+			live := r.withCapturedTerminalObservation(t.Context(), original)
+			if !reflect.DeepEqual(live.EndedAt, archived.EndedAt) || !reflect.DeepEqual(live.Duration, archived.Duration) || !reflect.DeepEqual(live.Failure, archived.Failure) {
+				t.Fatalf("live differs: %+v archive=%+v", live, archived)
+			}
+			if !original.EndedAt.Equal(lifecycleEnd) || *original.Duration != lifecycleDuration {
+				t.Fatal("mutated owned timing")
+			}
+		})
+	}
+}
+
+func TestCapturedControlledTerminalRejectsForeignCaptureAndPendingFacts(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"recording", "generation", "epoch", "worker", "scope", "attempt", "pending", "stamp", "legacy", "duplicate-json", "duplicate-record", "wrong-phase", "wrong-status"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			item := controlledSummaryFixture(t, workersessions.StateCanceled)
+			mutateControlledTerminalFixture(name, &item)
+			start := time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)
+			end, duration := start.Add(5*time.Second), 5*time.Second
+			observation := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: workersessions.StateCanceled, StartedAt: &start, EndedAt: &end, Duration: &duration}
+			r := &registry{logs: &LogReader{reader: &terminalSummaryReader{item: item}}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+			got := r.withCapturedTerminalObservation(t.Context(), observation)
+			if !reflect.DeepEqual(got.EndedAt, observation.EndedAt) || !reflect.DeepEqual(got.Duration, observation.Duration) {
+				t.Fatalf("unsafe timing: %+v", got)
+			}
+			if name == "legacy" {
+				archived, err := capturedHistoryIdentity(item, nil)
+				if err != nil || archived.Failure != nil || archived.EndedAt != nil || archived.Duration != nil {
+					t.Fatalf("invented legacy facts: %+v %v", archived, err)
+				}
+			}
+		})
+	}
+}
+
+func TestTerminalDraftPreservesKnownFailureOverControlDefault(t *testing.T) {
+	t.Parallel()
+	known := workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "known safe failure"}
+	result := workersessions.TerminalResult{Cause: &known}
+	draft, err := terminalDraft(workersessions.StateCanceled, result, "attempt")
+	var payload terminalSessionPayload
+	if err != nil || json.Unmarshal(draft.Payload, &payload) != nil || payload.FailureCause != string(known.Kind) || payload.FailureDetail != known.Detail || draft.DispatchID != "attempt" || !reflect.DeepEqual(result.Cause, &known) {
+		t.Fatalf("known failure lost: %+v %v", draft, err)
+	}
+}
+
+func TestCapturedUnwitnessedPrefixLeavesTerminalCauseAndTimingUnknown(t *testing.T) {
+	t.Parallel()
+	item := historyCapture(t, "worker", "factory", "attempt", false)
+	got, err := capturedHistoryIdentity(item, nil)
+	if err != nil || got.State != workersessions.StateFailed || got.ConfirmationState != workersessions.ConfirmationStateUnconfirmed || got.Failure == nil || got.Failure.Kind != workersessions.FailureCauseProcessGone || got.TerminalCause != nil || got.RecordingHealth != recordings.WorkerRecordingStatusIncomplete || got.RecordingHealthReason != item.HealthReason || got.EndedAt != nil || got.Duration != nil {
+		t.Fatalf("unwitnessed retained prefix: %+v %v", got, err)
+	}
+}
+
+func mutateControlledTerminalFixture(name string, item *recordings.WorkerCapturedCatalogItem) {
+	switch name {
+	case "recording":
+		item.Catalog.RecordingID = "foreign"
+	case "generation":
+		item.Catalog.RecordingGenerationID = "foreign"
+	case "epoch":
+		item.Catalog.OwnerEpoch = "foreign"
+	case "worker":
+		item.Catalog.WorkerSessionID = "foreign"
+	case "scope":
+		item.Catalog.FactorySessionID = "foreign"
+	case "attempt":
+		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"foreign","payload":{"status":"CANCELED"}}`)
+	case "pending":
+		item.Catalog.CommittedPosition = 2
+	case "stamp":
+		item.CapturedAt = nil
+	case "legacy":
+		item.CapturedAt = nil
+		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"attempt","payload":{"status":"CANCELED"}}`)
+	case "duplicate-record":
+		item.MetadataRecords = append(item.MetadataRecords, item.MetadataRecords[1])
+	case "wrong-phase":
+		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"COMPLETED","dispatchId":"attempt","payload":{"status":"CANCELED","failureCause":"OPERATOR_CANCELED"}}`)
+	case "wrong-status":
+		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"attempt","payload":{"status":"TERMINATED","failureCause":"OPERATOR_CANCELED"}}`)
+	case "duplicate-json":
+		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"attempt","payload":{"status":"CANCELED","failureCause":"OPERATOR_CANCELED","failureCause":"PROCESS_GONE"}}`)
+	}
+}
