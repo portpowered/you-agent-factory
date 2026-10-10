@@ -2,6 +2,7 @@ package execution_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -35,6 +36,10 @@ type selectedOperationScheduler struct {
 	polls  chan *selectedOperationTimer
 }
 
+// Legacy callers expose time and timers, without opting into Runtime's replay
+// tick ownership. The test controller alone advances this operation source.
+type selectedLegacyClock struct{ platformclock.TimerSource }
+
 func (scheduler *selectedOperationScheduler) NewTimer(delay time.Duration) platformclock.Timer {
 	// Readiness is outside the held provider/retry operation being observed.
 	if delay == 10*time.Millisecond {
@@ -60,14 +65,15 @@ func (scheduler *selectedOperationScheduler) NewTimer(delay time.Duration) platf
 }
 
 type selectedCommandCall struct {
-	request platformprocess.CommandRequest
-	reply   chan platformprocess.CommandResult
+	request  platformprocess.CommandRequest
+	reply    chan platformprocess.CommandResult
+	canceled chan error
 }
 
 type selectedCommandRunner struct{ calls chan selectedCommandCall }
 
 func (runner *selectedCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	call := selectedCommandCall{request: request, reply: make(chan platformprocess.CommandResult, 1)}
+	call := selectedCommandCall{request: request, reply: make(chan platformprocess.CommandResult, 1), canceled: make(chan error, 1)}
 	select {
 	case runner.calls <- call:
 	case <-ctx.Done():
@@ -77,6 +83,7 @@ func (runner *selectedCommandRunner) Run(ctx context.Context, request platformpr
 	case result := <-call.reply:
 		return result, nil
 	case <-ctx.Done():
+		call.canceled <- ctx.Err()
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
 }
@@ -144,8 +151,13 @@ type selectedInvocation struct {
 
 func startSelectedInvocation(t *testing.T, process support.Process, ctx context.Context) selectedInvocation {
 	t.Helper()
+	return startSelectedConfiguredInvocation(t, process, ctx, support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+}
+
+func startSelectedConfiguredInvocation(t *testing.T, process support.Process, ctx context.Context, config string) selectedInvocation {
+	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)
-	dir := scaffoldSelectedFactory(t)
+	dir := scaffoldSelectedFactory(t, config)
 	home := t.TempDir()
 	input := support.FakeInputs(ctx, []string{"you", "--json", "run", "--factory", filepath.Join(dir, interfaces.FactoryConfigFile), "--session", uuid.NewString(), "--no-record", "selected operation"})
 	input.WorkingDirectory = dir
@@ -163,7 +175,7 @@ func startSelectedInvocation(t *testing.T, process support.Process, ctx context.
 	return selectedInvocation{done: done, stdout: input.Stdout}
 }
 
-func scaffoldSelectedFactory(t *testing.T) string {
+func scaffoldSelectedFactory(t *testing.T, config string) string {
 	t.Helper()
 	// Bound the Factory dispatch budget separately from Workers' three
 	// provider commands. Retryable failures otherwise requeue the Work under
@@ -182,8 +194,100 @@ func scaffoldSelectedFactory(t *testing.T) string {
 			"limits":    map[string]int{"maxRetries": 1},
 		}},
 	})
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", config)
 	return dir
+}
+
+func TestSelectedProviderDeadline(t *testing.T) {
+	t.Parallel()
+	for _, legacy := range []bool{false, true} {
+		name := "explicit scheduler beats timer-capable fact clock"
+		if legacy {
+			name = "legacy timer-capable clock supplies omitted scheduler"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
+			facts := platformclock.NewDeterministic(base, time.Second)
+			scheduler := &selectedOperationScheduler{Deterministic: platformclock.NewDeterministic(base.Add(time.Hour), time.Millisecond), timers: make(chan *selectedOperationTimer, 32), polls: make(chan *selectedOperationTimer, 256)}
+			runner := &selectedCommandRunner{calls: make(chan selectedCommandCall, 16)}
+			edges := serviceedges.Edges{Clock: facts, ProcessScheduler: scheduler, ProviderCommandRunner: runner}
+			if legacy {
+				edges.Clock, edges.ProcessScheduler = selectedLegacyClock{scheduler}, nil
+			}
+			process := support.BuildProcess(t, edges)
+			tick := 0
+			advance := func(delay time.Duration) { tick += int(delay / time.Millisecond); scheduler.SetTick(tick) }
+			runSelectedProviderDeadline(t, process, facts, scheduler, runner, advance)
+		})
+	}
+}
+
+func runSelectedProviderDeadline(t *testing.T, process support.Process, facts *platformclock.Deterministic, scheduler *selectedOperationScheduler, runner *selectedCommandRunner, advance func(time.Duration)) {
+	t.Helper()
+	run := startSelectedConfiguredInvocation(t, process, t.Context(), support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, "gemini-3.6-flash-low"))
+	for attempt := 0; attempt < 3; attempt++ {
+		t.Logf("deadline attempt %d: awaiting command", attempt+1)
+		call := selectedAwait(t, runner.calls)
+		if call.request.Command != "agy" || !strings.Contains(strings.Join(call.request.Args, " "), "--print-timeout 5m") {
+			t.Fatalf("configured provider command = %s %v", call.request.Command, call.request.Args)
+		}
+		t.Log("awaiting configured deadline registration")
+		timer := selectedAwait(t, scheduler.timers)
+		if timer.delay != 5*time.Minute {
+			t.Fatalf("provider deadline = %s", timer.delay)
+		}
+		facts.SetTick(3600 + attempt*3600)
+		select {
+		case err := <-call.canceled:
+			t.Fatalf("fact clock expired selected attempt: %v", err)
+		default:
+		}
+		advance(timer.delay - time.Millisecond)
+		select {
+		case err := <-call.canceled:
+			t.Fatalf("provider expired before its selected deadline: %v", err)
+		default:
+		}
+		advance(time.Millisecond)
+		t.Log("awaiting selected deadline cancellation")
+		if err := selectedAwait(t, call.canceled); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("selected provider timeout = %v", err)
+		}
+		if attempt < 2 {
+			t.Log("awaiting deadline retry registration")
+			retry := selectedAwaitRetry(t, scheduler, runner, run)
+			if !timer.stopped.Load() {
+				t.Fatal("expired attempt timer was not stopped before retry")
+			}
+			assertSelectedRetryHeld(t, facts, runner, retry, time.Duration(attempt+1)*100*time.Millisecond)
+			advance(retry.delay)
+		}
+	}
+	if err := selectedAwaitCompletion(t, scheduler, run, advance); err == nil {
+		t.Fatal("expired provider attempts returned success")
+	}
+	response := support.DecodeInvocationResponseJSON(t, run.stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("provider deadline terminal result = %#v", response)
+	}
+	t.Log("S05/S09 provider/S10 legacy: held configured deadline expires only on its selected scheduler, maps to deadline exceeded, stops before retry and yields bounded public failure")
+}
+
+func TestSelectedEffectsOmittedDefaults(t *testing.T) {
+	t.Parallel()
+	runner := &selectedCommandRunner{calls: make(chan selectedCommandCall, 1)}
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	run := startSelectedInvocation(t, process, t.Context())
+	selectedAwait(t, runner.calls).reply <- platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("default effects COMPLETE")}
+	if err := selectedAwait(t, run.done); err != nil {
+		t.Fatal(err)
+	}
+	response := support.DecodeInvocationResponseJSON(t, run.stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted || !strings.Contains(run.stdout(), "default effects COMPLETE") {
+		t.Fatalf("default effects result = %#v", response)
+	}
+	t.Log("S10 default: omitted fact clock and scheduler preserve public provider success")
 }
 
 func selectedRetryFailure() platformprocess.CommandResult {
