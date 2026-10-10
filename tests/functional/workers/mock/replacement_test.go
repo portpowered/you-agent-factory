@@ -1,10 +1,13 @@
 package mock
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -14,6 +17,75 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// M6 complements the typed CLI selection witnesses with API session admission.
+// Public events and command effects observe passthrough parity. Each row owns
+// its session, factory and command route on the shared mock process.
+func testTypedMockPassthroughPreservesNativeResult(t *testing.T, fixture *sharedWorkersMockFixture) {
+	for _, mode := range []string{"inference", "agent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			dir := matchedMockRejectionFactory(t, mode)
+			id := uuid.NewString()
+			body := `{"label":"` + id + `","nested":{"count":7},"items":[true,"complete"]}`
+			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(body)})
+			fixture.useCommandRunnersFor(t, dir, runner, nil)
+			for _, name := range []string{"target", "sibling"} {
+				testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: name, WorkTypeID: "task", TraceID: id + "-" + name, Payload: []byte(name)})
+			}
+			session := fixture.openSession(t, dir)
+			defer session.closeAndAssertGone(t)
+			listed, events := session.terminalObservations(t, 30*time.Second)
+			assertDeclaredWork(t, listed, false)
+			assertTypedPassthroughDispatches(t, events, body)
+			requests := runner.Requests()
+			if len(requests) != 1 {
+				t.Fatalf("normal command calls = %d, want only unmatched sibling", len(requests))
+			}
+			if requests[0].Command != "codex" || requests[0].WorkDir != dir || requests[0].ExecutionScopeID != session.id {
+				t.Fatalf("passthrough command/correlation = %+v", requests[0])
+			}
+		})
+	}
+}
+
+func assertTypedPassthroughDispatches(t *testing.T, events []factoryapi.FactoryEvent, body string) {
+	t.Helper()
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 2 {
+		t.Fatalf("dispatch count = %d, want selected mock and unmatched native", len(dispatches))
+	}
+	var targetCount, siblingCount int
+	for _, dispatch := range dispatches {
+		if dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("passthrough terminal = %+v", dispatch.Response)
+		}
+		output := support.StringPointerValue(dispatch.Response.Output)
+		if support.DispatchObservationIncludesWork(dispatch, "target") {
+			targetCount++
+			if output != "mock worker accepted" {
+				t.Fatalf("selected mock result = %q", output)
+			}
+		} else if support.DispatchObservationIncludesWork(dispatch, "sibling") {
+			siblingCount++
+			var result struct {
+				Label  string `json:"label"`
+				Nested struct {
+					Count int `json:"count"`
+				} `json:"nested"`
+				Items []any `json:"items"`
+			}
+			if err := json.Unmarshal([]byte(output), &result); err != nil || output != body || result.Nested.Count != 7 || len(result.Items) != 2 {
+				t.Fatalf("native structured output = %q: %v", output, err)
+			}
+		} else {
+			t.Fatalf("unexpected passthrough Work correlation: %+v", dispatch.Request)
+		}
+	}
+	if targetCount != 1 || siblingCount != 1 {
+		t.Fatalf("passthrough correlation: target=%d sibling=%d", targetCount, siblingCount)
+	}
+}
 
 const (
 	unknownMockWorkerName = "ghost-worker"
