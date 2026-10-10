@@ -10,6 +10,56 @@ import (
 	snapshotmaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 )
 
+func TestCopySupportedFilesCopiesThinAssetsAndPreservesInlineTargets(t *testing.T) {
+	t.Parallel()
+	source, target := t.TempDir(), t.TempDir()
+	files := []factorydefinitions.BundledFileConfig{
+		{Type: factorydefinitions.BundledFileTypeScript, TargetPath: "factory/scripts/run.sh"},
+		{Type: factorydefinitions.BundledFileTypeDoc, TargetPath: "factory/docs/guide.md"},
+		{Type: factorydefinitions.BundledFileTypeInput, TargetPath: "factory/inputs/task/default/seed.md"},
+		{Type: factorydefinitions.BundledFileTypeRootHelper, TargetPath: "Makefile"},
+		{Type: factorydefinitions.BundledFileTypeDoc, TargetPath: "factory/docs/inline.md", Content: factorydefinitions.BundledFileContentConfig{Inline: "inline"}},
+	}
+	for _, path := range []string{"scripts/run.sh", "docs/guide.md", "inputs/task/default/seed.md"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(source, path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(source, path), []byte(path), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	config := &factorydefinitions.FactoryConfig{ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{BundledFiles: files}}
+	if err := NewFilesCopier(platformfilesystem.Local{})(source, target, config); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"scripts/run.sh", "docs/guide.md", "inputs/task/default/seed.md"} {
+		got, err := os.ReadFile(filepath.Join(target, path))
+		if err != nil || string(got) != path {
+			t.Fatalf("copied %s = %q, %v", path, got, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(target, "docs/inline.md")); !os.IsNotExist(err) {
+		t.Fatalf("inline target copied: %v", err)
+	}
+}
+
+func TestSupportedSourceResolverRejectsUnownedTargets(t *testing.T) {
+	t.Parallel()
+	resolver, err := NewSupportedSourceResolver(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []factorydefinitions.BundledFileConfig{
+		{Type: factorydefinitions.BundledFileTypeDoc, TargetPath: "factory/scripts/wrong.md"},
+		{Type: factorydefinitions.BundledFileTypeScript, TargetPath: "factory/scripts/"},
+		{Type: factorydefinitions.BundledFileTypeRootHelper, TargetPath: "unknown"},
+	} {
+		if path, ok := resolver(t.TempDir(), file); ok || path != "" {
+			t.Fatalf("unowned source = %q, %v", path, ok)
+		}
+	}
+}
+
 func TestMaterializeFilesReportsChangedExistingContent(t *testing.T) {
 	factoryDir := t.TempDir()
 	targetPath := filepath.Join(factoryDir, "scripts", "run.sh")
