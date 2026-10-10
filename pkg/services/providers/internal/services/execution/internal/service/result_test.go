@@ -45,6 +45,26 @@ func TestRecordingContentKeepsAdmittedDetailAndShortSecrets(t *testing.T) {
 	}
 }
 
+func TestRecordingContentRedactsInheritedCredentialsWithoutMutatingMetadata(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{ProcessEnvironment: []string{"API_TOKEN=inherited-secret", "LANG=ordinary", "NO_EQUALS"}}
+	metadata := map[string]string{"safe": "inherited-secret ordinary", "authorization": "credential", "input_tokens": "0"}
+	progress := sanitizeCapturedProgress(providers.ExecuteProgress{
+		Phase: "message.completed", Detail: "inherited-secret ordinary", Metadata: metadata,
+	}, request)
+	if progress.Detail != "<redacted> ordinary" || progress.Metadata["safe"] != "<redacted> ordinary" ||
+		progress.Metadata["authorization"] != redactedValue || progress.Metadata["input_tokens"] != "0" {
+		t.Fatalf("inherited credential capture = %+v", progress)
+	}
+	if metadata["safe"] != "inherited-secret ordinary" || metadata["authorization"] != "credential" {
+		t.Fatal("capture sanitizer mutated adapter metadata")
+	}
+	diagnostic := normalizeDiagnostics(providers.ExecuteDiagnostics{Metadata: metadata}, request)
+	if diagnostic.Metadata["safe"] != "<redacted> ordinary" {
+		t.Fatal("inherited credential escaped diagnostics")
+	}
+}
+
 func TestNormalizeDiagnosticsRedactsDeclaredEnvironmentValues(t *testing.T) {
 	t.Parallel()
 	request := providers.ExecuteRequest{EnvVars: map[string]string{

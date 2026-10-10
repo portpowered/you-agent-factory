@@ -54,6 +54,9 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 	if filepath.Base(request.WorkDir) == "recording-snapshot" {
 		progress = []byte(strings.ReplaceAll(string(progress), "DIRECT_CAPTURE_BETA", "DIRECT_CAPTURE_"))
 	}
+	if filepath.Base(request.WorkDir) == "recording-final-only" {
+		progress = []byte("{\"type\":\"thread.started\",\"thread_id\":\"recording-content-thread\"}\n")
+	}
 	if filepath.Base(request.WorkDir) == "recording-factory" {
 		progress = []byte(strings.ReplaceAll(string(progress), "DIRECT_CAPTURE_BETA", "FACTORY_CAPTURE_ALPHA COMPLETE"))
 	}

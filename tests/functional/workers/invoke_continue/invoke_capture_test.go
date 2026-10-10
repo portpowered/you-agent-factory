@@ -18,7 +18,7 @@ import (
 )
 
 func TestRecordingContentDirectEchoAndNonEcho(t *testing.T) {
-	for _, name := range []string{"recording-echo", "recording-other", "recording-equal", "recording-snapshot"} {
+	for _, name := range []string{"recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			fixture := ensureInvokeContinuePackageFixture(t)
@@ -49,11 +49,16 @@ func TestRecordingContentDirectEchoAndNonEcho(t *testing.T) {
 			if name == "recording-snapshot" {
 				liveMarker = "DIRECT_CAPTURE_"
 			}
-			if body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
-				_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
-				return body, nil
-			}, func(body string) bool { return strings.Contains(body, liveMarker) }); err != nil {
-				t.Fatalf("live content: %v: %s", err, body)
+			if name != "recording-final-only" {
+				if body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+					_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+					return body, nil
+				}, func(body string) bool { return strings.Contains(body, liveMarker) }); err != nil {
+					t.Fatalf("live content: %v: %s", err, body)
+				}
+			} else {
+				// This command emits only session association before the release
+				// gate. There is no message prefix for a reader to await.
 			}
 			close(runner.release)
 			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
@@ -69,7 +74,7 @@ func TestRecordingContentDirectEchoAndNonEcho(t *testing.T) {
 				t.Fatalf("unknown native-path usage became known: %+v", observation.TokenUsage)
 			}
 			page := recordingContentPages(t, ctx, fixture.baseURL, id)
-			assertRecordingMessageProvenance(t, page, false)
+			assertRecordingMessageProvenance(t, page, false, name == "recording-final-only")
 			for _, view := range []string{"logs", "transcript"} {
 				read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
 				if err := fixture.process.Execute(read.Input); err != nil {
@@ -167,7 +172,7 @@ func TestRecordingContentFactoryResultAppearsOnce(t *testing.T) {
 		transcript.Entries[0].Text == nil || *transcript.Entries[0].Text != "FACTORY_CAPTURE_ALPHA COMPLETE" || transcript.Entries[0].Order != 1 {
 		t.Fatalf("Factory result identity/parity: %+v / %+v", transcript, httpTranscript)
 	}
-	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), true)
+	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), true, false)
 }
 
 func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string) factoryapi.WorkerSessionLogPage {
@@ -205,7 +210,7 @@ func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string
 	return result
 }
 
-func assertRecordingMessageProvenance(t *testing.T, page factoryapi.WorkerSessionLogPage, agentLoop bool) {
+func assertRecordingMessageProvenance(t *testing.T, page factoryapi.WorkerSessionLogPage, agentLoop, finalOnly bool) {
 	t.Helper()
 	var native, synthesized []workers.Draft
 	for _, event := range page.Events {
@@ -231,7 +236,7 @@ func assertRecordingMessageProvenance(t *testing.T, page factoryapi.WorkerSessio
 	if agentLoop {
 		wantSynthesized = 1
 	}
-	if len(native) < 2 || len(synthesized) != wantSynthesized {
+	if (finalOnly && len(native) != 1) || (!finalOnly && len(native) < 2) || len(synthesized) != wantSynthesized {
 		t.Fatalf("stream/final provenance: native=%+v synthesized=%+v", native, synthesized)
 	}
 	if len(synthesized) == 0 {
