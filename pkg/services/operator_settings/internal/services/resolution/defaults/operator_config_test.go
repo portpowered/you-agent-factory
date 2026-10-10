@@ -223,7 +223,6 @@ func TestMergeProviderModelDefaults_RejectsInvalidRequiredProvider(t *testing.T)
 	}{
 		{name: "empty", provider: "  ", catalog: controlledProviderCatalog, wantError: "provider is required"},
 		{name: "unsupported", provider: "other", catalog: controlledProviderCatalog, wantError: `unsupported worker model provider "other"`},
-		{name: "catalog required", provider: "codex", wantError: "provider catalog is required"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service := testConfigDocumentServiceWithCatalog(test.catalog)

@@ -12,12 +12,6 @@ import (
 func (service *Service) loadDocument(
 	request operatorsettings.LoadDocumentRequest,
 ) (operatorsettings.LoadDocumentResult, error) {
-	if service.files == nil {
-		return operatorsettings.LoadDocumentResult{}, fmt.Errorf("operator document filesystem is required")
-	}
-	if service.decoder == nil {
-		return operatorsettings.LoadDocumentResult{}, fmt.Errorf("operator document decoder is required")
-	}
 
 	path := strings.TrimSpace(request.Path)
 	data, err := service.files.ReadFile(path)

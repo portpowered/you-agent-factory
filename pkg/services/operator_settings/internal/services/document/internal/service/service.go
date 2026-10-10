@@ -2,13 +2,10 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 )
-
-var errDocumentOwnerUnavailable = errors.New("operator settings document owner is unavailable")
 
 // Service keeps document load/update/persist behavior behind the
 // Operator Settings-owned document capability.
@@ -61,9 +58,6 @@ func newService(
 func (service *Service) LoadDocument(
 	request operatorsettings.LoadDocumentRequest,
 ) (operatorsettings.LoadDocumentResult, error) {
-	if service == nil {
-		return operatorsettings.LoadDocumentResult{}, errDocumentOwnerUnavailable
-	}
 	if err := request.Validate(); err != nil {
 		return operatorsettings.LoadDocumentResult{}, err
 	}
@@ -74,18 +68,12 @@ func (service *Service) MergeDocumentProviderModel(
 	document operatorsettings.Document,
 	update operatorsettings.DocumentProviderModelUpdate,
 ) (operatorsettings.Document, error) {
-	if service == nil {
-		return operatorsettings.Document{}, errDocumentOwnerUnavailable
-	}
 	return service.mergeProviderModelUpdate(document, update)
 }
 
 func (service *Service) ApplyDocumentUpdate(
 	request operatorsettings.ApplyDocumentUpdateRequest,
 ) (operatorsettings.ApplyDocumentUpdateResult, error) {
-	if service == nil {
-		return operatorsettings.ApplyDocumentUpdateResult{}, errDocumentOwnerUnavailable
-	}
 	if err := request.Validate(); err != nil {
 		return operatorsettings.ApplyDocumentUpdateResult{}, err
 	}
@@ -96,9 +84,6 @@ func (service *Service) PersistDocument(
 	ctx context.Context,
 	request operatorsettings.PersistDocumentRequest,
 ) error {
-	if service == nil {
-		return errDocumentOwnerUnavailable
-	}
 	if err := request.Validate(); err != nil {
 		return err
 	}

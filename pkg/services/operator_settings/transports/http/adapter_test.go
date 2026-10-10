@@ -36,7 +36,7 @@ func TestAdapter_BindsSettingsRootViaFakeRootSeam(t *testing.T) {
 		},
 	}
 
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 	if adapter.Root() != fake {
 		t.Fatal("adapter must expose the injected Settings root")
 	}
@@ -62,8 +62,8 @@ func TestNewAdapter_RejectsNilRoot(t *testing.T) {
 	if NewAdapter(nil) != nil {
 		t.Fatal("NewAdapter(nil) must return nil")
 	}
-	if NewAdapterFromRoot(RootBinding{}) != nil {
-		t.Fatal("NewAdapterFromRoot with nil Settings must return nil")
+	if NewAdapter(nil) != nil {
+		t.Fatal("NewAdapter with nil Settings must return nil")
 	}
 }
 
@@ -77,7 +77,7 @@ func TestAdapter_PropagatesTypedRootFailures(t *testing.T) {
 			return operatorsettings.LoadDocumentResult{}, operatorsettings.ErrDocumentNotFound
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	_, err := adapter.invokeLoadDocument(context.Background(), operatorsettings.LoadDocumentRequest{
 		Path:            "/tmp/missing.json",

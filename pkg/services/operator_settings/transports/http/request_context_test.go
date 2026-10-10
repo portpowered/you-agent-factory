@@ -62,7 +62,7 @@ func TestAdapter_LoadDocumentCanceledBeforeRootCallCompletesWithoutInvoke(t *tes
 			return operatorsettings.LoadDocumentResult{}, nil
 		},
 	}
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: fake})
+	adapter := operatorsettingshttp.NewAdapter(fake)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -93,7 +93,7 @@ func TestAdapter_LoadDocumentCanceledDuringRootCallCompletesWithoutHang(t *testi
 			return operatorsettings.LoadDocumentResult{}, nil
 		},
 	}
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: fake})
+	adapter := operatorsettingshttp.NewAdapter(fake)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer close(blocker)
@@ -134,7 +134,7 @@ func TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang(
 			return operatorsettings.LoadDocumentResult{}, nil
 		},
 	}
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: fake})
+	adapter := operatorsettingshttp.NewAdapter(fake)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
@@ -164,9 +164,7 @@ func TestAdapter_LoadDocumentDeadlineExceededDuringRootCallCompletesWithoutHang(
 func TestWriteRootOrInternalError_DoesNotMapCancelToInternalError(t *testing.T) {
 	t.Parallel()
 
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{
-		Settings: &blockingSettingsRootFake{},
-	})
+	adapter := operatorsettingshttp.NewAdapter(&blockingSettingsRootFake{})
 	recorder := httptest.NewRecorder()
 
 	operatorsettingshttp.WriteRootOrInternalErrorForTest(adapter, recorder, context.Canceled)
@@ -182,9 +180,7 @@ func TestWriteRootOrInternalError_DoesNotMapCancelToInternalError(t *testing.T) 
 func TestWriteRootOrInternalError_MapsDeadlineExceededToGatewayTimeout(t *testing.T) {
 	t.Parallel()
 
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{
-		Settings: &blockingSettingsRootFake{},
-	})
+	adapter := operatorsettingshttp.NewAdapter(&blockingSettingsRootFake{})
 	recorder := httptest.NewRecorder()
 
 	operatorsettingshttp.WriteRootOrInternalErrorForTest(adapter, recorder, context.DeadlineExceeded)

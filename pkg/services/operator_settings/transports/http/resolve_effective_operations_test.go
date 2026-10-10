@@ -47,7 +47,7 @@ func TestAdapter_ResolveEffectiveInvokesFakeRootAndEncodesSuccess(t *testing.T) 
 			}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	response, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
@@ -89,7 +89,7 @@ func TestAdapter_ResolveEffectiveRejectsBaselineMismatchBeforeFakeRoot(t *testin
 			return operatorsettings.ResolveEffectiveResult{}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	_, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
@@ -125,7 +125,7 @@ func TestAdapter_ResolveEffectivePropagatesTypedRootFailures(t *testing.T) {
 					return operatorsettings.ResolveEffectiveResult{}, test.err
 				},
 			}
-			adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+			adapter := NewAdapter(fake)
 
 			_, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 				DocumentBaseline: operatorsettings.DocumentDefaults{
@@ -167,7 +167,7 @@ func TestAdapter_ResolveEffectiveDoesNotMutateOperatorDocumentState(t *testing.T
 			}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	_, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 		DocumentBaseline: operatorsettings.DocumentDefaults{

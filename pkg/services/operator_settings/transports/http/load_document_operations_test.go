@@ -36,7 +36,7 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 			}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	response, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{
 		Path:            configPath,
@@ -70,7 +70,7 @@ func TestAdapter_LoadDocumentRejectsInvalidInputBeforeFakeRoot(t *testing.T) {
 			return operatorsettings.LoadDocumentResult{}, nil
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	_, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{RequireExisting: true})
 	if err == nil || !IsLoadDocumentBadRequest(err) {
@@ -88,7 +88,7 @@ func TestAdapter_LoadDocumentPropagatesTypedRootFailures(t *testing.T) {
 			return operatorsettings.LoadDocumentResult{}, operatorsettings.ErrDocumentNotFound
 		},
 	}
-	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
+	adapter := NewAdapter(fake)
 
 	_, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{
 		Path:            "/tmp/missing.json",

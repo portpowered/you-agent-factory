@@ -87,12 +87,6 @@ func (service *Service) validateProviderModelUpdate(
 			Message: "worker model provider is required",
 		}
 	}
-	if service.providers == nil {
-		return operatorsettings.DocumentProviderModelUpdate{}, operatorsettings.DocumentFailure{
-			Kind:    operatorsettings.DocumentFailureKindMalformed,
-			Message: "operator provider catalog is required",
-		}
-	}
 	canonical, ok := service.providers(provider)
 	canonical = strings.TrimSpace(canonical)
 	if !ok || canonical == "" {
