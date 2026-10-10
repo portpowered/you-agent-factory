@@ -38,35 +38,6 @@ type Service struct {
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService
 }
 
-// New constructs an inert Execute capability. Construction performs no runner
-// execution, Worktree preparation, or observation delivery.
-func New(
-	runnerService runners.Service,
-	providersService providers.Service,
-	observe workers.ObservationSink,
-	logger logging.Logger,
-	clock func() time.Time,
-	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles workers.TemporaryFileSystem,
-	factoryDocs ...workers.FactoryDocsLoader,
-) (*Service, error) {
-	return newService(
-		runnerService,
-		providersService,
-		observe,
-		logger,
-		clock,
-		worktree,
-		worktreeRelease,
-		temporaryFiles,
-		nil,
-		nil,
-		nil,
-		factoryDocs...,
-	)
-}
-
 // NewWithProviderOverride constructs an inert Execute capability with the
 // optional process edge provider used by root composition. The override is
 // immutable process configuration; request identity and cancellation remain
@@ -83,47 +54,13 @@ func NewWithProviderOverride(
 	providerOverride providers.Service,
 	agentRunHarness agentrun.HarnessAdapter,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	factoryDocs ...workers.FactoryDocsLoader,
-) (*Service, error) {
-	return newService(
-		runnerService,
-		providersService,
-		observe,
-		logger,
-		clock,
-		worktree,
-		worktreeRelease,
-		temporaryFiles,
-		providerOverride,
-		agentRunHarness,
-		decisionEnvelopes,
-		factoryDocs...,
-	)
-}
-
-func newService(
-	runnerService runners.Service,
-	providersService providers.Service,
-	observe workers.ObservationSink,
-	logger logging.Logger,
-	clock func() time.Time,
-	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles workers.TemporaryFileSystem,
-	providerOverride providers.Service,
-	agentRunHarness agentrun.HarnessAdapter,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	factoryDocs ...workers.FactoryDocsLoader,
+	factoryDocs workers.FactoryDocsLoader,
 ) (*Service, error) {
 	if runnerService == nil {
 		return nil, errMisconfigured("runners service is required")
 	}
 	if clock == nil {
 		return nil, errMisconfigured("clock is required")
-	}
-	var docsLoader workers.FactoryDocsLoader
-	if len(factoryDocs) > 0 {
-		docsLoader = factoryDocs[0]
 	}
 	return &Service{
 		runners:           runnerService,
@@ -135,7 +72,7 @@ func newService(
 		worktree:          worktree,
 		worktreeRelease:   worktreeRelease,
 		temporaryFiles:    temporaryFiles,
-		factoryDocs:       docsLoader,
+		factoryDocs:       factoryDocs,
 		agentRunHarness:   agentRunHarness,
 		decisionEnvelopes: decisionEnvelopes,
 	}, nil
