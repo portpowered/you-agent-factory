@@ -80,6 +80,12 @@ Recorded associated sessions remain readable after a host restart. The existing
 `--provider`, `--kind`, and `--id` tuple selects an associated session within a
 Factory Session. Use `--session <factory-session-id>` to select that scope.
 
+Completed summaries retain captured associations, transcript availability, usage,
+and failure details across restart. Their `endedAt` uses the committed terminal
+`capturedAt`: host capture completion, not provider execution completion.
+The duration uses that timestamp and the recorded start. Missing timestamps
+leave end and duration unavailable, including legacy and incomplete captures.
+
 An active session returns `WORKER_SESSION_TRANSCRIPT_ACTIVE`. Missing
 associations and incomplete captures return `WORKER_SESSION_TRANSCRIPT_UNAVAILABLE`.
 An unknown identity or a foreign Factory Session scope returns `NOT_FOUND`.

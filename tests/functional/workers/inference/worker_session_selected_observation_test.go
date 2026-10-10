@@ -236,7 +236,7 @@ func assertSelectedObservationParity(t *testing.T, group *inferenceProcessGroup,
 	for _, row := range []factoryapi.WorkerSessionObservation{matching[0], workRows[0], shown} {
 		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, state)
 	}
-	assertSelectedProviderEnrichment(t, matching[0], false)
+	assertSelectedProviderEnrichment(t, matching[0], state == "COMPLETED" && providerID != "")
 	assertSelectedProviderEnrichment(t, workRows[0], state == "COMPLETED" && providerID != "")
 	assertSelectedProviderEnrichment(t, shown, state == "COMPLETED" && providerID != "")
 	// Committed usage is available across views independently of optional

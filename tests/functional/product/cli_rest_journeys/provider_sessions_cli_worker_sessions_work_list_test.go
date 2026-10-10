@@ -526,20 +526,19 @@ func testWorkerSessionsListWorkScopedOptionalCapture(t *testing.T) {
 			after := observeWorkScopedRead(t, ctx, c, sessionID, workID, endpoint, false)
 			var actual workerSessionListJSON
 			decodeCLIJSON(t, after, &actual)
-			if len(actual.Sessions) != 1 || actual.Sessions[0].WorkerSessionID != row.WorkerSessionID || actual.Sessions[0].Transcript != "UNAVAILABLE" {
-				t.Fatalf("optional failure lost row/unavailable fact: %+v", actual)
+			if len(actual.Sessions) != 1 || actual.Sessions[0].WorkerSessionID != row.WorkerSessionID || actual.Sessions[0].Transcript != "AVAILABLE" {
+				t.Fatalf("activity failure lost committed summary availability: %+v", actual)
 			}
 			assertScopedCapturedUsage(t, actual.Sessions[0])
 			var expectedRaw map[string]any
 			if err := json.Unmarshal([]byte(before.Stdout()), &expectedRaw); err != nil {
 				t.Fatal(err)
 			}
-			expectedRaw["sessions"].([]any)[0].(map[string]any)["transcript"] = "UNAVAILABLE"
 			raw, err := json.Marshal(expectedRaw)
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertNormalizedFleetJSONEqual(t, "optional unavailable preserves all other facts", raw, []byte(after.Stdout()))
+			assertNormalizedFleetJSONEqual(t, "unavailable activity preserves committed summary facts", raw, []byte(after.Stdout()))
 		})
 	}
 }
