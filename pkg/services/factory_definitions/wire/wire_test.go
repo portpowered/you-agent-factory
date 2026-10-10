@@ -838,3 +838,21 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 type fixtureClock struct{ instant time.Time }
 
 func (c fixtureClock) Now() time.Time { return c.instant }
+
+type stubRequiredToolChecker struct{}
+
+func (stubRequiredToolChecker) Check(
+	factorydefinitions.RequiredToolConfig,
+) factorydefinitions.RequiredToolCheckResult {
+	return factorydefinitions.RequiredToolCheckResult{}
+}
+
+type stubOrchestratorValidator struct{}
+
+func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
+	context.Context,
+	*factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	factorydefinitions.WorkflowSourceReader,
+) []factorydefinitions.ValidationTarget {
+	return nil
+}

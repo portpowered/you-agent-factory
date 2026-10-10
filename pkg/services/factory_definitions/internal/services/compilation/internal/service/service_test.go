@@ -12,7 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
-	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	compilationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/internal/service"
 )
 
 type stubLoadedSource struct {
@@ -54,7 +54,7 @@ func newCompilationService(
 			return nil, factoryroot.ErrInvalidNamedFactory
 		}
 	}
-	svc := compilationwire.NewService(
+	svc := compilationimpl.New(
 		loadCanonical,
 		loadFromFactoryDir,
 		stubEncodeFactory,
@@ -79,7 +79,7 @@ func TestCompileEffectiveFactorySource_CancellationPrecedesLoading(t *testing.T)
 		t.Fatal("canceled compilation reached the directory loader")
 		return nil, nil
 	}
-	svc := compilationwire.NewService(loadCanonical, loadDirectory, stubEncodeFactory)
+	svc := compilationimpl.New(loadCanonical, loadDirectory, stubEncodeFactory)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	result, err := svc.CompileEffectiveFactorySource(ctx, factoryroot.CompileEffectiveFactorySourceRequest{
@@ -102,7 +102,7 @@ func TestCompileEffectiveFactorySource_LoaderFailureRetainsCause(t *testing.T) {
 			loadDirectory := func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, cause
 			}
-			svc := compilationwire.NewService(loadCanonical, loadDirectory, stubEncodeFactory)
+			svc := compilationimpl.New(loadCanonical, loadDirectory, stubEncodeFactory)
 			request := factoryroot.CompileEffectiveFactorySourceRequest{FactoryDir: "/factories/alpha"}
 			if source == "canonical" {
 				request.Canonical = []byte(`{"name":"alpha"}`)
@@ -289,7 +289,7 @@ func TestCanonicalLoadingPreservesArgumentsAndOutcome(t *testing.T) {
 				}
 				return expected, tc.err
 			}
-			svc := compilationwire.NewService(loadCanonical, nil, nil)
+			svc := compilationimpl.New(loadCanonical, nil, nil)
 			result, err := svc.LoadCanonicalFactorySource(payload, workstationLoader)
 			if result != expected || err != tc.err {
 				t.Fatalf("canonical outcome = %v, %v; want original source and error %v", result, err, tc.err)
