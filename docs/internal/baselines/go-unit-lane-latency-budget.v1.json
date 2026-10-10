@@ -3240,8 +3240,6 @@
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology::TestValidate_ValidPetriFactoryHasNoBlockingTopologyTargets",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire::TestWire_NewServiceConstructsValidationSubservice",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire::TestWire_NewServiceRejectsMissingDependencies",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachAuthoringLayout_DelegatesCTRDEFAuthoringSlice",
-      "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachAuthoringLayout_RejectsMissingDependencies",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachPublishesEffectiveCatalogOnRootService",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestAttachRuntimeSnapshotDelegatesThroughDefinitionsRoot",
       "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal::TestCatalogCancellationIsAtomicAcrossDiscoveryAndMerge",

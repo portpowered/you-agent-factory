@@ -568,14 +568,6 @@ pkg/services/factory_definitions/definition/shim.go: unreachable func: NewWithCo
 pkg/services/factory_definitions/definition/shim.go: unreachable func: NewWithValidation
 pkg/services/factory_definitions/definition/shim.go: unreachable func: SessionFactoryPersistRoot
 pkg/services/factory_definitions/definition/shim.go: unreachable func: StubActivationGateway
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: AttachAuthoringLayout
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: authoringLayoutService.CreateNamedFactory
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: authoringLayoutService.ExpandFactoryLayout
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: authoringLayoutService.FlattenFactoryLayout
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: authoringLayoutService.PrepareFactoryLayout
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: authoringLayoutService.ReplaceNamedFactory
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: errAuthoringLayoutServiceRequired
-pkg/services/factory_definitions/internal/authoring_layout.go: unreachable func: errFactoryDefinitionsServiceRequired
 pkg/services/factory_definitions/internal/composition_options.go: unreachable func: WithDistributionScaffold
 pkg/services/factory_definitions/internal/contracts/factory_runtime.go: unreachable func: FirstRuntimeFactoryConfigLookup
 pkg/services/factory_definitions/internal/contracts/factory_runtime.go: unreachable func: FirstRuntimeWorkstationLookup

@@ -23,6 +23,7 @@ import (
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
 // NewService constructs an inert Factory Definitions root from completed catalog,
@@ -203,22 +204,18 @@ func composeFactoryDefinitionSupport(
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
-	authoringLayout, err := NewAuthoringLayoutService(AuthoringLayoutDependencies{
-		Validator: validator,
-		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload)
-		},
-		Loader:             loader,
-		MaterializeFiles:   internalportableconfig.NewMaterializer(portableFileSystem),
-		ValidateWrites:     internalportableconfig.NewWritesValidator(portableFileSystem),
-		PruneRemovedDocs:   pruneRemovedDocs,
-		CopySupportedFiles: internalportableconfig.NewFilesCopier(portableFileSystem),
-		AuthoredWriterFS:   authoringFS,
-		EnsureInbox:        inboxgitkeep.NewLocal(portableFileSystem),
-		PersistenceFS:      authoringFS,
-		NamedPaths:         namedPaths,
-		Directories:        directoryReplacementStore,
-	})
+	mapper := factorymapping.NewFactoryConfigMapper()
+	writer := NewAuthoredLayoutWriter(authoringFS, inboxgitkeep.NewLocal(portableFileSystem), AuthoredAgentsFileWriter(authoringFS))
+	materializeFiles := internalportableconfig.NewMaterializer(portableFileSystem)
+	validateWrites := internalportableconfig.NewWritesValidator(portableFileSystem)
+	authoringLayout, err := NewAuthoringLayout(
+		validator, validationentry.MapFactoryJSONForPersistence, mapper.Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout, mapper.Flatten,
+		PreparedAuthoredLayoutWriter(writer, materializeFiles, pruneRemovedDocs),
+		AuthoredLayoutValidator(loader, validateWrites), loader.FlattenFactoryConfig,
+		AuthoredLayoutExpander(loader, writer, validateWrites, materializeFiles, internalportableconfig.NewFilesCopier(portableFileSystem)),
+		authoringFS, namedPaths.RequireDefinitionDir, directoryReplacementStore,
+	)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}

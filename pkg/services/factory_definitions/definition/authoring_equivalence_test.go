@@ -53,22 +53,18 @@ func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {
 	copySupportedFiles := func(sourceDir, targetDir string, config *factoryroot.FactoryConfig) error {
 		return portableconfig.CopySupportedFiles(fileSystem, sourceDir, targetDir, config)
 	}
-	authoringLayout, err := factorydefinitionswire.NewAuthoringLayoutService(factorydefinitionswire.AuthoringLayoutDependencies{
-		Validator:          validator,
-		MapInput:           composition.MapFactoryJSONForPersistence,
-		Loader:             loader,
-		MaterializeFiles:   materializeFiles,
-		ValidateWrites:     validateWrites,
-		PruneRemovedDocs:   pruneRemovedDocs,
-		CopySupportedFiles: copySupportedFiles,
-		AuthoredWriterFS:   fileSystem,
-		EnsureInbox:        inboxgitkeep.NewLocal(fileSystem),
-		PersistenceFS:      fileSystem,
-		NamedPaths:         paths,
-		Directories:        directoryreplace.Local{},
-	})
+	mapper := factorymapping.NewFactoryConfigMapper()
+	writer := factorydefinitionswire.NewAuthoredLayoutWriter(fileSystem, inboxgitkeep.NewLocal(fileSystem), factorydefinitionswire.AuthoredAgentsFileWriter(fileSystem))
+	authoringLayout, err := factorydefinitionswire.NewAuthoringLayout(
+		validator, composition.MapFactoryJSONForPersistence, mapper.Expand,
+		authoredmapping.AuthoredFactoryConfigForExpandedLayout, mapper.Flatten,
+		factorydefinitionswire.PreparedAuthoredLayoutWriter(writer, materializeFiles, pruneRemovedDocs),
+		factorydefinitionswire.AuthoredLayoutValidator(loader, validateWrites), loader.FlattenFactoryConfig,
+		factorydefinitionswire.AuthoredLayoutExpander(loader, writer, validateWrites, materializeFiles, copySupportedFiles),
+		fileSystem, paths.RequireDefinitionDir, directoryreplace.Local{},
+	)
 	if err != nil {
-		t.Fatalf("NewAuthoringLayoutService: %v", err)
+		t.Fatalf("NewAuthoringLayout: %v", err)
 	}
 
 	return factorydefinition.NewWithCatalogPackagesValidationInstallationAndAuthoring(

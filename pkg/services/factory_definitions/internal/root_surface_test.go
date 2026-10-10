@@ -82,7 +82,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		},
 		rootSurfaceRequiredToolChecker{},
 		rootSurfaceOrchestratorValidator{},
-		stubAuthoringLayout{},
+		rootSurfaceAuthoring{},
 		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
 		factorydefinitions.UnimplementedService{},
 	)
@@ -260,4 +260,12 @@ func (rootSurfaceOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	factorydefinitions.WorkflowSourceReader,
 ) []factorydefinitions.ValidationTarget {
 	return nil
+}
+
+type rootSurfaceAuthoring struct {
+	factorydefinitions.UnimplementedService
+}
+
+func (rootSurfaceAuthoring) PrepareFactoryLayout(_ context.Context, request factorydefinitions.PrepareFactoryLayoutRequest) (factorydefinitions.PrepareFactoryLayoutResult, error) {
+	return factorydefinitions.PrepareFactoryLayoutResult{Prepared: factorydefinitions.PreparedFactoryLayoutPayload{Canonical: request.Payload}}, nil
 }
