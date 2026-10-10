@@ -49,6 +49,8 @@ func (r *registry) readTerminalContinuationReplay(req workersessions.ContinueReq
 	if err != nil {
 		return nil, err
 	}
+	addressed := req
+	req.SourceWorkerSessionID = target.WorkerSessionID
 	session := workersessions.Session{
 		ID: req.SuccessorWorkerSessionID, State: workersessions.State(page.Terminal.Status),
 		Result:                     result,
@@ -57,7 +59,7 @@ func (r *registry) readTerminalContinuationReplay(req workersessions.ContinueReq
 		ProviderSessionAssociation: continuationAssociation(req, input.Execution, source.snapshot.turnID, reference),
 	}
 	replay := &continueReplay{
-		tuple: continueTuple{sourceID: req.SourceWorkerSessionID, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput},
+		tuple: continueTuple{sourceID: addressed.SourceWorkerSessionID, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput, resolveHead: addressed.ResolveHead},
 		plan:  continuePlan{request: req}, done: make(chan struct{}),
 		result: workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
 			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: session},

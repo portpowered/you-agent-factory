@@ -350,6 +350,72 @@ func assertFactoryRevivalResult(t *testing.T, host invokeContinueStartedProcess,
 	}
 }
 
+func TestContinuationHeadSurvivesRepeatedContinuationAndHostRestart(t *testing.T) {
+	t.Parallel()
+	dir, root := t.TempDir(), t.TempDir()
+	host, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: directCodexSessionOutput("opaque-restart-thread", "initial COMPLETE")},
+		continuationRestartCommandResult(false), continuationRestartCommandResult(false), continuationRestartCommandResult(false),
+	)
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+	first := startContinuationRestartHost(t, root, host, home, route)
+	path := filepath.Join(dir, "execution.json")
+	writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{requestID: "head-source-request", workerSessionID: "head-source", dispatchID: "head-source-attempt", workingDirectory: dir, userMessage: "initial input"})
+	executeHeadRestartCLI(t, first, home, dir, "worker-sessions", "invoke", "--execution", path)
+	args := []string{"worker-sessions", "continue", "head-source", "--request-id", "head-first", "--successor-worker-session-id", "head-first-successor", "--user-message", "first follow-up"}
+	executeHeadRestartCLI(t, first, home, dir, args...)
+	denied := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "continue", "head-source", "--request-id", "head-default-denied", "--successor-worker-session-id", "head-denied-successor", "--user-message", "default must conflict"})
+	denied.Input.Env, denied.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	if err := first.process.Execute(denied.Input); err == nil || runner.CallCount() != 2 {
+		t.Fatalf("default continuation advanced the chain: %v calls=%d", err, runner.CallCount())
+	}
+	assertDirectWorkerSessionCLIError(t, denied, "WORKER_SESSION_CONTINUATION_CONFLICT")
+	headArgs := []string{"worker-sessions", "continue", "head-source", "--head", "--request-id", "head-second", "--successor-worker-session-id", "head-second-successor", "--user-message", "second follow-up"}
+	second := executeHeadRestartCLI(t, first, home, dir, append(headArgs, "--remote", "--server", first.baseURL)...)
+	if second.SourceWorkerSessionID != "head-first-successor" || second.PredecessorWorkerSessionID != "head-first-successor" {
+		t.Fatalf("head response lost resolved lineage: %+v", second)
+	}
+	awaitContinuationRestartLogs(t, first, home, dir, "head-second-successor")
+	if err := first.command.stop(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := startContinuationRestartHost(t, root, host, home, route)
+	replay := executeHeadRestartCLI(t, fresh, home, dir, headArgs...)
+	if replay.SourceWorkerSessionID != second.SourceWorkerSessionID || runner.CallCount() != 3 {
+		t.Fatalf("durable retry advanced head or repeated launch: %+v calls=%d", replay, runner.CallCount())
+	}
+	third := executeHeadRestartCLI(t, fresh, home, dir, "worker-sessions", "continue", "head-source", "--head", "--request-id", "head-third", "--successor-worker-session-id", "head-third-successor", "--user-message", "third follow-up")
+	if third.SourceWorkerSessionID != "head-second-successor" || third.PredecessorWorkerSessionID != "head-second-successor" || runner.CallCount() != 4 {
+		t.Fatalf("restart did not resolve newest head: %+v calls=%d", third, runner.CallCount())
+	}
+	for index, request := range runner.Requests()[1:] {
+		command := strings.Join(request.Args, " ")
+		input := []string{"first follow-up", "second follow-up", "third follow-up"}[index]
+		if request.WorkDir != dir || !strings.Contains(command, "resume opaque-restart-thread") || !strings.Contains(command, "functional-model") || !strings.Contains(command+string(request.Stdin), input) {
+			t.Fatalf("head continuation replaced exact execution: %+v", request)
+		}
+	}
+}
+
+func executeHeadRestartCLI(t *testing.T, host invokeContinueStartedProcess, home, dir string, args ...string) directWorkerSessionCLIResult {
+	t.Helper()
+	request := support.FakeInputs(t.Context(), append([]string{"you", "--json"}, args...))
+	request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	if err := host.process.Execute(request.Input); err != nil {
+		t.Fatalf("head command %v: %v stdout=%s stderr=%s", args, err, request.Stdout(), request.Stderr())
+	}
+	var result directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, request.Stdout(), &result)
+	return result
+}
+
 func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	failed := name == "failed"
 	requestID := continuationRestartRequestID(name)

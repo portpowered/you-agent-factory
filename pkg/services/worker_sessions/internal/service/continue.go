@@ -78,19 +78,21 @@ type continueTuple struct {
 	sourceID    string
 	successorID string
 	input       string
+	resolveHead bool
 }
 
 type continuePlan struct {
-	sourceAddress string
-	executor      workers.Service
-	clock         platformclock.Source
-	scheduler     platformclock.TimerSource
-	request       workersessions.ContinueRequest
-	execution     workers.WorkstationDispatchRequest
-	direct        bool
-	lineage       *workers.SessionLineage
-	archived      bool
-	interrupt     bool
+	sourceAddress     string
+	addressedSourceID string
+	executor          workers.Service
+	clock             platformclock.Source
+	scheduler         platformclock.TimerSource
+	request           workersessions.ContinueRequest
+	execution         workers.WorkstationDispatchRequest
+	direct            bool
+	lineage           *workers.SessionLineage
+	archived          bool
+	interrupt         bool
 }
 
 type continuationSourceSnapshot struct {
@@ -194,6 +196,35 @@ func (r *registry) reserveContinuation(
 	req workersessions.ContinueRequest,
 	callers ...context.Context,
 ) (*continueReplay, bool, error) {
+	r.mu.RLock()
+	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	existing := r.continueReplays[req.RequestID]
+	r.mu.RUnlock()
+	if err != nil {
+		return nil, false, err
+	}
+	tuple := continueTuple{sourceID: firstNonEmpty(address, req.SourceWorkerSessionID), successorID: req.SuccessorWorkerSessionID,
+		input: req.FollowUpInput, resolveHead: req.ResolveHead}
+	if existing != nil {
+		if existing.tuple != tuple {
+			return nil, false, workersessions.ErrContinuationRequestIDConflict
+		}
+		return existing, false, nil
+	}
+	addressed := req
+	if req.ResolveHead {
+		var replay *continueReplay
+		req, replay, err = r.resolveContinuationHead(req)
+		if err != nil || replay != nil {
+			return replay, false, err
+		}
+	}
+	return r.reserveResolvedContinuation(req, addressed, tuple, callers...)
+}
+
+func (r *registry) reserveResolvedContinuation(
+	req, addressed workersessions.ContinueRequest, tuple continueTuple, callers ...context.Context,
+) (*continueReplay, bool, error) {
 	captured, err := r.readContinuationRecipe(req, callers...)
 	if err != nil {
 		return nil, false, err
@@ -203,7 +234,7 @@ func (r *registry) reserveContinuation(
 		return nil, false, err
 	}
 	if archived != nil {
-		if replay, err := r.readTerminalContinuationReplay(req, archived); replay != nil || err != nil {
+		if replay, err := r.readTerminalContinuationReplay(addressed, archived); replay != nil || err != nil {
 			return replay, false, err
 		}
 	}
@@ -216,7 +247,6 @@ func (r *registry) reserveContinuation(
 	if address == "" {
 		address = req.SourceWorkerSessionID
 	}
-	tuple := continueTuple{sourceID: address, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}
 
 	if r.continueReplays == nil {
 		r.continueReplays = make(map[string]*continueReplay)
@@ -251,6 +281,7 @@ func (r *registry) reserveContinuation(
 		return nil, false, err
 	}
 	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
+	replay.plan.addressedSourceID = addressed.SourceWorkerSessionID
 	if archived != nil {
 		r.publications[snapshot.address] = &publication{capture: archived.target}
 	}
@@ -411,6 +442,8 @@ func (r *registry) storeContinuationReservationLocked(
 	r.continueReplays[req.RequestID] = replay
 	r.logger.Info(
 		"worker session continuation",
+		"addressedSourceWorkerSessionID", publicWorkerID(tuple.sourceID),
+		"resolveHead", tuple.resolveHead,
 		"sourceWorkerSessionID", req.SourceWorkerSessionID,
 		"successorWorkerSessionID", req.SuccessorWorkerSessionID,
 		"attemptID", continuation.Execution.Dispatch.DispatchID,

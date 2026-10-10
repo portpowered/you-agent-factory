@@ -78,6 +78,11 @@ func archivedContinuationTarget(page recordings.WorkerCapturedActivityPage, sour
 }
 
 func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, target recordings.WorkerControlTarget, captured recordings.WorkerContinuationSource) (*archivedContinuationSource, error) {
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if json.Unmarshal(page.Opening.Payload, &draft) != nil || json.Unmarshal(draft.Payload, &opening) != nil || opening.ValidateLineage() != nil {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
 	source := workersessions.Session{
 		ID: target.WorkerSessionID, State: workersessions.State(captured.Terminal.Status),
 		SuccessorWorkerSessionID: page.SuccessorWorkerSessionID,
@@ -85,6 +90,9 @@ func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, ta
 			WorkerSessionID: target.WorkerSessionID, DispatchID: target.ExpectedAttemptID,
 			AttemptID: target.ExpectedAttemptID, TurnID: captured.TurnID, Reference: captured.Reference,
 		},
+	}
+	if opening.Lineage != nil {
+		source.PredecessorWorkerSessionID = opening.Lineage.PredecessorWorkerSessionID
 	}
 	if !source.Terminal() || validateContinuationSourceAssociation(source) != nil {
 		return nil, workersessions.ErrContinuationProviderSessionInvalid
@@ -95,6 +103,67 @@ func archivedContinuationSnapshot(page recordings.WorkerCapturedActivityPage, ta
 		session: source, execution: captured.Execution, dispatchID: target.ExpectedAttemptID,
 		turnID: captured.TurnID, direct: true, archived: true,
 	}}, nil
+}
+
+// Resolve only committed forward links with matching reverse lineage in the
+// same owner scope. The subsequent reservation rechecks the selected source;
+// this read never acquires execution or cancellation authority.
+func (r *registry) resolveContinuationHead(req workersessions.ContinueRequest) (workersessions.ContinueRequest, *continueReplay, error) {
+	addressed := req
+	seen := make(map[string]bool)
+	previous := ""
+	for {
+		if seen[req.SourceWorkerSessionID] {
+			return req, nil, workersessions.ErrContinuationExecutionUnavailable
+		}
+		seen[req.SourceWorkerSessionID] = true
+		source, scope, archived, err := r.continuationHeadSource(req)
+		if err != nil {
+			return req, nil, err
+		}
+		if previous != "" && source.PredecessorWorkerSessionID != previous {
+			return req, nil, workersessions.ErrContinuationExecutionUnavailable
+		}
+		if archived != nil {
+			if replay, err := r.readTerminalContinuationReplay(addressed, archived); replay != nil || err != nil {
+				return req, replay, err
+			}
+		}
+		if source.SuccessorWorkerSessionID == "" {
+			return req, nil, nil
+		}
+		previous = source.ID
+		req.SourceWorkerSessionID = source.SuccessorWorkerSessionID
+		req.FactorySessionID = scope
+	}
+}
+
+func (r *registry) continuationHeadSource(req workersessions.ContinueRequest) (workersessions.Session, string, *archivedContinuationSource, error) {
+	r.mu.RLock()
+	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
+	source, exists := r.sessions[address]
+	scope := req.FactorySessionID
+	if metadata := r.observations[address]; metadata != nil {
+		scope = metadata.factorySessionID
+	}
+	r.mu.RUnlock()
+	if err != nil {
+		return workersessions.Session{}, "", nil, err
+	}
+	if exists {
+		if !source.Terminal() {
+			return workersessions.Session{}, "", nil, workersessions.ErrContinuationSourceActive
+		}
+		return source, scope, nil, nil
+	}
+	archived, err := r.readArchivedContinuationSource(req)
+	if err != nil {
+		return workersessions.Session{}, "", nil, err
+	}
+	if archived == nil {
+		return workersessions.Session{}, "", nil, workersessions.ErrContinuationSourceNotFound
+	}
+	return archived.snapshot.session, archived.target.FactorySessionID, archived, nil
 }
 
 // The caller holds r.mu. Recheck live reservations after the detached read;

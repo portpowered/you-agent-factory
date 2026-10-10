@@ -8957,6 +8957,9 @@ type WorkerSessionContinueRequest struct {
 	// RequestId Required caller idempotency key for this continuation.
 	RequestId string `json:"requestId"`
 
+	// ResolveHead Resolve the newest validated terminal continuation head before reserving a successor.
+	ResolveHead *bool `json:"resolveHead,omitempty"`
+
 	// SuccessorWorkerSessionId Distinct Worker Session identity to reserve for the successor.
 	SuccessorWorkerSessionId string `json:"successorWorkerSessionId"`
 }

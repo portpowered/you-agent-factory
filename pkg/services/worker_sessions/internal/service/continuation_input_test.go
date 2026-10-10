@@ -20,6 +20,123 @@ type retainedContinuationStore struct {
 	readErr error
 }
 
+func TestContinuationHeadReservationPreservesAddressedTuple(t *testing.T) {
+	t.Parallel()
+	req := continuationReservationRequest()
+	r := newContinuationSource(t, req)
+	root := r.sessions[req.SourceWorkerSessionID]
+	root.SuccessorWorkerSessionID = "head"
+	r.sessions[root.ID] = root
+	head := root.Clone()
+	head.ID, head.PredecessorWorkerSessionID, head.SuccessorWorkerSessionID = "head", root.ID, ""
+	head.ProviderSessionAssociation.WorkerSessionID = head.ID
+	r.sessions[head.ID] = head
+	r.supervisions[head.ID] = newSupervision("dispatch-1", "turn", continuationValidExecution("dispatch-1"))
+	if _, _, err := r.reserveContinuation(req); !errors.Is(err, workersessions.ErrContinuationSourceConflict) {
+		t.Fatalf("default continuation bypassed source conflict: %v", err)
+	}
+	req.ResolveHead = true
+	replay, owner, err := r.reserveContinuation(req)
+	if err != nil || !owner || replay.plan.request.SourceWorkerSessionID != head.ID || replay.plan.lineage.PredecessorWorkerSessionID != head.ID || replay.plan.addressedSourceID != root.ID {
+		t.Fatalf("head reservation: owner=%v err=%v replay=%+v", owner, err, replay)
+	}
+	// Advancement after admission cannot retarget the original request ID.
+	head.SuccessorWorkerSessionID = req.SuccessorWorkerSessionID
+	r.sessions[head.ID] = head
+	again, owner, err := r.reserveContinuation(req)
+	if err != nil || owner || again != replay {
+		t.Fatalf("retry retargeted the request: owner=%v err=%v", owner, err)
+	}
+	req.ResolveHead = false
+	if _, _, err := r.reserveContinuation(req); !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+		t.Fatalf("changed head flag reused request identity: %v", err)
+	}
+}
+
+func TestContinuationHeadResolutionRejectsInvalidChains(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"terminal", "active", "reverse", "cycle", "foreign"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			req := continuationReservationRequest()
+			r := newContinuationSource(t, req)
+			root := r.sessions[req.SourceWorkerSessionID]
+			root.SuccessorWorkerSessionID = "head"
+			r.sessions[root.ID] = root
+			head := workersessions.Session{ID: "head", State: workersessions.StateCompleted, PredecessorWorkerSessionID: root.ID}
+			switch cell {
+			case "active":
+				head.State = workersessions.StateRunning
+			case "reverse":
+				head.PredecessorWorkerSessionID = "foreign"
+			case "cycle":
+				head.SuccessorWorkerSessionID = root.ID
+			}
+			r.sessions[head.ID] = head
+			r.observations[root.ID] = &observation{factorySessionID: "scope"}
+			r.observations[head.ID] = &observation{factorySessionID: "scope"}
+			if cell == "foreign" {
+				r.observations[head.ID].factorySessionID = "other"
+			}
+			resolved, _, err := r.resolveContinuationHead(req)
+			if cell == "terminal" {
+				if err != nil || resolved.SourceWorkerSessionID != head.ID {
+					t.Fatalf("head resolution: %+v %v", resolved, err)
+				}
+			} else if err == nil {
+				t.Fatal("invalid chain resolved")
+			}
+			if len(r.continueReplays) != 0 || len(r.supervisions) != 0 {
+				t.Fatal("head read created execution authority")
+			}
+		})
+	}
+}
+
+func TestContinuationInputAddressAndHeadFlagAreImmutable(t *testing.T) {
+	t.Parallel()
+	_, plan, target := retainedContinuationFixture(t)
+	plan.addressedSourceID, plan.request.ResolveHead = "original", true
+	payload, err := encodeContinuationInput(plan, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := decodeContinuationInput(payload, plan.addressedRequest(), target)
+	if err != nil || input.AddressedSourceWorkerSessionID != "original" || !input.ResolveHead {
+		t.Fatalf("addressed tuple: %+v %v", input, err)
+	}
+	for _, cell := range []string{"flag", "address"} {
+		req := plan.addressedRequest()
+		if cell == "flag" {
+			req.ResolveHead = false
+		} else {
+			req.SourceWorkerSessionID = "other"
+		}
+		if _, err := decodeContinuationInput(payload, req, target); !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) {
+			t.Fatalf("changed %s accepted: %v", cell, err)
+		}
+	}
+	// Missing additive keys retain the old exact-target/false tuple.
+	_, legacy, target := retainedContinuationFixture(t)
+	payload, err = encodeContinuationInput(legacy, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatal(err)
+	}
+	delete(fields, "addressedSourceWorkerSessionId")
+	delete(fields, "resolveHead")
+	payload, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodeContinuationInput(payload, legacy.request, target); err != nil {
+		t.Fatalf("legacy tuple rejected: %v", err)
+	}
+}
+
 // The storage collaborator has committed the bytes but lost its response.
 // Readback stays independent so disputed or unavailable facts fail closed.
 func TestContinuationInputLostAcknowledgementRequiresExactReadback(t *testing.T) {

@@ -38,6 +38,7 @@ type ContinueConfig struct {
 	Stdin                    io.Reader
 	StdinIsTTY               bool
 	Async                    bool
+	ResolveHead              bool
 
 	OutputFormat string
 	JSON         bool
@@ -145,6 +146,9 @@ func normalizeContinueRequest(config ContinueConfig) (normalizedContinueRequest,
 	apiRequest := factoryapi.WorkerSessionContinueRequest{
 		RequestId: requestID, SuccessorWorkerSessionId: successorID, FollowUpInput: followUp,
 	}
+	if config.ResolveHead {
+		apiRequest.ResolveHead = &config.ResolveHead
+	}
 	if scope := strings.TrimSpace(config.FactorySessionID); scope != "" {
 		apiRequest.FactorySessionId = &scope
 	}
@@ -240,9 +244,9 @@ func waitRemoteContinuationTerminal(config ContinueConfig, workerSessionID strin
 
 func continueAdmissionResult(request workersessions.ContinueRequest, admitted workersessions.ContinueResult) continueResult {
 	return continueResult{
-		RequestID: request.RequestID, SourceWorkerSessionID: request.SourceWorkerSessionID,
+		RequestID: request.RequestID, SourceWorkerSessionID: admitted.SourceWorkerSessionID,
 		SuccessorWorkerSessionID:   admitted.SuccessorWorkerSessionID,
-		PredecessorWorkerSessionID: request.SourceWorkerSessionID, Accepted: true,
+		PredecessorWorkerSessionID: admitted.SourceWorkerSessionID, Accepted: true,
 		State: string(admitted.Session.State), EventTopic: string(workersessions.Topic(admitted.Session.ID)),
 		Observation: observationGuidance(admitted.Session.ID),
 	}

@@ -13,6 +13,14 @@
     "execution"
   ],
   "properties": {
+    "addressedSourceWorkerSessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resolveHead": {
+      "type": "boolean",
+      "default": false
+    },
     "version": {
       "const": 1
     },

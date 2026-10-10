@@ -382,6 +382,9 @@ func WorkerSessionContinueRequestFromAPI(
 		SuccessorWorkerSessionID: strings.TrimSpace(request.SuccessorWorkerSessionId),
 		FollowUpInput:            request.FollowUpInput,
 	}
+	if request.ResolveHead != nil {
+		continuation.ResolveHead = *request.ResolveHead
+	}
 	if request.FactorySessionId != nil {
 		continuation.FactorySessionID = strings.TrimSpace(*request.FactorySessionId)
 		if continuation.FactorySessionID == "" {

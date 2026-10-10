@@ -1575,6 +1575,11 @@ export interface components {
     };
     /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may select the source Factory Session, successor identity and follow-up input. Without factorySessionId, a shared source ID returns 409 WORKER_SESSION_AMBIGUOUS. */
     WorkerSessionContinueRequest: {
+      /**
+       * @description Resolve the newest validated terminal continuation head before reserving a successor.
+       * @default false
+       */
+      resolveHead: boolean;
       /** @description Exact source Factory Session; omit only when the Worker Session ID is unique. */
       factorySessionId?: string;
       /** @description Required caller idempotency key for this continuation. */

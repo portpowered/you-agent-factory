@@ -23,13 +23,14 @@ import (
 )
 
 type directWorkerSessionCLIResult struct {
-	RequestID                string `json:"requestId"`
-	WorkerSessionID          string `json:"workerSessionId"`
-	SourceWorkerSessionID    string `json:"sourceWorkerSessionId"`
-	SuccessorWorkerSessionID string `json:"successorWorkerSessionId"`
-	Accepted                 bool   `json:"accepted"`
-	State                    string `json:"state"`
-	Output                   string `json:"output"`
+	PredecessorWorkerSessionID string `json:"predecessorWorkerSessionId"`
+	RequestID                  string `json:"requestId"`
+	WorkerSessionID            string `json:"workerSessionId"`
+	SourceWorkerSessionID      string `json:"sourceWorkerSessionId"`
+	SuccessorWorkerSessionID   string `json:"successorWorkerSessionId"`
+	Accepted                   bool   `json:"accepted"`
+	State                      string `json:"state"`
+	Output                     string `json:"output"`
 }
 
 type directWorkerSessionInterruptCLIResult struct {
