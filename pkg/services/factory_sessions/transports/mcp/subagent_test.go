@@ -91,7 +91,16 @@ func (fake *subagentTargetFake) GetFactorySession(ctx context.Context, sessionID
 
 func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	target := &subagentTargetFake{}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-1" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
+	// Supply only the lifecycle operations; unrelated durable execution,
+	// inspection and control operations are not available to this RUN.
+	var lifecycle interface {
+		Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
+		Invoke(context.Context, factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error)
+		Control(context.Context, factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error)
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+		SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	} = target
+	response := mcpfactorysession.Subagent(context.Background(), lifecycle, "C:/project", func() string { return "request-1" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
 	if response.Error != nil || response.Result == nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}
