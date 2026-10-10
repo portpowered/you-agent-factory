@@ -1716,7 +1716,10 @@ func (filesystem *incompleteRetentionFileSystem) WalkDir(root string, walk fs.Wa
 // Changes at the existing claim/removal effects model another owner changing a
 // candidate after inventory. Sweep must revalidate it without recursive removal.
 func TestRuntimeMetricsRetentionRevalidatesDisappearedOrReplacedArtifactAndRecovers(t *testing.T) {
-	for _, transition := range []string{"missing after claim", "directory after claim", "missing during removal"} {
+	for _, transition := range []string{
+		"missing before claim", "directory before claim", "inspection failure before claim",
+		"missing after claim", "directory after claim", "missing during removal",
+	} {
 		t.Run(transition, func(t *testing.T) {
 			t.Parallel()
 			assertRetentionArtifactTransitionRecovery(t, transition)
@@ -1736,14 +1739,7 @@ func assertRetentionArtifactTransitionRecovery(t *testing.T, transition string) 
 	rootLock, claim := &metricsTestCloser{}, &metricsTestCloser{}
 	coordination := &metricsTestCoordination{tryRootLock: rootLock, tryClaim: claim}
 	filesystem := &retentionTransitionFileSystem{Local: platformfilesystem.Local{}}
-	change := func(path string) {
-		changeRetentionArtifact(t, transition, selected, path)
-	}
-	if transition == "missing during removal" {
-		filesystem.beforeRemove = change
-	} else {
-		coordination.onTryClaim = change
-	}
+	configureRetentionArtifactTransition(t, transition, selected, filesystem, coordination)
 	retention, err := NewRuntimeMetricsRetention(filesystem, func() time.Time {
 		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
 	}, coordination)
@@ -1753,22 +1749,56 @@ func assertRetentionArtifactTransitionRecovery(t *testing.T, transition string) 
 	request := RuntimeMetricsRetentionRequest{RootDirectory: root, Config: RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1}}
 	report, err := retention.Sweep(t.Context(), request)
 	assertRetentionArtifactTransitionReport(t, transition, report, err, selected)
-	if rootLock.closed != 1 || claim.closed != 2 {
-		t.Fatalf("transition releases: root=%d claim=%d, want 1/2", rootLock.closed, claim.closed)
+	wantClaims := 2
+	if strings.HasSuffix(transition, "before claim") {
+		wantClaims = 1
+	}
+	if rootLock.closed != 1 || claim.closed != wantClaims {
+		t.Fatalf("transition releases: root=%d claim=%d, want 1/%d", rootLock.closed, claim.closed, wantClaims)
 	}
 	assertRetentionPathAbsent(t, peer, "independently pruned peer")
 	assertRetentionPreservedContent(t, unknown, "preserve customer content")
-	coordination.onTryClaim, filesystem.beforeRemove = nil, nil
+	coordination.onTryClaim, filesystem.beforeRemove, filesystem.beforeReadDir = nil, nil, nil
 	restoreRetentionArtifact(t, transition, selected)
 	report, err = retention.Sweep(t.Context(), request)
 	if err != nil || len(report.Failures) != 0 || report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 11}) || report.After.Files != 0 || report.Protected.Files != 0 {
 		t.Fatalf("recovered sweep = %#v, %v", report, err)
 	}
-	if rootLock.closed != 2 || claim.closed != 3 {
-		t.Fatalf("recovery releases: root=%d claim=%d, want 2/3", rootLock.closed, claim.closed)
+	if rootLock.closed != 2 || claim.closed != wantClaims+1 {
+		t.Fatalf("recovery releases: root=%d claim=%d, want 2/%d", rootLock.closed, claim.closed, wantClaims+1)
 	}
 	assertRetentionPathAbsent(t, selected, "recovered eligible artifact")
 	assertRetentionPreservedContent(t, unknown, "preserve customer content")
+}
+
+func configureRetentionArtifactTransition(
+	t *testing.T, transition, selected string,
+	filesystem *retentionTransitionFileSystem, coordination *metricsTestCoordination,
+) {
+	t.Helper()
+	change := func(path string) {
+		changeRetentionArtifact(t, transition, selected, path)
+	}
+	switch {
+	case strings.HasSuffix(transition, "before claim"):
+		// The directory read follows inventory and precedes candidate inspection.
+		// Change only this scenario's selected artifact at that filesystem effect.
+		filesystem.beforeReadDir = func(path string) {
+			if path != filepath.Dir(selected) {
+				return
+			}
+			filesystem.beforeReadDir = nil
+			if transition == "inspection failure before claim" {
+				filesystem.rejectedInspection = selected
+				return
+			}
+			change(selected)
+		}
+	case transition == "missing during removal":
+		filesystem.beforeRemove = change
+	default:
+		coordination.onTryClaim = change
+	}
 }
 
 func changeRetentionArtifact(t *testing.T, transition, selected, path string) {
@@ -1779,7 +1809,7 @@ func changeRetentionArtifact(t *testing.T, transition, selected, path string) {
 	if err := os.Remove(selected); err != nil {
 		t.Fatal(err)
 	}
-	if transition == "directory after claim" {
+	if strings.HasPrefix(transition, "directory ") {
 		if err := os.Mkdir(selected, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -1791,7 +1821,7 @@ func changeRetentionArtifact(t *testing.T, transition, selected, path string) {
 
 func restoreRetentionArtifact(t *testing.T, transition, selected string) {
 	t.Helper()
-	if transition == "directory after claim" {
+	if strings.HasPrefix(transition, "directory ") {
 		// Remove only the scenario-owned replacement after proving its bytes
 		// survived the failed candidate validation; never recursively delete it.
 		if err := os.Remove(filepath.Join(selected, "customer.txt")); err != nil {
@@ -1813,10 +1843,14 @@ func assertRetentionArtifactTransitionReport(
 	t *testing.T, transition string, report RuntimeMetricsRetentionReport, err error, selected string,
 ) {
 	t.Helper()
+	if transition == "inspection failure before claim" {
+		assertRetentionRejectedInspectionReport(t, report, err, selected)
+		return
+	}
 	if err != nil || len(report.Failures) != 0 || report.Failed.Files != 0 || report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) || report.After.Files != 0 {
 		t.Fatalf("transition sweep = %#v, %v", report, err)
 	}
-	if transition == "directory after claim" {
+	if strings.HasPrefix(transition, "directory ") {
 		info, statErr := os.Stat(selected)
 		if statErr != nil {
 			t.Fatal(statErr)
@@ -1833,9 +1867,45 @@ func assertRetentionArtifactTransitionReport(
 	assertRetentionPathAbsent(t, selected, "already removed candidate")
 }
 
+func assertRetentionRejectedInspectionReport(t *testing.T, report RuntimeMetricsRetentionReport, err error, selected string) {
+	t.Helper()
+	if err != nil || report.Before != (RuntimeMetricsRetentionTotals{Files: 2, Bytes: 18}) ||
+		report.After != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 11}) ||
+		report.Removed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 7}) ||
+		report.Failed != (RuntimeMetricsRetentionTotals{Files: 1, Bytes: 11}) || report.Protected.Files != 0 {
+		t.Fatalf("rejected inspection report = %#v, %v", report, err)
+	}
+	if len(report.Failures) != 1 || report.Failures[0].Path != selected || !errors.Is(report.Failures[0].Error, fs.ErrPermission) {
+		t.Fatalf("inspection failure = %#v, want selected path and permission cause", report.Failures)
+	}
+	assertRetentionPreservedContent(t, selected, "mmmmmmmmmmm")
+}
+
 type retentionTransitionFileSystem struct {
 	platformfilesystem.Local
-	beforeRemove func(string)
+	beforeRemove       func(string)
+	beforeReadDir      func(string)
+	rejectedInspection string
+}
+
+func (filesystem *retentionTransitionFileSystem) ReadDir(path string) ([]fs.DirEntry, error) {
+	if filesystem.beforeReadDir != nil {
+		filesystem.beforeReadDir(path)
+	}
+	if path == filepath.Dir(filesystem.rejectedInspection) {
+		// Reject whole-directory pruning so the candidate's own inspection
+		// reports the fault. The final inventory must still see its intact bytes.
+		return nil, fs.ErrPermission
+	}
+	return filesystem.Local.ReadDir(path)
+}
+
+func (filesystem *retentionTransitionFileSystem) Lstat(path string) (fs.FileInfo, error) {
+	if path == filesystem.rejectedInspection {
+		filesystem.rejectedInspection = ""
+		return nil, fs.ErrPermission
+	}
+	return filesystem.Local.Lstat(path)
 }
 
 func (filesystem *retentionTransitionFileSystem) Remove(path string) error {
