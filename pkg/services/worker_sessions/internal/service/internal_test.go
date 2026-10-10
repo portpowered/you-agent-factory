@@ -9661,8 +9661,10 @@ func completeCharacterizationSuccessor(
 func TestInterrupt_CleanupCharacterizationIsolatedSiblingAndExactRecordingClose(t *testing.T) {
 	fixture := newCleanupCharacterizationFixture(t)
 	accepted := requireAcceptedInterrupt(t, fixture.registry, fixture.request)
-	assertCleanupSiblingAndEffects(t, fixture)
+	// Acceptance reserves the successor before its asynchronous execution starts.
+	// Observe its exact dispatch before counting execution-boundary effects.
 	assertCleanupSuccessorInput(t, fixture, accepted)
+	assertCleanupSiblingAndEffects(t, fixture)
 	finishCleanupCharacterization(t, fixture, accepted)
 	assertCleanupReplay(t, fixture, accepted)
 }
