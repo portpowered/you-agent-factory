@@ -767,6 +767,7 @@ const (
 )
 
 func TestCycle003MissingPlaceProjectionPreservesLegacyWitness(t *testing.T) {
+	t.Parallel()
 	events := loadCycle003MissingPlaceEvents(t)
 	restored, err := NewProjectionService().ReconstructFactoryWorldState(events, 322)
 	if err != nil {
@@ -856,9 +857,13 @@ func assertCycle003ProjectedDispatchAndTrace(t *testing.T, restored factorydefin
 		t.Fatalf("projected active dispatch = %#v, want plan and target Work identity", dispatch)
 	}
 	input := dispatch.Inputs[0]
+	// WORK_REQUEST sequence 4776 precedes DISPATCH_REQUEST sequence 4858,
+	// despite the resumed dispatch's tick reset. Its recorded Work is available
+	// when the legacy input (which has no place) is resolved.
 	if input.TokenID != cycle003TargetWorkID || input.WorkItem == nil ||
-		input.WorkItem.ID != cycle003TargetWorkID || input.PlaceID != "" {
-		t.Fatalf("projected legacy dispatch input = %#v, want target identity with empty PlaceID", input)
+		input.WorkItem.ID != cycle003TargetWorkID || input.PlaceID != "idea:init" ||
+		!reflect.DeepEqual(*input.WorkItem, restored.WorkItemsByID[cycle003TargetWorkID]) {
+		t.Fatalf("projected legacy dispatch input = %#v, want recorded target Work in idea:init", input)
 	}
 	trace := restored.TracesByID[cycle003TraceID]
 	if !reflect.DeepEqual(trace.DispatchIDs, []string{cycle003DispatchID}) ||

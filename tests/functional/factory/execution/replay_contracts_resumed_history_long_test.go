@@ -28,6 +28,7 @@ func (replayNoProvider) Run(context.Context, platformprocess.CommandRequest) (pl
 }
 
 func TestResumedHistoricalReplayPublicBoundaries(t *testing.T) {
+	t.Parallel()
 	var reader recordings.Service
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner:  replayNoProvider{},
