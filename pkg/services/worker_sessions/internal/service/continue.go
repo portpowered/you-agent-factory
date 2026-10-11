@@ -198,7 +198,7 @@ func (r *registry) Continue(
 func (r *registry) reserveContinuation(
 	req workersessions.ContinueRequest,
 	callers ...context.Context,
-) (*continueReplay, bool, error) {
+) (replay *continueReplay, owner bool, err error) {
 	r.mu.RLock()
 	address, err := r.resolveWorkerAddressLocked(req.SourceWorkerSessionID, req.FactorySessionID)
 	existing := r.continueReplays[req.RequestID]
@@ -208,6 +208,25 @@ func (r *registry) reserveContinuation(
 	}
 	tuple := continueTuple{sourceID: firstNonEmpty(address, req.SourceWorkerSessionID), successorID: req.SuccessorWorkerSessionID,
 		input: req.FollowUpInput, resolveHead: req.ResolveHead}
+	// Detached capture reads can overlap another caller's reservation and input
+	// persistence before its forward lineage is published. Recheck the exact
+	// in-host tuple even when those reads fail; the reservation, rather than a
+	// partial durable replay, owns admission. This never repeats storage reads.
+	defer func() {
+		if owner {
+			return
+		}
+		r.mu.RLock()
+		current := r.continueReplays[req.RequestID]
+		r.mu.RUnlock()
+		if current != nil {
+			if current.tuple != tuple {
+				replay, err = nil, workersessions.ErrContinuationRequestIDConflict
+			} else {
+				replay, err = current, nil
+			}
+		}
+	}()
 	if existing != nil {
 		if existing.tuple != tuple {
 			return nil, false, workersessions.ErrContinuationRequestIDConflict

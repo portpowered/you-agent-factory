@@ -188,8 +188,9 @@ func TestContinuationInspectionRechecksChangedSource(t *testing.T) {
 
 type retainedContinuationStore struct {
 	restartRecipeStore
-	payload json.RawMessage
-	readErr error
+	payload    json.RawMessage
+	readErr    error
+	beforeRead func()
 }
 
 func TestContinuationHeadReservationPreservesAddressedTuple(t *testing.T) {
@@ -552,7 +553,61 @@ func configureArchivedContinuationCell(cell string, reader *capturedActivityFake
 }
 
 func (s *retainedContinuationStore) ReadWorkerContinuationInput(context.Context, recordings.WorkerControlOperationKey) (json.RawMessage, error) {
+	if s.beforeRead != nil {
+		s.beforeRead()
+	}
 	return s.payload, s.readErr
+}
+
+// The competing caller reserves and persists input after this caller selects
+// the source capture, but before it reads that input. The source forward link
+// is not committed yet; only the in-host reservation owns admission here.
+func TestContinuationReservationRechecksReplayAfterCapturedRead(t *testing.T) {
+	t.Parallel()
+	for _, conflicting := range []bool{false, true} {
+		t.Run(strconv.FormatBool(conflicting), func(t *testing.T) {
+			t.Parallel()
+			r, plan, target := retainedContinuationFixture(t)
+			req := plan.request
+			item := historyCapture(t, req.SourceWorkerSessionID, "", target.ExpectedAttemptID, true)
+			item.Catalog.RecordingID = target.RecordingID
+			item.Catalog.RecordingGenerationID = target.RecordingGenerationID
+			item.Catalog.OwnerEpoch = target.OwnerEpoch
+			r.logs = &LogReader{reader: &capturedActivityFake{page: recordings.WorkerCapturedActivityPage{
+				Catalog: item.Catalog, Opening: item.Opening, Terminal: item.Terminal, Health: item.Health,
+			}}}
+			payload, err := encodeContinuationInput(plan, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			original := &continueReplay{tuple: continueTuple{sourceID: req.SourceWorkerSessionID,
+				successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}, done: make(chan struct{})}
+			if conflicting {
+				original.tuple.input = "different input"
+			}
+			r.restart = &retainedContinuationStore{
+				restartRecipeStore: restartRecipeStore{execution: continuationValidExecution(target.ExpectedAttemptID),
+					reference: r.sessions[req.SourceWorkerSessionID].ProviderSessionAssociation.Reference},
+				payload: payload,
+				beforeRead: func() {
+					r.mu.Lock()
+					defer r.mu.Unlock()
+					r.continueReplays = map[string]*continueReplay{req.RequestID: original}
+				},
+			}
+			replay, owner, err := r.reserveContinuation(req)
+			if conflicting {
+				if !errors.Is(err, workersessions.ErrContinuationRequestIDConflict) || replay != nil || owner {
+					t.Fatalf("changed concurrent tuple: replay=%p owner=%v err=%v", replay, owner, err)
+				}
+			} else if err != nil || owner || replay != original {
+				t.Fatalf("exact concurrent tuple lost replay: replay=%p owner=%v err=%v", replay, owner, err)
+			}
+			if len(r.sessions) != 1 || len(r.supervisions) != 0 {
+				t.Fatal("captured replay read admitted another successor or restored source supervision")
+			}
+		})
+	}
 }
 
 // The admission driver observes retained input through its storage collaborator.
