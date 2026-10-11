@@ -87,7 +87,7 @@ func (s *Service) ResolveSelection(
 }
 
 // ValidatePrerequisites reports whether a canonical provider is selectable by
-// the catalog. Unknown identities fail with ErrUnknownProvider; blocked
+// the catalog and current ACP executable lookup. Unknown identities fail with ErrUnknownProvider; blocked
 // availability or missing prerequisites fail with ErrProviderUnavailable.
 func (s *Service) ValidatePrerequisites(
 	ctx context.Context,
@@ -102,8 +102,15 @@ func (s *Service) ValidatePrerequisites(
 	if err := request.Validate(); err != nil {
 		return err
 	}
-	_, err := s.GetProvider(ctx, providers.GetProviderRequest{ID: request.ID})
-	return err
+	if _, err := s.GetProvider(ctx, providers.GetProviderRequest(request)); err != nil {
+		return err
+	}
+	if canonical, ok := s.acp.Resolve(request.ID); ok {
+		err := s.acp.ValidatePrerequisites(ctx, canonical)
+		s.logger.Info("provider ACP executable prerequisite", "provider", canonical.String(), "available", err == nil)
+		return err
+	}
+	return nil
 }
 
 func (s *Service) catalogAliasIndex(ctx context.Context) (map[string]providers.ID, error) {

@@ -29,6 +29,10 @@ type negotiatedCapabilityACPService struct {
 
 func (s *negotiatedCapabilityACPService) Close(context.Context) error { return nil }
 
+func (s *negotiatedCapabilityACPService) ValidatePrerequisites(ctx context.Context, _ providers.ID) error {
+	return ctx.Err()
+}
+
 func (s *negotiatedCapabilityACPService) Configure(context.Context, []providers.ACPIntegration) error {
 	return nil
 }
