@@ -357,9 +357,10 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 // Stream identity uses the same scoped capture selection as summary reads.
 // Optional Work names belong to the summary representation; resolving them
 // must not hold up event delivery, whose frames carry only Work IDs.
+//nolint:contextcheck // Legacy nil-context callers have no parent to inherit; non-nil observer contexts pass through unchanged.
 func (a *Adapter) topLevelWorkerSessionObservation(ctx context.Context, workerSessionID, factorySessionID string) (workersessions.Observation, error) {
 	if a == nil || a.topLevel == nil {
-		return workersessions.Observation{}, errors.New("Worker Sessions service is required")
+		return workersessions.Observation{}, errors.New("worker sessions service is required")
 	}
 	workerSessionID = strings.TrimSpace(workerSessionID)
 	if workerSessionID == "" {

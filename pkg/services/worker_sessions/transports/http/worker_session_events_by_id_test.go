@@ -35,19 +35,28 @@ func TestWorkerEventsPrefixThenSourceFailureEOF(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions/worker-prefix/events", nil), "worker-prefix", factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{})
 			response := recorder.Result()
-			defer response.Body.Close()
+			defer func() {
+				if err := response.Body.Close(); err != nil {
+					t.Errorf("close stream response: %v", err)
+				}
+			}()
 			body, err := io.ReadAll(response.Body)
 			if err != nil || response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "text/event-stream" {
 				t.Fatalf("stream response: %d %v %v", response.StatusCode, response.Header, err)
 			}
-			frames := decodeSSEFrames(t, string(body))
-			if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[0].Event == nil || frames[1].Delivery != "SOURCE_FAILURE" || frames[1].Event != nil || frames[1].ReplaySummary != nil {
-				t.Fatalf("prefix/failure frames: %+v", frames)
-			}
-			if frames[1].ErrorCode == nil || *frames[1].ErrorCode != "WORKER_SESSION_STREAM_CLOSED" || !strings.Contains(string(body), "retained-prefix") || !source.closed || source.index != 2 {
-				t.Fatalf("loss must close once after the prefix: %s closed=%v reads=%d", body, source.closed, source.index)
-			}
+			assertWorkerEventsSourceFailurePrefix(t, body, source)
 		})
+	}
+}
+
+func assertWorkerEventsSourceFailurePrefix(t *testing.T, body []byte, source *fakeObservationSubscription) {
+	t.Helper()
+	frames := decodeSSEFrames(t, string(body))
+	if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[0].Event == nil || frames[1].Delivery != "SOURCE_FAILURE" || frames[1].Event != nil || frames[1].ReplaySummary != nil {
+		t.Fatalf("prefix/failure frames: %+v", frames)
+	}
+	if frames[1].ErrorCode == nil || *frames[1].ErrorCode != "WORKER_SESSION_STREAM_CLOSED" || !strings.Contains(string(body), "retained-prefix") || !source.closed || source.index != 2 {
+		t.Fatalf("loss must close once after the prefix: %s closed=%v reads=%d", body, source.closed, source.index)
 	}
 }
 

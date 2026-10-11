@@ -116,10 +116,7 @@ func assertWorkerEventsDegradedPrefix(t *testing.T, frames []api.WorkerSessionEv
 	if !reflect.DeepEqual(records, workerEventsFailureRecords(want)) || summary == nil || summary.Complete || summary.EventsEmitted != int64(len(want)) || summary.Reason != "capture-DEGRADED" {
 		t.Fatalf("degraded replay changed prefix or health: records=%+v summary=%+v", records, summary)
 	}
-	raw, err := json.Marshal(frames)
-	if err != nil || strings.Contains(string(raw), "uncaptured later output") || strings.Contains(string(raw), "private-t7-capture-failure") {
-		t.Fatalf("degraded replay leaked uncaptured output or private failure: %s (%v)", raw, err)
-	}
+	assertWorkerEventsDegradedPrivacy(t, frames)
 }
 
 func workerEventsFailureRecords(frames []api.WorkerSessionEvent) []api.WorkerSessionEventRecord {
@@ -130,4 +127,12 @@ func workerEventsFailureRecords(frames []api.WorkerSessionEvent) []api.WorkerSes
 		}
 	}
 	return records
+}
+
+func assertWorkerEventsDegradedPrivacy(t *testing.T, frames []api.WorkerSessionEvent) {
+	t.Helper()
+	raw, err := json.Marshal(frames)
+	if err != nil || strings.Contains(string(raw), "uncaptured later output") || strings.Contains(string(raw), "private-t7-capture-failure") {
+		t.Fatalf("degraded replay leaked uncaptured output or private failure: %s (%v)", raw, err)
+	}
 }

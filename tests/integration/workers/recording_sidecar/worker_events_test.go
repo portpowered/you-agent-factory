@@ -59,18 +59,7 @@ func assertWorkerEventsArtifactDamagedSource(t *testing.T, f invokeArtifactFixtu
 	degraded := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
 	for _, query := range []string{"?replayOnly=true&limit=1", "?limit=1"} {
 		frames := readWorkerEventsArtifact(t, f.ctx, degraded.url, query)
-		if !reflect.DeepEqual(workerEventsArtifactRecords(frames), workerEventsArtifactRecords(want)) {
-			t.Fatal("damaged tail changed accepted records or stored timestamps")
-		}
-		last := frames[len(frames)-1]
-		if last.ReplaySummary == nil || last.ReplaySummary.Complete || last.ReplaySummary.Reason != "capture-DEGRADED" || last.ReplaySummary.EventsEmitted != int64(len(workerEventsArtifactRecords(want))) {
-			t.Fatalf("damaged tail fabricated completion: %+v", last)
-		}
-		for _, frame := range frames {
-			if frame.Delivery == api.WorkerSessionEventDeliveryTerminalReplay || frame.Delivery == api.WorkerSessionEventDeliverySourceFailure {
-				t.Fatalf("damaged tail lost truthful incomplete replay: %+v", frame)
-			}
-		}
+		assertWorkerEventsArtifactDegradedReplay(t, frames, want)
 	}
 	degraded.stop(t, f.ctx, f.binary, f.project, f.env)
 	appendWorkerEventsArtifactFault(t, paths[0], "\n")
@@ -217,5 +206,21 @@ func assertWorkerEventsArtifactTerminal(t *testing.T, frames []api.WorkerSession
 	}
 	if !terminal || position == 0 {
 		t.Fatal("finite stream lacked terminal captured history")
+	}
+}
+
+func assertWorkerEventsArtifactDegradedReplay(t *testing.T, frames, want []api.WorkerSessionEvent) {
+	t.Helper()
+	if !reflect.DeepEqual(workerEventsArtifactRecords(frames), workerEventsArtifactRecords(want)) {
+		t.Fatal("damaged tail changed accepted records or stored timestamps")
+	}
+	last := frames[len(frames)-1]
+	if last.ReplaySummary == nil || last.ReplaySummary.Complete || last.ReplaySummary.Reason != "capture-DEGRADED" || last.ReplaySummary.EventsEmitted != int64(len(workerEventsArtifactRecords(want))) {
+		t.Fatalf("damaged tail fabricated completion: %+v", last)
+	}
+	for _, frame := range frames {
+		if frame.Delivery == api.WorkerSessionEventDeliveryTerminalReplay || frame.Delivery == api.WorkerSessionEventDeliverySourceFailure {
+			t.Fatalf("damaged tail lost truthful incomplete replay: %+v", frame)
+		}
 	}
 }

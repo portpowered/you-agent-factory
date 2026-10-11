@@ -183,36 +183,7 @@ func assertWorkerEventsFiniteMCP(t *testing.T, ctx context.Context, host invokeC
 		t.Fatal(err)
 	}
 	defer session.Close()
-	for _, limit := range []int{1, 1000} {
-		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{
-			"action": "READ", "workerSessionId": "events-target", "view": "events", "limit": limit,
-		}})
-		if err != nil || result.IsError {
-			t.Fatalf("finite MCP events: %v %+v", err, result)
-		}
-		var envelope struct {
-			Result struct {
-				Events struct {
-					Events    []api.WorkerSessionEvent `json:"events"`
-					Truncated bool                     `json:"truncated"`
-				} `json:"events"`
-			} `json:"result"`
-		}
-		if len(result.Content) != 1 {
-			t.Fatalf("finite MCP content count: %d", len(result.Content))
-		}
-		content, ok := result.Content[0].(*mcp.TextContent)
-		if !ok || json.Unmarshal([]byte(content.Text), &envelope) != nil {
-			t.Fatalf("finite MCP envelope: %+v", result.Content)
-		}
-		want := frames
-		if limit == 1 {
-			want = frames[:1]
-		}
-		if !reflect.DeepEqual(envelope.Result.Events.Events, want) || envelope.Result.Events.Truncated != (limit == 1) {
-			t.Fatalf("finite MCP changed frames/truncation: %s", content.Text)
-		}
-	}
+	assertWorkerEventsMCPFrames(t, ctx, session, frames)
 }
 
 func assertWorkerEventsCLIComplete(t *testing.T, ctx context.Context, command *support.ProcessCommand, writer *s8SignalWriter) {
@@ -431,9 +402,7 @@ func assertWorkerEventsDirectRecords(t *testing.T, frames []api.WorkerSessionEve
 		if frame.Event.Position <= 0 {
 			continue
 		}
-		if frame.Event.Position != int64(len(records)+1) || frame.Event.Cursor.Position != frame.Event.Position || frame.Event.Cursor.WorkerSessionId == nil || *frame.Event.Cursor.WorkerSessionId != id {
-			t.Fatalf("ordered captured cursor/time: %+v", frame.Event)
-		}
+		assertWorkerEventsDirectCursor(t, frame.Event, id, int64(len(records)+1))
 		payload, _ := json.Marshal(frame.Event.Payload)
 		progress = progress || strings.Contains(string(payload), "events-later-target")
 		if strings.Contains(string(payload), "events-later-peer") {
@@ -541,5 +510,46 @@ func assertWorkerEventsCommandIdle(t *testing.T, runner *workerEventsRunner) {
 	case <-runner.joined:
 		t.Fatal("observer request ended an unreleased provider command")
 	default:
+	}
+}
+
+func assertWorkerEventsMCPFrames(t *testing.T, ctx context.Context, session *mcp.ClientSession, frames []api.WorkerSessionEvent) {
+	t.Helper()
+	for _, limit := range []int{1, 1000} {
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{
+			"action": "READ", "workerSessionId": "events-target", "view": "events", "limit": limit,
+		}})
+		if err != nil || result.IsError {
+			t.Fatalf("finite MCP events: %v %+v", err, result)
+		}
+		var envelope struct {
+			Result struct {
+				Events struct {
+					Events    []api.WorkerSessionEvent `json:"events"`
+					Truncated bool                     `json:"truncated"`
+				} `json:"events"`
+			} `json:"result"`
+		}
+		if len(result.Content) != 1 {
+			t.Fatalf("finite MCP content count: %d", len(result.Content))
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		if !ok || json.Unmarshal([]byte(content.Text), &envelope) != nil {
+			t.Fatalf("finite MCP envelope: %+v", result.Content)
+		}
+		want := frames
+		if limit == 1 {
+			want = frames[:1]
+		}
+		if !reflect.DeepEqual(envelope.Result.Events.Events, want) || envelope.Result.Events.Truncated != (limit == 1) {
+			t.Fatalf("finite MCP changed frames/truncation: %s", content.Text)
+		}
+	}
+}
+
+func assertWorkerEventsDirectCursor(t *testing.T, event api.WorkerSessionEventRecord, id string, position int64) {
+	t.Helper()
+	if event.Position != position || event.Cursor.Position != event.Position || event.Cursor.WorkerSessionId == nil || *event.Cursor.WorkerSessionId != id {
+		t.Fatalf("ordered captured cursor/time: %+v", event)
 	}
 }
