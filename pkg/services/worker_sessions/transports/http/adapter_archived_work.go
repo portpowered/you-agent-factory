@@ -37,8 +37,24 @@ func (a *Adapter) mergeArchivedWorkerSessionsForWork(ctx context.Context, sessio
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
-	retained := make([]workersessions.Observation, 0, len(page.Observations))
-	for _, row := range page.Observations {
+	retained, selected := archivedWorkObservations(page.Observations, sessionID, workID)
+	attribution, err := a.resolveWorkAttribution(ctx, selected)
+	if err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, err
+	}
+	// Captured physical facts replace a matching ended runtime row. Attempts
+	// with a different identity remain distinct, including repeated Work runs.
+	for _, row := range retained {
+		mapped := workerSessionObservationWithWorkToAPI(row, attribution[row.WorkerSessionID])
+		live.Sessions = replaceArchivedWorkRow(live.Sessions, mapped, sessionID)
+	}
+	sortArchivedWorkRows(live.Sessions)
+	return live, ctx.Err()
+}
+
+func archivedWorkObservations(rows []workersessions.Observation, sessionID, workID string) ([]workersessions.Observation, []workersessions.Observation) {
+	retained := make([]workersessions.Observation, 0, len(rows))
+	for _, row := range rows {
 		if row.FactorySessionID == sessionID && slices.Contains(row.WorkIDs, workID) {
 			retained = append(retained, row)
 		}
@@ -48,28 +64,12 @@ func (a *Adapter) mergeArchivedWorkerSessionsForWork(ctx context.Context, sessio
 		selected[index] = row
 		selected[index].WorkIDs = []string{workID}
 	}
-	attribution, err := a.resolveWorkAttribution(ctx, selected)
-	if err != nil {
-		return factoryapi.ListWorkerSessionsResponse{}, err
-	}
-	// Captured physical facts replace a matching ended runtime row. Attempts
-	// with a different identity remain distinct, including repeated Work runs.
-	for _, row := range retained {
-		mapped := workerSessionObservationWithWorkToAPI(row, attribution[row.WorkerSessionID])
-		replaced := false
-		for index, existing := range live.Sessions {
-			if existing.WorkerSessionId == mapped.WorkerSessionId && existing.AttemptId == mapped.AttemptId &&
-				existing.FactorySessionId != nil && *existing.FactorySessionId == sessionID {
-				live.Sessions[index], replaced = mapped, true
-				break
-			}
-		}
-		if !replaced {
-			live.Sessions = append(live.Sessions, mapped)
-		}
-	}
-	sort.SliceStable(live.Sessions, func(i, j int) bool {
-		left, right := live.Sessions[i], live.Sessions[j]
+	return retained, selected
+}
+
+func sortArchivedWorkRows(rows []factoryapi.WorkerSessionObservation) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		left, right := rows[i], rows[j]
 		if left.StartedAt != nil && right.StartedAt != nil && !left.StartedAt.Equal(*right.StartedAt) {
 			return left.StartedAt.Before(*right.StartedAt)
 		}
@@ -81,5 +81,14 @@ func (a *Adapter) mergeArchivedWorkerSessionsForWork(ctx context.Context, sessio
 		}
 		return left.WorkerSessionId < right.WorkerSessionId
 	})
-	return live, ctx.Err()
+}
+
+func replaceArchivedWorkRow(rows []factoryapi.WorkerSessionObservation, mapped factoryapi.WorkerSessionObservation, sessionID string) []factoryapi.WorkerSessionObservation {
+	for index, existing := range rows {
+		if existing.WorkerSessionId == mapped.WorkerSessionId && existing.AttemptId == mapped.AttemptId && existing.FactorySessionId != nil && *existing.FactorySessionId == sessionID {
+			rows[index] = mapped
+			return rows
+		}
+	}
+	return append(rows, mapped)
 }

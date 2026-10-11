@@ -228,51 +228,7 @@ func readTerminalArchiveSnapshots(t *testing.T, f invokeArtifactFixture, server 
 
 	result := make(map[string]terminalArchiveSnapshot)
 	for _, row := range rows {
-		var snapshot terminalArchiveSnapshot
-		body := historyCLI(t, f.ctx, f.binary, f.project, f.env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", row.WorkerSessionId)
-		if err := json.Unmarshal(body, &snapshot.Observation); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(row, snapshot.Observation) {
-			t.Fatalf("LIST/READ differ: row=%+v show=%+v", row, snapshot.Observation)
-		}
-		state := terminalArchiveName(row)[strings.LastIndex(terminalArchiveName(row), "-")+1:]
-		if string(row.State) != state || row.ConfirmationState != "CONFIRMED" || row.EndedAt == nil || row.DurationMillis == nil {
-			t.Fatalf("untruthful committed %s: %+v", state, row)
-		}
-		snapshot.Logs = historyLogPage(t, f.ctx, f.binary, f.project, f.env, server, row.WorkerSessionId, "")
-		readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+row.WorkerSessionId, &snapshot.Observation)
-		if !reflect.DeepEqual(row, snapshot.Observation) {
-			t.Fatal("HTTP READ differs from CLI LIST")
-		}
-		readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+row.WorkerSessionId+"/logs?limit=1", &snapshot.Page)
-		if snapshot.Page.NextToken == nil {
-			t.Fatal("committed prefix omitted cursor")
-		}
-		continued := historyLogPage(t, f.ctx, f.binary, f.project, f.env, server, row.WorkerSessionId, *snapshot.Page.NextToken)
-		if !reflect.DeepEqual(continued.Events, snapshot.Logs.Events[1:]) || continued.RecordingGenerationId != snapshot.Logs.RecordingGenerationId {
-			t.Fatal("acknowledged cursor changed committed content/generation")
-		}
-
-		if row.State == "COMPLETED" {
-			usage := row.TokenUsage
-			if usage == nil || usage.Origin == nil || *usage.Origin != api.ProviderSessionTokenUsageOriginSYNTHETIC || usage.InputTokens == nil || *usage.InputTokens != 17 || usage.OutputTokens == nil || *usage.OutputTokens != 5 {
-				t.Fatalf("completed mock lost declared synthetic usage: %+v", usage)
-			}
-			body := historyCLI(t, f.ctx, f.binary, f.project, f.env, "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", row.WorkerSessionId, "--view", "transcript")
-			if err := json.Unmarshal(body, &snapshot.Transcript); err != nil {
-				t.Fatal(err)
-			}
-			var transcript api.WorkerSessionTranscriptResponse
-			readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+row.WorkerSessionId+"/transcript", &transcript)
-			if !reflect.DeepEqual(transcript, snapshot.Transcript) {
-				t.Fatal("CLI/HTTP transcript differs")
-			}
-
-		}
-		if !row.Direct {
-			assertTerminalArchiveScope(t, f, server, row)
-		}
+		snapshot := readTerminalArchiveSnapshot(t, f, server, row)
 		result[row.WorkerSessionId] = snapshot
 	}
 	assertTerminalArchiveLists(t, f, server, rows, result)
@@ -361,30 +317,9 @@ func assertTerminalArchiveLists(t *testing.T, f invokeArtifactFixture, server st
 	}
 	assertTerminalArchiveOriginals(t, rows, envelope.Result.Sessions)
 	for _, row := range rows {
-		snapshot := snapshots[row.WorkerSessionId]
-		for _, view := range []string{"summary", "logs", "transcript"} {
-			if view == "transcript" && row.State != "COMPLETED" {
-				continue
-			}
-			args := map[string]any{"action": "READ", "workerSessionId": row.WorkerSessionId, "view": view}
-			result, err := session.CallTool(f.ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
-			if err != nil || result.IsError || len(result.Content) != 1 {
-				t.Fatalf("MCP %s: %+v error=%v", view, result, err)
-			}
-			content, ok := result.Content[0].(*mcp.TextContent)
-			if !ok {
-				t.Fatalf("unexpected MCP content %T", result.Content[0])
-			}
-			switch view {
-			case "transcript":
-				assertHistoryMCPTranscript(t, content.Text, []api.WorkerSessionTranscriptResponse{snapshot.Transcript})
-			case "logs":
-				assertHistoryMCPResult(t, "logs", content.Text, row, snapshot.Logs)
-			default:
-				assertHistoryMCPResult(t, "READ", content.Text, row, snapshot.Logs)
-			}
-		}
+		assertTerminalArchiveMCPReads(t, f, session, row, snapshots[row.WorkerSessionId])
 	}
+
 }
 
 func assertTerminalArchiveOriginals(t *testing.T, want, got []api.WorkerSessionObservation) {
@@ -408,6 +343,90 @@ func assertTerminalArchiveMembership(t *testing.T, row api.WorkerSessionObservat
 	for _, actual := range rows {
 		if !reflect.DeepEqual(actual.FactorySessionId, row.FactorySessionId) || !reflect.DeepEqual(actual.WorkId, row.WorkId) || !reflect.DeepEqual(actual.WorkName, row.WorkName) {
 			t.Fatalf("foreign Work scope/name in LIST: %+v", actual)
+		}
+	}
+}
+
+func readTerminalArchiveSnapshot(t *testing.T, f invokeArtifactFixture, server string, row api.WorkerSessionObservation) terminalArchiveSnapshot {
+	t.Helper()
+	var snapshot terminalArchiveSnapshot
+	body := historyCLI(t, f.ctx, f.binary, f.project, f.env, "--server", server, "--json", "worker-sessions", "show", "--worker-session-id", row.WorkerSessionId)
+	if err := json.Unmarshal(body, &snapshot.Observation); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(row, snapshot.Observation) {
+		t.Fatalf("LIST/READ differ: row=%+v show=%+v", row, snapshot.Observation)
+	}
+	state := terminalArchiveName(row)[strings.LastIndex(terminalArchiveName(row), "-")+1:]
+	if string(row.State) != state || row.ConfirmationState != "CONFIRMED" || row.EndedAt == nil || row.DurationMillis == nil {
+		t.Fatalf("untruthful committed %s: %+v", state, row)
+	}
+	snapshot.Logs = historyLogPage(t, f.ctx, f.binary, f.project, f.env, server, row.WorkerSessionId, "")
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+row.WorkerSessionId, &snapshot.Observation)
+	if !reflect.DeepEqual(row, snapshot.Observation) {
+		t.Fatal("HTTP READ differs from CLI LIST")
+	}
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+row.WorkerSessionId+"/logs?limit=1", &snapshot.Page)
+	if snapshot.Page.NextToken == nil {
+		t.Fatal("committed prefix omitted cursor")
+	}
+	continued := historyLogPage(t, f.ctx, f.binary, f.project, f.env, server, row.WorkerSessionId, *snapshot.Page.NextToken)
+	if !reflect.DeepEqual(continued.Events, snapshot.Logs.Events[1:]) || continued.RecordingGenerationId != snapshot.Logs.RecordingGenerationId {
+		t.Fatal("acknowledged cursor changed committed content/generation")
+	}
+
+	if row.State == "COMPLETED" {
+		snapshot.Transcript = readTerminalArchiveTranscript(t, f, server, row)
+	}
+	if !row.Direct {
+		assertTerminalArchiveScope(t, f, server, row)
+	}
+	return snapshot
+}
+
+func readTerminalArchiveTranscript(t *testing.T, f invokeArtifactFixture, server string, row api.WorkerSessionObservation) api.WorkerSessionTranscriptResponse {
+	t.Helper()
+	var captured api.WorkerSessionTranscriptResponse
+
+	usage := row.TokenUsage
+	if usage == nil || usage.Origin == nil || *usage.Origin != api.ProviderSessionTokenUsageOriginSYNTHETIC || usage.InputTokens == nil || *usage.InputTokens != 17 || usage.OutputTokens == nil || *usage.OutputTokens != 5 {
+		t.Fatalf("completed mock lost declared synthetic usage: %+v", usage)
+	}
+	body := historyCLI(t, f.ctx, f.binary, f.project, f.env, "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", row.WorkerSessionId, "--view", "transcript")
+	if err := json.Unmarshal(body, &captured); err != nil {
+		t.Fatal(err)
+	}
+	var transcript api.WorkerSessionTranscriptResponse
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+row.WorkerSessionId+"/transcript", &transcript)
+	if !reflect.DeepEqual(transcript, captured) {
+		t.Fatal("CLI/HTTP transcript differs")
+	}
+
+	return captured
+}
+
+func assertTerminalArchiveMCPReads(t *testing.T, f invokeArtifactFixture, session *mcp.ClientSession, row api.WorkerSessionObservation, snapshot terminalArchiveSnapshot) {
+	t.Helper()
+	for _, view := range []string{"summary", "logs", "transcript"} {
+		if view == "transcript" && row.State != "COMPLETED" {
+			continue
+		}
+		args := map[string]any{"action": "READ", "workerSessionId": row.WorkerSessionId, "view": view}
+		result, err := session.CallTool(f.ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+		if err != nil || result.IsError || len(result.Content) != 1 {
+			t.Fatalf("MCP %s: %+v error=%v", view, result, err)
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		if !ok {
+			t.Fatalf("unexpected MCP content %T", result.Content[0])
+		}
+		switch view {
+		case "transcript":
+			assertHistoryMCPTranscript(t, content.Text, []api.WorkerSessionTranscriptResponse{snapshot.Transcript})
+		case "logs":
+			assertHistoryMCPResult(t, "logs", content.Text, row, snapshot.Logs)
+		default:
+			assertHistoryMCPResult(t, "READ", content.Text, row, snapshot.Logs)
 		}
 	}
 }

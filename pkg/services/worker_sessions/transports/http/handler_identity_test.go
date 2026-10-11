@@ -753,13 +753,7 @@ func TestTopLevelTranscriptRetainsExactCapturedFactory(t *testing.T) {
 			adapter := NewAdapter(service, workServiceStub{})
 			adapter.logs = capture
 			got, err := adapter.ReadTopLevelWorkerSessionTranscript(t.Context(), "worker")
-			if want != nil {
-				if !errors.Is(err, want) || got.WorkerSessionId != "" {
-					t.Fatalf("invalid identity disclosed transcript: %+v, %v", got, err)
-				}
-			} else if err != nil || got.WorkerSessionId != "worker" || got.AttemptId != "attempt" || (name == "direct" && got.FactorySessionId != nil) || (name == "original" && (got.FactorySessionId == nil || *got.FactorySessionId != "original")) {
-				t.Fatalf("captured transcript owner: %+v, %v", got, err)
-			}
+			assertCapturedTranscriptOwner(t, name, want, got, err)
 			if capture.request.WorkerSessionID != "worker" || capture.request.FactorySessionID != "" || capture.calls != 1 {
 				t.Fatalf("unscoped transcript selected another identity: %+v calls=%d", capture.request, capture.calls)
 			}
@@ -973,5 +967,16 @@ func TestWorkerSessionHTTPCallerRefusalDoesNotReachAdmissionOrExposeToken(t *tes
 				t.Fatal("caller refusal lost typed error")
 			}
 		})
+	}
+}
+
+func assertCapturedTranscriptOwner(t *testing.T, name string, want error, got factoryapi.WorkerSessionTranscriptResponse, err error) {
+	t.Helper()
+	if want != nil {
+		if !errors.Is(err, want) || got.WorkerSessionId != "" {
+			t.Fatalf("invalid identity disclosed transcript: %+v, %v", got, err)
+		}
+	} else if err != nil || got.WorkerSessionId != "worker" || got.AttemptId != "attempt" || (name == "direct" && got.FactorySessionId != nil) || (name == "original" && (got.FactorySessionId == nil || *got.FactorySessionId != "original")) {
+		t.Fatalf("captured transcript owner: %+v, %v", got, err)
 	}
 }

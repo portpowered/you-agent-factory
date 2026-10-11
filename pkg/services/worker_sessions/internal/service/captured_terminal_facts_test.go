@@ -192,15 +192,7 @@ func TestCapturedTerminalEnrichmentUsesCommittedConfirmationAndOptionalFailure(t
 				original := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: state, ConfirmationState: workersessions.ConfirmationStateUnconfirmed, Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live only", ProviderFailureKind: providers.ExecuteFailureKindTimeout}}
 				got := r.withCapturedTerminalObservation(t.Context(), original)
 				archived, err := r.logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
-				if err != nil || got.ConfirmationState != workersessions.ConfirmationStateConfirmed || !reflect.DeepEqual(got.Failure, archived.Failure) {
-					t.Fatalf("committed facts disagree: live=%+v archived=%+v error=%v", got, archived, err)
-				}
-				if (!recorded || state == workersessions.StateCompleted) && got.Failure != nil {
-					t.Fatalf("invented optional failure: %+v", got.Failure)
-				}
-				if recorded && state != workersessions.StateCompleted && (got.Failure == nil || got.Failure.Detail != "committed underlying failure") {
-					t.Fatalf("lost committed underlying failure: %+v", got.Failure)
-				}
+				assertCommittedTerminalEnrichment(t, state, recorded, got, archived, err)
 			}
 		})
 	}
@@ -516,5 +508,18 @@ func mutateControlledTerminalFixture(name string, item *recordings.WorkerCapture
 		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"attempt","payload":{"status":"TERMINATED","failureCause":"OPERATOR_CANCELED"}}`)
 	case "duplicate-json":
 		item.MetadataRecords[1].Payload = []byte(`{"kind":"SESSION","phase":"CANCELED","dispatchId":"attempt","payload":{"status":"CANCELED","failureCause":"OPERATOR_CANCELED","failureCause":"PROCESS_GONE"}}`)
+	}
+}
+
+func assertCommittedTerminalEnrichment(t *testing.T, state workersessions.State, recorded bool, got, archived workersessions.Observation, err error) {
+	t.Helper()
+	if err != nil || got.ConfirmationState != workersessions.ConfirmationStateConfirmed || !reflect.DeepEqual(got.Failure, archived.Failure) {
+		t.Fatalf("committed facts disagree: live=%+v archived=%+v error=%v", got, archived, err)
+	}
+	if (!recorded || state == workersessions.StateCompleted) && got.Failure != nil {
+		t.Fatalf("invented optional failure: %+v", got.Failure)
+	}
+	if recorded && state != workersessions.StateCompleted && (got.Failure == nil || got.Failure.Detail != "committed underlying failure") {
+		t.Fatalf("lost committed underlying failure: %+v", got.Failure)
 	}
 }
