@@ -103,13 +103,21 @@ func (s *FleetObservationService) GetObservationByWorkerSessionID(
 		}
 		return selected, nil
 	}
-	return s.capturedObservationByWorkerSessionID(ctx, req)
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
-// Archived predecessors have no live registry owner. Use the same activated
-// captured identity reader as fleet history and continuation, without restoring
-// execution authority or reading a recording on this ordinary request.
-func (s *FleetObservationService) capturedObservationByWorkerSessionID(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+// GetCapturedObservation resolves archived identity facts without a live owner.
+// It is an explicit history read and grants no execution or admission authority.
+func (s *FleetObservationService) GetCapturedObservation(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if ctx == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
 	if s.history == nil || s.history.continuation == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 	}

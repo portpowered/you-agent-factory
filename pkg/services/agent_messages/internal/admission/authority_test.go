@@ -59,7 +59,7 @@ func TestAuthorizerRequiresExactActiveCaller(t *testing.T) {
 					return errors.New("private diagnostics execution-token")
 				}
 				return nil
-			}, reader.read)
+			}, reader.read, nil)
 			identity, err := authorizer.Authenticate(context.Background(), caller)
 			if cell != "valid" {
 				if !errors.Is(err, agentmessages.ErrNotPermitted) || identity.Chain != "" {
@@ -126,7 +126,7 @@ func TestAuthorizerRequesterPolicy(t *testing.T) {
 			lead := reader.observations["lead"]
 			lead.Requester = &workersessions.Requester{Kind: "OPERATOR"}
 			reader.observations["lead"] = lead
-			authorizer := NewAuthorizer(nil, reader.read)
+			authorizer := NewAuthorizer(nil, reader.read, nil)
 			sender, err := authorizer.Recipient(context.Background(), cell.sender, "")
 			if err != nil {
 				t.Fatal(err)
@@ -148,7 +148,7 @@ func TestAuthorizerScopedAddressAndAmbiguity(t *testing.T) {
 	reader := &authorityReader{observations: map[string]workersessions.Observation{
 		"recipient": authorityObservation("recipient", "selected-factory", "work", ""),
 	}}
-	authorizer := NewAuthorizer(nil, reader.read)
+	authorizer := NewAuthorizer(nil, reader.read, nil)
 	identity, err := authorizer.Recipient(context.Background(), "recipient", "selected-factory")
 	if err != nil || identity.Observation.FactorySessionID != "selected-factory" ||
 		reader.requests[0].FactorySessionID != "selected-factory" {
@@ -185,7 +185,7 @@ func TestAuthorizerRevalidatesWithoutRetainingCredentials(t *testing.T) {
 		}
 		received.Token = "collaborator-mutated"
 		return nil
-	}, reader.read)
+	}, reader.read, nil)
 	if _, err := authorizer.Authenticate(context.Background(), caller); err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestAuthorizerInboxUsesScopedWorkAndVerifiedContinuation(t *testing.T) {
 	reader := &authorityReader{observations: map[string]workersessions.Observation{
 		"old": old, "new": current, "redispatched": redispatched, "foreign": foreign,
 	}}
-	authorizer := NewAuthorizer(nil, reader.read)
+	authorizer := NewAuthorizer(nil, reader.read, nil)
 	identities := make(map[string]Identity)
 	for worker := range reader.observations {
 		identity, err := authorizer.Recipient(context.Background(), worker, "")
@@ -233,6 +233,39 @@ func TestAuthorizerInboxUsesScopedWorkAndVerifiedContinuation(t *testing.T) {
 	}
 	if scopedIdentity("a/b", "c") == scopedIdentity("a", "b/c") {
 		t.Fatal("opaque ID tuple collision")
+	}
+}
+
+func TestAuthorizerCapturedReadIsOnlyForPredecessors(t *testing.T) {
+	t.Parallel()
+	old := authorityObservation("old", "factory", "work", "")
+	old.State, old.SuccessorWorkerSessionID = workersessions.StateCompleted, "new"
+	current := authorityObservation("new", "factory", "work", "")
+	current.PredecessorWorkerSessionID = "old"
+	for _, readError := range []error{workersessions.ErrObservationSessionNotFound, workersessions.ErrObservationProjectionUnavailable} {
+		t.Run(readError.Error(), func(t *testing.T) {
+			t.Parallel()
+			live := &authorityReader{observations: map[string]workersessions.Observation{"new": current}}
+			captured := &authorityReader{observations: map[string]workersessions.Observation{"old": old}}
+			read := func(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+				if req.WorkerSessionID == "old" {
+					return workersessions.Observation{}, readError
+				}
+				return live.read(ctx, req)
+			}
+			authorizer := NewAuthorizer(nil, read, captured.read)
+			if _, err := authorizer.Recipient(t.Context(), "old", "factory"); !errors.Is(err, agentmessages.ErrRecipientNotFound) || len(captured.requests) != 0 {
+				t.Fatalf("archived recipient used captured reader: %v, %#v", err, captured.requests)
+			}
+			identity, err := authorizer.Recipient(t.Context(), "new", "factory")
+			if errors.Is(readError, workersessions.ErrObservationSessionNotFound) {
+				if err != nil || identity.Chain != scopedIdentity("factory", "old") || len(captured.requests) != 1 || captured.requests[0].FactorySessionID != "factory" {
+					t.Fatalf("archived predecessor not resolved exactly: %#v, %v, %#v", identity, err, captured.requests)
+				}
+			} else if !errors.Is(err, agentmessages.ErrRecipientNotFound) || len(captured.requests) != 0 {
+				t.Fatalf("projection failure fell back to capture: %v, %#v", err, captured.requests)
+			}
+		})
 	}
 }
 
@@ -266,7 +299,7 @@ func TestAuthorizerRejectsBrokenLineageAndRequesterCycles(t *testing.T) {
 				current.Requester = &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "new"}
 				reader.observations["new"] = current
 			}
-			authorizer := NewAuthorizer(nil, reader.read)
+			authorizer := NewAuthorizer(nil, reader.read, nil)
 			identity, err := authorizer.Recipient(context.Background(), "new", "")
 			if cell == "requester cycle" {
 				target, targetErr := authorizer.Recipient(context.Background(), "target", "")
@@ -288,7 +321,7 @@ func TestAuthorizerDetachesIdentityFacts(t *testing.T) {
 	t.Parallel()
 	observation := authorityObservation("worker", "factory", "work", "lead")
 	reader := &authorityReader{observations: map[string]workersessions.Observation{"worker": observation}}
-	authorizer := NewAuthorizer(nil, reader.read)
+	authorizer := NewAuthorizer(nil, reader.read, nil)
 	identity, err := authorizer.Recipient(context.Background(), "worker", "")
 	if err != nil {
 		t.Fatal(err)
@@ -321,7 +354,7 @@ func TestAuthorizerProjectRequesterWorkRequiresEvidence(t *testing.T) {
 				"original-lead": authorityObservation("original-lead", "factory", "project-work", ""),
 				"new-lead":      authorityObservation("new-lead", cell.selectedFactory, "project-work", ""),
 			}}
-			authorizer := NewAuthorizer(nil, reader.read)
+			authorizer := NewAuthorizer(nil, reader.read, nil)
 			sender, err := authorizer.Recipient(context.Background(), "lane", "")
 			if err != nil {
 				t.Fatal(err)
@@ -348,7 +381,7 @@ func TestAuthorizerChecksCompleteRequesterChain(t *testing.T) {
 	child := authorityObservation("child", "factory", "", "parent")
 	parent := authorityObservation("parent", "factory", "", "child")
 	reader := &authorityReader{observations: map[string]workersessions.Observation{"child": child, "parent": parent}}
-	authorizer := NewAuthorizer(nil, reader.read)
+	authorizer := NewAuthorizer(nil, reader.read, nil)
 	sender, err := authorizer.Recipient(context.Background(), "child", "")
 	if err != nil {
 		t.Fatal(err)
@@ -376,7 +409,7 @@ func TestAuthorizerDirectWorkIdentityAndCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	authorizer := NewAuthorizer(nil, nil)
+	authorizer := NewAuthorizer(nil, nil, nil)
 	if _, err := authorizer.Recipient(ctx, "worker", "factory"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("recipient cancellation = %v", err)
 	}

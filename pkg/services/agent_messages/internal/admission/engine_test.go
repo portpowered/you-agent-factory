@@ -206,6 +206,35 @@ func TestEngineSendFlushRetryAndAlias(t *testing.T) {
 	}
 }
 
+func TestEngineExactReplayRetainsArchivedRecipientFacts(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	request := engineRequest("request", "question")
+	original, err := f.engine.Send(t.Context(), request, f.caller, "factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(f.authority.recipients, "lead")
+	replayed, err := f.engine.Send(t.Context(), request, f.caller, "")
+	if err != nil || !reflect.DeepEqual(original, replayed) {
+		t.Fatalf("archived exact retry = %#v, %v", replayed, err)
+	}
+	if _, err := f.engine.Send(t.Context(), request, f.caller, "foreign"); !errors.Is(err, agentmessages.ErrRequestConflict) {
+		t.Fatalf("changed explicit owner = %v", err)
+	}
+	request.Body = "changed"
+	if _, err := f.engine.Send(t.Context(), request, f.caller, ""); !errors.Is(err, agentmessages.ErrRequestConflict) {
+		t.Fatalf("changed archived retry = %v", err)
+	}
+	request.Body, request.RequestID = "question", "new-request"
+	if _, err := f.engine.Send(t.Context(), request, f.caller, ""); !errors.Is(err, agentmessages.ErrRecipientNotFound) {
+		t.Fatalf("new send bypassed ordinary recipient resolution: %v", err)
+	}
+	if len(f.ledger.transactions) != 1 || f.quota.calls != 1 {
+		t.Fatal("archived retry or refusal created a send")
+	}
+}
+
 func TestEngineChangedRequestConflictsWithoutCommit(t *testing.T) {
 	t.Parallel()
 	f := newEngineFixture()

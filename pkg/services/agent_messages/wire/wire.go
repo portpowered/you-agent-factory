@@ -42,11 +42,11 @@ func NewJournal(files agentmessages.StoreFileSystem, path string) (*Journal, err
 	return store.New(files, path), nil
 }
 
-func NewAuthority(validate workersessions.CallerValidator, read ObservationReader) (Authority, error) {
-	if validate == nil || read == nil {
+func NewAuthority(validate workersessions.CallerValidator, read, captured ObservationReader) (Authority, error) {
+	if validate == nil || read == nil || captured == nil {
 		return nil, agentmessages.ErrBadRequest
 	}
-	return admission.NewAuthorizer(validate, read), nil
+	return admission.NewAuthorizer(validate, read, captured), nil
 }
 
 func NewValidator(bodyBytes, defaultExpirySeconds int, redact func(recordings.RecordingRedactionRequest) (recordings.RecordingRedactionResult, error)) (InputValidator, error) {

@@ -25,7 +25,7 @@ func provideMessageStartup(journal *agentmessageswire.Journal, clock platformclo
 }
 
 func provideMessageAuthority(validate workersessions.CallerValidator, fleet *workersessionswire.FleetObservationService) (agentmessageswire.Authority, error) {
-	return agentmessageswire.NewAuthority(validate, fleet.GetObservationByWorkerSessionID)
+	return agentmessageswire.NewAuthority(validate, fleet.GetObservationByWorkerSessionID, fleet.GetCapturedObservation)
 }
 
 func provideMessageValidator() (agentmessageswire.InputValidator, error) {

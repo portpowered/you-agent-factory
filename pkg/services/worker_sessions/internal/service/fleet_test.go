@@ -160,7 +160,7 @@ func TestFleetObservationServiceResolvesWorkerSessionIdentityAcrossSources(t *te
 	}
 }
 
-func TestFleetExactReadResolvesCapturedPredecessor(t *testing.T) {
+func TestFleetCapturedReadResolvesArchivedPredecessor(t *testing.T) {
 	t.Parallel()
 	wanted := workersessions.Observation{
 		WorkerSessionID: "predecessor", FactorySessionID: "factory", State: workersessions.StateCompleted,
@@ -196,7 +196,10 @@ func TestFleetExactReadResolvesCapturedPredecessor(t *testing.T) {
 			service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
 				return []workersessions.Service{newFleetObservationSource("live")}, nil
 			}, &FleetHistory{continuation: reader})
-			got, err := service.GetObservationByWorkerSessionID(t.Context(), test.request)
+			if _, err := service.GetObservationByWorkerSessionID(t.Context(), test.request); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+				t.Fatalf("ordinary lookup returned archived identity: %v", err)
+			}
+			got, err := service.GetCapturedObservation(t.Context(), test.request)
 			if !errors.Is(err, test.wantError) {
 				t.Fatalf("exact read error = %v, want %v", err, test.wantError)
 			}

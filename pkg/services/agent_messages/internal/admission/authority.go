@@ -25,10 +25,11 @@ type ObservationReader func(context.Context, workersessions.GetObservationByWork
 type Authorizer struct {
 	validate workersessions.CallerValidator
 	read     ObservationReader
+	captured ObservationReader
 }
 
-func NewAuthorizer(validate workersessions.CallerValidator, read ObservationReader) *Authorizer {
-	return &Authorizer{validate: validate, read: read}
+func NewAuthorizer(validate workersessions.CallerValidator, read, captured ObservationReader) *Authorizer {
+	return &Authorizer{validate: validate, read: read, captured: captured}
 }
 
 // Revalidate is also called under the admission lock immediately before a
@@ -121,9 +122,13 @@ func (a *Authorizer) chainRoot(ctx context.Context, observation workersessions.O
 		if previous == "" {
 			return observation.WorkerSessionID, nil
 		}
-		parent, err := a.read(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+		request := workersessions.GetObservationByWorkerSessionIDRequest{
 			WorkerSessionID: previous, FactorySessionID: observation.FactorySessionID,
-		})
+		}
+		parent, err := a.read(ctx, request)
+		if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.captured != nil {
+			parent, err = a.captured(ctx, request)
+		}
 		if err != nil || parent.WorkerSessionID != previous || parent.FactorySessionID != observation.FactorySessionID ||
 			parent.SuccessorWorkerSessionID != observation.WorkerSessionID || !parent.State.Terminal() {
 			return "", agentmessages.ErrNotPermitted

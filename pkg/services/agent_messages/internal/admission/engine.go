@@ -97,6 +97,9 @@ func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, ca
 		return agentmessages.Message{}, err
 	}
 	prepared, factory = replyDefaults(prepared, parent, factory)
+	if message, found, err := e.replayRequest(ctx, caller, sender, prepared, factory, entries, sequence); found || err != nil {
+		return message, err
+	}
 	recipient, err := e.authority.Recipient(ctx, prepared.Request.To.WorkerSessionID, factory)
 	if err != nil {
 		return agentmessages.Message{}, err
@@ -109,13 +112,6 @@ func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, ca
 		return agentmessages.Message{}, err
 	}
 	alias := store.Request{SenderIdentity: sender.Chain, RequestID: prepared.Request.RequestID, RequestSHA256: fingerprint}
-	prior, exists, err := e.ledger.LookupRequest(alias.SenderIdentity, alias.RequestID)
-	if err != nil {
-		return agentmessages.Message{}, err
-	}
-	if exists {
-		return e.retry(ctx, caller, prior, fingerprint, entries, sequence)
-	}
 	if duplicate, found := identicalMessage(now, prepared, sender, recipient, entries); found {
 		alias.MessageID = duplicate.MessageID
 		t := e.transaction(sequence, now, store.RequestAlias, nil, alias)
@@ -128,6 +124,31 @@ func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, ca
 		return duplicate, nil
 	}
 	return e.admit(ctx, caller, prepared, sender, recipient, parent, entries, sequence, now, alias)
+}
+
+// Exact retries use committed recipient ownership, so returning a prior admission
+// never needs archived recipient resolution or grants a new send permission.
+func (e *Engine) replayRequest(ctx context.Context, caller *workersessions.CallerIdentity, sender Identity, prepared Prepared, factory string, entries []store.Entry, sequence uint64) (agentmessages.Message, bool, error) {
+	prior, found, err := e.ledger.LookupRequest(sender.Chain, prepared.Request.RequestID)
+	if err != nil || !found {
+		return agentmessages.Message{}, false, err
+	}
+	for _, entry := range entries {
+		if entry.Message.MessageID != prior.MessageID {
+			continue
+		}
+		owner := entry.Message.To.FactorySessionID
+		if factory != "" && factory != owner {
+			return agentmessages.Message{}, true, agentmessages.ErrRequestConflict
+		}
+		fingerprint, err := prepared.Fingerprint(owner)
+		if err != nil {
+			return agentmessages.Message{}, true, err
+		}
+		message, err := e.retry(ctx, caller, prior, fingerprint, entries, sequence)
+		return message, true, err
+	}
+	return agentmessages.Message{}, true, store.ErrCorrupt
 }
 
 func (e *Engine) retry(ctx context.Context, caller *workersessions.CallerIdentity, prior store.Request, fingerprint string, entries []store.Entry, sequence uint64) (agentmessages.Message, error) {
