@@ -560,3 +560,27 @@ func TestObservationHandlerStatusPreservesSafeFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestDurableObservationStatusRemainsUnavailable(t *testing.T) {
+	t.Parallel()
+	handler := NewDurableObservationHandler(nil, nil, zap.NewNop())
+	for _, sessionID := range []string{"", "durable-selected"} {
+		t.Run(sessionID, func(t *testing.T) {
+			t.Parallel()
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/status", nil)
+			if sessionID == "" {
+				handler.GetStatus(recorder, request)
+			} else {
+				handler.GetStatusBySessionId(recorder, request, factoryapi.SessionID(sessionID))
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if recorder.Code != http.StatusServiceUnavailable || response.Code != "SERVICE_UNAVAILABLE" || response.Message != "factory status is unavailable" || response.Family != errorFamilyForStatus(http.StatusServiceUnavailable) || response.Targets != nil {
+				t.Fatalf("durable status response = %d %s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}

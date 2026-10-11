@@ -124,9 +124,11 @@ func executeGeneratedMCPServe(
 				wantProjectRoot,
 			)
 		}
-		server, err := mcpserver.New(mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
-			nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), service, "", func() string { return "mcp-subagent-test-id" }, nil,
-		)), mcpserver.Options{})
+		prepare, workflows := installSmokeRequestPreparation(), installSmokeWorkflowDefinitions()
+		operation := func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+			return mcpfactorysession.CallTool(ctx, prepare, workflows, name, input, nil, service, "", func() string { return "mcp-subagent-test-id" }, nil)
+		}
+		server, err := mcpserver.New(operation, mcpserver.Options{})
 		if err != nil {
 			return err
 		}

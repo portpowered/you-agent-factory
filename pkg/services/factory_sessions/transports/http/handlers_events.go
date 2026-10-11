@@ -58,6 +58,10 @@ func (s *ObservationHandler) getStatus(
 ) {
 	status, err := s.factoryStatus.ProjectFactoryStatus(r.Context(), sessionID)
 	if err != nil {
+		if errors.Is(err, errFactoryStatusUnavailable) {
+			s.writeError(w, http.StatusServiceUnavailable, "factory status is unavailable", "SERVICE_UNAVAILABLE")
+			return
+		}
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 			return

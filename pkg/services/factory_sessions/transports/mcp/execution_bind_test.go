@@ -32,7 +32,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalListSessionsTool(t *testin
 			return factorysessions.ListSessionsResult{Scope: factorysessions.SessionListScopePersisted}, nil
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"persisted"}`))
 	if err != nil {
 		t.Fatalf("CallTool(list_sessions) error = %v", err)
@@ -58,7 +58,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalGetSessionTool(t *testing.
 			return runningSessionRead(), nil
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolGetSession,
@@ -100,7 +100,7 @@ func TestBind_FakeRecordingsRootInvokedThroughCanonicalListDispatchesTool(t *tes
 					}, nil
 				},
 			}
-			operation := mcpfactorysession.BindToolOperation(fake, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{}, "", nil, nil)
+			operation := bindTestToolOperation(fake, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{}, "", nil, nil)
 			raw, err := operation(context.Background(), mcpfactorysession.ToolListDispatches,
 				json.RawMessage(`{"sessionId":"`+successSessionID+`","status":"COMPLETED"}`))
 			if err != nil {
@@ -163,7 +163,7 @@ func TestBind_ReadListToolsInvalidJSONDecodeReturnsBadRequestWithoutInvokingFake
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolGetSession, json.RawMessage(`{"sessionId":`))
 	if err != nil {
 		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", err)
@@ -183,7 +183,7 @@ func TestBind_ReadListToolsValidationFailureReturnsBadRequestWithoutInvokingFake
 			return factorysessions.ListSessionsRequest{}, errors.New(`unsupported Factory Session scope "workspace"`)
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, preparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
+	operation := bindTestToolOperation(nil, preparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"workspace"}`))
 	if err != nil {
 		t.Fatalf("CallTool(list_sessions) transport error = %v, want typed tool response", err)
@@ -210,7 +210,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalStartAsyncTool(t *testing.
 			return runningAsyncStart(), nil
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolStartAsync,
@@ -245,7 +245,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalControlTool(t *testing.T) 
 			return acceptedControl(runningSessionID, "PAUSE", factorysessions.LifecycleStatusPaused), nil
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolControl,
@@ -268,7 +268,7 @@ func TestBind_StartControlToolsInvalidJSONDecodeReturnsBadRequestWithoutInvoking
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolStartAsync, json.RawMessage(`{"requestId":`))
 	if err != nil {
 		t.Fatalf("CallTool(start_async) transport error = %v, want typed tool response", err)
@@ -288,7 +288,7 @@ func TestBind_StartControlToolsValidationFailureReturnsBadRequestWithoutInvoking
 			return factorysessions.StartRequest{}, errors.New("factory session source factoryId is required")
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, preparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
+	operation := bindTestToolOperation(nil, preparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolStartAsync,
@@ -314,7 +314,7 @@ func TestBind_GetSessionTypedNotFoundErrorReturnsToolErrorEnvelope(t *testing.T)
 			return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolGetSession,
@@ -349,7 +349,7 @@ func TestBind_ListDispatchesExecutionValidationErrorReturnsBadRequestEnvelope(t 
 			}
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolListDispatches,
@@ -378,7 +378,7 @@ func TestBind_UnmappedRootErrorDoesNotLeakInternalPackagePaths(t *testing.T) {
 			)
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolGetSession,
@@ -404,7 +404,7 @@ func TestBind_GetSessionContextCanceledBeforeRootReturnsDocumentedEnvelope(t *te
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	raw, err := operation(
@@ -442,7 +442,7 @@ func TestBind_GetSessionContextCanceledDuringRootReturnsDocumentedEnvelope(t *te
 			return factorysessions.SessionReadResult{}, ctx.Err()
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	var raw json.RawMessage
@@ -490,7 +490,7 @@ func TestBind_StartAsyncContextDeadlineExceededDuringRootReturnsDocumentedEnvelo
 			return factorysessions.AsyncStartResult{}, ctx.Err()
 		},
 	}
-	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
+	operation := bindTestToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
 	raw, err := operation(
@@ -709,7 +709,7 @@ func TestSubagentRejectsInputsOutsidePublishedSchemaBeforeStartingSession(t *tes
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			target := &subagentTargetFake{}
-			operation := mcpfactorysession.BindToolOperation(nil, nil, nil, target, "C:/project", func() string { return "request-1" }, nil)
+			operation := bindTestToolOperation(nil, nil, nil, target, "C:/project", func() string { return "request-1" }, nil)
 			raw, err := operation(context.Background(), mcpfactorysession.ToolSubagent, json.RawMessage(test.input))
 			if err != nil {
 				t.Fatalf("CallTool() transport error = %v", err)
@@ -737,7 +737,7 @@ func TestSubagentPublicToolOperationRejectsUnknownProviderWithoutDispatch(t *tes
 
 	target := &subagentTargetFake{}
 	resolver := &subagentProviderResolverFake{}
-	operation := mcpfactorysession.BindToolOperation(
+	operation := bindTestToolOperation(
 		nil, nil, nil, target, "C:/project",
 		func() string { return "request-unknown-provider" }, resolver.resolve,
 	)

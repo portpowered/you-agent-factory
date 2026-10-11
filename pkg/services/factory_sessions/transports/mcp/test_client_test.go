@@ -18,11 +18,11 @@ type testClient struct {
 }
 
 func newTestClient() *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, nil, ".", nil, nil)}
+	return &testClient{call: bindTestToolOperation(nil, nil, nil, nil, ".", nil, nil)}
 }
 
 func newTestClientWithWorkflows(workflows factoryruntime.WorkflowPreviewOperation) *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, workflows, nil, ".", nil, nil)}
+	return &testClient{call: bindTestToolOperation(nil, nil, workflows, nil, ".", nil, nil)}
 }
 
 func newTestClientWithService(
@@ -34,7 +34,7 @@ func newTestClientWithService(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, prepare, workflow, service, ".", nil, nil)}
+	return &testClient{call: bindTestToolOperation(nil, prepare, workflow, service, ".", nil, nil)}
 }
 
 func newTestClientWithRecordings(
@@ -47,7 +47,7 @@ func newTestClientWithRecordings(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(recordingRoot, prepare, workflow, service, ".", nil, nil)}
+	return &testClient{call: bindTestToolOperation(recordingRoot, prepare, workflow, service, ".", nil, nil)}
 }
 
 func (c *testClient) CallTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
@@ -109,4 +109,19 @@ func (c *testClient) Control(ctx context.Context, input mcpfactorysession.Contro
 
 func (c *testClient) GetResult(ctx context.Context, input mcpfactorysession.GetResultInput) (mcpfactorysession.ToolResponse[factoryapi.FactorySessionResult], error) {
 	return callTestTool[mcpfactorysession.GetResultInput, factoryapi.FactorySessionResult](ctx, c, mcpfactorysession.ToolGetResult, input)
+}
+
+// bindTestToolOperation supplies controlled roles to the production CallTool operation.
+func bindTestToolOperation(
+	recordingsService mcpfactorysession.RecordingsInspection,
+	prepare mcpfactorysession.RequestPreparation,
+	workflows factoryruntime.WorkflowPreviewOperation,
+	sessions factorysessions.Service,
+	workingRoot string,
+	generateID factorysessions.SessionIDGenerator,
+	resolveProvider mcpfactorysession.ProviderIdentityResolver,
+) mcpfactorysession.ToolOperation {
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		return mcpfactorysession.CallTool(ctx, prepare, workflows, name, input, recordingsService, sessions, workingRoot, generateID, resolveProvider)
+	}
 }
