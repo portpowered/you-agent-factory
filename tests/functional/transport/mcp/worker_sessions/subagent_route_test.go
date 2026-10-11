@@ -23,14 +23,14 @@ import (
 // START leaf owns its directory, identity and held-open command observation.
 func TestSubagentRouteDefaults(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "mcp/mcp.tool.you.subagent", "rest/startWorkerSession")
+	functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "mcp/mcp.tool.you.subagent", "rest/startWorkerSession")
 	client := newSelectedHostClientProcess(t)
 	home, workDir := t.TempDir(), t.TempDir()
 	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
 	released := make(chan struct{})
 	var nativeCalls, acpCommands atomic.Int32
 	commands := make(map[string]chan platformprocess.CommandRequest)
-	for _, name := range []string{"default", "model-override", "effort-override", "codex", "claude", "agy"} {
+	for _, name := range []string{"default", "model-override", "effort-override", "codex", "claude", "agy", "resolved"} {
 		commands[name] = make(chan platformprocess.CommandRequest, 2)
 	}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -53,6 +53,10 @@ func TestSubagentRouteDefaults(t *testing.T) {
 	}
 	writeSubagentProfile(t, configPath, map[string]any{"provider": "codex", "model": "dedicated-model"})
 	assertSubagentExplicitRouteFailures(t, ctx, session)
+	t.Run("resolved admission and legacy invoke ignore dedicated defaults", func(t *testing.T) {
+		t.Parallel()
+		assertSubagentResolvedCompatibility(t, host, client, workDir, commands["resolved"])
+	})
 	for _, cell := range []struct{ name, provider, model, effort string }{
 		{"default", "", "", ""}, {"model-override", "", "override-model", "high"},
 		{"effort-override", "", "", "high"},
@@ -87,6 +91,58 @@ func TestSubagentRouteDefaults(t *testing.T) {
 			}
 			assertSubagentProfileSiblings(t, configPath)
 		})
+	}
+}
+
+func assertSubagentResolvedCompatibility(t *testing.T, host *support.FunctionalAPIServer, client selectedHostClientProcess, root string, commands <-chan platformprocess.CommandRequest) {
+	t.Helper()
+	dir := filepath.Join(root, "resolved")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := map[string]any{
+		"requestId": "resolved-request", "workerSessionId": "resolved",
+		"execution": map[string]any{
+			"workstationName": "process", "workerType": "processor", "runnerId": "codex", "modelProvider": "codex",
+			"model": "resolved-model", "reasoningEffort": "high", "workingDirectory": dir, "userMessage": "controlled route prompt",
+			"dispatch": map[string]any{"dispatchId": "resolved-attempt", "workstationName": "process", "workerType": "processor"},
+		},
+	}
+	postHostJSON(t, t.Context(), host.URL()+"/worker-sessions", payload, 202)
+	select {
+	case command := <-commands:
+		assertSubagentRouteCommand(t, command, "codex", "resolved-model", "high")
+	case <-t.Context().Done():
+		t.Fatal("resolved provider boundary was not reached")
+	}
+	// F16 protects both pre-existing forms, each with its own authored identity;
+	// it does not introduce a cross-form normalization/replay contract.
+	payload["requestId"], payload["workerSessionId"] = "legacy-request", "legacy"
+	payload["execution"].(map[string]any)["dispatch"].(map[string]any)["dispatchId"] = "legacy-attempt"
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "execution.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "invoke", "--remote", "--execution", path, "--async"})
+	input.Input.WorkingDirectory = dir
+	if err := client.Execute(input.Input); err != nil || !strings.Contains(input.Stdout(), `"workerSessionId":"legacy"`) || !strings.Contains(input.Stdout(), `"accepted":true`) {
+		t.Fatalf("legacy selected-host invoke: %v %s %s", err, input.Stdout(), input.Stderr())
+	}
+	select {
+	case command := <-commands:
+		assertSubagentRouteCommand(t, command, "codex", "resolved-model", "high")
+	case <-t.Context().Done():
+		t.Fatal("legacy invoke provider boundary was not reached")
+	}
+	for id, attempt := range map[string]string{"resolved": "resolved-attempt", "legacy": "legacy-attempt"} {
+		observation := getHost(t, host.URL()+"/worker-sessions/"+id).(map[string]any)
+		if observation["workerSessionId"] != id || observation["state"] != "RUNNING" || observation["attemptId"] != attempt {
+			t.Fatalf("resolved admission lost its active identity: %v", observation)
+		}
 	}
 }
 

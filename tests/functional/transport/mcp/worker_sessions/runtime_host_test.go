@@ -129,21 +129,23 @@ func runRealHostControls(t *testing.T, process support.Process) {
 	sibling := admitControlWorker(t, ctx, host.URL(), "sibling", runner)
 	for _, operation := range []string{"CANCEL", "TERMINATE"} {
 		id := "mcp-" + strings.ToLower(operation)
-		done := admitControlWorker(t, ctx, host.URL(), id, runner)
+		done := admitSubagentControlWorker(t, ctx, session, dir, id, runner)
 		listed := callWorker(t, ctx, session, "list", map[string]any{"scope": "direct"})["result"]
 		assertRuntimeObservationParity(t, listed, getHost(t, host.URL()+"/worker-sessions?history=all&scope=direct"))
 		before := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id})["result"].(map[string]any)["session"]
+		attempt := before.(map[string]any)["attemptId"].(string)
 		assertRuntimeObservationParity(t, before, getHost(t, host.URL()+"/worker-sessions/"+id))
 		assertFactoryCLIParity(t, host, id, getHost(t, host.URL()+"/worker-sessions/"+id))
 		args := map[string]any{"workerSessionId": id, "operation": operation}
 		applied := callWorker(t, ctx, session, "control", args)["result"].(map[string]any)
-		assertOwnedControl(t, applied, id, operation, "APPLIED")
+		assertOwnedControl(t, applied, id, operation, "APPLIED", attempt)
 		waitControlSignal(t, done)
 		retry := callWorker(t, ctx, session, "control", args)["result"]
-		assertOwnedControl(t, retry.(map[string]any), id, operation, "NOOP")
+		assertOwnedControl(t, retry.(map[string]any), id, operation, "NOOP", attempt)
 		assertJSONEqual(t, retry, requestHost(t, http.MethodPost, host.URL()+"/worker-sessions/"+id+"/"+strings.ToLower(operation)))
 		assertCLIControlParity(t, host, retry, id, strings.ToLower(operation), process)
 		assertStoppedObservationParity(t, ctx, session, host, id, operation)
+		assertSubagentStoppedReads(t, ctx, session, host, id)
 		read := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id, "view": "events", "limit": 1})["result"].(map[string]any)
 		assertJSONEqual(t, read["session"], getHost(t, host.URL()+"/worker-sessions/"+id))
 		page := read["events"].(map[string]any)
@@ -167,6 +169,49 @@ func runRealHostControls(t *testing.T, process support.Process) {
 	assertFactoryWithoutReference(t, ctx, session, host, dir, runner)
 	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "sibling", "operation": "TERMINATE"})
 	waitControlSignal(t, sibling)
+}
+
+// The prompt START and legacy resolved sibling intentionally coexist on one
+// selected host. Only provider effects are controlled; inspection and controls
+// use public MCP/HTTP/CLI boundaries after admission has returned.
+func admitSubagentControlWorker(t *testing.T, ctx context.Context, session *mcp.ClientSession, directory, id string, runner controlHostRunner) <-chan struct{} {
+	t.Helper()
+	result := callAction(t, ctx, session, "START", map[string]any{
+		"requestId": "request-" + id, "workerSessionId": id,
+		"prompt": "controlled direct host prompt", "provider": "codex", "model": "test-model", "workingRoot": directory,
+	})
+	assertSubagentAdmission(t, result, id)
+	select {
+	case done := <-runner.started:
+		return done
+	case <-ctx.Done():
+		t.Fatal("START provider boundary was not reached")
+	}
+	return nil
+}
+
+func assertSubagentStoppedReads(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	// This controlled attempt emits no provider-session reference. Preserve the
+	// existing typed unavailable transcript rather than inventing captured data.
+	transcript := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id, "view": "transcript"})
+	assertToolError(t, transcript, "worker_session.unavailable", false)
+	details := transcript.StructuredContent.(map[string]any)["error"].(map[string]any)["details"].(map[string]any)
+	if details["upstreamCode"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+		t.Fatalf("START transcript lost typed unavailable meaning: %v", details)
+	}
+	page := logsParityPage(t, ctx, session, host, id, "")
+	if page["workerSessionId"] != id || len(page["events"].([]any)) != 1 {
+		t.Fatalf("START logs lost the bounded owned prefix: %v", page)
+	}
+	token, ok := page["nextToken"].(string)
+	if !ok || token == "" {
+		t.Fatalf("START logs lost its retained cursor: %v", page)
+	}
+	logsParityPage(t, ctx, session, host, id, token)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{
+		"workerSessionId": "sibling", "view": "logs", "nextToken": token,
+	}), "worker_session.invalid_request", false)
 }
 
 func assertFactoryWithoutReference(t *testing.T, ctx context.Context, session *mcp.ClientSession, host *support.FunctionalAPIServer, dir string, runner controlHostRunner) {
@@ -375,9 +420,13 @@ func waitControlSignal(t *testing.T, done <-chan struct{}) {
 	}
 }
 
-func assertOwnedControl(t *testing.T, result map[string]any, id, operation, outcome string) {
+func assertOwnedControl(t *testing.T, result map[string]any, id, operation, outcome string, attempts ...string) {
 	t.Helper()
-	if result["workerSessionId"] != id || result["dispatchId"] != "attempt-"+id || result["action"] != operation || result["outcome"] != outcome {
+	attempt := "attempt-" + id
+	if len(attempts) > 0 {
+		attempt = attempts[0]
+	}
+	if result["workerSessionId"] != id || result["dispatchId"] != attempt || result["action"] != operation || result["outcome"] != outcome {
 		t.Fatalf("exact target control result: %v", result)
 	}
 }

@@ -154,6 +154,7 @@
     {
       "test": "tests/functional/transport/mcp/worker_sessions/subagent_route_test.go::TestSubagentRouteDefaults",
       "stableIds": [
+        "cli/you.worker-sessions.invoke",
         "mcp/mcp.tool.you.subagent",
         "rest/startWorkerSession"
       ]

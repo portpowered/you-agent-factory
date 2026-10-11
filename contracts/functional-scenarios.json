@@ -783,6 +783,10 @@
       "executionClass": "deterministic",
       "evidence": [
         {
+          "test": "tests/functional/transport/mcp/worker_sessions/subagent_route_test.go::TestSubagentRouteDefaults",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "cli"
         },

@@ -93,6 +93,21 @@ func runSelectedHostScenarios(t *testing.T) {
 		}
 		args["prompt"] = "conflicting prompt"
 		assertToolError(t, callTool(t, freshCtx, fresh, "you.subagent", args), "worker_session.conflict", false)
+		args["prompt"] = "controlled unfinished prompt"
+		args["workerSessionId"] = "conflicting-worker"
+		assertToolError(t, callTool(t, freshCtx, fresh, "you.subagent", args), "worker_session.conflict", false)
+		assertToolError(t, callAction(t, freshCtx, fresh, "READ", map[string]any{"workerSessionId": "conflicting-worker"}), "worker_session.not_found", false)
+		args["workerSessionId"], args["model"] = "direct-worker", "conflicting-model"
+		assertToolError(t, callTool(t, freshCtx, fresh, "you.subagent", args), "worker_session.conflict", false)
+		read = callAction(t, freshCtx, fresh, "READ", map[string]any{"workerSessionId": "direct-worker"})
+		if read.IsError || !strings.Contains(read.Content[0].(*mcp.TextContent).Text, `"state":"RUNNING"`) {
+			t.Fatalf("conflict changed the original active identity: %#v", read)
+		}
+		select {
+		case <-launched:
+			t.Fatal("conflicting tuple launched another provider")
+		default:
+		}
 		assertToolError(t, callTool(t, freshCtx, fresh, "you.subagent", map[string]any{"action": "RUN", "prompt": "ignored"}), "worker_session.run_removed", false)
 		close(released)
 	})
