@@ -188,7 +188,7 @@ func newEngineFixture() *engineFixture {
 	f.engine = NewEngine(true, f.authority, engineValidator{}, f.quota, f.ledger, func() time.Time { return f.now }, platformclock.Real{}, func() string { id++; return fmt.Sprintf("id-%d", id) }, []byte("controlled-cursor-signing-key-32bytes"), nil, nil,
 		func(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
 			return workersessions.ContinueResult{}, workersessions.ErrContinuationExecutionUnavailable
-		}, nil)
+		}, nil, nil)
 	return f
 }
 

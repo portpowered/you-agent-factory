@@ -255,6 +255,7 @@ func (e *Engine) BindHost() func() {
 	life.hosts++
 	if life.hosts == 1 {
 		e.startExpiry(life)
+		e.startDeliveryRecovery(life)
 		e.resumeRecipientObservers(context.Background())
 	}
 	e.mu.Unlock()

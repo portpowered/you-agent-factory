@@ -18,6 +18,93 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
+type recoveryCell struct {
+	name, state                                       string
+	progress, complete, active, malformed, writeFault bool
+	replayError                                       error
+}
+
+func TestRecoveryRequiresExactAdmissionAndProviderProgress(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []recoveryCell{
+		{name: "completed confirmed", state: store.IntentAccepted, progress: true, complete: true},
+		{name: "active confirmed", state: store.IntentAccepted, progress: true, complete: true, active: true},
+		{name: "active pending", state: store.IntentAdmitted, complete: true, active: true},
+		{name: "completed without progress", state: store.IntentUncertain, complete: true},
+		{name: "incomplete replay", state: store.IntentUncertain},
+		{name: "foreign successor", state: store.IntentUncertain, malformed: true},
+		{name: "unavailable replay", state: store.IntentUncertain, replayError: workersessions.ErrContinuationExecutionUnavailable},
+		{name: "rejected replay", state: store.IntentUncertain, replayError: workersessions.ErrContinuationNotAccepted},
+		{name: "refused recovery flush", state: store.IntentAdmitted, progress: true, complete: true, writeFault: true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			f, message, intent := admittedEngineFixture(t)
+			f.now = f.now.Add(10 * time.Minute)
+			calls := configureRecoveryReplay(t, f, intent, cell)
+			if cell.writeFault {
+				f.ledger.commitError = store.ErrUnavailable
+			}
+			f.engine.mu.Lock()
+			err := f.engine.recoverDelivery(t.Context(), intent)
+			f.engine.mu.Unlock()
+			if cell.writeFault != errors.Is(err, store.ErrUnavailable) || *calls != 1 {
+				t.Fatal("incorrect replay/flush outcome", err)
+			}
+			current := f.ledger.intents[intent.RequestID]
+			if current.State != cell.state {
+				t.Fatalf("recovery state = %s", current.State)
+			}
+			if (cell.state == store.IntentAccepted || cell.state == store.IntentAdmitted) && !current.AcceptedAt.Equal(intent.AcceptedAt) {
+				t.Fatal("recovery changed volume timestamp")
+			}
+			got := f.ledger.entries[0].Message
+			if cell.state == store.IntentAccepted {
+				if got.Status != agentmessages.DeliveredRevive || got.RevivedWorkerSessionID != intent.SuccessorWorkerSessionID {
+					t.Fatal("confirmed recovery lost delivery facts")
+				}
+			} else if got.Status != agentmessages.Queued || got.RevivedWorkerSessionID != "" || got.Body != message.Body {
+				t.Fatal("uncertain recovery guessed delivery or changed input")
+			}
+		})
+	}
+}
+
+func configureRecoveryReplay(t *testing.T, f *engineFixture, intent store.DeliveryIntent, cell recoveryCell) *int {
+	t.Helper()
+	calls := new(int)
+	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		*calls++
+		if req.RequestID != intent.RequestID || req.SourceWorkerSessionID != intent.SourceWorkerSessionID || req.SuccessorWorkerSessionID != intent.SuccessorWorkerSessionID || req.FollowUpInput != intent.FollowUpInput || !req.ResolveHead {
+			t.Fatal("recovery rewrote the admitted effect tuple")
+		}
+		state := workersessions.StateCompleted
+		if cell.active {
+			state = workersessions.StateRunning
+		}
+		result := workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID, State: state}}
+		if cell.malformed {
+			result.Session.ID = "foreign"
+		}
+		return result, cell.replayError
+	}
+	f.engine.readObservations = func(_ context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
+		if req.WorkerSessionID != intent.SuccessorWorkerSessionID || req.FactorySessionID != intent.FactorySessionID || !req.ReplayOnly {
+			t.Fatal("recovery inspected a different or unbounded source")
+		}
+		progress := cell.progress
+		return workersessions.ObservationSubscription{NextFunc: func(context.Context) workersessions.ObservationDelivery {
+			if progress {
+				progress = false
+				return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{SchemaID: "workers.draft.v1", Payload: json.RawMessage(`{"kind":"RUN","phase":"STARTED","provenance":{"provider":"codex","delivery":"NATIVE_STREAM","nativeEventType":"turn.started"}}`)}}
+			}
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: cell.complete}}
+		}}, nil
+	}
+	return calls
+}
+
 type observationAppender struct {
 	requests    []events.AppendRequest
 	attachments []events.AttachSourceRequest

@@ -54,7 +54,7 @@ func provideMessageEngine(authority agentmessageswire.Authority, validator agent
 			millis >>= 8
 		}
 		return "msg-" + messageIDText(id[:])
-	}, key, stream, logger, sessions.Continue, sessions.Get)
+	}, key, stream, logger, sessions.Continue, sessions.Get, sessions.StreamObservationsByWorkerSessionID)
 }
 
 func messageIDText(bytes []byte) string {

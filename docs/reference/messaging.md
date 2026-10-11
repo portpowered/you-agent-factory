@@ -182,6 +182,9 @@ Read and admission operations durably expire due messages.
 Retention removes complete settled threads older than the configured window during startup.
 Pending messages and retained thread relationships remain available.
 Reconstructing the process with the same isolated profile recovers identities, redacted content, statuses, reply relationships, and request deduplication.
+Startup also reconciles interrupted continuations through the original request, input, and successor identity.
+Confirmed provider progress produces durable delivery facts without another provider attempt.
+Unavailable or incomplete evidence keeps the message queued with `REVIVE_FAILED`.
 Separate processes must not share a writable messaging profile.
 
 Setting `messaging.enabled` to `false` returns `MESSAGING_DISABLED` with HTTP `503` and preserves stored messages.
@@ -222,7 +225,6 @@ Use `--reply-hold` to make a future reply inherit `HOLD`.
 Unreplied messages become `EXPIRED` at `expiresAt`, even without a read request.
 Messaging schedules expiry independently of Factory execution.
 Replies preserve the parent message as `REPLIED`.
-Restart reconciliation is pending the remaining T6 work.
 Interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
 No Factory route, guard, or workstation waits on an Agent Message.
 

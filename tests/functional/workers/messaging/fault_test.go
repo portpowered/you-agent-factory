@@ -221,11 +221,8 @@ func exerciseProviderOutcomeFlush(t *testing.T, reject bool) {
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
 	f.endWorker(t, "lane")
 	f.server.Close(t)
-	second := startHost(t, f.home, f.dir, "")
-	page := readPage(t, second, "/messages?threadId="+pending.ThreadId, nil)
-	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], final) {
-		t.Fatal("reconstruction changed the last durable provider outcome")
-	}
+	assertRestartedDelivery(t, f, revival, pending, final, successor["YOU_WORKER_SESSION_ID"], reject)
+
 }
 
 func exerciseOutcomeFlush(t *testing.T, reject bool) {
@@ -273,7 +270,7 @@ func exerciseOutcomeFlush(t *testing.T, reject bool) {
 	}
 	input.unblock.Do(func() { close(input.release) })
 	assertFlushPublicationBlocked(t, ctx, gate, result, frames)
-	assertOutcomeFlushResult(t, ctx, f, lane, lead, revival, sent.Message, result, frames, finished, reject)
+	successor := assertOutcomeFlushResult(t, ctx, f, lane, lead, revival, sent.Message, result, frames, finished, reject)
 	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
 		t.Fatal("outcome flush changed Factory Events")
 	}
@@ -284,6 +281,85 @@ func exerciseOutcomeFlush(t *testing.T, reject bool) {
 		t.Fatal("outcome follow did not join")
 	}
 	f.endWorker(t, "lane")
+	f.server.Close(t)
+	if reject {
+		assertRestartedDelivery(t, f, revival, sent.Message, sent.Message, successor, true)
+	}
+
+}
+
+func assertRestartedDelivery(t *testing.T, first *fixture, revival *workerGate, pending, expected api.AgentMessage, successor string, recoverOutcome bool) {
+	t.Helper()
+	second := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival)
+	if recoverOutcome {
+		reason := "REVIVE_PENDING"
+		pending.Reason = &reason
+		expected = second.awaitDeliveryOutcome(t, nil, pending)
+		if expected.Status != "DELIVERED_REVIVE" || expected.RevivedWorkerSessionId == nil || *expected.RevivedWorkerSessionId != successor {
+			t.Fatal("startup did not recover the original confirmed successor")
+		}
+	}
+	page := readPage(t, second, "/messages?threadId="+pending.ThreadId, nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], expected) {
+		t.Fatal("reconstruction changed the durable provider outcome")
+	}
+	second.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("outcome recovery started another provider attempt")
+	default:
+	}
+}
+
+func TestInterruptedAdmissionWithoutProviderProofStaysQueuedAfterRestart(t *testing.T) {
+	t.Parallel()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, state: "ADMITTED"}
+	progress := make(chan struct{})
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{AgentMessageStoreFileSystem: gate}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	request := map[string]any{"requestId": "interrupted", "to": map[string]string{"workerSessionId": "lead"}, "body": "requires authoritative resumed progress"}
+	response := make(chan outcomeSendResponse, 1)
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+		response <- outcomeSendResponse{status, body}
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("admission did not reach the controlled flush")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	result := <-response
+	var failure api.ErrorResponse
+	if result.status != http.StatusServiceUnavailable || json.Unmarshal(result.body, &failure) != nil || failure.Code != "MESSAGE_STORE_UNAVAILABLE" {
+		t.Fatal("refused admission flush did not return its typed fault")
+	}
+	<-revival.started
+	<-revival.requests
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", lane)
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("interrupted admission guessed provider delivery")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t) // cancels and joins the admitted, unconfirmed successor
+	second := startHostRunner(t, f.home, f.dir, "", serviceedges.Edges{}, nil, revival)
+	pending := "REVIVE_PENDING"
+	page.Messages[0].Reason = &pending
+	recovered := second.awaitDeliveryOutcome(t, nil, page.Messages[0])
+	if recovered.Status != "QUEUED" || recovered.Reason == nil || *recovered.Reason != "REVIVE_FAILED" || recovered.RevivedWorkerSessionId != nil || recovered.Body != page.Messages[0].Body {
+		t.Fatal("restart guessed success without provider progress")
+	}
+	assertError(t, second, http.MethodPost, "/messages", request, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	second.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("unconfirmed restart branched another provider attempt")
+	default:
+	}
 }
 
 func assertFlushPublicationBlocked(t *testing.T, ctx context.Context, gate *messageOutcomeFileSystem, result <-chan outcomeSendResponse, frames <-chan []byte) {
@@ -306,7 +382,7 @@ func assertFlushPublicationBlocked(t *testing.T, ctx context.Context, gate *mess
 	gate.unblock.Do(func() { close(gate.release) })
 }
 
-func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lane, lead map[string]string, revival *workerGate, queued api.AgentMessage, result <-chan outcomeSendResponse, frames <-chan []byte, finished <-chan error, reject bool) {
+func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lane, lead map[string]string, revival *workerGate, queued api.AgentMessage, result <-chan outcomeSendResponse, frames <-chan []byte, finished <-chan error, reject bool) string {
 	t.Helper()
 	var response outcomeSendResponse
 	select {
@@ -315,8 +391,7 @@ func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lan
 		t.Fatal("send did not finish after outcome flush")
 	}
 	if reject {
-		assertRefusedOutcomeFlush(t, f, lane, revival, queued, response, frames)
-		return
+		return assertRefusedOutcomeFlush(t, f, lane, revival, queued, response, frames)
 	}
 	var responseBody api.AgentMessageSendResponse
 	if response.status != http.StatusAccepted || json.Unmarshal(response.body, &responseBody) != nil {
@@ -335,9 +410,10 @@ func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lan
 	successor := assertReviveAdmission(t, f, revival, message, lead)
 	close(revival.release)
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	return successor["YOU_WORKER_SESSION_ID"]
 }
 
-func assertRefusedOutcomeFlush(t *testing.T, f *fixture, lane map[string]string, revival *workerGate, queued api.AgentMessage, response outcomeSendResponse, frames <-chan []byte) {
+func assertRefusedOutcomeFlush(t *testing.T, f *fixture, lane map[string]string, revival *workerGate, queued api.AgentMessage, response outcomeSendResponse, frames <-chan []byte) string {
 	t.Helper()
 	var failure api.ErrorResponse
 	if response.status != http.StatusServiceUnavailable || json.Unmarshal(response.body, &failure) != nil || string(failure.Code) != "MESSAGE_STORE_UNAVAILABLE" {
@@ -357,6 +433,7 @@ func assertRefusedOutcomeFlush(t *testing.T, f *fixture, lane map[string]string,
 	<-revival.requests
 	close(revival.release)
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	return successor["YOU_WORKER_SESSION_ID"]
 }
 
 func TestMessagingFaultsLeaveFactoryWorkHealthy(t *testing.T) {

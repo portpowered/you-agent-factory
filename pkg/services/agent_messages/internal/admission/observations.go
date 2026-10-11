@@ -3,6 +3,7 @@ package admission
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
@@ -213,4 +214,131 @@ func observationKind(kind string, entry store.Entry) string {
 		return store.Sent
 	}
 	return string(entry.Message.Status)
+}
+
+// Recovery shares the selected host lifetime. The frozen request, source,
+// successor and input are replayed through the admitting owner; neither a
+// saved opening nor the message journal alone proves an accepted effect.
+func (e *Engine) startDeliveryRecovery(life *deliveryLifetime) {
+	intents, err := e.ledger.DeliveryIntents()
+	if err != nil {
+		return
+	}
+	pending := make([]store.DeliveryIntent, 0, len(intents))
+	for _, intent := range intents {
+		if intent.State == store.IntentPending || intent.State == store.IntentAdmitted || intent.State == store.IntentUncertain {
+			pending = append(pending, intent)
+		}
+	}
+	if len(pending) == 0 {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	observer := &deliveryObserver{cancel: cancel}
+	life.active[observer] = struct{}{}
+	life.observers.Add(1)
+	go func() {
+		defer life.observers.Done()
+		defer cancel()
+		defer e.forgetDeliveryObserver(life, "recovery", observer)
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		for _, intent := range pending {
+			if ctx.Err() != nil || e.deliveryLife != life {
+				return
+			}
+			if err := e.recoverDelivery(ctx, intent); err != nil {
+				if e.logger != nil {
+					e.logger.Warn("Agent Message recovery unavailable", "code", "MESSAGE_STORE_UNAVAILABLE")
+				}
+				return
+			}
+		}
+		e.resumeRecipientObservers(ctx)
+	}()
+}
+
+// Called under e.mu; external replay and finite observation reads release it.
+func (e *Engine) recoverDelivery(ctx context.Context, intent store.DeliveryIntent) error {
+	result, err := e.continueIntent(ctx, intent)
+	if ctx.Err() != nil {
+		return ctx.Err() // shutdown retains the last durable recovery milestone
+	}
+	next := e.classifyAdmission(intent, result, err)
+	if err != nil {
+		// An unavailable replay cannot distinguish a missing admission from
+		// owner-lost history. Keep the chain reserved rather than retrying a
+		// different effect or calling the historical failure successful.
+		next.State, next.Reason = store.IntentUncertain, "REVIVE_FAILED"
+	}
+	if next.State == store.IntentAdmitted {
+		if !intent.AcceptedAt.IsZero() {
+			next.AcceptedAt = intent.AcceptedAt
+		}
+		next.State, next.Reason = e.recoveredProviderOutcome(ctx, intent, result.Session)
+	}
+	if next.State == store.IntentFailed || next.State == store.IntentUncertain {
+		next.AcceptedAt = time.Time{}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	entries := make([]store.Entry, 0, len(intent.MessageIDs))
+	for _, id := range intent.MessageIDs {
+		entry, found, _, lookupErr := e.ledger.LookupMessage(id)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if !found {
+			return store.ErrCorrupt
+		}
+		entries = append(entries, entry)
+	}
+	if next.State != intent.State || next.Reason != intent.Reason {
+		if _, err := e.deliveryOutcome(ctx, next, entries, intent.RequestID); err != nil {
+			return err
+		}
+	}
+	if next.State == store.IntentAdmitted {
+		e.observeDelivery(ctx, next)
+	}
+	return nil
+}
+
+func (e *Engine) recoveredProviderOutcome(ctx context.Context, intent store.DeliveryIntent, session workersessions.Session) (string, string) {
+	e.mu.Unlock()
+	defer e.mu.Lock()
+	sub, err := e.readObservations(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: intent.SuccessorWorkerSessionID, FactorySessionID: intent.FactorySessionID,
+		Limit: workersessions.DefaultObservationStreamLimit, ReplayOnly: true,
+	})
+	if err != nil {
+		return store.IntentUncertain, "REVIVE_FAILED"
+	}
+	defer sub.Close()
+	for {
+		delivery := sub.Next(ctx)
+		if delivery.Kind == workersessions.ObservationDeliveryRecord {
+			var draft providerRecord
+			if delivery.Event.SchemaID == "workers.draft.v1" && json.Unmarshal(delivery.Event.Payload, &draft) == nil && providerProgress(draft) {
+				return store.IntentAccepted, ""
+			}
+			continue
+		}
+		if !completeRecoveryReplay(delivery) {
+			return store.IntentUncertain, "REVIVE_FAILED"
+		}
+		if !session.State.Terminal() {
+			return store.IntentAdmitted, "REVIVE_PENDING"
+		}
+		if session.State == workersessions.StateFailed && session.Result != nil && session.Result.Cause != nil && unsupportedCause(session.Result.Cause) {
+			return store.IntentFailed, "REVIVE_UNSUPPORTED"
+		}
+		return store.IntentUncertain, "REVIVE_FAILED"
+	}
+}
+
+func completeRecoveryReplay(delivery workersessions.ObservationDelivery) bool {
+	return delivery.Summary != nil && delivery.Summary.Complete &&
+		(delivery.Kind == workersessions.ObservationDeliveryReplaySummary || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay || delivery.Kind == workersessions.ObservationDeliveryTerminal)
 }
