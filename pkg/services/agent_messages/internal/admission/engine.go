@@ -2,7 +2,7 @@ package admission
 
 import (
 	"context"
-	"log/slog"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"sync"
 	"time"
 
@@ -60,10 +60,10 @@ type Engine struct {
 	newID     func() string
 	cursorKey []byte
 	events    EventAppender
-	logger    *slog.Logger
+	logger    logging.Logger
 }
 
-func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger *slog.Logger) *Engine {
+func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger) *Engine {
 	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID, cursorKey: append([]byte(nil), cursorKey...), events: stream, logger: logger}
 }
 

@@ -16,6 +16,33 @@ func sendInput() agentmessages.SendRequest {
 	return agentmessages.SendRequest{RequestID: "request", To: &agentmessages.Address{WorkerSessionID: "recipient"}, Body: "hello"}
 }
 
+func TestValidatorConfiguredExpiryDefaultsAndExplicitOverride(t *testing.T) {
+	t.Parallel()
+	for _, seconds := range []int{MinExpirySeconds, MaxExpirySeconds} {
+		v := Validator{DefaultExpirySeconds: seconds}
+		r := sendInput()
+		got, err := v.Prepare(r, "")
+		if err != nil || *got.Request.ExpiresInSeconds != seconds || r.ExpiresInSeconds != nil {
+			t.Fatalf("configured expiry %d: %v", seconds, err)
+		}
+		r.ExpiresInSeconds = intPointer(DefaultExpirySeconds)
+		got, err = v.Prepare(r, "")
+		if err != nil || *got.Request.ExpiresInSeconds != DefaultExpirySeconds {
+			t.Fatalf("explicit expiry overwritten: %v", err)
+		}
+		*r.ExpiresInSeconds = MinExpirySeconds
+		if *got.Request.ExpiresInSeconds != DefaultExpirySeconds {
+			t.Fatal("prepared expiry retained caller-owned pointer")
+		}
+	}
+	for _, seconds := range []int{-1, MinExpirySeconds - 1, MaxExpirySeconds + 1} {
+		_, err := (Validator{DefaultExpirySeconds: seconds}).Prepare(sendInput(), "")
+		if !errors.Is(err, agentmessages.ErrBadRequest) {
+			t.Fatalf("invalid configured expiry %d accepted: %v", seconds, err)
+		}
+	}
+}
+
 func TestValidatorRejectsInvalidInputWithoutRedaction(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(*agentmessages.SendRequest){

@@ -24,8 +24,9 @@ const (
 // Validator consumes the public declared-secret capability injected by Wire.
 // BodyBytes is the effective configured limit, bounded by the public contract.
 type Validator struct {
-	BodyBytes int
-	Redact    func(recordings.RecordingRedactionRequest) (recordings.RecordingRedactionResult, error)
+	BodyBytes            int
+	DefaultExpirySeconds int
+	Redact               func(recordings.RecordingRedactionRequest) (recordings.RecordingRedactionResult, error)
 }
 
 // Prepared contains only safe content. Fingerprints omit request IDs so the
@@ -53,7 +54,14 @@ func (v Validator) Prepare(request agentmessages.SendRequest, token string) (Pre
 	if request.Delivery == "INTERRUPT" {
 		return Prepared{}, agentmessages.ErrInterruptUnsupported
 	}
-	request = detachedDefaults(request)
+	expiry := v.DefaultExpirySeconds
+	if expiry == 0 {
+		expiry = DefaultExpirySeconds
+	}
+	if expiry < MinExpirySeconds || expiry > MaxExpirySeconds {
+		return Prepared{}, agentmessages.ErrBadRequest
+	}
+	request = detachedDefaults(request, expiry)
 	count := 0
 	if request.BodySecret || (token != "" && strings.Contains(request.Body, token)) {
 		var err error
@@ -113,12 +121,11 @@ func containsCredential(r agentmessages.SendRequest, token string) bool {
 	return false
 }
 
-func detachedDefaults(r agentmessages.SendRequest) agentmessages.SendRequest {
+func detachedDefaults(r agentmessages.SendRequest, expiry int) agentmessages.SendRequest {
 	if r.To != nil {
 		to := *r.To
 		r.To = &to
 	}
-	expiry := DefaultExpirySeconds
 	if r.ExpiresInSeconds != nil {
 		expiry = *r.ExpiresInSeconds
 	}

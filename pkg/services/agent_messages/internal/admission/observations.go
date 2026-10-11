@@ -34,7 +34,7 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 				StartAt: events.Cursor{Topic: topic}, Mode: events.AttachModeLiveOnly,
 			})
 			if attachErr != nil && e.logger != nil {
-				e.logger.WarnContext(publication, "Agent Message aggregate stream unavailable")
+				e.logger.Warn("Agent Message aggregate stream unavailable")
 			}
 		}
 		if err == nil {
@@ -47,7 +47,7 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 		if err != nil && e.logger != nil {
 			// Collaborator diagnostics may contain credentials or payloads. Only
 			// the stable outcome is safe to publish to operational telemetry.
-			e.logger.WarnContext(publication, "Agent Message observation unavailable")
+			e.logger.Warn("Agent Message observation unavailable")
 		}
 	}
 	return nil

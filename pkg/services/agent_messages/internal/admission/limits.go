@@ -20,13 +20,21 @@ const (
 type Limits struct {
 	SendsPerHour   int
 	ThreadMessages int
+	HopLimit       *int
 }
 
 func (l Limits) Check(now time.Time, senderChain, thread string, hop int, entries []store.Entry) error {
 	if now.IsZero() || senderChain == "" || hop < 0 || l.SendsPerHour < 0 || l.ThreadMessages < 0 {
 		return agentmessages.ErrBadRequest
 	}
-	if hop > MaxHop {
+	maxHop := MaxHop
+	if l.HopLimit != nil {
+		maxHop = *l.HopLimit
+	}
+	if maxHop < 0 || maxHop > MaxHop {
+		return agentmessages.ErrBadRequest
+	}
+	if hop > maxHop {
 		return &agentmessages.LimitError{Dimension: "hop"}
 	}
 	sendsLimit, threadLimit := l.SendsPerHour, l.ThreadMessages

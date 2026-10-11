@@ -51,7 +51,7 @@ func (a *engineAuthority) Revalidate(context.Context, *workersessions.CallerIden
 type engineValidator struct{}
 
 func (engineValidator) Prepare(r agentmessages.SendRequest, _ string) (Prepared, error) {
-	r = detachedDefaults(r)
+	r = detachedDefaults(r, DefaultExpirySeconds)
 	return Prepared{Request: r, BodySHA256: digest([]byte(r.Body))}, nil
 }
 

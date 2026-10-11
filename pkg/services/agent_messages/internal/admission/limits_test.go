@@ -84,3 +84,21 @@ func assertLimit(t *testing.T, err error, dimension string, retry int) {
 		t.Fatalf("got %v, want %s limit retry=%d", err, dimension, retry)
 	}
 }
+
+func TestLimitsConfiguredHopIncludesZero(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)
+	for _, maximum := range []int{0, 1, MaxHop} {
+		limit := Limits{HopLimit: &maximum}
+		if err := limit.Check(now, "chain", "thread", maximum, nil); err != nil {
+			t.Fatalf("allowed configured hop %d: %v", maximum, err)
+		}
+		assertLimit(t, limit.Check(now, "chain", "thread", maximum+1, nil), "hop", 0)
+	}
+	for _, maximum := range []int{-1, MaxHop + 1} {
+		err := (Limits{HopLimit: &maximum}).Check(now, "chain", "thread", 0, nil)
+		if !errors.Is(err, agentmessages.ErrBadRequest) {
+			t.Fatalf("invalid configured hop %d accepted: %v", maximum, err)
+		}
+	}
+}

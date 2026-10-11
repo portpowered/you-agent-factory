@@ -5,7 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
+	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"strings"
 	"testing"
 	"time"
@@ -237,7 +238,7 @@ func TestObservationFailurePreservesDisconnectedDurableSuccessAndSafeTelemetry(t
 	t.Parallel()
 	f := newEngineFixture()
 	var telemetry bytes.Buffer
-	f.engine.logger = slog.New(slog.NewJSONHandler(&telemetry, nil))
+	f.engine.logger = observationLogger{buffer: &telemetry}
 	a := &observationAppender{err: errors.New("planted-secret caller-secret")}
 	f.engine.events = a
 	ctx, cancel := context.WithCancel(context.Background())
@@ -270,7 +271,7 @@ func TestAggregateAttachmentFailurePreservesRecipientObservation(t *testing.T) {
 	t.Parallel()
 	f := newEngineFixture()
 	var telemetry bytes.Buffer
-	f.engine.logger = slog.New(slog.NewJSONHandler(&telemetry, nil))
+	f.engine.logger = observationLogger{buffer: &telemetry}
 	a := &observationAppender{attachError: errors.New("caller-secret planted-secret")}
 	f.engine.events = a
 	m, err := f.engine.Send(context.Background(), engineRequest("one", "body"), f.caller, "factory")
@@ -283,4 +284,13 @@ func TestAggregateAttachmentFailurePreservesRecipientObservation(t *testing.T) {
 	if strings.Contains(telemetry.String(), "planted-secret") || strings.Contains(telemetry.String(), f.caller.Token) {
 		t.Fatal("attachment diagnostics leaked")
 	}
+}
+
+type observationLogger struct {
+	logging.NoopLogger
+	buffer *bytes.Buffer
+}
+
+func (l observationLogger) Warn(message string, fields ...any) {
+	fmt.Fprintln(l.buffer, message, fields)
 }
