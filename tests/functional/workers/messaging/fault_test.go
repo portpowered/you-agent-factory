@@ -39,6 +39,7 @@ type messageOutcomeFileSystem struct {
 	unblock          sync.Once
 	reject           bool
 	state            string
+	kind             string
 }
 
 type messageOutcomeFile struct {
@@ -63,7 +64,11 @@ func (f *messageOutcomeFile) Write(data []byte) (int, error) {
 		} `json:"deliveryIntents"`
 	}
 	if json.Unmarshal(data, &record) == nil {
-		f.outcome = record.Kind == "REVIVE_OUTCOME"
+		kind := f.gate.kind
+		if kind == "" {
+			kind = "REVIVE_OUTCOME"
+		}
+		f.outcome = record.Kind == kind
 		if f.gate.state != "" {
 			f.outcome = f.outcome && len(record.DeliveryIntents) == 1 && record.DeliveryIntents[0].State == f.gate.state
 		}
@@ -600,5 +605,85 @@ func TestReadOnlyRetentionStorePreservesInboxAndFactoryWork(t *testing.T) {
 	assertError(t, third, http.MethodGet, "/messages/"+old.MessageId, nil, nil, http.StatusNotFound, "MESSAGE_NOT_FOUND")
 	if page := readPage(t, third, "/messages", nil); len(page.Messages) != 1 || page.Messages[0].MessageId != recent.MessageId || page.Messages[0].BodySha256 != recent.BodySha256 || page.Messages[0].Status != "EXPIRED" {
 		t.Fatal("retention retry lost the surviving committed message")
+	}
+}
+
+func TestStartupDeliversUnreadMessagesWithoutAnotherSend(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), t.TempDir()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, kind: "REVIVE_INTENT"}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, home, dir, "", serviceedges.Edges{AgentMessageStoreFileSystem: gate}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	first := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", "first retained input")
+	held := f.cliSend(t, lane, "lead", "--request-id", "held", "--body", "held retained input", "--if-ended", "hold")
+	second := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second retained input")
+	f.endWorker(t, "lead")
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("recipient end did not attempt durable delivery")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	// An unavailable intent flush has no continuation effect. Startup must
+	// recover these unread messages without the former process's Events or
+	// credentials, and without a new send to wake delivery.
+	if page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil); len(page.Messages) != 3 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("refused intent flush claimed delivery or lost the inbox")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("refused intent flush reached the provider")
+	default:
+	}
+	next := startHostRunner(t, home, dir, "", serviceedges.Edges{}, nil, revival)
+	pending := "REVIVE_PENDING"
+	first.Reason = &pending
+	final := next.awaitDeliveryOutcome(t, nil, first)
+	batch := final
+	batch.Body = first.Body + "\n\n" + second.Body
+	head := assertReviveAdmission(t, next, revival, batch, lead)
+	page := readPage(t, next, "/messages?toWorkerSessionId=lead", nil)
+	assertStartupDeliverySelection(t, page, head["YOU_WORKER_SESSION_ID"], first, held, second)
+	assertError(t, next, http.MethodGet, "/messages/"+first.MessageId, nil, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	before := next.server.GetFactoryEvents(t)
+	close(revival.release)
+	next.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	if after := next.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+		t.Fatal("direct recovered successor changed canonical Factory Events")
+	}
+	next.server.Close(t)
+	third := startHostRunner(t, home, dir, "", serviceedges.Edges{}, nil, revival)
+	if reopened := readPage(t, third, "/messages?toWorkerSessionId=lead", nil); !reflect.DeepEqual(page, reopened) {
+		t.Fatal("second startup changed delivered or held messages")
+	}
+	third.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("restart or held input duplicated the continuation")
+	default:
+	}
+}
+
+func assertStartupDeliverySelection(t *testing.T, page api.AgentMessageListResponse, head string, messages ...api.AgentMessage) {
+	t.Helper()
+	if len(page.Messages) != len(messages) {
+		t.Fatal("startup invented or lost an original message")
+	}
+	for i, message := range page.Messages {
+		if message.MessageId != messages[i].MessageId || message.Body != messages[i].Body {
+			t.Fatal("startup changed durable send order or input")
+		}
+		if i == 1 {
+			if message.Status != "QUEUED" || message.RevivedWorkerSessionId != nil {
+				t.Fatal("startup revived a held message")
+			}
+		} else if message.Status != "DELIVERED_REVIVE" || message.RevivedWorkerSessionId == nil || *message.RevivedWorkerSessionId != head {
+			t.Fatal("startup did not share exactly one confirmed successor")
+		}
 	}
 }
