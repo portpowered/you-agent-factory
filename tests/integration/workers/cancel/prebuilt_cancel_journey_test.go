@@ -54,7 +54,7 @@ func TestJoinedSessionCancelStopsOneShotWaiter(t *testing.T) {
 	workID := *works.Results[0].WorkId
 	waitForRunningWorkerSession(t, ctx, fixture.serverURL, session, workID, oneShot)
 	tree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, workID)
-	registerFailedTreeCleanup(t, tree)
+	assertTreeGone := retainJoinedCancelTree(t, tree)
 	assertObservedTreeAncestry(t, tree)
 	postJoinedSessionCancel(t, ctx, fixture, session)
 	select {
@@ -66,7 +66,7 @@ func TestJoinedSessionCancelStopsOneShotWaiter(t *testing.T) {
 		t.Fatalf("one-shot cancellation exit=%d stdout=%s stderr=%s", exitCode(oneShot.waitError()), oneShot.stdout.String(), oneShot.stderr.String())
 	}
 	assertJoinedCancelInvocationResult(t, oneShot.stdout.String(), session, workID)
-	assertJoinedCancelTreeGone(t, tree)
+	assertTreeGone()
 	if err := cancelPortAvailabilityError(fixture.port); err != nil {
 		t.Fatal(err)
 	}
@@ -272,10 +272,10 @@ func runJoinedCancelServingPeer(t *testing.T, ctx context.Context, binary string
 	observation := waitForRunningWorkerSession(t, ctx, fixture.serverURL, selected, target, daemon)
 	targetTree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, target)
 	peerTree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, peerWork)
-	registerFailedTreeCleanup(t, targetTree)
-	registerFailedTreeCleanup(t, peerTree)
+	assertTargetGone := retainJoinedCancelTree(t, targetTree)
+	assertPeerGone := retainJoinedCancelTree(t, peerTree)
 	postJoinedSessionCancel(t, ctx, fixture, selected)
-	assertJoinedCancelTreeGone(t, targetTree)
+	assertTargetGone()
 	assertNativeTreesLive(t, peerTree)
 	if err := waitForCanceledDispatchEvent(t, ctx, fixture.serverURL, selected, observation.AttemptId); err != nil {
 		t.Fatal(err)
@@ -283,9 +283,10 @@ func runJoinedCancelServingPeer(t *testing.T, ctx context.Context, binary string
 	assertJoinedCancelReadback(t, ctx, fixture, selected, target, observation.AttemptId)
 	for index, workID := range []string{peerWork, submitCancelWork(t, ctx, fixture.serverURL, peer, "later-peer")} {
 		tree := peerTree
+		assertTreeGone := assertPeerGone
 		if index != 0 {
 			tree = waitForFixtureProcessTree(t, ctx, fixture.stateDir, workID)
-			registerFailedTreeCleanup(t, tree)
+			assertTreeGone = retainJoinedCancelTree(t, tree)
 		}
 		marker := filepath.Join(fixture.stateDir, safePathSegment(workID), fmt.Sprintf("run-%d", tree.RootPID), "release")
 		if err := os.WriteFile(marker, []byte("release"), 0o600); err != nil {
@@ -296,7 +297,7 @@ func runJoinedCancelServingPeer(t *testing.T, ctx context.Context, binary string
 		if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL || !strings.Contains(workContentText(work), "joined-peer-result") {
 			t.Fatalf("useful serving peer Work=%+v", work)
 		}
-		assertJoinedCancelTreeGone(t, tree)
+		assertTreeGone()
 	}
 }
 
