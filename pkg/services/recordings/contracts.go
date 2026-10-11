@@ -135,6 +135,7 @@ type (
 	JavaScriptPhaseChangeEventPayload                          = recordingcontracts.JavaScriptPhaseChangeEventPayload
 	Ledger                                                     = recordingcontracts.Ledger
 	LiveRecordingTarget                                        = recordingcontracts.LiveRecordingTarget
+	LiveRecordingReservationOwner                              = recordingcontracts.LiveRecordingReservationOwner
 	LiveRecordingTargetPlanner                                 = recordingcontracts.LiveRecordingTargetPlanner
 	LiveRecordingTargetPlannerFunc                             = recordingcontracts.LiveRecordingTargetPlannerFunc
 	LiveRecordingTargetRequest                                 = recordingcontracts.LiveRecordingTargetRequest

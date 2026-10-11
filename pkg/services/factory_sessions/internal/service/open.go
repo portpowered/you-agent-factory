@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -45,6 +46,7 @@ type RuntimeOpening struct {
 	assembly                  openingAssembly
 	durable                   durableexecution.Service
 	startFlights              singleflight.Group
+	reservationCleanups       sync.Map // session ID -> retryable opening cleanup
 	factoryDefinitions        factorydefinitions.Service
 	resolveHome               factorysessions.HomeDirectoryResolver
 	runtimeRoot               FactoryRuntimeRoot
@@ -185,6 +187,9 @@ func (opening *sessionRuntimeOpening) bindSelectedState(state runtimebinding.Ope
 		OperatorSettingsPath:   opening.operatorSettingsPath,
 		SkippedBoardRecordings: opening.skippedBoardRecordings,
 		ReplayMetadataWarnings: opening.load.ReplayMetadataWarnings,
+	}
+	if opening.sessionSelection != nil {
+		metadata.RecordingHome = opening.sessionSelection.SystemConfigHome
 	}
 	if opening.resumeInput != nil {
 		resume := opening.resumeInput.RecoveryMetadata

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation"
@@ -982,6 +983,7 @@ type LiveRecordingTargetRequest struct {
 	HomeDir            string
 	CanonicalSessionID string
 	ReportedSessionID  string
+	RollbackOnFailure  bool
 }
 
 // LiveRecordingTarget carries the runtime template path and the customer path
@@ -989,6 +991,14 @@ type LiveRecordingTargetRequest struct {
 type LiveRecordingTarget struct {
 	ServicePath  string
 	ReportedPath string
+	Reservation  runtimeartifact.Reservation
+}
+
+// LiveRecordingReservationOwner commits or releases an opening's immutable reservation identity.
+// The capability is optional for existing non-transactional planner callers.
+type LiveRecordingReservationOwner interface {
+	ReleaseReservation(runtimeartifact.Reservation) error
+	CommitReservation(runtimeartifact.Reservation)
 }
 
 // LiveRecordingTargetPlanner owns default live-recording layout, naming, and

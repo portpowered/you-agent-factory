@@ -555,7 +555,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		SessionID: "session-1", FactoryDir: "/old", FolderPath: "/workspace",
 		ExecutionBaseDir: "/old-execution", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "alpha"},
 		Handle: &runtimebinding.SessionState{Instance: oldInstance, Handle: oldHandle, Spec: preparedSpec, Clock: clock, Logger: oldInstance.RuntimeLogger(),
-			ReplayMetadataWarnings: warnings, ResumeRecoveryMetadata: recovery, OperatorSettingsPath: "scoped.yaml", CurrentBoardRecordPath: "selected.jsonl"},
+			ReplayMetadataWarnings: warnings, ResumeRecoveryMetadata: recovery, OperatorSettingsPath: "scoped.yaml", CurrentBoardRecordPath: "selected.jsonl", RecordingHome: "selected-profile"},
 		Default: false, Project: "project", Select: true,
 	})
 	original := sessions.Resolve("session-1")
@@ -615,7 +615,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	if oldLogs.Len() != 0 || currentLogs.FilterMessage("replacement session diagnostic").Len() != 1 {
 		t.Fatalf("replacement diagnostic reached wrong generation: retired=%d current=%d", oldLogs.Len(), currentLogs.Len())
 	}
-	if bound.Clock != clock || bound.OperatorSettingsPath != "scoped.yaml" || bound.CurrentBoardRecordPath != "selected.jsonl" ||
+	if bound.Clock != clock || bound.OperatorSettingsPath != "scoped.yaml" || bound.CurrentBoardRecordPath != "selected.jsonl" || bound.RecordingHome != "selected-profile" ||
 		len(bound.ReplayMetadataWarnings) != 1 || bound.ResumeRecoveryMetadata == nil || bound.ResumeRecoveryMetadata == recovery {
 		t.Fatalf("replacement lost scoped facts or failed to detach recovery metadata: %#v", bound)
 	}
@@ -982,7 +982,7 @@ func TestOpeningMetadataRemainsDetachedAndClearsAbsentFacts(t *testing.T) {
 	resume := &recordings.ResumeRecoveryMetadata{SourceRecordingID: "source"}
 	recovery := &factorysessions.StartupRecovery{Cause: "quarantined"}
 	metadata := runtimebinding.OpeningMetadata{
-		CurrentBoardRecordPath: "selected.recording", OperatorSettingsPath: "selected.operator",
+		CurrentBoardRecordPath: "selected.recording", OperatorSettingsPath: "selected.operator", RecordingHome: "selected-profile",
 		SkippedBoardRecordings: []string{"selected.skipped"},
 		ReplayMetadataWarnings: []recordings.MetadataMismatchWarning{{Key: "selected"}},
 		ResumeRecoveryMetadata: resume, StartupRecovery: recovery,
@@ -993,13 +993,13 @@ func TestOpeningMetadataRemainsDetachedAndClearsAbsentFacts(t *testing.T) {
 	metadata.SkippedBoardRecordings[0] = "changed"
 	metadata.ReplayMetadataWarnings[0].Key = "changed"
 	resume.SourceRecordingID, recovery.Cause = "changed", "changed"
-	if selected.CurrentBoardRecordPath != "selected.recording" || selected.OperatorSettingsPath != "selected.operator" ||
+	if selected.CurrentBoardRecordPath != "selected.recording" || selected.OperatorSettingsPath != "selected.operator" || selected.RecordingHome != "selected-profile" ||
 		selected.SkippedBoardRecordings[0] != "selected.skipped" || selected.ReplayMetadataWarnings[0].Key != "selected" ||
 		selected.ResumeRecoveryMetadata.SourceRecordingID != "source" || selected.StartupRecovery.Cause != "quarantined" || peer.ResumeRecoveryMetadata != nil {
 		t.Fatal("opening metadata aliases caller or peer state")
 	}
 	opening.SetOpeningMetadata(runtimebinding.OpeningMetadata{})
-	if selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" || selected.SkippedBoardRecordings != nil ||
+	if selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" || selected.RecordingHome != "" || selected.SkippedBoardRecordings != nil ||
 		selected.ReplayMetadataWarnings != nil || selected.ResumeRecoveryMetadata != nil || selected.StartupRecovery != nil {
 		t.Fatal("absent opening metadata retained previous facts")
 	}
