@@ -8,6 +8,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"io"
 	"net/http"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/root"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -347,5 +349,166 @@ func assertMCPProviderOutcome(t *testing.T, settled api.AgentMessage, reason str
 		close(revival.release)
 	} else if settled.Status != api.AgentMessageDeliveryStatusQUEUED || settled.Reason == nil || *settled.Reason != reason || settled.RevivedWorkerSessionId != nil {
 		t.Fatal("non-progress guessed delivery")
+	}
+}
+
+func TestT8MCPEndedReplyRetainsHoldForFreshVisit(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{}, nil, revival, "lead", "lane", "lane-next")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	leadCall := f.mcpCaller(t, lead)
+	ask := mcpMessage(t, f.mcpCaller(t, lane), map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "answer on a later visit", "requestId": "ended-ask", "ifEnded": "HOLD", "replyIfEnded": "HOLD"})
+	f.endWorker(t, "lane")
+	reply := mcpMessage(t, leadCall, map[string]any{"action": "MESSAGE", "inReplyTo": ask.MessageId, "message": "retained answer", "requestId": "ended-reply"})
+	if reply.Status != "QUEUED" || reply.IfEnded != api.AgentMessageIfEndedHOLD || reply.To.WorkerSessionId != "lane" || reply.ThreadId != ask.ThreadId || reply.InReplyTo == nil || *reply.InReplyTo != ask.MessageId || reply.RevivedWorkerSessionId != nil {
+		t.Fatal("ended reply changed recipient, thread, or inherited HOLD")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("HOLD reply started a provider")
+	default:
+	}
+	parent := mcpPage(t, leadCall, map[string]any{"action": "READ", "messages": true, "workerSessionId": "lead", "threadId": ask.ThreadId, "markRead": true})
+	if len(parent.Messages) != 1 || parent.Messages[0].Status != "REPLIED" {
+		t.Fatal("mark-read regressed the replied parent")
+	}
+	fresh := f.continueCaller(t, "lane", "lane-next")
+	page := mcpPage(t, f.mcpCaller(t, fresh), map[string]any{"action": "LIST", "messages": true, "threadId": ask.ThreadId})
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], reply) {
+		t.Fatal("fresh same-Work visit lost the held reply")
+	}
+	httpPage := readPage(t, f, "/messages?toMe=true&threadId="+ask.ThreadId, fresh)
+	if !reflect.DeepEqual(page, httpPage) {
+		t.Fatal("later-visit MCP inbox differs from HTTP")
+	}
+}
+
+func TestT8MCPExpiryDoesNotRegressOnMarkRead(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	// Control message timestamps only; lifecycle readiness uses real timers.
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	call := f.mcpCaller(t, lead)
+	ask := mcpMessage(t, f.mcpCaller(t, lane), map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "expires exactly", "requestId": "expiry", "expiresInSeconds": 60, "ifEnded": "HOLD"})
+	clock.SetTick(59)
+	page := mcpPage(t, call, map[string]any{"action": "LIST", "messages": true, "threadId": ask.ThreadId})
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("MCP message expired before its deadline")
+	}
+	clock.SetTick(60)
+	page = mcpPage(t, call, map[string]any{"action": "READ", "messages": true, "workerSessionId": "lead", "threadId": ask.ThreadId, "markRead": true})
+	if len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" || !reflect.DeepEqual(page, readPage(t, f, "/messages?toMe=true&threadId="+ask.ThreadId, lead)) {
+		t.Fatal("MCP expiry or mark-read differs from HTTP")
+	}
+	failure := call(map[string]any{"action": "MESSAGE", "inReplyTo": ask.MessageId, "message": "too late", "requestId": "expired-reply"})
+	if !strings.Contains(string(failure["error"]), "MESSAGE_INVALID_REQUEST") {
+		t.Fatal("MCP admitted a reply to an expired message")
+	}
+}
+
+func TestT8MCPMissingReferencePreservesQueuedAsk(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{}, nil, revival, "lead", "lane")
+	f.runner.workers["lead"].result = &platformprocess.CommandResult{Stdout: []byte("{\"type\":\"turn.completed\"}\n")}
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	call := f.mcpCaller(t, lane)
+	input := map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "retain unsupported ask", "requestId": "missing-reference"}
+	ask := mcpMessage(t, call, input)
+	if ask.Status != "QUEUED" || ask.Reason == nil || *ask.Reason != "REVIVE_UNSUPPORTED" || ask.RevivedWorkerSessionId != nil {
+		t.Fatal("missing reference claimed delivery")
+	}
+	if replay := mcpMessage(t, call, input); !reflect.DeepEqual(ask, replay) {
+		t.Fatal("unsupported retry changed identity")
+	}
+	cli := f.cliSend(t, lane, "lead", "--request-id", "missing-reference", "--body", "retain unsupported ask")
+	page := mcpPage(t, call, map[string]any{"action": "READ", "messages": true, "workerSessionId": "lead", "threadId": ask.ThreadId})
+	if !reflect.DeepEqual(ask, cli) || len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], ask) {
+		t.Fatal("MCP unsupported outcome differs from CLI or durable inspection")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("missing reference started a provider")
+	default:
+	}
+	if !reflect.DeepEqual(before, messageFactoryStreams(t, f, "lead", "lane")) {
+		t.Fatal("unsupported revival changed Factory Events")
+	}
+}
+
+func TestT8MCPQuarantinedStorePreservesTypedRefusal(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct{ name, settings, journal, code string }{
+		{"invalid-settings", `{"messaging":{"limits":{"maxBodyBytes":0}}}`, "", "MESSAGE_STORE_UNAVAILABLE"},
+		{"corrupt-store", "", "controlled invalid journal\n", "MESSAGE_STORE_CORRUPT"},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			if cell.journal != "" {
+				writeJournal(t, filepath.Join(home, ".you-agent-factory", "messages", "messages.jsonl"), cell.journal)
+			}
+			f := startHost(t, home, t.TempDir(), cell.settings, "lead", "lane")
+			lead := f.invoke(t, "lead", nil)
+			lane := f.invoke(t, "lane", lead)
+			call := f.mcpCaller(t, lane)
+			before := messageFactoryStreams(t, f, "lead", "lane")
+			for _, input := range []map[string]any{
+				{"action": "MESSAGE", "workerSessionId": "lead", "message": "private refused body", "requestId": "quarantine"},
+				{"action": "LIST", "messages": true},
+				{"action": "READ", "messages": true, "workerSessionId": "lead"},
+			} {
+				failure := call(input)
+				diagnostic := string(failure["error"])
+				if !strings.Contains(diagnostic, cell.code) || strings.Contains(diagnostic, "private refused body") || strings.Contains(diagnostic, lane["YOU_WORKER_SESSION_TOKEN"]) {
+					t.Fatal("MCP quarantine lost safe typed refusal")
+				}
+			}
+			assertError(t, f, http.MethodGet, "/messages", nil, lane, http.StatusServiceUnavailable, cell.code)
+			if !reflect.DeepEqual(before, messageFactoryStreams(t, f, "lead", "lane")) {
+				t.Fatal("quarantined messaging changed Factory Events")
+			}
+		})
+	}
+}
+
+func TestT8MCPReviveLimitRetainsReadableQueuedAsk(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	close(revival.release)
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"revivesPerChainPerHour":1}}}`, serviceedges.Edges{}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	call := f.mcpCaller(t, lane)
+	first := mcpMessage(t, call, map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "first allowed resume", "requestId": "first-revive"})
+	first = f.awaitDeliveryOutcome(t, lane, first)
+	head := assertReviveAdmission(t, f, revival, first, lead)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	input := map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "retain limited ask", "requestId": "limited"}
+	limited := mcpMessage(t, call, input)
+	if limited.Status != "QUEUED" || limited.Reason == nil || *limited.Reason != "REVIVE_LIMIT" || limited.RevivedWorkerSessionId != nil {
+		t.Fatal("MCP revive limit guessed delivery")
+	}
+	page := mcpPage(t, call, map[string]any{"action": "READ", "messages": true, "workerSessionId": "lead", "threadId": limited.ThreadId})
+	cli := f.cliSend(t, lane, "lead", "--request-id", "limited", "--body", "retain limited ask")
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], limited) || !reflect.DeepEqual(cli, limited) || !reflect.DeepEqual(mcpMessage(t, call, input), limited) {
+		t.Fatal("limited MCP read/retry differs from durable CLI outcome")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("limited request started another provider")
+	default:
+	}
+	if !reflect.DeepEqual(before, messageFactoryStreams(t, f, "lead", "lane")) {
+		t.Fatal("revive quota changed Factory Events")
 	}
 }
