@@ -16,6 +16,7 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -25,6 +26,19 @@ import (
 )
 
 const processCommandStopTimeout = 5 * time.Second
+
+// SessionRuntimeLogPath returns the active runtime's diagnostic artifact path
+// without exposing runtime composition types to functional scenarios.
+func SessionRuntimeLogPath(t testing.TB, sessions factorysessions.Service, sessionID string) string {
+	t.Helper()
+	diagnostics, err := sessions.(interface {
+		ApplicationDiagnostics(string) (runtimeartifact.Diagnostics, error)
+	}).ApplicationDiagnostics(sessionID)
+	if err != nil || diagnostics.Path == "" {
+		t.Fatalf("session log artifact: %#v, %v", diagnostics, err)
+	}
+	return diagnostics.Path
+}
 
 // Process is the exact customer-process capability used by functional tests.
 type Process interface {

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/root"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -140,8 +139,8 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 		t.Fatal("peer has no response history before replacement")
 	}
 
-	oldLog := replacementSessionLogPath(t, sessions, sessionID)
-	peerLog := replacementSessionLogPath(t, sessions, peerID)
+	oldLog := support.SessionRuntimeLogPath(t, sessions, sessionID)
+	peerLog := support.SessionRuntimeLogPath(t, sessions, peerID)
 	firstInvocation := postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "replacement-input-secret")
 	assertSessionRuntimeReplaceInvocationCompleted(t, firstInvocation)
 
@@ -160,7 +159,7 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	}
 
 	replaceSessionRuntimeCurrentFactory(t, baseURL, sessionID, "task")
-	currentLog := replacementSessionLogPath(t, sessions, sessionID)
+	currentLog := support.SessionRuntimeLogPath(t, sessions, sessionID)
 	if currentLog == oldLog {
 		t.Fatal("replacement retained retired log artifact")
 	}
@@ -570,17 +569,6 @@ func assertReplacementBackendDiagnostics(t *testing.T, logs *observer.ObservedLo
 			}
 		}
 	}
-}
-
-func replacementSessionLogPath(t *testing.T, sessions factorysessions.Service, sessionID string) string {
-	t.Helper()
-	diagnostics, err := sessions.(interface {
-		ApplicationDiagnostics(string) (factoryruntime.RuntimeLogDiagnostics, error)
-	}).ApplicationDiagnostics(sessionID)
-	if err != nil || diagnostics.Path == "" {
-		t.Fatalf("session log artifact: %#v, %v", diagnostics, err)
-	}
-	return diagnostics.Path
 }
 
 func assertReplacementSinkDiagnostics(t *testing.T, path, sessionID string, replacement bool) {
