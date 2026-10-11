@@ -53,18 +53,11 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 	}
 	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable
 	observation.Transcript, observation.TokenUsage = captured.Transcript, captured.TokenUsage
-	if captured.Failure != nil {
-		if observation.Failure == nil {
-			observation.Failure = captured.Failure
-		} else {
-			failure := *observation.Failure
-			failure.Kind, failure.Detail = captured.Failure.Kind, captured.Failure.Detail
-			if captured.Failure.AgentRunFailureClass != "" {
-				failure.AgentRunFailureClass = captured.Failure.AgentRunFailureClass
-			}
-			observation.Failure = &failure
-		}
-	}
+	// A matched committed terminal is authoritative for optional facts too.
+	// Keeping live-only classifications would make LIST disagree with archived
+	// READ and turn absent legacy evidence into a recorded provider outcome.
+	observation.Failure = captured.Failure
+	observation.ConfirmationState = captured.ConfirmationState
 	observation.TerminalCause = captured.TerminalCause
 	observation.RecordingHealth, observation.RecordingHealthReason = captured.RecordingHealth, captured.RecordingHealthReason
 	return observation

@@ -147,7 +147,7 @@ func mutateCompletedSummaryFixture(name string, draft *workers.Draft, payload ma
 	}
 }
 
-func TestCapturedTerminalEnrichmentPreservesLiveFailureClassification(t *testing.T) {
+func TestCapturedTerminalEnrichmentUsesCommittedFailureClassification(t *testing.T) {
 	t.Parallel()
 	item := completedSummaryFixture(t, true)
 	reader := &terminalSummaryReader{item: item}
@@ -155,14 +155,54 @@ func TestCapturedTerminalEnrichmentPreservesLiveFailureClassification(t *testing
 	failure := &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live detail", ProviderFailureKind: providers.ExecuteFailureKindTimeout, ProviderContinuationFailureKind: providers.ContinuationFailureKindStale, ProviderContinuationOutcome: providers.ContinuationOutcomeUnsupported, AgentRunFailureClass: "agent_run_provider_failure"}
 	observation := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: workersessions.StateFailed, Failure: failure}
 	got := r.withCapturedTerminalObservation(t.Context(), observation)
-	want := *failure
-	want.Detail = "expected output artifact was not produced"
+	want := workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "expected output artifact was not produced"}
 	if !reflect.DeepEqual(got.Failure, &want) || failure.Detail != "live detail" {
-		t.Fatalf("lost or mutated normalized live failure: %+v", got.Failure)
+		t.Fatalf("invented unrecorded classification or mutated live failure: %+v", got.Failure)
 	}
 	archived, err := r.logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
 	if err != nil || archived.Failure.ProviderFailureKind != "" || archived.Failure.ProviderContinuationFailureKind != "" || archived.Failure.ProviderContinuationOutcome != "" {
 		t.Fatalf("inferred unrecorded classification: %+v %v", archived.Failure, err)
+	}
+}
+
+func TestCapturedTerminalEnrichmentUsesCommittedConfirmationAndOptionalFailure(t *testing.T) {
+	t.Parallel()
+	for _, state := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled, workersessions.StateTerminated} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			item := completedSummaryFixture(t, state == workersessions.StateFailed)
+			if state == workersessions.StateCanceled || state == workersessions.StateTerminated {
+				item = controlledSummaryFixture(t, state)
+			}
+			for _, recorded := range []bool{false, true} {
+				var draft workers.Draft
+				var payload map[string]any
+				_ = json.Unmarshal(item.MetadataRecords[1].Payload, &draft)
+				_ = json.Unmarshal(draft.Payload, &payload)
+				delete(payload, "failureCause")
+				delete(payload, "failureDetail")
+				if recorded && state != workersessions.StateCompleted {
+					payload["failureCause"] = "WORKERS_EXECUTION_FAILURE"
+					payload["failureDetail"] = "committed underlying failure"
+				}
+				draft.Payload, _ = json.Marshal(payload)
+				item.MetadataRecords[1].Payload, _ = json.Marshal(draft)
+				reader := &terminalSummaryReader{item: item}
+				r := &registry{logs: &LogReader{reader: reader}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+				original := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: state, ConfirmationState: workersessions.ConfirmationStateUnconfirmed, Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live only", ProviderFailureKind: providers.ExecuteFailureKindTimeout}}
+				got := r.withCapturedTerminalObservation(t.Context(), original)
+				archived, err := r.logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
+				if err != nil || got.ConfirmationState != workersessions.ConfirmationStateConfirmed || !reflect.DeepEqual(got.Failure, archived.Failure) {
+					t.Fatalf("committed facts disagree: live=%+v archived=%+v error=%v", got, archived, err)
+				}
+				if (!recorded || state == workersessions.StateCompleted) && got.Failure != nil {
+					t.Fatalf("invented optional failure: %+v", got.Failure)
+				}
+				if recorded && state != workersessions.StateCompleted && (got.Failure == nil || got.Failure.Detail != "committed underlying failure") {
+					t.Fatalf("lost committed underlying failure: %+v", got.Failure)
+				}
+			}
+		})
 	}
 }
 
