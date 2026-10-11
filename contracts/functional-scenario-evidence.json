@@ -2,6 +2,14 @@
   "formatVersion": 1,
   "declarations": [
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestSubagentDirectStart",
+      "stableIds": [
+        "cli/you.worker-sessions.start",
+        "rest/startWorkerSession",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
       "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
       "stableIds": [
         "rest/getMetrics"

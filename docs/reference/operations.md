@@ -632,7 +632,22 @@ For older captures without an available name, `workName` is null while the
 associated Work ID remains visible. A missing name does not change capture
 health or an available provider fact.
 
-### Start a direct Worker Session through HTTP
+### Start a direct Worker Session
+
+Use a running host for asynchronous subagents:
+
+```sh
+you --server http://localhost:7437 --json worker-sessions start 'Inspect the repository'
+you --server http://localhost:7437 worker-sessions start --provider codex --model gpt-6-luna --reasoning-effort low 'Inspect the repository'
+```
+
+START returns the admitted Worker Session ID while the provider continues on
+the selected host. A fresh `worker-sessions show` or `read` command can inspect
+that ID after the caller exits. Omitted IDs are generated; use `--request-id`
+and `--worker-session-id` to replay the same request. Positional text or
+non-terminal stdin supplies the prompt. `--working-root` selects an absolute
+directory on the host; `--timeout-millis` sets an optional execution duration.
+Omission sets no execution deadline. No Factory Session is created per START.
 
 `POST /worker-sessions` accepts a prompt with caller-selected request and Worker
 Session IDs. The host resolves omitted provider and model values from

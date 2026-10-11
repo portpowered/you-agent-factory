@@ -28,6 +28,7 @@ type t7GatedProviderRunner struct {
 // reuses the package's immutable host and has its own held-open external effect.
 func TestSubagentDirectStart(t *testing.T) {
 	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.start", "rest/startWorkerSession", "cli/you.worker-sessions.show")
 	fixture := ensureInvokeContinuePackageFixture(t)
 	scenario := fixture.scenario(t, "sam-direct-start")
 	defer scenario.close(t)
@@ -51,6 +52,15 @@ func TestSubagentDirectStart(t *testing.T) {
 		t.Fatalf("fresh selected-host read = %v: %s %s", err, show.Stdout(), show.Stderr())
 	}
 	assertSubagentHTTPReplayAndRoute(t, ctx, fixture.baseURL, document, runner)
+	// CLI START replays the same identity on the selected host. It must return
+	// while the external provider is still held open, without requiring --remote.
+	start := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "--json", "worker-sessions", "start",
+		"--request-id", id + "-request", "--worker-session-id", id, "--provider", "codex", "--model", "exact-start-model",
+		"--reasoning-effort", "high", "--working-root", scenario.workingDirectory, "held-open direct START prompt"})
+	start.Input.Env, start.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(start.Input); err != nil || !strings.Contains(start.Stdout(), `"workerSessionId":"`+id+`"`) || runner.CallCount() != 1 {
+		t.Fatalf("selected-host CLI replay: %v %s %s", err, start.Stdout(), start.Stderr())
+	}
 	// Missing dedicated defaults cannot inherit the host's generic codex default.
 	document = map[string]any{"requestId": id + "-missing-request", "workerSessionId": id + "-missing", "prompt": "no fallback"}
 	status, body = t7HTTP(t, ctx, http.MethodPost, fixture.baseURL+"/worker-sessions", document)

@@ -352,6 +352,7 @@ var workerSessionsRunnableCommands = []struct {
 	{id: "you.worker-sessions.show", handlerID: workerSessionsShowHandlerID},
 	{id: "you.worker-sessions.read", handlerID: workerSessionsReadHandlerID},
 	{id: "you.worker-sessions.stream", handlerID: workerSessionsStreamHandlerID},
+	{id: "you.worker-sessions.start", handlerID: "you.worker-sessions.start.handler"},
 }
 
 // NewWorkerSessionsFamilyCommand builds the detached `you worker-sessions`
@@ -401,6 +402,7 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 		handlers  commandregistry.CommandHandlers
 	}{
 		{workerSessionsInvokeHandlerID, registered.invoke},
+		{"you.worker-sessions.start.handler", registered.start},
 		{workerSessionsContinueHandlerID, registered.continueOperation},
 		{workerSessionsInterruptHandlerID, registered.interrupt},
 		{workerSessionsPauseHandlerID, registered.pause},
@@ -460,7 +462,7 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 }
 
 type workerSessionsHandlers struct {
-	invoke, continueOperation, interrupt, pause, resume, cancel, terminate, list, show, read, stream commandregistry.CommandHandlers
+	start, invoke, continueOperation, interrupt, pause, resume, cancel, terminate, list, show, read, stream commandregistry.CommandHandlers
 }
 
 func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSessionsHandlers, error) {
@@ -479,6 +481,7 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 		found[index] = handlers
 	}
 	return workerSessionsHandlers{
+		start:  found[11],
 		invoke: found[0], continueOperation: found[1], interrupt: found[2],
 		pause: found[3], resume: found[4], cancel: found[5], terminate: found[6],
 		list: found[7], show: found[8], read: found[9], stream: found[10],
