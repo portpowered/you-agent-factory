@@ -25,7 +25,7 @@ flowchart TB
   end
   subgraph recordings["Recordings and events"]
     s_services_events["events<br/>1986 LOC · 0 subservices"]
-    s_services_recordings["recordings<br/>36633 LOC · 8 subservices"]
+    s_services_recordings["recordings<br/>36640 LOC · 8 subservices"]
   end
   subgraph metrics["Metrics"]
     s_services_costs["costs<br/>2168 LOC · 0 subservices"]
