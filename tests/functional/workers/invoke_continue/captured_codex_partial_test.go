@@ -182,7 +182,9 @@ func assertCapturedCodexUnknownReads(t *testing.T, ctx context.Context, fixture 
 		if err := fixture.process.Execute(read.Input); err == nil {
 			t.Fatal("unknown Worker CLI read succeeded")
 		}
-		assertDirectWorkerSessionCLIError(t, read, code)
+		// CLI normalizes the transcript's generic HTTP not-found code to its
+		// Worker-specific code; both retain the same missing-resource meaning.
+		assertDirectWorkerSessionCLIError(t, read, "WORKER_SESSION_NOT_FOUND")
 		var mcp struct {
 			Error struct {
 				Code string `json:"code"`
