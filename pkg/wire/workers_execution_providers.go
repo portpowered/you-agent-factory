@@ -156,26 +156,6 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 	return platformfilesystem.Local{}
 }
 
-// provideProvidersAgyPTYEffect completes the native adapter before root assembly.
-func provideProvidersAgyPTYEffect(edges serviceedges.Edges) (providerswire.AgyEffect, error) {
-	allocator, err := provideProvidersAgyPTYAllocator(edges)
-	if err != nil {
-		return nil, err
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	return providerswire.NewAgyPTYEffect(
-		allocator, executableLocator, executableInspector,
-		effectiveProviderCommandClock(edges), providerswire.AgyPTYPolicy{},
-	), nil
-}
-
 func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {
 	if edges.WorkersFactoryDocsFileSystem != nil {
 		return edges.WorkersFactoryDocsFileSystem

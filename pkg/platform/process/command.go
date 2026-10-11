@@ -291,19 +291,29 @@ func NewExecCommandRunner(newCommand CommandFactory, clock Clock, logger logging
 	if clock == nil {
 		return ExecCommandRunner{}, errors.New("platform process clock is required")
 	}
-	return ExecCommandRunner{Logger: logger, Clock: clock, NewCommand: newCommand, ProcessStateReader: processStateReader, ProcFS: procFS}, nil
+	return ExecCommandRunner{Logger: logging.EnsureLogger(logger), Clock: clock, NewCommand: newCommand, ProcessStateReader: processStateReader, ProcFS: procFS}, nil
 }
 
 // Run executes the command with process-tree cancellation, capturing stdout and stderr.
 func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	return r.run(ctx, req, nil, false)
+	return r.admitLogger().run(ctx, req, nil, false)
 }
 
 // RunStreaming executes the same injected subprocess effect while forwarding
 // incremental output. It prevents higher-level packages from constructing a
 // second host command implementation merely to observe output.
 func (r ExecCommandRunner) RunStreaming(ctx context.Context, req CommandRequest, observer OutputChunkObserver) (CommandResult, error) {
-	return r.run(ctx, req, observer, true)
+	return r.admitLogger().run(ctx, req, observer, true)
+}
+
+// admitLogger preserves direct struct callers that omit the optional logger.
+// Constructed runners already store an explicit selection; strict execution and
+// cleanup never select a fallback or replace the request's ExecutionLogger.
+func (r ExecCommandRunner) admitLogger() ExecCommandRunner {
+	if r.Logger == nil {
+		r.Logger = logging.NoopLogger{}
+	}
+	return r
 }
 
 func (r ExecCommandRunner) run(
@@ -318,7 +328,7 @@ func (r ExecCommandRunner) run(
 	// Reject before constructing a command: even an injected factory must not
 	// observe an invocation the host cannot launch. Stdin is outside this bound.
 	if r.CommandLineLimit > 0 && ComposedCommandLineLength(req.Command, req.Args) >= r.CommandLineLimit {
-		return CommandResult{}, r.reportCommandStartFailure(logging.EnsureLogger(r.Logger), req,
+		return CommandResult{}, r.reportCommandStartFailure(r.Logger, req,
 			errors.New("command-line preflight rejected launch"))
 	}
 	cmd, stdout, stderr, err := r.prepareCommand(req, observer, streaming)
@@ -326,7 +336,7 @@ func (r ExecCommandRunner) run(
 		return CommandResult{}, err
 	}
 
-	cleanupLogger := logging.EnsureLogger(r.Logger)
+	cleanupLogger := r.Logger
 	tree, err := startCommandProcessTree(cmd)
 	if err != nil {
 		return CommandResult{}, r.reportCommandStartFailure(cleanupLogger, req, err)

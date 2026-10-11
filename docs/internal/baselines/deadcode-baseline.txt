@@ -1436,7 +1436,6 @@ pkg/services/providers/wire/registration_contract.go: unreachable func: Progress
 pkg/services/providers/wire/registration_contract.go: unreachable func: ProgressingIntegration.Stats
 pkg/services/providers/wire/registration_contract.go: unreachable func: SuccessfulCompletion
 pkg/services/providers/wire/registration_contract.go: unreachable func: cloneManifest
-pkg/services/providers/wire/wire.go: unreachable func: DefaultPTYSessionConfig
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: ApplyJavaScriptProjectionFacts
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: resultFromJavaScriptProjection
 pkg/services/recordings/internal/contracts/contracts.go: unreachable func: LiveRecordingTargetPlannerFunc.PlanLiveRecordingTarget
