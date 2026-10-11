@@ -699,7 +699,8 @@ func TestStartupDeliversUnreadMessagesWithoutAnotherSend(t *testing.T) {
 		t.Fatal("refused intent flush reached the provider")
 	default:
 	}
-	next := startHostRunner(t, home, dir, "", serviceedges.Edges{}, nil, revival)
+	assertInactiveStartupPreservesUnread(t, f, revival, first.MessageId)
+	next := startHostRunner(t, home, dir, `{"messaging":{"enabled":true}}`, serviceedges.Edges{}, nil, revival)
 	pending := "REVIVE_PENDING"
 	first.Reason = &pending
 	final := next.awaitDeliveryOutcome(t, nil, first)
@@ -725,6 +726,42 @@ func TestStartupDeliversUnreadMessagesWithoutAnotherSend(t *testing.T) {
 	case <-revival.requests:
 		t.Fatal("restart or held input duplicated the continuation")
 	default:
+	}
+}
+
+// Replacing the graph is necessary to select a different immutable profile
+// policy. Both inactive hosts retain the exact inbox; later re-enabling must
+// deliver the existing REVIVE messages without a new send.
+func assertInactiveStartupPreservesUnread(t *testing.T, first *fixture, revival *workerGate, messageID string) {
+	t.Helper()
+	path := filepath.Join(first.home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cell := range []struct{ name, settings, code string }{
+		{"disabled", `{"messaging":{"enabled":false}}`, "MESSAGING_DISABLED"},
+		{"quarantined", `{"messaging":{"limits":{"defaultExpirySeconds":59}}}`, "MESSAGE_STORE_UNAVAILABLE"},
+	} {
+		f := startHostRunner(t, first.home, first.dir, cell.settings, serviceedges.Edges{}, nil, revival, cell.name)
+		caller := f.invoke(t, cell.name, nil)
+		for _, route := range []string{"/messages", "/messages/" + messageID, "/messages?follow=true"} {
+			assertError(t, f, http.MethodGet, route, nil, nil, http.StatusServiceUnavailable, cell.code)
+		}
+		assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "inactive-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "inactive send"}, caller, http.StatusServiceUnavailable, cell.code)
+		// Worker execution and owned shutdown still function while Messaging
+		// cannot activate delivery; join the host before inspecting effects.
+		f.endWorker(t, cell.name)
+		f.server.Close(t)
+		select {
+		case <-revival.requests:
+			t.Fatalf("%s startup revived the retained recipient", cell.name)
+		default:
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatalf("%s startup changed or erased the retained inbox", cell.name)
+		}
 	}
 }
 

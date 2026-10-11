@@ -573,6 +573,76 @@ func TestOversizedBodyCLIHTTPParity(t *testing.T) {
 	}
 }
 
+func TestExpiryBoundariesCLIHTTPPreserveAdmission(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"sendsPerChainPerHour":3,"defaultExpirySeconds":120}}}`, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	for _, cell := range []struct {
+		seconds int
+		flag    string
+	}{
+		{0, "0s"}, {59, "59s"}, {604801, "168h1s"},
+	} {
+		request := map[string]any{"requestId": "minimum", "to": map[string]string{"workerSessionId": "lead"}, "body": "expiry boundary", "expiresInSeconds": cell.seconds}
+		assertError(t, f, http.MethodPost, "/messages", request, lane, http.StatusBadRequest, "MESSAGE_INVALID_REQUEST")
+		assertCLIExpiryRefused(t, f, lane, cell.flag)
+	}
+	// CLI durations must represent whole seconds; HTTP publishes integer seconds.
+	assertCLIExpiryRefused(t, f, lane, "60.5s")
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+		t.Fatal("invalid expiry persisted a message")
+	}
+	for _, cell := range []struct {
+		id, flag string
+		seconds  int
+	}{
+		{"minimum", "1m", 60}, {"maximum", "168h", 604800}, {"selected-default", "", 120},
+	} {
+		// Different bodies avoid the preserved ten-minute content dedup policy.
+		body := "expiry boundary " + cell.id
+		args := []string{"lead", "--request-id", cell.id, "--body", body}
+		request := map[string]any{"requestId": cell.id, "to": map[string]string{"workerSessionId": "lead"}, "body": body}
+		if cell.flag != "" {
+			args = append(args, "--expires", cell.flag)
+			request["expiresInSeconds"] = cell.seconds
+		}
+		message := f.cliSend(t, lane, args...)
+		if message.ExpiresAt.Sub(message.SentAt) != time.Duration(cell.seconds)*time.Second || message.Status != "QUEUED" || message.Reason != nil {
+			t.Fatalf("%s expiry or running-recipient policy changed: duration=%s status=%s reason=%v", cell.id, message.ExpiresAt.Sub(message.SentAt), message.Status, message.Reason)
+		}
+		assertProviderRetry(t, f, request, lane, message)
+		if stored := f.get(t, message.MessageId, lane); !reflect.DeepEqual(stored, message) {
+			t.Fatal("expiry facts differ from the durable HTTP read")
+		}
+	}
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 3 {
+		t.Fatal("expiry refusals or cross-transport retries spent admission quota or created messages")
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("expiry validation or queueing changed Factory Events")
+	}
+	// Join the sender first, then mark the recipient's inbox read so teardown
+	// cannot start a continuation for these boundary-only queued messages.
+	f.endWorker(t, "lane")
+	readPage(t, f, "/messages?toMe=true&markRead=true", lead)
+	f.endWorker(t, "lead")
+}
+
+func assertCLIExpiryRefused(t *testing.T, f *fixture, lane map[string]string, duration string) {
+	t.Helper()
+	args := []string{"you", "--json", "--server", f.server.URL(), "message", "lead", "--request-id", "minimum", "--body", "expiry boundary", "--expires", duration, "--output", "json"}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(append([]string{}, f.env...), "YOU_WORKER_SESSION_ID="+lane["YOU_WORKER_SESSION_ID"], "YOU_WORKER_SESSION_TOKEN="+lane["YOU_WORKER_SESSION_TOKEN"])
+	inputs.Input.WorkingDirectory = f.dir
+	err := f.server.Execute(t, inputs.Input)
+	var failure *clihttp.APIError
+	if !errors.As(err, &failure) || failure.StatusCode != http.StatusBadRequest || failure.Response.Code != "MESSAGE_INVALID_REQUEST" {
+		t.Fatalf("CLI expiry refusal for %s: %v %s", duration, err, inputs.Stderr())
+	}
+}
+
 func assertCLIBodyLimit(t *testing.T, f *fixture, lane map[string]string, body string, stdin bool) {
 	t.Helper()
 	args := []string{"you", "--json", "--server", f.server.URL(), "message", "lead", "--request-id", "boundary", "--output", "json"}
