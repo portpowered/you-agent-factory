@@ -166,6 +166,23 @@ func productionWorkerSessionsCommand(
 	register("you.worker-sessions.stream.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
 		return executeGeneratedWorkerSessionsStreamWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.StreamWorkerSession, values)
 	}))
+	register("you.worker-sessions.follow.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, _ *cliDiagnosticsOptions, values map[string]any) error {
+		terminal, err := commandInputValue[bool](values, "you.worker-sessions.follow.flag.terminal")
+		if err != nil {
+			return err
+		}
+		ids, err := commandInputValue[[]string](values, "you.worker-sessions.follow.arg.0")
+		if err != nil {
+			return err
+		}
+		if options.StreamWorkerSession == nil {
+			return fmt.Errorf("worker session stream service is required")
+		}
+		return options.StreamWorkerSession(workersessionscli.StreamConfig{
+			Context: cmd.Context(), Server: resolvedGlobals.server, Terminal: terminal, TerminalIDs: ids,
+			JSON: resolvedGlobals.json, Output: cmd.OutOrStdout(),
+		})
+	}))
 	register("you.worker-sessions.invoke.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
 		invoke := options.InvokeWorkerSession
 		if invoke != nil {
@@ -203,6 +220,25 @@ func productionWorkerSessionsCommand(
 	}
 	if err := installWorkerSessionsStreamModeConflictGuard(command); err != nil {
 		panic(fmt.Sprintf("build worker sessions stream conflict guard: %v", err))
+	}
+	follow, _, err := command.Find([]string{"follow"})
+	if err != nil || follow == nil {
+		panic("worker sessions follow command is unavailable")
+	}
+	previousArgs := follow.Args
+	follow.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return &workersessionscli.CLIError{Code: "WORKER_SESSION_FOLLOW_INVALID", Message: "use worker-sessions follow --terminal ID [ID...]"}
+		}
+		for _, id := range args {
+			if strings.TrimSpace(id) == "" {
+				return &workersessionscli.CLIError{Code: "WORKER_SESSION_FOLLOW_INVALID", Message: "Worker Session IDs must be nonempty"}
+			}
+		}
+		if previousArgs != nil {
+			return previousArgs(cmd, args)
+		}
+		return nil
 	}
 	return command
 }

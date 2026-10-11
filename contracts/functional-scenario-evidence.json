@@ -499,6 +499,13 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/terminal_follow_test.go::TestManySessionTerminalFollowCompletionOrder",
+      "stableIds": [
+        "cli/you.worker-sessions.follow",
+        "rest/streamWorkerSessionEventsByWorkerSessionId"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
       "stableIds": [
         "cli/you.worker-sessions.cancel",
