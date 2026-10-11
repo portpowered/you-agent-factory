@@ -340,7 +340,7 @@ func configuredTestOperation[T any](operation func(T) error) func(T) error {
 func TestCommandFactoryDefersHomeErrorUntilSelectedCommandNeedsIt(t *testing.T) {
 	t.Parallel()
 	homeErr := errors.New("controlled home metadata unavailable")
-	factory := newTestCommandFactory(CommandOperations{})
+	factory := newTestCommandFactory(commandTestOperations{})
 	for _, test := range []struct {
 		name string
 		args []string

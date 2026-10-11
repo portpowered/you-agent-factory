@@ -102,62 +102,22 @@ func newMetricsCLIHTTPClient(transport http.RoundTripper) *http.Client {
 // httpRuntimeBinding selects one canonical live session and host cancellation.
 type httpRuntimeBinding func(string, initializer.InvocationCancellation) (http.Handler, error)
 
-// provideHTTPRuntimeBindingWithMetrics is the production Wire-owned live HTTP
-// composition path. Session-independent adapters are constructed once; the
-// returned operation selects host facts and cancellation for the route shell.
+// provideHTTPRuntimeBindingWithMetrics selects host facts over completed HTTP roles.
 func provideHTTPRuntimeBindingWithMetrics(
 	root *factorysessionwire.Root,
-	inspection factorysessions.SessionInspectionService,
-	definitions factorydefinitions.Service,
-	workService work.Service,
-	modelService models.Service,
-	recordingsService recordings.Service,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workerPrompts workers.PromptTemplates,
-	factoryStatusProjector factoryruntime.FactoryStatusProjector,
+	recordingsAdapter *recordingshttp.Adapter,
+	sessionsHandler *factorysessionshttp.Handler,
+	factoryDefinitionsHandler *factorydefinitionshttp.Handler,
+	workHandler *workhttp.Adapter,
 	providerSessionsHTTP *providersessionshttp.Handler,
-	modelsContent work.ContentPreparation,
-	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-	sessionRequests factorysessionshttp.RequestPreparation,
-	metricsQuery factoryvisualization.RuntimeMetricsQuery,
-	costsQuery costs.CostsQuery,
-	logs workersessions.Service,
+	modelsHandler *modelshttp.Handler,
+	metricsHandler *factoryvisualizationhttp.MetricsHandler,
+	costsHandler *costshttp.Handler,
+	workerSessionsHandler *workersessionshttp.Handler,
 	recoverOwners recordings.WorkerOwnerRecoveryOperation,
-	fleet *workersessionswire.FleetObservationService,
-	fleetSources workersessionswire.ObservationServiceCatalog,
-	attribution recordings.WorkerWorkAttributionReader,
+	endpointBinding workersessions.ExecutionEndpointBinding,
 	logger *zap.Logger,
-) (httpRuntimeBinding, error) {
-	if root == nil || inspection == nil || definitions == nil || workService == nil || modelService == nil || recordingsService == nil || workflowPreview == nil || workerPrompts == nil || factoryStatusProjector == nil || providerSessionsHTTP == nil || modelsContent == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || metricsQuery == nil || costsQuery == nil || logs == nil || attribution == nil || logger == nil {
-		return nil, errors.New("construct HTTP runtime binding: owner adapters and boundary policies are required")
-	}
-	definitionMapping := factorydefinitionmapping.New(definitions)
-	definitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
-	recordingsAdapter := recordingshttp.NewAdapterWithSessions(recordingsService, root, inspection)
-	workHandler := workhttpAdapter(root, workService, definitionsAPI, invocationWorkType)
-	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
-	statusAPI := factorysessionshttp.NewFactoryStatusAPI(root, factoryStatusProjector)
-	liveAPI := factorysessionmapping.NewLiveAPI(root, root)
-	invocationAPI := factorysessionmapping.NewInvocationAPI(root)
-	sessionsHandler := newHTTPSessionsHandler(
-		root, logger, definitionMapping, definitionsAPI, statusAPI, liveAPI, invocationAPI,
-		validation, sessionRequests, workflowPreview, workerPrompts,
-	)
-	factoryDefinitionsHandler := factorydefinitionshttp.NewHandler(
-		definitions, factorydefinitionshttp.NewTopologyValidation(definitions), logger,
-	)
-	modelsHandler := modelshttp.NewHandler(modelshttp.NewSessionAdapter(modelService, root, modelsContent, modelshttp.ModelsScope, modelshttp.SessionID), logger)
-	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(costsQuery, costshttp.RuntimePaths, metricsScopeResolver), logger)
-	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(metricsQuery, metricsScopeResolver, factoryvisualizationhttp.MetricsRoot), logger)
-	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, logs, fleet, fleetSources, attribution, logger)
-	endpointOwner, ok := logs.(interface {
-		ExecutionEndpointBinding() workersessions.ExecutionEndpointBinding
-	})
-	if !ok {
-		return nil, errors.New("construct HTTP runtime binding: Worker Sessions execution endpoint binding is required")
-	}
-	endpointBinding := endpointOwner.ExecutionEndpointBinding()
+) httpRuntimeBinding {
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
@@ -169,7 +129,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 			return nil, err
 		}
 		return workerExecutionEndpointHandler{Handler: handler, bind: endpointBinding}, nil
-	}, nil
+	}
 }
 
 // Only a host exposing the canonical Worker Sessions admission routes may
@@ -213,48 +173,82 @@ func newHTTPRuntimeHandlerWithMetrics(
 	), nil
 }
 
-func newHTTPSessionsHandler(
-	root *factorysessionwire.Root,
-	logger *zap.Logger,
-	currentFactory apisurface.CurrentFactoryReader,
-	definitionsAPI *factorydefinitionmapping.API,
-	statusAPI apisurface.FactoryStatusAPI,
-	liveAPI *factorysessionmapping.LiveAPI,
-	invocationAPI *factorysessionmapping.InvocationAPI,
-	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	sessionRequests factorysessionshttp.RequestPreparation,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	workerPrompts workers.PromptTemplates,
-) *factorysessionshttp.Handler {
-	handler := factorysessionshttp.NewHandler(
-		factorysessionshttp.NewLifecycleHandler(root, root, root, sessionRequests, logger),
-		factorysessionshttp.NewReadHandler(root, liveAPI, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, sessionRequests, logger),
-		factorysessionshttp.NewAuthoringHandler(currentFactory, definitionsAPI, validation, workflowPreview, workerPrompts, logger),
-		factorysessionshttp.NewInvocationHandler(invocationAPI, logger),
-		factorysessionshttp.NewObservationHandler(root, liveAPI, statusAPI, sessionRequests, logger),
-	)
-	return handler
+func provideHTTPDefinitionMapping(service factorydefinitions.Service) *factorydefinitionmapping.Service {
+	return factorydefinitionmapping.New(service)
+}
+func provideHTTPDefinitionsAPI(mapping *factorydefinitionmapping.Service) *factorydefinitionmapping.API {
+	return factorydefinitionmapping.NewAPI(mapping, mapping)
+}
+func provideHTTPRecordingsAdapter(service recordings.Service, root *factorysessionwire.Root, inspection factorysessions.SessionInspectionService) *recordingshttp.Adapter {
+	return recordingshttp.NewAdapterWithSessions(service, root, inspection)
+}
+func provideHTTPMetricsScope(root *factorysessionwire.Root) factorysessions.RuntimeMetricsScopeResolver {
+	return factorysessionwire.NewRuntimeMetricsScopeResolver(root)
+}
+func provideHTTPStatusAPI(root *factorysessionwire.Root, projector factoryruntime.FactoryStatusProjector) apisurface.FactoryStatusAPI {
+	return factorysessionshttp.NewFactoryStatusAPI(root, projector)
+}
+func provideHTTPLiveAPI(root *factorysessionwire.Root) *factorysessionmapping.LiveAPI {
+	return factorysessionmapping.NewLiveAPI(root, root)
+}
+func provideHTTPInvocationAPI(root *factorysessionwire.Root) *factorysessionmapping.InvocationAPI {
+	return factorysessionmapping.NewInvocationAPI(root)
+}
+func provideHTTPLifecycleHandler(root *factorysessionwire.Root, requests factorysessionshttp.RequestPreparation, logger *zap.Logger) *factorysessionshttp.LifecycleHandler {
+	return factorysessionshttp.NewLifecycleHandler(root, root, root, requests, logger)
+}
+func provideHTTPReadHandler(root *factorysessionwire.Root, live *factorysessionmapping.LiveAPI, requests factorysessionshttp.RequestPreparation, logger *zap.Logger) *factorysessionshttp.ReadHandler {
+	return factorysessionshttp.NewReadHandler(root, live, factorysessionshttp.ReadProjectionSessionListReader{Reader: root}, requests, logger)
+}
+func provideHTTPAuthoringHandler(mapping *factorydefinitionmapping.Service, definitions *factorydefinitionmapping.API, validation factorydefinitions.SubmittedDefinitionValidationOperation, preview factoryruntime.WorkflowPreviewOperation, prompts workers.PromptTemplates, logger *zap.Logger) *factorysessionshttp.AuthoringHandler {
+	return factorysessionshttp.NewAuthoringHandler(mapping, definitions, validation, preview, prompts, logger)
+}
+func provideHTTPInvocationHandler(invocation *factorysessionmapping.InvocationAPI, logger *zap.Logger) *factorysessionshttp.InvocationHandler {
+	return factorysessionshttp.NewInvocationHandler(invocation, logger)
+}
+func provideHTTPObservationHandler(root *factorysessionwire.Root, live *factorysessionmapping.LiveAPI, status apisurface.FactoryStatusAPI, requests factorysessionshttp.RequestPreparation, logger *zap.Logger) *factorysessionshttp.ObservationHandler {
+	return factorysessionshttp.NewObservationHandler(root, live, status, requests, logger)
 }
 
-func newHTTPWorkerSessionsHandler(
-	root *factorysessionwire.Root,
-	workService work.Service,
-	logs workersessions.Service,
-	fleet *workersessionswire.FleetObservationService,
-	sources workersessionswire.ObservationServiceCatalog,
-	attribution recordings.WorkerWorkAttributionReader,
-	logger *zap.Logger,
-) *workersessionshttp.Handler {
-	resolver := newWorkerSessionsFactorySessionScopeResolver(root)
-	controller := workerSessionControlRouter{
-		archived: logs,
-		sources:  sources,
-	}
-	adapter := workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
-		logs, logs, logs,
-		controller, logs, workService, attribution, resolver,
-	)
+type httpDefinitionsTopology struct {
+	factorydefinitions.SubmittedDefinitionValidationOperation
+}
+
+func provideHTTPDefinitionsTopology(service factorydefinitions.Service) httpDefinitionsTopology {
+	return httpDefinitionsTopology{factorydefinitionshttp.NewTopologyValidation(service)}
+}
+func provideHTTPDefinitionsHandler(service factorydefinitions.Service, validation httpDefinitionsTopology, logger *zap.Logger) *factorydefinitionshttp.Handler {
+	return factorydefinitionshttp.NewHandler(service, validation, logger)
+}
+func provideHTTPModelsAdapter(service models.Service, root *factorysessionwire.Root, content work.ContentPreparation) *modelshttp.Adapter {
+	return modelshttp.NewSessionAdapter(service, root, content, modelshttp.ModelsScope, modelshttp.SessionID)
+}
+func provideHTTPCostsAdapter(query costs.CostsQuery, resolver factorysessions.RuntimeMetricsScopeResolver) *costshttp.Adapter {
+	return costshttp.NewAdapter(query, costshttp.RuntimePaths, resolver)
+}
+func provideHTTPMetricsAdapter(query factoryvisualization.RuntimeMetricsQuery, resolver factorysessions.RuntimeMetricsScopeResolver) *factoryvisualizationhttp.MetricsAdapter {
+	return factoryvisualizationhttp.NewMetricsAdapter(query, resolver, factoryvisualizationhttp.MetricsRoot)
+}
+func provideHTTPWorkerSessionScope(root *factorysessionwire.Root) workersessionshttp.SessionScopeResolver {
+	return newWorkerSessionsFactorySessionScopeResolver(root)
+}
+func provideHTTPWorkerSessionController(logs workersessions.Service, sources workersessionswire.ObservationServiceCatalog) workerSessionControlRouter {
+	return workerSessionControlRouter{archived: logs, sources: sources}
+}
+func provideHTTPWorkerSessionsAdapter(logs workersessions.Service, controller workerSessionControlRouter, workService work.Service, attribution recordings.WorkerWorkAttributionReader, resolver workersessionshttp.SessionScopeResolver) *workersessionshttp.Adapter {
+	return workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(logs, logs, logs, controller, logs, workService, attribution, resolver)
+}
+func provideHTTPWorkerSessionsHandler(adapter *workersessionshttp.Adapter, fleet *workersessionswire.FleetObservationService, logs workersessions.Service, logger *zap.Logger) *workersessionshttp.Handler {
 	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), logger)
+}
+func provideWorkerExecutionEndpointBinding(logs workersessions.Service) (workersessions.ExecutionEndpointBinding, error) {
+	owner, ok := logs.(interface {
+		ExecutionEndpointBinding() workersessions.ExecutionEndpointBinding
+	})
+	if !ok {
+		return nil, errors.New("construct HTTP runtime binding: Worker Sessions execution endpoint binding is required")
+	}
+	return owner.ExecutionEndpointBinding(), nil
 }
 
 func workerSessionObservationSources(
@@ -449,14 +443,15 @@ func newHTTPRuntimeServer(
 	})
 }
 
-func workhttpAdapter(
-	root *factorysessionwire.Root,
-	workService work.Service,
-	factoryDefinitionsAPI apisurface.FactorySaveAPI,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-) *workhttp.Adapter {
+type httpDefaultWorkTypeResolver func(context.Context, string) (string, error)
+
+func provideHTTPDefaultWorkTypeResolver(root *factorysessionwire.Root, policy factorydefinitions.InvocationWorkTypeService) httpDefaultWorkTypeResolver {
+	return newDefaultWorkTypeResolver(root, policy)
+}
+
+func provideHTTPWorkAdapter(workService work.Service, definitions *factorydefinitionmapping.API, defaultType httpDefaultWorkTypeResolver) *workhttp.Adapter {
 	return workhttp.NewAdapterWithSessionScope(workService, func(ctx context.Context, sessionID string) error {
-		_, err := factoryDefinitionsAPI.GetCurrentFactoryForSession(ctx, sessionID)
+		_, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
 		return err
-	}).WithDefaultWorkTypeResolver(newDefaultWorkTypeResolver(root, invocationWorkType))
+	}).WithDefaultWorkTypeResolver(defaultType)
 }

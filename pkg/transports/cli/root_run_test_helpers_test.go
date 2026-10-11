@@ -6,6 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
+	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -895,8 +907,154 @@ func testSessionHandlers(local, remote sessioncli.Service) commandregistry.Sessi
 	return commandregistry.BindSessionResolvedHandlers(local, remote, func(context.Context, *sessioncli.ListConfig) error { return nil }, CommandDiagnostics)
 }
 
-func newTestCommandFactory(operations CommandOperations) CommandFactory {
-	factory := NewCommandFactory(operations, testSessionHandlers(operations.LocalSessionsCLI, operations.SessionsCLI), nil)
+func newTestCommandFactory(operations commandTestOperations) CommandFactory {
+	factory := NewCommandFactory(
+		operations.ObserveCLI,
+		operations.NamedFactoryCatalog,
+		operations.CompleteFactoryNames,
+		operations.CompletePackagedFactoryNames,
+		operations.CompleteSelectedFactorySignature,
+		operations.ResolveNamedFactoryRoots,
+		operations.ResolveNamedFactoryCandidatePaths,
+		operations.ResolveCurrentFactoryDir,
+		operations.ResolveFactoryConfigRoot,
+		operations.LoadFactoryConfigFile,
+		operations.WorkRequestFileLoader,
+		operations.PrepareSingleWorkTarget,
+		operations.PrepareInvocationInput,
+		operations.BuildTerminalLogger,
+		operations.RunDefaults,
+		operations.BatchInputFileSystem,
+		operations.RunInputPathInspector,
+		operations.RunDirectoryCreator,
+		operations.BrowserOpener,
+		operations.ResolveOperatorDefaults,
+		operations.LoadOperatorConfig,
+		operations.FactorySessions,
+		operations.ModelsCLI,
+		operations.ProvidersCLI,
+		operations.SessionsCLI,
+		operations.LocalSessionsCLI,
+		operations.SubmitWork,
+		operations.SubmitBatch,
+		operations.FlattenFactoryConfig,
+		operations.ExpandFactoryConfig,
+		operations.InitFactory,
+		operations.ConfigureInit,
+		operations.InstallPackagedFactory,
+		operations.QueryFactory,
+		operations.ListFactories,
+		operations.ValidateFactory,
+		operations.CreateFactoryFromFile,
+		operations.ReplaceFactoryCurrent,
+		operations.UpdateFactoryFromFile,
+		operations.DeleteFactory,
+		operations.ListWork,
+		operations.ListHumanApprovals,
+		operations.ShowHumanApproval,
+		operations.WatchWork,
+		operations.ShowWork,
+		operations.MoveWork,
+		operations.VisualizeWork,
+		operations.ListWorkerSessions,
+		operations.ShowWorkerSession,
+		operations.ReadWorkerSession,
+		operations.StreamWorkerSession,
+		operations.InvokeWorkerSession,
+		operations.ContinueWorkerSession,
+		operations.InterruptWorkerSession,
+		operations.PauseWorkerSession,
+		operations.ResumeWorkerSession,
+		operations.CancelWorkerSession,
+		operations.TerminateWorkerSession,
+		operations.LocalWorkerSessions,
+		operations.LocalWorkerSessionControls,
+		operations.OpenRunSelection,
+		operations.RemoteInvocation,
+		operations.ResponsePresentation,
+		operations.ACP,
+		operations.ACPServer,
+		operations.RuntimeMetricsQuery,
+		operations.MetricsCLI,
+		operations.MetricsCostReportCLI,
+		operations.CostsCLI,
+		operations.ServerStopCLI,
+		testSessionHandlers(operations.LocalSessionsCLI, operations.SessionsCLI), nil,
+	)
 	factory.factoryConfigInitHandler = testFactoryConfigInitHandler(factory)
 	return factory
+}
+
+// commandTestOperations selects fake roles for isolated command tests.
+type commandTestOperations struct {
+	ObserveCLI                        platformprocess.CLIObserver
+	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
+	CompleteFactoryNames              cobracompletion.FactoryNamesOperation
+	CompletePackagedFactoryNames      cobracompletion.PackagedFactoryNamesOperation
+	CompleteSelectedFactorySignature  cobracompletion.SelectedFactorySignatureOperation
+	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
+	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
+	ResolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
+	ResolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
+	LoadFactoryConfigFile             interfaces.FactoryConfigFileLoader
+	WorkRequestFileLoader             work.RequestFileLoader
+	PrepareSingleWorkTarget           work.SingleWorkTargetPreparation
+	PrepareInvocationInput            work.InvocationInputPreparation
+	BuildTerminalLogger               terminalpolicy.LoggerBuilder
+	RunDefaults                       runcli.RunConfig
+	BatchInputFileSystem              submitcli.BatchInputFileSystem
+	RunInputPathInspector             platformfilesystem.PathInspector
+	RunDirectoryCreator               platformfilesystem.DirectoryCreator
+	BrowserOpener                     platformbrowser.Opener
+	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
+	LoadOperatorConfig                operatorconfig.ConfigLoader
+	FactorySessions                   factorysessions.Service
+	ModelsCLI                         modelscli.Service
+	ProvidersCLI                      providerscli.Service
+	SessionsCLI                       sessioncli.Service
+	LocalSessionsCLI                  LocalSessionsCLIService
+	SubmitWork                        SubmitWorkOperation
+	SubmitBatch                       SubmitBatchOperation
+	FlattenFactoryConfig              FlattenFactoryConfigOperation
+	ExpandFactoryConfig               ExpandFactoryConfigOperation
+	InitFactory                       interfaces.ScaffoldInitializer
+	ConfigureInit                     ConfigureInitOperation
+	InstallPackagedFactory            InstallPackagedFactoryOperation
+	QueryFactory                      QueryFactoryOperation
+	ListFactories                     ListFactoriesOperation
+	ValidateFactory                   ValidateFactoryOperation
+	CreateFactoryFromFile             CreateFactoryFromFileOperation
+	ReplaceFactoryCurrent             ReplaceFactoryCurrentOperation
+	UpdateFactoryFromFile             UpdateFactoryFromFileOperation
+	DeleteFactory                     DeleteFactoryOperation
+	ListWork                          ListWorkOperation
+	ListHumanApprovals                ListHumanApprovalsOperation
+	ShowHumanApproval                 ShowHumanApprovalOperation
+	WatchWork                         WatchWorkOperation
+	ShowWork                          ShowWorkOperation
+	MoveWork                          MoveWorkOperation
+	VisualizeWork                     VisualizeWorkOperation
+	ListWorkerSessions                ListWorkerSessionsOperation
+	ShowWorkerSession                 ShowWorkerSessionsOperation
+	ReadWorkerSession                 ReadWorkerSessionOperation
+	StreamWorkerSession               StreamWorkerSessionOperation
+	InvokeWorkerSession               InvokeWorkerSessionOperation
+	ContinueWorkerSession             ContinueWorkerSessionOperation
+	InterruptWorkerSession            InterruptWorkerSessionOperation
+	PauseWorkerSession                PauseWorkerSessionOperation
+	ResumeWorkerSession               ResumeWorkerSessionOperation
+	CancelWorkerSession               CancelWorkerSessionOperation
+	TerminateWorkerSession            TerminateWorkerSessionOperation
+	LocalWorkerSessions               workersessionscli.LocalInvokeBoundary
+	LocalWorkerSessionControls        workersessionscli.LocalControlBoundary
+	OpenRunSelection                  runcli.SelectionFactory
+	RemoteInvocation                  runcli.RemoteInvocationOperation
+	ResponsePresentation              factoryvisualization.ResponsePresentation
+	ACP                               acpcli.Operations
+	ACPServer                         acp.Server
+	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
+	MetricsCLI                        factoryvisualizationcli.Operation
+	MetricsCostReportCLI              factoryvisualizationcli.CostReportOperation
+	CostsCLI                          costscli.Operation
+	ServerStopCLI                     serverstopcli.Operation
 }

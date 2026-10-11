@@ -57,9 +57,6 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 
-	if _, err := provideHTTPRuntimeBindingWithMetrics(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
-		t.Fatal("provideHTTPRuntimeBindingWithMetrics(nil roles) error = nil, want required-owner validation")
-	}
 }
 
 func TestHTTPRuntimeBindingRejectsMissingRoot(t *testing.T) {

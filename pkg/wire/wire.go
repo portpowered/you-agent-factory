@@ -4,6 +4,10 @@ package wire
 
 import (
 	"context"
+	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
@@ -45,6 +49,35 @@ var apiSet = wire.NewSet(
 	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
 	provideHTTPRuntimeBindingWithMetrics,
+	provideHTTPDefinitionMapping,
+	provideHTTPDefinitionsAPI,
+	provideHTTPRecordingsAdapter,
+	provideHTTPMetricsScope,
+	provideHTTPStatusAPI,
+	provideHTTPLiveAPI,
+	provideHTTPInvocationAPI,
+	provideHTTPLifecycleHandler,
+	provideHTTPReadHandler,
+	provideHTTPAuthoringHandler,
+	provideHTTPInvocationHandler,
+	provideHTTPObservationHandler,
+	factorysessionshttp.NewHandler,
+	provideHTTPDefinitionsTopology,
+	provideHTTPDefinitionsHandler,
+	provideHTTPModelsAdapter,
+	modelshttp.NewHandler,
+	provideHTTPCostsAdapter,
+	costshttp.NewHandler,
+	provideHTTPMetricsAdapter,
+	factoryvisualizationhttp.NewMetricsHandler,
+	provideHTTPWorkerSessionScope,
+	provideHTTPWorkerSessionController,
+	provideHTTPWorkerSessionsAdapter,
+	provideHTTPWorkerSessionsHandler,
+	provideWorkerExecutionEndpointBinding,
+	provideHTTPDefaultWorkTypeResolver,
+	provideHTTPWorkAdapter,
+
 	provideHTTPWorkerPrompts,
 )
 
@@ -577,7 +610,6 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideMoveWorkOperation,
 	provideWorkVisualizationOperation,
 	provideVisualizeWorkOperation,
-	wire.Struct(new(cli.CommandOperations), "*"),
 )
 
 // BundleSet is the one canonical provider set used by the single public bundle
@@ -613,7 +645,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewInitializer,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
-	provideCLICommandFactory,
+	cli.NewCommandFactory,
 	initializerapplication.NewProcessWithRuntimeCosts,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),

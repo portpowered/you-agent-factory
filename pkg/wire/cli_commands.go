@@ -906,10 +906,6 @@ func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
 	return edges.CLIObserver
 }
 
-func provideCLICommandFactory(operations cli.CommandOperations, handlers commandregistry.SessionResolvedHandlers, factoryHandler commandregistry.FactoryConfigInitHandler) cli.CommandFactory {
-	return cli.NewCommandFactory(operations, handlers, factoryHandler)
-}
-
 func provideSessionListPreparation(service factorysessions.Service) func(context.Context, *sessioncli.ListConfig) error {
 	return func(_ context.Context, cfg *sessioncli.ListConfig) error {
 		if cfg.LiveOnly || cfg.HistoryOnly {
