@@ -98,6 +98,47 @@ func observationMetadata() *observation {
 	}
 }
 
+func TestUnavailableTerminalReadDoesNotWait(t *testing.T) {
+	t.Parallel()
+	r := newObservationRegistry(nil)
+	r.sessions["script"] = workersessions.Session{ID: "script", State: workersessions.StateCompleted}
+	r.observations["script"] = observationMetadata()
+	started := time.Now()
+	_, err := r.ReadTranscriptByWorkerSessionID(t.Context(), workersessions.ReadTranscriptByWorkerSessionIDRequest{WorkerSessionID: "script"})
+	if !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) || time.Since(started) > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("terminal transcript = %v, elapsed=%s", err, time.Since(started))
+	}
+}
+
+func TestUnavailableTerminalStreamCloses(t *testing.T) {
+	t.Parallel()
+	for _, replayOnly := range []bool{false, true} {
+		t.Run(fmt.Sprint(replayOnly), func(t *testing.T) {
+			t.Parallel()
+			topic := workersessions.Topic("script")
+			reader := &observationEventReaderFake{readResults: []events.ReadResult{{Outcome: events.ReadOutcomeAtHead, Next: events.Cursor{Topic: topic}, Retained: events.RetainedRange{Topic: topic}}}, subscription: func(context.Context) events.Delivery {
+				t.Error("terminal stream must not wait for future events")
+				return events.Delivery{Kind: events.DeliveryClosed}
+			}}
+			r := newObservationRegistry(reader)
+			r.sessions["script"] = workersessions.Session{ID: "script", State: workersessions.StateCompleted}
+			r.observations["script"] = observationMetadata()
+			stream, err := r.StreamObservationsByWorkerSessionID(t.Context(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "script", ReplayOnly: replayOnly})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer stream.Close()
+			delivery := stream.Next(t.Context())
+			if delivery.Kind != workersessions.ObservationDeliveryReplaySummary || delivery.Summary == nil || delivery.Summary.Complete || delivery.Summary.EventsEmitted != 0 {
+				t.Fatalf("empty terminal replay = %+v", delivery)
+			}
+			if next := stream.Next(t.Context()); next.Kind != workersessions.ObservationDeliveryClosed {
+				t.Fatalf("after summary = %+v", next)
+			}
+		})
+	}
+}
+
 func TestListObservationsCandidateVisitsCountDiscardedEntries(t *testing.T) {
 	t.Parallel()
 	r := newObservationRegistry(nil)

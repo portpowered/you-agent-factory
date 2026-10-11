@@ -20,6 +20,88 @@ type replayCaptureReader struct {
 	snapshot recordings.WorkerRecordingSnapshot
 }
 
+func TestUnavailableArchivedTerminalCursorCloses(t *testing.T) {
+	t.Parallel()
+	page := transcriptCapturePage("archived", "owned", "answer")
+	page.Records[2].Record.SourceType = lifecycleSourceType
+	page.Records[2].Record.SourceSequence = terminalSourceSequence
+	page.Records[2].Record.SourceEventID = terminalSourceEventID
+	r := newObservationRegistry(nil)
+	r.logs = &LogReader{reader: &transcriptCaptureFake{pages: []recordings.WorkerCapturedActivityPage{page}}}
+	for _, position := range []uint64{0, 1, 3} {
+		var cursor *workersessions.ObservationCursor
+		if position > 0 {
+			cursor = &workersessions.ObservationCursor{WorkerSessionID: "archived", Position: position}
+		}
+		stream, err := r.StreamObservationsByWorkerSessionID(t.Context(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "archived", FactorySessionID: "owned", Cursor: cursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for {
+			delivery := stream.Next(t.Context())
+			if delivery.Kind == workersessions.ObservationDeliveryClosed {
+				break
+			}
+			if delivery.Kind == workersessions.ObservationDeliverySourceFailure {
+				t.Fatalf("archived cursor: %+v", delivery)
+			}
+			if delivery.Event.Position > 0 {
+				count++
+				if delivery.Event.Position != position+uint64(count) {
+					t.Fatalf("archived cursor repeated/skipped: %+v", delivery)
+				}
+			}
+			if delivery.Summary != nil && (!delivery.Summary.Complete || delivery.Summary.EventsEmitted != count) {
+				t.Fatalf("archived summary=%+v records=%d", delivery.Summary, count)
+			}
+		}
+		stream.Close()
+		if count != 3-int(position) {
+			t.Fatalf("archived records=%d after=%d", count, position)
+		}
+	}
+}
+
+type archivedPageGate struct {
+	recordings.WorkerCapturedActivityReader
+	entered chan struct{}
+}
+
+func (g archivedPageGate) ReadWorkerCapturedActivity(ctx context.Context, _ recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
+	close(g.entered)
+	<-ctx.Done()
+	return recordings.WorkerCapturedActivityPage{}, ctx.Err()
+}
+
+func TestUnavailableArchivedStreamCloseCancelsBlockedPage(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second) //nolint:testsleep // Operator 2026-10-11T20:11Z: failure ceiling, Close must finish within one second.
+	defer cancel()
+	gate := archivedPageGate{entered: make(chan struct{})}
+	stream := &continuationCaptureStream{reader: gate, head: 1, page: recordings.WorkerCapturedActivityPage{NextToken: "next"}}
+	done := make(chan workersessions.ObservationDelivery, 1)
+	go func() { done <- stream.Next(ctx) }()
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("archived page was not requested")
+	}
+	started := time.Now()
+	stream.Close()
+	select {
+	case result := <-done:
+		if result.Kind != workersessions.ObservationDeliveryCanceled {
+			t.Fatalf("detached archived read=%+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("archived page did not join")
+	}
+	if time.Since(started) > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatal("Close waited for blocked archived storage")
+	}
+}
+
 func TestReplayObservationSubscriptionCloseCancelsBlockedPage(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second) //nolint:testsleep // Failure ceiling for a stuck replay read; entered and done channels synchronize Close.

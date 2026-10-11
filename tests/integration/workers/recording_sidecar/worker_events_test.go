@@ -2,18 +2,116 @@ package recording_sidecar_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// Consume the exact prebuilt artifact; a private Node script has no provider
+// association. Both owned hosts join before the same profile is reopened.
+func TestUnavailableTerminalReadsRestart(t *testing.T) {
+	f := newInvokeArtifactFixture(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRecordingIntegrityJSON(t, f.document, map[string]any{
+		"requestId": "unavailable-script-request", "workerSessionId": "unavailable-script",
+		"execution": map[string]any{"workstationName": "direct", "workingDirectory": f.project, "workerType": "script", "runnerId": "script", "command": node, "args": []string{"-e", `console.log("owned script output")`}, "dispatch": map[string]any{"dispatchId": "script-attempt", "workstationName": "direct", "workerType": "script"}},
+	})
+	host := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
+	f.cli(t, host.url, "invoke", "--execution", f.document)
+	before := assertUnavailableArtifactReads(t, f, host.url)
+	host.stop(t, f.ctx, f.binary, f.project, f.env)
+	reopened := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
+	after := assertUnavailableArtifactReads(t, f, reopened.url)
+	if !reflect.DeepEqual(before.Events, after.Events) || before.Health != after.Health {
+		t.Fatal("restart changed retained script history/health")
+	}
+	reopened.stop(t, f.ctx, f.binary, f.project, f.env)
+}
+
+func assertUnavailableArtifactReads(t *testing.T, f invokeArtifactFixture, server string) api.WorkerSessionLogPage {
+	t.Helper()
+	var row api.WorkerSessionObservation
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/unavailable-script", &row)
+	if row.State != "COMPLETED" || row.ProviderSession != nil || row.Transcript != "UNAVAILABLE" {
+		t.Fatalf("script identity=%+v", row)
+	}
+	assertUnavailableArtifactTranscript(t, f, server)
+	var page api.WorkerSessionLogPage
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/unavailable-script/logs", &page)
+	if page.Health != api.COMPLETE || page.NextToken != nil || len(page.Events) < 2 {
+		t.Fatalf("retained script logs=%+v", page)
+	}
+	assertUnavailableArtifactStreams(t, f, server, page)
+
+	return page
+}
+
+func assertUnavailableArtifactTranscript(t *testing.T, f invokeArtifactFixture, server string) {
+	t.Helper()
+	started := time.Now()
+	request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/unavailable-script/transcript", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var diagnostic api.ErrorResponse
+	decodeErr := json.NewDecoder(response.Body).Decode(&diagnostic)
+	response.Body.Close()
+	if decodeErr != nil || response.StatusCode != http.StatusInternalServerError || diagnostic.Code != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" || time.Since(started) > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("HTTP unavailable: status=%d code=%s elapsed=%s err=%v", response.StatusCode, diagnostic.Code, time.Since(started), decodeErr)
+	}
+	started = time.Now()
+	command := exec.CommandContext(f.ctx, f.binary, "--remote", "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", "unavailable-script")
+	command.Dir, command.Env = f.project, f.env
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	if err := command.Run(); err == nil || !strings.Contains(stderr.String(), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") || strings.Contains(stderr.String(), "FACTORY_UNREACHABLE") || time.Since(started) > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("CLI unavailable: elapsed=%s err=%v stderr=%s", time.Since(started), err, stderr.String())
+	}
+}
+
+func assertUnavailableArtifactStreams(t *testing.T, f invokeArtifactFixture, server string, page api.WorkerSessionLogPage) {
+	t.Helper()
+	for _, query := range []string{"", "?replayOnly=true"} {
+		request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/unavailable-script/events"+query, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		started := time.Now()
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		headers := time.Since(started)
+		frames := drainWorkerEventsArtifact(t, response)
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK || headers > time.Second || time.Since(started) > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+			t.Fatalf("finite script stream headers=%s EOF=%s status=%d", headers, time.Since(started), response.StatusCode)
+		}
+		assertWorkerEventsArtifactTerminal(t, frames)
+		if len(workerEventsArtifactRecords(frames)) != len(page.Events) {
+			t.Fatal("terminal stream lost retained script records")
+		}
+		t.Logf("script finite headers=%s EOF=%s records=%d", headers, time.Since(started), len(page.Events))
+	}
+}
 
 // Both cells consume the upstream immutable artifact, never build a binary,
 // and use private profiles and a controlled native provider command.
