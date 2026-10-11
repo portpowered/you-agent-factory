@@ -312,13 +312,93 @@ func provideModelRuntimeHost(scopes modelswire.RuntimeScopes, assets modelswire.
 	return modelswire.NewRuntimeHost(scopes, assets, leases, state, launcher, client, clock, logger, metrics,
 		platform, protocol, compatibility, symlinks, evidence, 0, 0)
 }
-func provideModelInvocationRuntime(edges serviceedges.Edges, runner modelRuntimeRunner, temp modelswire.RuntimeTempDirectory,
-	create modelswire.RuntimeCreateTempFile, write modelswire.AssetWriteFile, inspect modelswire.RuntimeInspectFile,
-	read modelswire.AssetReadFile, remove modelswire.AssetRemovePath) (modelswire.InvocationRuntime, error) {
 
-	return modelswire.NewInvocationRuntime(adaptModelInvocationBackend(edges.ModelInvocationBackend),
-		adaptModelASRBackend(edges.ModelASRBackend), adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
-		edges.ModelInvocationProtocolClient, edges.ModelInvocationGRPCDialer, runner, temp, create, write, inspect, read, remove)
+// Optional overrides are normalized here, before strict operation composition.
+func provideModelGenericInvocation(edges serviceedges.Edges) modelswire.GenericInvocationRuntime {
+	return modelswire.NewGenericInvocationRuntime(adaptModelInvocationBackend(edges.ModelInvocationBackend))
+}
+func provideModelInvocationProtocol(edges serviceedges.Edges) modelswire.InvocationProtocol {
+	if !isNilModelEdgeDependency(edges.ModelInvocationProtocolClient) {
+		return modelswire.NewInvocationProtocolAdapter(edges.ModelInvocationProtocolClient)
+	}
+	return modelswire.NewPinnedInvocationProtocol(edges.ModelInvocationGRPCDialer)
+}
+func provideModelInvocationTempFile(create modelswire.RuntimeCreateTempFile) modelswire.InvocationTempFile {
+	return modelswire.NewInvocationTempFile(create)
+}
+func provideModelInvocationWriteFile(write modelswire.AssetWriteFile) modelswire.InvocationWriteFile {
+	return modelswire.NewInvocationWriteFile(write)
+}
+func provideModelInvocationRemoveFile(remove modelswire.AssetRemovePath) modelswire.InvocationRemoveFile {
+	return modelswire.InvocationRemoveFile(remove)
+}
+
+type modelVideoAudioTransform modelswire.InvocationAudioTransform
+type modelAudioNormalizer modelswire.InvocationAudioTransform
+
+func provideModelVideoAudioTransform(runner modelRuntimeRunner, temp modelswire.RuntimeTempDirectory,
+	create modelswire.InvocationTempFile, write modelswire.InvocationWriteFile, read modelswire.AssetReadFile,
+	remove modelswire.InvocationRemoveFile) modelVideoAudioTransform {
+	return modelVideoAudioTransform(modelswire.NewInvocationVideoAudioTransform(runner, temp, create, write, read, remove))
+}
+func provideModelAudioNormalizer(runner modelRuntimeRunner, temp modelswire.RuntimeTempDirectory,
+	create modelswire.InvocationTempFile, write modelswire.InvocationWriteFile, read modelswire.AssetReadFile,
+	remove modelswire.InvocationRemoveFile) modelAudioNormalizer {
+	return modelAudioNormalizer(modelswire.NewInvocationAudioNormalizer(runner, temp, create, write, read, remove))
+}
+func provideModelOMNICodec(client modelswire.InvocationProtocol, extract modelVideoAudioTransform) *modelswire.InvocationOMNICodec {
+	return modelswire.NewInvocationOMNICodec(client, modelswire.InvocationAudioTransform(extract))
+}
+func provideModelOMNIInvocation(codec *modelswire.InvocationOMNICodec) modelswire.OMNIInvocationRuntime {
+	return modelswire.NewOMNIInvocationRuntime(codec)
+}
+func provideModelASRBackend(edges serviceedges.Edges, temp modelswire.RuntimeTempDirectory,
+	create modelswire.InvocationTempFile, write modelswire.InvocationWriteFile, remove modelswire.InvocationRemoveFile) modelswire.ASRBackend {
+	if edges.ModelASRBackend != nil {
+		return adaptModelASRBackend(edges.ModelASRBackend)
+	}
+	if edges.ModelInvocationBackend != nil {
+		return nil
+	}
+	return modelswire.NewPinnedInvocationASRBackend(edges.ModelInvocationGRPCDialer, temp, create, write, remove)
+}
+func provideModelASRInvocation(backend modelswire.ASRBackend, generic modelswire.GenericInvocationRuntime,
+	extract modelVideoAudioTransform, normalize modelAudioNormalizer) (modelswire.ASRInvocationRuntime, error) {
+	if backend == nil {
+		return generic, nil
+	}
+	return modelswire.NewASRInvocationRuntime(backend, modelswire.InvocationAudioTransform(extract), modelswire.InvocationAudioTransform(normalize))
+}
+func provideModelEmbeddingBackend(edges serviceedges.Edges) modelswire.EmbeddingBackend {
+	if edges.ModelEmbeddingBackend != nil {
+		return adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend)
+	}
+	if edges.ModelInvocationBackend != nil {
+		return nil
+	}
+	return modelswire.NewPinnedInvocationEmbeddingBackend(edges.ModelInvocationGRPCDialer)
+}
+func provideModelEmbeddingInvocation(backend modelswire.EmbeddingBackend, generic modelswire.GenericInvocationRuntime) (modelswire.EmbeddingInvocationRuntime, error) {
+	if backend == nil {
+		return generic, nil
+	}
+	return modelswire.NewEmbeddingInvocationRuntime(backend)
+}
+func provideModelTTSBackend(edges serviceedges.Edges, temp modelswire.RuntimeTempDirectory,
+	create modelswire.InvocationTempFile, write modelswire.InvocationWriteFile, inspect modelswire.RuntimeInspectFile,
+	read modelswire.AssetReadFile, remove modelswire.InvocationRemoveFile) modelswire.InvocationTTSBackend {
+	return modelswire.NewPinnedInvocationTTSBackend(edges.ModelInvocationGRPCDialer, temp, create, write, inspect, read, remove)
+}
+func provideModelTTSInvocation(backend modelswire.InvocationTTSBackend) (modelswire.TTSInvocationRuntime, error) {
+	if backend == nil {
+		return modelswire.NewUnavailableInvocationRuntime(), nil
+	}
+	return modelswire.NewTTSInvocationRuntime(backend)
+}
+func provideModelInvocationRuntime(generic modelswire.GenericInvocationRuntime, omni modelswire.OMNIInvocationRuntime,
+	asr modelswire.ASRInvocationRuntime, embedding modelswire.EmbeddingInvocationRuntime,
+	tts modelswire.TTSInvocationRuntime) (modelswire.InvocationRuntime, error) {
+	return modelswire.NewInvocationRuntime(generic, omni, asr, embedding, tts)
 }
 func provideModelInference(scopes modelswire.RuntimeScopes, assets modelswire.Assets, catalog modelswire.Catalog,
 	host modelswire.RuntimeHost, runtime modelswire.InvocationRuntime, registrar *modelswire.InvocationArtifactRegistrar,

@@ -41,9 +41,6 @@ func (s *slotFactsProvider) SlotFacts(
 	scope models.RuntimeScopeRef,
 	modelName string,
 ) (modelseffects.SlotFacts, error) {
-	if s == nil || s.scopes == nil || s.assets == nil {
-		return modelseffects.SlotFacts{}, models.ErrUnavailable
-	}
 	if err := hostContextError(ctx); err != nil {
 		return modelseffects.SlotFacts{}, err
 	}
