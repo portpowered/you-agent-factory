@@ -347,18 +347,31 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	workerSessionID string,
 	factorySessionID string,
 ) (factoryapi.WorkerSessionObservation, error) {
+	observation, err := a.topLevelWorkerSessionObservation(ctx, workerSessionID, factorySessionID)
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
+	}
+	return a.presentWorkerSessionObservation(ctx, observation)
+}
+
+// Stream identity uses the same scoped capture selection as summary reads.
+// Optional Work names belong to the summary representation; resolving them
+// must not hold up event delivery, whose frames carry only Work IDs.
+//
+//nolint:contextcheck // Legacy nil-context callers have no parent to inherit; non-nil observer contexts pass through unchanged.
+func (a *Adapter) topLevelWorkerSessionObservation(ctx context.Context, workerSessionID, factorySessionID string) (workersessions.Observation, error) {
 	if a == nil || a.topLevel == nil {
-		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+		return workersessions.Observation{}, errors.New("worker sessions service is required")
 	}
 	workerSessionID = strings.TrimSpace(workerSessionID)
 	if workerSessionID == "" {
-		return factoryapi.WorkerSessionObservation{}, errors.New("worker session id is required")
+		return workersessions.Observation{}, errors.New("worker session id is required")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return factoryapi.WorkerSessionObservation{}, err
+		return workersessions.Observation{}, err
 	}
 	factorySessionID = strings.TrimSpace(factorySessionID)
 	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
@@ -376,9 +389,9 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 		}
 	}
 	if err != nil {
-		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
+		return workersessions.Observation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
-	return a.presentWorkerSessionObservation(ctx, observation)
+	return observation, nil
 }
 
 // ReadTopLevelWorkerSessionTranscript resolves the exact Provider Session
@@ -431,7 +444,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
 	}
-	observation, err := a.GetTopLevelWorkerSessionObservation(ctx, workerSessionID, "")
+	observation, err := a.topLevelWorkerSessionObservation(ctx, workerSessionID, "")
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
@@ -451,7 +464,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
-	return observation, subscription, nil
+	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
 func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID string) (workerSessionScope, error) {
