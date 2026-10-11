@@ -30,10 +30,12 @@ import (
 func TestCanceledReplayRecordedBoundary(t *testing.T) {
 	t.Parallel()
 	runner := &boundaryCommandRunner{routes: make(map[string]*boundaryCommandRoute)}
+	publication := &boundaryRecordingWriter{published: make(map[string]chan struct{})}
 	var ledger recordings.Service
 	bound := make(chan http.Handler, 1)
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner:  runner,
+		RecordingWriteFile:     publication.write,
 		RecordingsRootObserver: func(service recordings.Service) { ledger = service },
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			bound <- request.Handler
@@ -58,9 +60,35 @@ func TestCanceledReplayRecordedBoundary(t *testing.T) {
 	for _, name := range []string{"canceled-json", "http-canceled-jsonl", "success-json", "success-jsonl", "resume-and-recorded-retry", "mismatch", "invalid", "peer"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runReplayBoundaryCase(t, process, sessions, ledger, runner, handler, name)
+			runReplayBoundaryCase(t, process, sessions, ledger, runner, publication, handler, name)
 		})
 	}
+}
+
+type boundaryRecordingWriter struct {
+	mu        sync.Mutex
+	published map[string]chan struct{}
+}
+
+func (writer *boundaryRecordingWriter) watch(path string) <-chan struct{} {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	published := make(chan struct{})
+	writer.published[path] = published
+	return published
+}
+
+func (writer *boundaryRecordingWriter) write(path string, data []byte) error {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if published := writer.published[path]; published != nil {
+		close(published)
+		delete(writer.published, path)
+	}
+	return nil
 }
 
 type boundaryCommandRoute struct {
@@ -112,7 +140,7 @@ type boundarySource struct {
 	history             recordings.HistoricalRecordingQueryResult
 }
 
-func recordBoundarySource(t *testing.T, process support.Process, ledger recordings.Service, runner *boundaryCommandRunner, handler http.Handler, cancelSource, httpStop, jsonl bool) boundarySource {
+func recordBoundarySource(t *testing.T, process support.Process, ledger recordings.Service, runner *boundaryCommandRunner, publication *boundaryRecordingWriter, handler http.Handler, cancelSource, httpStop, jsonl bool) boundarySource {
 	t.Helper()
 	extension := ".json"
 	if jsonl {
@@ -124,6 +152,10 @@ func recordBoundarySource(t *testing.T, process support.Process, ledger recordin
 	inputs.WorkingDirectory = source.dir
 	inputs.Args = append(inputs.Args, "--session", source.id)
 	source.route = runner.route(source.dir, cancelSource)
+	var published <-chan struct{}
+	if cancelSource && !jsonl {
+		published = publication.watch(source.path)
+	}
 	// CLI opening owns this explicitly selected UUID and its recording.
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -136,6 +168,7 @@ func recordBoundarySource(t *testing.T, process support.Process, ledger recordin
 	case <-time.After(30 * time.Second):
 		t.Fatal("source provider admission unavailable")
 	}
+	waitBoundaryPublication(t, published, done)
 	if cancelSource {
 		if httpStop {
 			response := recordingPeerResponse(t.Context(), handler, http.MethodPost, "/factory-sessions/"+source.id+"/cancel", []byte(`{}`))
@@ -154,11 +187,31 @@ func recordBoundarySource(t *testing.T, process support.Process, ledger recordin
 		t.Fatal(err)
 	}
 	source.history = boundaryHistory(t, ledger, source.path)
+	if !jsonl && !recordingWriteHasTerminalEvent(source.bytes) {
+		t.Fatal("joined native source has no recorded run closeout")
+	}
 	if len(source.history.Dispatches) != 1 {
 		t.Fatalf("source dispatches: %#v", source.history.Dispatches)
 	}
 	assertBoundaryWork(t, source.history, cancelSource)
 	return source
+}
+
+func waitBoundaryPublication(t *testing.T, published <-chan struct{}, done <-chan error) {
+	t.Helper()
+	if published == nil {
+		return
+	}
+	// Provider admission can precede startup's first recording publication.
+	// A successful artifact write commits recording activation; cancellation
+	// then joins its final write rather than aborting an unopened recording.
+	select {
+	case <-published:
+	case err := <-done:
+		t.Fatalf("source before recording publication: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("source recording was not published")
+	}
 }
 
 func joinBoundarySource(t *testing.T, done <-chan error, canceled, httpStop bool) {
@@ -207,9 +260,9 @@ func assertBoundaryWork(t *testing.T, history recordings.HistoricalRecordingQuer
 	}
 }
 
-func runReplayBoundaryCase(t *testing.T, process support.Process, sessions factorysessions.Service, ledger recordings.Service, runner *boundaryCommandRunner, handler http.Handler, name string) {
+func runReplayBoundaryCase(t *testing.T, process support.Process, sessions factorysessions.Service, ledger recordings.Service, runner *boundaryCommandRunner, publication *boundaryRecordingWriter, handler http.Handler, name string) {
 	canceled := !strings.HasPrefix(name, "success") && name != "mismatch" && name != "invalid"
-	source := recordBoundarySource(t, process, ledger, runner, handler, canceled, name == "http-canceled-jsonl", strings.HasSuffix(name, "jsonl"))
+	source := recordBoundarySource(t, process, ledger, runner, publication, handler, canceled, name == "http-canceled-jsonl", strings.HasSuffix(name, "jsonl"))
 	if name == "mismatch" || name == "invalid" {
 		assertBoundaryRejected(t, process, source, name)
 		return
