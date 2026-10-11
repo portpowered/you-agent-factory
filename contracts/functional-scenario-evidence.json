@@ -481,6 +481,14 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
+      "stableIds": [
+        "cli/you.worker-sessions.start",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
       "stableIds": [
         "cli/you.worker-sessions.start",

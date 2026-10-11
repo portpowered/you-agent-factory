@@ -1072,6 +1072,10 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
           "boundary": "cli"
         }
@@ -1675,6 +1679,10 @@
           "boundary": "rest"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
+          "boundary": "rest"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
           "boundary": "rest"
         }
@@ -2272,6 +2280,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
           "boundary": "rest"
         },
         {
