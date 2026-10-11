@@ -545,7 +545,7 @@ func TestScopedRuntimePreservesValidatedCapturedIdentity(t *testing.T) {
 
 func TestScopedRuntimeTranscriptIdentityUsesExactAttempt(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"original", "foreign-attempt", "denied", "corrupt", "canceled"} {
+	for _, name := range []string{"original", "archived", "foreign-attempt", "denied", "corrupt", "canceled"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			service := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker", AttemptID: "attempt", FactorySessionID: "original"}}
@@ -562,8 +562,12 @@ func TestScopedRuntimeTranscriptIdentityUsesExactAttempt(t *testing.T) {
 				service.getByWorkerErr = context.Canceled
 			}
 			adapter := NewAdapter(service, workServiceStub{})
+			if name == "archived" {
+				adapter.logs = &closedScopeCaptureStub{observation: service.getByWorkerResult.Clone()}
+				service.getByWorkerErr = workersessions.ErrObservationSessionNotFound
+			}
 			got, err := adapter.scopedTranscriptIdentity(t.Context(), service, workerSessionScope{effectiveID: "reopened", defaultScope: true, validatedSource: true}, workersessions.ReadTranscriptResult{WorkerSessionID: "worker", AttemptID: "attempt"}, factoryapi.WorkerSessionTranscriptResponse{WorkerSessionId: "worker", AttemptId: "attempt"})
-			if name == "original" {
+			if name == "original" || name == "archived" {
 				if err != nil || got.FactorySessionId == nil || *got.FactorySessionId != "original" || service.getWorkerFactorySessionID != "~default" {
 					t.Fatalf("restored transcript attribution = %+v, %v", got, err)
 				}
@@ -713,6 +717,53 @@ func assertWorkerSessionStartAPIRoundTrip(t *testing.T, request factoryapi.Worke
 	}
 	if request.Execution.ModelBindings == nil {
 		t.Fatal("model bindings are nil, want retained optional fields")
+	}
+}
+
+func TestTopLevelTranscriptRetainsExactCapturedFactory(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"original", "direct", "foreign-worker", "foreign-attempt", "corrupt", "canceled", "missing"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			capture := &closedScopeCaptureStub{observation: workersessions.Observation{WorkerSessionID: "worker", AttemptID: "attempt", FactorySessionID: "original", State: workersessions.StateCompleted}}
+			var want error
+			switch name {
+			case "direct":
+				capture.observation.FactorySessionID = ""
+			case "foreign-worker":
+				capture.observation.WorkerSessionID = "peer"
+				want = workersessions.ErrObservationSessionNotFound
+			case "foreign-attempt":
+				capture.observation.AttemptID = "peer-attempt"
+				want = workersessions.ErrObservationSessionNotFound
+			case "corrupt":
+				capture.err = workersessions.ErrObservationRecordingCorrupt
+				want = capture.err
+			case "canceled":
+				capture.err = context.Canceled
+				want = capture.err
+			case "missing":
+				capture.err = workersessions.ErrObservationSessionNotFound
+				want = capture.err
+			}
+			service := &fakeObservationService{
+				getByWorkerErr:     workersessions.ErrObservationSessionNotFound,
+				readByWorkerResult: workersessions.ReadTranscriptResult{WorkerSessionID: "worker", AttemptID: "attempt", State: workersessions.StateCompleted},
+			}
+			adapter := NewAdapter(service, workServiceStub{})
+			adapter.logs = capture
+			got, err := adapter.ReadTopLevelWorkerSessionTranscript(t.Context(), "worker")
+			if want != nil {
+				if !errors.Is(err, want) || got.WorkerSessionId != "" {
+					t.Fatalf("invalid identity disclosed transcript: %+v, %v", got, err)
+				}
+			} else if err != nil || got.WorkerSessionId != "worker" || got.AttemptId != "attempt" || (name == "direct" && got.FactorySessionId != nil) || (name == "original" && (got.FactorySessionId == nil || *got.FactorySessionId != "original")) {
+				t.Fatalf("captured transcript owner: %+v, %v", got, err)
+			}
+			if capture.request.WorkerSessionID != "worker" || capture.request.FactorySessionID != "" || capture.calls != 1 {
+				t.Fatalf("unscoped transcript selected another identity: %+v calls=%d", capture.request, capture.calls)
+			}
+		})
 	}
 }
 

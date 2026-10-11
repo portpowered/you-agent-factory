@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -348,6 +349,11 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	// Two independent sessions share one host and edge shape. Joined reopen
 	// must be sequential: the captured profile has exactly one writer.
 	cases = []committedTerminalCase{cases[8], cases[12]}
+	first := make(map[string]*functionalWorkerGate)
+	for _, cell := range cases {
+		first[cell.model] = newFunctionalWorkerGate(make(chan struct{}))
+	}
+	config.Edges.ProviderCommandRunner = &archivedAttemptRunner{first: first, final: runner, calls: make(map[string]int)}
 	home := strings.TrimPrefix(config.Env[0], "HOME=")
 	config.BeforeStart = func(tb testing.TB, process support.Process, _ root.Input) {
 		startCommittedTerminalBoards(tb, process, cases, home, ".older.json")
@@ -363,33 +369,27 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	earlier.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".latest.json")
 	server := support.StartFunctionalAPIServer(t, config)
-	names := []string{"catalog-name", "legacy-name"}
-	before := make([]factoryapi.WorkerSessionObservation, len(cases))
-	logs := make([]factoryapi.WorkerSessionLogPage, len(cases))
-	cursors := make([]string, len(cases))
+	names := []string{"catalog-name", "catalog-name", "legacy-name", "legacy-name"}
+	before := make([]factoryapi.WorkerSessionObservation, 2*len(cases))
+	logs := make([]factoryapi.WorkerSessionLogPage, len(before))
+	cursors := make([]string, len(before))
+	transcripts := make([]*factoryapi.WorkerSessionTranscriptResponse, len(before))
 	t.Run("committed named attempts", func(t *testing.T) {
 		for index, cell := range cases {
 			t.Run(string(cell.provider), func(t *testing.T) {
 				t.Parallel()
-				stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), cell.scope))
-				name := names[index]
-				work := support.SubmitSessionWorkAt(t, server.URL(), cell.scope, factoryapi.SubmitWorkRequest{Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": name}})
-				target := waitForRouteCharacterizationAssociation(t, stream, support.StringPointerValue(work.WorkId))
-				runner.slots[cell.model].waitStarted(t)
-				postLiveRuntimeLifecycleControl(t, server.URL(), cell.scope, factoryapi.FactorySessionLifecycleControlKindPause)
-				close(gates[cell.model])
-				runner.slots[cell.model].waitCompleted(t)
-				waitCapturedTerminal(t, server.URL(), target.workerSessionID)
-				before[index] = support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+target.workerSessionID)
+				attempts := runArchivedAttempts(t, server, cell, names[2*index], first[cell.model], runner.slots[cell.model], gates[cell.model])
+				copy(before[2*index:], attempts)
 			})
 		}
 	})
 	if t.Failed() {
 		return
 	}
-	for index := range cases {
+	for index := range before {
 		assertArchivedKnownName(t, assertTerminalReadParity(t, server, before[index].WorkerSessionId), names[index])
 		assertArchivedOwnScopeReads(t, server, before[index])
+		transcripts[index] = assertArchivedTranscriptParity(t, server, before[index])
 		logs[index] = assertCommittedTerminalCapture(t, server, before[index].WorkerSessionId)
 		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+before[index].WorkerSessionId+"/logs?limit=1")
 		if page.NextToken == nil {
@@ -400,27 +400,100 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	server.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".latest.json", ".reopened.json")
 	latest := support.StartFunctionalAPIServer(t, config)
-	assertArchivedResumedBoard(t, latest, before, logs, names, cursors, true)
+	assertArchivedResumedBoard(t, latest, before, logs, names, cursors, transcripts, true)
 	latest.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".restored.json")
 	reopened := support.StartFunctionalAPIServer(t, config)
-	assertArchivedResumedBoard(t, reopened, before, logs, names, cursors, false)
+	assertArchivedResumedBoard(t, reopened, before, logs, names, cursors, transcripts, false)
 	reopened.Close(t)
 	// The retained original Factory need not have a reopened runtime at all.
 	// Its capture remains read-only, exact-scope authority on the same profile.
 	config.BeforeStart = nil
 	closedScopes := support.StartFunctionalAPIServer(t, config)
-	for index := range cases {
-		got := assertTerminalReadParity(t, closedScopes, before[index].WorkerSessionId)
-		assertArchivedKnownName(t, got, names[index])
-		assertArchivedOwnScopeReads(t, closedScopes, got)
-		assertArchivedStopHasNoEffect(t, closedScopes, got, logs[index])
-	}
+	assertArchivedClosedScopeParity(t, closedScopes, before, logs, names, transcripts)
 	closedScopes.Close(t)
 	assertArchivedPrivateProfileFence(t, config, before)
 }
 
-func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServer, before []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names, cursors []string, retainsWork bool) {
+func assertArchivedClosedScopeParity(t *testing.T, server *support.FunctionalAPIServer, attempts []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names []string, transcripts []*factoryapi.WorkerSessionTranscriptResponse) {
+	t.Helper()
+	for index, attempt := range attempts {
+		got := assertTerminalReadParity(t, server, attempt.WorkerSessionId)
+		assertArchivedKnownName(t, got, names[index])
+		assertArchivedOwnScopeReads(t, server, got)
+		if !reflect.DeepEqual(assertArchivedTranscriptParity(t, server, got), transcripts[index]) {
+			t.Fatal("closed-scope transcript changed")
+		}
+		assertArchivedStopHasNoEffect(t, server, got, logs[index])
+	}
+}
+
+// Cancellation requeues the same public Work. The next dispatch is held at its
+// own command gate before pausing the Factory, so no timing race or board edit
+// manufactures the second attempt. The two independent Factories overlap.
+func runArchivedAttempts(t *testing.T, server *support.FunctionalAPIServer, cell committedTerminalCase, name string, first, final *functionalWorkerGate, finish chan struct{}) []factoryapi.WorkerSessionObservation {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), cell.scope))
+	work := support.SubmitSessionWorkAt(t, server.URL(), cell.scope, factoryapi.SubmitWorkRequest{Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": name}})
+	workID := support.StringPointerValue(work.WorkId)
+	initial := waitForRouteCharacterizationAssociation(t, stream, workID)
+	first.waitStarted(t)
+	response := postWorkerSessionControl(t, server.URL(), initial.workerSessionID, "cancel")
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("first attempt cancellation: %d", response.StatusCode)
+	}
+	first.waitCanceled(t)
+	waitCapturedTerminal(t, server.URL(), initial.workerSessionID)
+	replacement := waitForRouteCharacterizationAssociation(t, stream, workID)
+	final.waitStarted(t)
+	postLiveRuntimeLifecycleControl(t, server.URL(), cell.scope, factoryapi.FactorySessionLifecycleControlKindPause)
+	close(finish)
+	final.waitCompleted(t)
+	waitCapturedTerminal(t, server.URL(), replacement.workerSessionID)
+	attempts := []factoryapi.WorkerSessionObservation{
+		support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+initial.workerSessionID),
+		support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+replacement.workerSessionID),
+	}
+	if attempts[0].WorkerSessionId == attempts[1].WorkerSessionId || attempts[0].AttemptId == attempts[1].AttemptId || attempts[0].State != "CANCELED" || attempts[1].State != "COMPLETED" || !reflect.DeepEqual(attempts[0].WorkId, attempts[1].WorkId) {
+		t.Fatalf("same Work lost distinct attempts: %+v", attempts)
+	}
+	return attempts
+}
+
+// Controlled provider command output supplies a continuation ID and normalized
+// content. It never writes or reads native provider rollout files.
+type archivedAttemptRunner struct {
+	first map[string]*functionalWorkerGate
+	final *committedTerminalRunner
+	mu    sync.Mutex
+	calls map[string]int
+}
+
+func (r *archivedAttemptRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	model := copiedLedgerModelArgument(request.Args)
+	r.mu.Lock()
+	r.calls[model]++
+	count := r.calls[model]
+	r.mu.Unlock()
+	if count == 1 && r.first[model] != nil {
+		return r.first[model].Run(ctx, request)
+	}
+	if count != 2 {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected archived attempt %q #%d", model, count)
+	}
+	result, err := r.final.Run(ctx, request)
+	if err == nil {
+		opening := fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", "archive-provider-"+model)
+		if request.Command == "claude" {
+			opening = fmt.Sprintf("{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":%q}\n", "archive-provider-"+model)
+		}
+		result.Stdout = append([]byte(opening), result.Stdout...)
+	}
+	return result, err
+}
+
+func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServer, before []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names, cursors []string, transcripts []*factoryapi.WorkerSessionTranscriptResponse, retainsWork bool) {
 	t.Helper()
 	for index, original := range before {
 		scope := support.StringPointerValue(original.FactorySessionId)
@@ -435,6 +508,9 @@ func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServe
 		got := assertTerminalReadParity(t, server, original.WorkerSessionId)
 		assertArchivedKnownName(t, got, names[index])
 		assertArchivedOwnScopeReads(t, server, got)
+		if !reflect.DeepEqual(assertArchivedTranscriptParity(t, server, got), transcripts[index]) {
+			t.Fatal("joined restart changed transcript identity or content")
+		}
 		if !committedTerminalFactsEqual(got, original) || !reflect.DeepEqual(got.FactorySessionId, original.FactorySessionId) || got.AttemptId != original.AttemptId || !reflect.DeepEqual(got.WorkId, original.WorkId) {
 			t.Fatalf("restart changed committed identity/facts: before=%+v after=%+v", original, got)
 		}
@@ -524,7 +600,7 @@ func assertArchivedPrivateProfileFence(t *testing.T, config support.FunctionalAP
 func assertArchivedPeerFences(t *testing.T, server *support.FunctionalAPIServer, attempts []factoryapi.WorkerSessionObservation, cursors []string) {
 	t.Helper()
 	for index, attempt := range attempts {
-		peer := attempts[(index+1)%len(attempts)]
+		peer := attempts[(index+2)%len(attempts)]
 		base := server.URL() + "/factory-sessions/" + support.StringPointerValue(peer.FactorySessionId) + "/worker-sessions"
 		for _, suffix := range []string{"?workId=" + url.QueryEscape(support.StringPointerValue(attempt.WorkId)), "/" + attempt.WorkerSessionId, "/" + attempt.WorkerSessionId + "/transcript"} {
 			response, err := http.Get(base + suffix)
@@ -577,25 +653,15 @@ func assertArchivedOwnScopeReads(t *testing.T, server *support.FunctionalAPIServ
 	scope, workID := support.StringPointerValue(shown.FactorySessionId), support.StringPointerValue(shown.WorkId)
 	base := server.URL() + "/factory-sessions/" + scope + "/worker-sessions"
 	list := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, base+"?workId="+workID)
+	if len(list.Sessions) != 2 || list.Sessions[0].WorkerSessionId == list.Sessions[1].WorkerSessionId || list.Sessions[0].AttemptId == list.Sessions[1].AttemptId || list.Sessions[0].State != "CANCELED" || list.Sessions[1].State != "COMPLETED" {
+		t.Fatalf("scoped LIST lost distinct chronological attempts: %+v", list)
+	}
 	assertTerminalListed(t, list, shown)
 	own := support.GetJSON[factoryapi.WorkerSessionObservation](t, base+"/"+shown.WorkerSessionId)
 	if !reflect.DeepEqual(own, shown) {
 		t.Fatalf("own-scope summary differs: own=%+v unscoped=%+v", own, shown)
 	}
-	// This command-edge fixture does not supply a third-party continuation.
-	// The unchanged transcript contract reports typed unavailability in both scopes.
-	for _, url := range []string{base + "/" + shown.WorkerSessionId + "/transcript", server.URL() + "/worker-sessions/" + shown.WorkerSessionId + "/transcript"} {
-		response, err := http.Get(url)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var failure factoryapi.ErrorResponse
-		err = json.NewDecoder(response.Body).Decode(&failure)
-		_ = response.Body.Close()
-		if err != nil || response.StatusCode != http.StatusInternalServerError || failure.Code != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
-			t.Fatalf("transcript absence differs: status=%d error=%+v decode=%v", response.StatusCode, failure, err)
-		}
-	}
+	assertArchivedTranscriptParity(t, server, shown)
 	input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "list", "--session", scope, "--work-id", workID, "--output", "json"})
 	if err := server.Execute(t, input.Input); err != nil {
 		t.Fatalf("own-scope CLI list: %v %s", err, input.Stderr())
@@ -617,6 +683,66 @@ func assertArchivedOwnScopeReads(t *testing.T, server *support.FunctionalAPIServ
 			t.Fatalf("unknown identity %s: %d", query, response.StatusCode)
 		}
 	}
+}
+
+func assertArchivedTranscriptParity(t *testing.T, server *support.FunctionalAPIServer, shown factoryapi.WorkerSessionObservation) *factoryapi.WorkerSessionTranscriptResponse {
+	t.Helper()
+	scope := support.StringPointerValue(shown.FactorySessionId)
+	base := server.URL() + "/factory-sessions/" + scope + "/worker-sessions"
+	if shown.ProviderSession != nil {
+		return assertArchivedAvailableTranscript(t, server, shown, base)
+	}
+	// The canceled attempt has no provider association. Transcript absence must
+	// remain typed, even beside a second attempt with available captured content.
+	for _, url := range []string{base + "/" + shown.WorkerSessionId + "/transcript", server.URL() + "/worker-sessions/" + shown.WorkerSessionId + "/transcript"} {
+		response, err := http.Get(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var failure factoryapi.ErrorResponse
+		err = json.NewDecoder(response.Body).Decode(&failure)
+		_ = response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusInternalServerError || failure.Code != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+			t.Fatalf("transcript absence differs: status=%d error=%+v decode=%v", response.StatusCode, failure, err)
+		}
+	}
+	return nil
+}
+
+func assertArchivedAvailableTranscript(t *testing.T, server *support.FunctionalAPIServer, shown factoryapi.WorkerSessionObservation, base string) *factoryapi.WorkerSessionTranscriptResponse {
+	t.Helper()
+	transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, base+"/"+shown.WorkerSessionId+"/transcript")
+	unscoped := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, server.URL()+"/worker-sessions/"+shown.WorkerSessionId+"/transcript")
+	if !reflect.DeepEqual(transcript, unscoped) || transcript.WorkerSessionId != shown.WorkerSessionId || transcript.AttemptId != shown.AttemptId || !reflect.DeepEqual(transcript.FactorySessionId, shown.FactorySessionId) || !reflect.DeepEqual(transcript.WorkIds, shown.WorkIds) || transcript.ProviderSession.Id != shown.ProviderSession.Id || transcript.ProviderSession.Provider != shown.ProviderSession.Provider || string(transcript.ProviderSession.Kind) != string(shown.ProviderSession.Kind) || len(transcript.Entries) == 0 {
+		t.Fatalf("transcript lost exact identity or captured content: scoped=%+v unscoped=%+v summary=%+v", transcript, unscoped, shown)
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "read", "--worker-session-id", shown.WorkerSessionId, "--view", "transcript", "--output", "json"})
+	if err := server.Execute(t, input.Input); err != nil {
+		t.Fatalf("CLI transcript: %v %s", err, input.Stderr())
+	}
+	var cli factoryapi.WorkerSessionTranscriptResponse
+	if err := json.Unmarshal([]byte(input.Stdout()), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cli, transcript) {
+		t.Fatalf("CLI/HTTP transcript differs: %+v / %+v", cli, transcript)
+	}
+	connection, ctx, cleanup := archivedReplayMCP(t, server)
+	defer cleanup()
+	result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": "transcript", "workerSessionId": shown.WorkerSessionId}})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("MCP transcript: %+v %v", result, err)
+	}
+	var envelope struct {
+		Result struct {
+			Transcript factoryapi.WorkerSessionTranscriptResponse `json:"transcript"`
+		} `json:"result"`
+	}
+	encoded := []byte(result.Content[0].(*mcp.TextContent).Text)
+	if err := json.Unmarshal(encoded, &envelope); err != nil || !reflect.DeepEqual(envelope.Result.Transcript, transcript) {
+		t.Fatalf("MCP/HTTP transcript differs: %+v / %+v error=%v", envelope, transcript, err)
+	}
+	return &transcript
 }
 
 func assertArchivedKnownName(t *testing.T, row factoryapi.WorkerSessionObservation, name string) {

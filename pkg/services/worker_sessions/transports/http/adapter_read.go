@@ -212,6 +212,9 @@ func (a *Adapter) scopedTranscriptIdentity(ctx context.Context, observations obs
 		return response, nil
 	}
 	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID, FactorySessionID: scope.observationID()})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		observation, err = a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID, FactorySessionID: scope.observationID()})
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
@@ -423,7 +426,25 @@ func (a *Adapter) ReadTopLevelWorkerSessionTranscript(
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read top-level Worker Session transcript: %w", err)
 	}
-	return WorkerSessionTranscriptToAPI(result), nil
+	request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID}
+	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, request)
+	if a.logs != nil && (errors.Is(err, workersessions.ErrObservationSessionNotFound) || (err == nil && observation.State.Terminal())) {
+		captured, captureErr := a.logs.GetCapturedObservation(ctx, request)
+		if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) || err != nil {
+			observation, err = captured, captureErr
+		}
+	}
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("resolve transcript Factory identity: %w", err)
+	}
+	if observation.WorkerSessionID != result.WorkerSessionID || observation.AttemptID != result.AttemptID {
+		return factoryapi.WorkerSessionTranscriptResponse{}, workersessions.ErrObservationSessionNotFound
+	}
+	response := WorkerSessionTranscriptToAPI(result)
+	if observation.FactorySessionID != "" {
+		response.FactorySessionId = stringPtr(observation.FactorySessionID)
+	}
+	return response, nil
 }
 
 // StreamTopLevelWorkerSessionEvents resolves the canonical event topic by
