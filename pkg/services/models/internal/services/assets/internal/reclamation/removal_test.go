@@ -61,7 +61,6 @@ func TestCacheReclamationCancellationAndPartialFailureReturnNoSuccessBytes(t *te
 				}
 				return errors.New("denied")
 			})
-			policy.contextError = func(ctx context.Context) error { return errors.Join(ctx.Err(), context.Cause(ctx)) }
 			bytes, err := policy.Apply(ctx, Plan{candidates: []candidate{{path: root, bytes: 5}}})
 			want := models.ErrModelCacheRemovalFailed
 			if cancelDuringRemoval {
@@ -106,7 +105,11 @@ func TestCacheReclamationReleasesEveryAcquiredLockAfterFailure(t *testing.T) {
 }
 
 func removalPolicy(remove func(string) error) *Service {
-	return New(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, remove, nil, unknownSources{}, func(ctx context.Context) error { return ctx.Err() })
+	return New(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, remove, nil, unknownSources{}, reclamationContextError)
+}
+
+func reclamationContextError(ctx context.Context) error {
+	return errors.Join(ctx.Err(), context.Cause(ctx))
 }
 
 type unknownSources struct{}

@@ -86,7 +86,7 @@ func TestRuntimeHostAcceptedDependenciesFailedStartRetriesAndClosingScopePreserv
 		}
 	})
 	request := models.EnsureModelHostRequest{Scope: selected, Name: "OMNIVOICE_Q4_K_M"}
-	if result, err := host.EnsureModelHost(t.Context(), request); err == nil || result.Host.ReadinessState == models.ReadinessStateReady {
+	if result, err := host.EnsureModelHost(t.Context(), request); !errors.Is(err, models.ErrHostProcessCrash) || result.Host.ReadinessState == models.ReadinessStateReady {
 		t.Fatalf("failed start = %#v, %v", result, err)
 	}
 	for _, scope := range []models.RuntimeScopeRef{selected, peer} {
@@ -114,6 +114,27 @@ func TestRuntimeHostAcceptedDependenciesFailedStartRetriesAndClosingScopePreserv
 	}
 	if len(launcher.processes) != 2 {
 		t.Fatalf("peer was relaunched: %d processes", len(launcher.processes))
+	}
+}
+
+func TestRuntimeHostAcceptedDependenciesMissingAssetsHaveNoHostEffect(t *testing.T) {
+	t.Parallel()
+	ref := mustParseScope(t, "selected")
+	config := supervisedRuntimeConfig()
+	scopes := &acceptedScopes{bindings: map[runtimescopes.Reference]models.RuntimeBinding{
+		"selected": {RuntimeConfig: func() *models.RuntimeConfig { return &config }},
+	}}
+	launcher := &acceptedLauncher{}
+	host := acceptedHost(scopes, &acceptedAssets{inspection: scopedassets.RuntimeCacheInspection{Supported: true}}, launcher)
+	request := models.EnsureModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"}
+	if result, err := host.EnsureModelHost(t.Context(), request); !errors.Is(err, models.ErrHostMissingAssets) || result.Host.ReadinessState == models.ReadinessStateReady {
+		t.Fatalf("missing assets = %#v, %v", result, err)
+	}
+	if len(launcher.processes) != 0 {
+		t.Fatal("missing assets launched a process")
+	}
+	if result, err := host.StopModelHost(t.Context(), models.StopModelHostRequest{Scope: ref, Name: request.Name}); err != nil || result.Outcome != models.HostStopAlreadyStopped {
+		t.Fatalf("absent slot stop = %#v, %v", result, err)
 	}
 }
 
