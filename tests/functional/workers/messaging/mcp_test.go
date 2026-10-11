@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -15,10 +14,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // Each connection owns streams and execution credentials, while sharing the
@@ -163,6 +167,7 @@ func TestT8MCPExplicitReviveHasStableContinuationAndNoMessage(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("exact tuple retry changed admission")
 	}
+	assertMCPConcurrentContinuationReplay(t, call, request, second)
 	status, raw := f.request(t, http.MethodPost, "/worker-sessions/source/continue", map[string]any{"followUpInput": "continue exact provider", "requestId": "mcp-revive", "successorWorkerSessionId": "successor", "resolveHead": true}, nil)
 	if status != 202 {
 		t.Fatalf("HTTP replay failed: %d", status)
@@ -182,6 +187,277 @@ func TestT8MCPExplicitReviveHasStableContinuationAndNoMessage(t *testing.T) {
 	missing := call(map[string]any{"action": "REVIVE", "workerSessionId": "missing", "message": "follow up", "requestId": "missing", "successorWorkerSessionId": "missing-next"})
 	if !strings.Contains(string(missing["error"]), "WORKER_SESSION_NOT_FOUND") && !strings.Contains(string(missing["error"]), "NOT_FOUND") {
 		t.Fatalf("missing source lost host code: %s", missing["error"])
+	}
+}
+
+func assertMCPConcurrentContinuationReplay(t *testing.T, call func(map[string]any) map[string]json.RawMessage, request map[string]any, expected map[string]json.RawMessage) {
+	t.Helper()
+	concurrent := make(chan map[string]json.RawMessage, 2)
+	for range 2 {
+		go func() { concurrent <- call(request) }()
+	}
+	for range 2 {
+		if replay := <-concurrent; !reflect.DeepEqual(replay, expected) {
+			t.Fatal("concurrent continuation retry changed admission")
+		}
+	}
+}
+
+func TestT8MCPSelectedHostAndRecipientDisambiguation(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	other := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	f.invoke(t, "lane", lead)
+	otherLead := other.invoke(t, "lead", nil)
+	other.invoke(t, "lane", otherLead)
+	_, raw := f.request(t, http.MethodGet, "/worker-sessions/lane", nil, nil)
+	var live api.WorkerSessionObservation
+	if json.Unmarshal(raw, &live) != nil || live.FactorySessionId == nil {
+		t.Fatal("missing selected host owner")
+	}
+	peer := uuid.NewString()
+	f.replayPeer(t, "lane", peer)
+	call := f.mcpCaller(t, lead)
+	request := map[string]any{"action": "MESSAGE", "workerSessionId": "lane", "message": "selected owned recipient", "requestId": "selected", "ifEnded": "HOLD"}
+	failure := call(request)
+	var diagnostic struct {
+		Details struct {
+			UpstreamCode string                              `json:"upstreamCode"`
+			Candidates   []api.WorkerSessionAddressCandidate `json:"candidates"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(failure["error"], &diagnostic) != nil || diagnostic.Details.UpstreamCode != "WORKER_SESSION_AMBIGUOUS" || len(diagnostic.Details.Candidates) != 2 {
+		t.Fatalf("MCP ambiguity lost candidates: %s", failure["error"])
+	}
+	assertMCPReviveDisambiguation(t, call, *live.FactorySessionId, peer)
+	request["factorySessionId"] = *live.FactorySessionId
+	message := mcpMessage(t, call, request)
+	if message.To.FactorySessionId == nil || *message.To.FactorySessionId != *live.FactorySessionId {
+		t.Fatal("explicit selector changed recipient")
+	}
+	page := mcpPage(t, call, map[string]any{"action": "READ", "messages": true, "workerSessionId": "lane", "factorySessionId": *live.FactorySessionId, "threadId": message.ThreadId, "markRead": true})
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("sender acquired recipient mark-read authority")
+	}
+	request["factorySessionId"], request["requestId"] = peer, "unowned-peer"
+	if denied := call(request); !strings.Contains(string(denied["error"]), "MESSAGE_NOT_PERMITTED") {
+		t.Fatal("explicit peer selector granted authority")
+	}
+	if len(readPage(t, other, "/messages", nil).Messages) != 0 || len(readPage(t, f, "/messages", nil).Messages) != 1 {
+		t.Fatal("selected-host send affected another host or persisted a denial")
+	}
+	f.endWorker(t, "lead")
+	close(f.runner.workers["lane"].release)
+	support.GetWorkerSessionEventsForSessionByIDAt(t, f.baseURL(), *live.FactorySessionId, "lane")
+}
+
+func assertMCPReviveDisambiguation(t *testing.T, call func(map[string]any) map[string]json.RawMessage, live, peer string) {
+	t.Helper()
+	revive := map[string]any{"action": "REVIVE", "workerSessionId": "lane", "message": "resolve exact source", "requestId": "ambiguous-revive", "successorWorkerSessionId": "never-ambiguous"}
+	if failure := call(revive); !strings.Contains(string(failure["error"]), "WORKER_SESSION_AMBIGUOUS") {
+		t.Fatalf("REVIVE lost host ambiguity: %s", failure["error"])
+	}
+	revive["factorySessionId"] = live
+	if failure := call(revive); !strings.Contains(string(failure["error"]), "WORKER_SESSION_CONTINUATION_CONFLICT") {
+		t.Fatalf("REVIVE explicit selector did not resolve live source: %s", failure["error"])
+	}
+	// This public replay fixture has no captured continuation artifact. The host
+	// resolves it successfully, then rejects admission without executing a worker.
+	revive["factorySessionId"] = peer
+	if failure := call(revive); !strings.Contains(string(failure["error"]), "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED") {
+		t.Fatalf("REVIVE explicit selector did not resolve legacy peer: %s", failure["error"])
+	}
+}
+
+func TestT8MCPFactoryOriginExplicitRevivePreservesLineage(t *testing.T) {
+	t.Parallel()
+	factory := &workerGate{started: make(chan map[string]string, 1), release: make(chan struct{})}
+	f := startHostDelivery(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{}, nil, nil, factory, "successor")
+	session := support.OpenFactorySessionAt(t, f.server.URL(), f.dir).Session.Id
+	support.SubmitSessionWorkAt(t, f.server.URL(), session, api.SubmitWorkRequest{WorkTypeName: "task", Payload: "Factory-origin lead"})
+	lead := awaitHeldReplyDispatch(t, factory)
+	id := lead["YOU_WORKER_SESSION_ID"]
+	call := f.mcpCaller(t, nil)
+	request := map[string]any{"action": "REVIVE", "workerSessionId": id, "factorySessionId": session, "message": "explicit follow up", "requestId": "factory-revive", "successorWorkerSessionId": "successor"}
+	if failure := call(request); !strings.Contains(string(failure["error"]), "WORKER_SESSION_CONTINUATION_CONFLICT") {
+		t.Fatalf("active source lost typed conflict: %s", failure["error"])
+	}
+	close(factory.release)
+	f.waitEndedWorker(t, id)
+	before := support.GetFactoryEventsForSessionAt(t, f.baseURL(), session)
+	first := call(request)
+	var admission api.WorkerSessionContinueResponse
+	if json.Unmarshal(first["result"], &admission) != nil || !admission.Accepted || admission.SourceWorkerSessionId != id || admission.SuccessorWorkerSessionId != "successor" {
+		t.Fatalf("Factory explicit REVIVE failed: %s", first["error"])
+	}
+	successor := awaitHeldReplyDispatch(t, f.runner.workers["successor"])
+	assertFactorySuccessorOrigin(t, f, successor, lead)
+	if !reflect.DeepEqual(first, call(request)) {
+		t.Fatal("Factory continuation replay changed lineage")
+	}
+	f.endWorker(t, "successor")
+	if len(readPage(t, f, "/messages", nil).Messages) != 0 || !reflect.DeepEqual(before, support.GetFactoryEventsForSessionAt(t, f.baseURL(), session)) {
+		t.Fatal("explicit Factory REVIVE created messages or another Factory result")
+	}
+}
+
+func TestT8MCPExplicitReviveReplayAfterRestart(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), t.TempDir()
+	f := startHost(t, home, dir, "", "source", "successor")
+	f.invoke(t, "source", nil)
+	f.endWorker(t, "source")
+	request := map[string]any{"action": "REVIVE", "workerSessionId": "source", "message": "durable continuation", "requestId": "restart-revive", "successorWorkerSessionId": "successor"}
+	first := f.mcpCaller(t, nil)(request)
+	var admission api.WorkerSessionContinueResponse
+	if json.Unmarshal(first["result"], &admission) != nil || !admission.Accepted {
+		t.Fatalf("continuation not admitted: %s", first["error"])
+	}
+	awaitHeldReplyDispatch(t, f.runner.workers["successor"])
+	f.endWorker(t, "successor")
+	f.server.Close(t)
+	restored := startHost(t, home, dir, "")
+	call := restored.mcpCaller(t, nil)
+	replay := call(request)
+	var restoredAdmission api.WorkerSessionContinueResponse
+	if json.Unmarshal(replay["result"], &restoredAdmission) != nil {
+		t.Fatalf("restart replay failed: %s", replay["error"])
+	}
+	// State is the current public successor observation, not immutable lineage.
+	admission.State = restoredAdmission.State
+	if !reflect.DeepEqual(restoredAdmission, admission) || restoredAdmission.State != "COMPLETED" {
+		t.Fatalf("restart changed continuation lineage: %+v", restoredAdmission)
+	}
+	request["successorWorkerSessionId"] = "changed-successor"
+	if failure := call(request); !strings.Contains(string(failure["error"]), "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT") {
+		t.Fatalf("restart changed-tuple replay lost conflict: %s", failure["error"])
+	}
+	if len(readPage(t, restored, "/messages", nil).Messages) != 0 {
+		t.Fatal("restart replay created an Agent Message")
+	}
+}
+
+func TestT8MCPUnreadReviveBatchExcludesHold(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	call := f.mcpCaller(t, lane)
+	held := mcpMessage(t, call, map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "held input", "requestId": "hold", "ifEnded": "HOLD"})
+	first := mcpMessage(t, call, map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "first eligible", "requestId": "first"})
+	secondInput := map[string]any{"action": "MESSAGE", "workerSessionId": "lead", "message": "second eligible", "requestId": "second"}
+	second := mcpMessage(t, call, secondInput)
+	if first.Status != "QUEUED" || second.Status != "QUEUED" || first.RevivedWorkerSessionId != nil || second.RevivedWorkerSessionId != nil {
+		t.Fatal("running recipient was revived early")
+	}
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	f.endWorker(t, "lead")
+	pending := "REVIVE_PENDING"
+	first.Reason = &pending
+	final := f.awaitDeliveryOutcome(t, lane, first)
+	batch := final
+	batch.Body = first.Body + "\n\n" + second.Body
+	head := assertReviveAdmission(t, f, revival, batch, lead)
+	page := mcpPage(t, call, map[string]any{"action": "READ", "messages": true, "workerSessionId": "lead"})
+	if len(page.Messages) != 3 || page.Messages[0].MessageId != held.MessageId || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("unread batch consumed HOLD or lost inbox order")
+	}
+	assertMCPUnreadSuccessors(t, page.Messages[1:], head["YOU_WORKER_SESSION_ID"], first, second)
+	if !reflect.DeepEqual(mcpMessage(t, call, secondInput), page.Messages[2]) || !reflect.DeepEqual(before, messageFactoryStreams(t, f, "lead", "lane")) {
+		t.Fatal("batch replay duplicated delivery or changed Factory history")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	select {
+	case <-revival.requests:
+		t.Fatal("HOLD or exact replay started another successor")
+	default:
+	}
+}
+
+func assertMCPUnreadSuccessors(t *testing.T, messages []api.AgentMessage, head string, expected ...api.AgentMessage) {
+	t.Helper()
+	for i, want := range expected {
+		got := messages[i]
+		if got.MessageId != want.MessageId || got.Status != "DELIVERED_REVIVE" || got.RevivedWorkerSessionId == nil || *got.RevivedWorkerSessionId != head {
+			t.Fatal("unread batch lost shared successor or send order")
+		}
+	}
+}
+
+func TestT8MCPUnavailableHostHasNoLocalFallback(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	unavailable := httptest.NewServer(http.NotFoundHandler())
+	endpoint := unavailable.URL
+	unavailable.Close()
+	selected := *f
+	selected.endpoint = endpoint
+	call := selected.mcpCaller(t, lane)
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	for _, input := range []map[string]any{
+		{"action": "MESSAGE", "workerSessionId": "lead", "message": "private unavailable input", "requestId": "unavailable"},
+		{"action": "LIST", "messages": true},
+		{"action": "READ", "messages": true, "workerSessionId": "lead"},
+		{"action": "REVIVE", "workerSessionId": "lead", "message": "private unavailable input", "requestId": "unavailable", "successorWorkerSessionId": "never-local"},
+	} {
+		failure := call(input)
+		diagnostic := string(failure["error"])
+		if !strings.Contains(diagnostic, "worker_session.host_unavailable") || strings.Contains(diagnostic, "private unavailable input") || strings.Contains(diagnostic, lane["YOU_WORKER_SESSION_TOKEN"]) {
+			t.Fatalf("unsafe selected host refusal: %s", diagnostic)
+		}
+	}
+	if len(readPage(t, f, "/messages", nil).Messages) != 0 || !reflect.DeepEqual(before, messageFactoryStreams(t, f, "lead", "lane")) {
+		t.Fatal("unavailable selected host fell back to local effects")
+	}
+}
+
+func TestT8MCPExplicitReviveAdmissionFailureAndMissingReference(t *testing.T) {
+	t.Parallel()
+	for _, reject := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing reference", true: "admission failure"}[reject], func(t *testing.T) {
+			t.Parallel()
+			gate := &reviveInputGate{entered: make(chan struct{}), release: make(chan struct{}), reject: reject}
+			close(gate.release)
+			dir := t.TempDir()
+			f := startHostEffects(t, t.TempDir(), dir, "", serviceedges.Edges{
+				FactorySessionsWorkingDirectory: reviveRecordingDirectory(dir),
+				WorkerRecordingWriter:           gate, WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { gate.WorkerRecordingStore = store },
+			}, "source", "successor")
+			if !reject {
+				f.runner.workers["source"].progress = make(chan struct{})
+			}
+			f.invoke(t, "source", nil)
+			if reject {
+				f.endWorker(t, "source")
+			} else {
+				status, _ := f.request(t, http.MethodPost, "/worker-sessions/source/cancel", map[string]any{}, nil)
+				if status != http.StatusOK {
+					t.Fatal("source cancellation failed")
+				}
+			}
+			failure := f.mcpCaller(t, nil)(map[string]any{"action": "REVIVE", "workerSessionId": "source", "message": "private refused continuation", "requestId": "msg-reject", "successorWorkerSessionId": "successor"})
+			code := "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID"
+			if reject {
+				code = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
+			}
+			diagnostic := string(failure["error"])
+			if !strings.Contains(diagnostic, code) || strings.Contains(diagnostic, "private refused continuation") || strings.Contains(diagnostic, "private-controlled") {
+				t.Fatalf("lost safe explicit continuation refusal: %s", diagnostic)
+			}
+			select {
+			case <-f.runner.workers["successor"].started:
+				t.Fatal("refused continuation executed provider")
+			default:
+			}
+			if len(readPage(t, f, "/messages", nil).Messages) != 0 {
+				t.Fatal("refused continuation created message")
+			}
+		})
 	}
 }
 
