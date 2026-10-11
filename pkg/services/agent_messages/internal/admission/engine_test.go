@@ -2,6 +2,7 @@ package admission
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -11,6 +12,8 @@ import (
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
+	"github.com/portpowered/infinite-you/pkg/services/events"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -184,7 +187,7 @@ func newEngineFixture() *engineFixture {
 	f.engine = NewEngine(true, f.authority, engineValidator{}, f.quota, f.ledger, func() time.Time { return f.now }, func() string { id++; return fmt.Sprintf("id-%d", id) }, []byte("controlled-cursor-signing-key-32bytes"), nil, nil,
 		func(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
 			return workersessions.ContinueResult{}, workersessions.ErrContinuationExecutionUnavailable
-		})
+		}, nil)
 	return f
 }
 
@@ -203,7 +206,7 @@ func TestSendRevivePublishesOnlyDurableAdmission(t *testing.T) {
 		fault               error
 		malformed           bool
 	}{
-		{"accepted", store.IntentAccepted, "", nil, false},
+		{"admitted", store.IntentAdmitted, "REVIVE_PENDING", nil, false},
 		{"unsupported", store.IntentFailed, "REVIVE_UNSUPPORTED", workersessions.ErrContinuationProviderSessionMissing, false},
 		{"rejected", store.IntentFailed, "REVIVE_FAILED", workersessions.ErrContinuationNotAccepted, false},
 		{"canceled wait", store.IntentUncertain, "REVIVE_FAILED", context.Canceled, false},
@@ -241,6 +244,143 @@ func TestSendRevivePublishesOnlyDurableAdmission(t *testing.T) {
 				t.Fatalf("retry repeated delivery: %+v %v %d", retry, err, calls)
 			}
 		})
+	}
+}
+
+func TestProviderProgressRequiresResumedWork(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		kind, phase, delivery, native string
+		confirms                      bool
+	}{
+		{"RUN", "STARTED", "NATIVE_STREAM", "turn.started", true},
+		{"MESSAGE", "COMPLETED", "NATIVE_FINAL", "message.completed", true},
+		{"SESSION", "STARTED", "SYNTHESIZED", "worker_session_lifecycle", false},
+		{"PROGRESS", "UPDATED", "NATIVE_STREAM", "session.started", false},
+		{"PROGRESS", "UPDATED", "NATIVE_STREAM", "progress.updated", false},
+		{"ERROR", "FAILED", "NATIVE_STREAM", "error", false},
+		{"RUN", "STARTED", "SYNTHESIZED", "run.started", false},
+		{"RUN", "FAILED", "NATIVE_STREAM", "turn.failed", false},
+		{"RUN", "INVALID", "NATIVE_STREAM", "turn.started", false},
+	} {
+		record := providerRecord{Kind: cell.kind, Phase: cell.phase}
+		record.Provenance.Provider, record.Provenance.Delivery, record.Provenance.NativeEventType = "codex", cell.delivery, cell.native
+		if providerProgress(record) != cell.confirms {
+			t.Fatalf("classification differs for %s/%s/%s", cell.kind, cell.delivery, cell.native)
+		}
+		record.Provenance.Provider = ""
+		if providerProgress(record) {
+			t.Fatal("unattributed record confirmed provider delivery")
+		}
+	}
+}
+
+func TestProviderOutcomePreservesAdmissionOnUnavailableProofOrFlush(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name, state, reason string
+		readErr, flushErr   error
+	}{
+		{"typed rejection", store.IntentFailed, "REVIVE_UNSUPPORTED", nil, nil},
+		{"unavailable result", store.IntentUncertain, "REVIVE_FAILED", workersessions.ErrSessionNotFound, nil},
+		{"refused settlement", store.IntentAdmitted, "REVIVE_PENDING", nil, store.ErrUnavailable},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			f, message, intent := admittedEngineFixture(t)
+			f.engine.readSession = func(_ context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
+				return workersessions.Session{ID: req.ID, State: workersessions.StateFailed, Result: &workersessions.TerminalResult{
+					Outcome: workersessions.TerminalOutcomeFailed, Cause: &workersessions.FailureCause{ProviderFailureKind: providers.ExecuteFailureKindSessionNotFound},
+				}}, cell.readErr
+			}
+			f.ledger.commitError = cell.flushErr
+			// A generic native diagnostic is not confirmation. The terminal read
+			// supplies classification; no provider body enters this projection.
+			records := []string{
+				`{"kind":"PROGRESS","phase":"UPDATED","provenance":{"provider":"codex","delivery":"NATIVE_STREAM","nativeEventType":"progress.updated"}}`,
+				`{"kind":"SESSION","phase":"FAILED"}`,
+			}
+			f.engine.consumeDelivery(t.Context(), intent, providerRecordSubscription(records))
+			entry, _, _, _ := f.ledger.LookupMessage(message.MessageID)
+			if entry.Message.Status != agentmessages.Queued || entry.Message.Reason != cell.reason || entry.Message.RevivedWorkerSessionID != "" || f.ledger.intents[intent.RequestID].State != cell.state {
+				t.Fatal("unconfirmed outcome changed admission or claimed delivery")
+			}
+		})
+	}
+}
+
+func admittedEngineFixture(t *testing.T) (*engineFixture, agentmessages.Message, store.DeliveryIntent) {
+	t.Helper()
+	f := newEngineFixture()
+	ended := f.authority.recipients["lead"]
+	ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = ended
+	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID, SuccessorWorkerSessionID: req.SuccessorWorkerSessionID,
+			Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+	}
+	message, err := f.engine.Send(t.Context(), engineRequest("ask", "safe input"), f.caller, "")
+	if err != nil || message.Reason != "REVIVE_PENDING" {
+		t.Fatal("admission was not pending", err)
+	}
+	return f, message, f.ledger.intents[message.MessageID]
+}
+
+func providerRecordSubscription(records []string) events.Subscription {
+	return func(context.Context) events.Delivery {
+		if len(records) == 0 {
+			return events.Delivery{Kind: events.DeliveryClosed}
+		}
+		payload := records[0]
+		records = records[1:]
+		return events.Delivery{Kind: events.DeliveryRecord, Record: events.Record{SchemaID: "workers.draft.v1", Payload: json.RawMessage(payload)}}
+	}
+}
+
+type deliveryStreamAppender struct {
+	observationAppender
+	started, stopped chan struct{}
+}
+
+func (s *deliveryStreamAppender) Subscribe(ctx context.Context, request events.SubscribeRequest) (events.Subscription, error) {
+	close(s.started)
+	return func(context.Context) events.Delivery {
+		<-ctx.Done()
+		close(s.stopped)
+		return events.Delivery{Kind: events.DeliveryCanceled}
+	}, nil
+}
+
+func TestLastHostReleaseJoinsObserversAndPreservesPendingAdmission(t *testing.T) {
+	t.Parallel()
+	f, message, intent := admittedEngineFixture(t)
+	stream := &deliveryStreamAppender{started: make(chan struct{}), stopped: make(chan struct{})}
+	f.engine.events = stream
+	first, last := f.engine.BindHost(), f.engine.BindHost()
+	f.engine.mu.Lock()
+	f.engine.observeDelivery(t.Context(), intent)
+	f.engine.mu.Unlock()
+	select {
+	case <-stream.started:
+	case <-t.Context().Done():
+		t.Fatal("observer did not start")
+	}
+	first()
+	first() // release is idempotent and cannot cancel another live host
+	select {
+	case <-stream.stopped:
+		t.Fatal("another live host lost its observer")
+	default:
+	}
+	last()
+	select {
+	case <-stream.stopped:
+	default:
+		t.Fatal("last host did not join observer")
+	}
+	entry, _, _, _ := f.ledger.LookupMessage(message.MessageID)
+	if entry.Message.Reason != "REVIVE_PENDING" || f.ledger.intents[intent.RequestID].State != store.IntentAdmitted {
+		t.Fatal("shutdown guessed a provider outcome")
 	}
 }
 
@@ -303,7 +443,7 @@ func TestConcurrentSendsQueueAgainstAdmittedHead(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if calls != 1 || statuses[agentmessages.DeliveredRevive] != 1 || statuses[agentmessages.Queued] != 1 {
+	if calls != 1 || statuses[agentmessages.Queued] != 2 {
 		t.Fatal("concurrent sends branched", calls, statuses)
 	}
 }

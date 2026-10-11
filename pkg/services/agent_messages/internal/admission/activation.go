@@ -97,6 +97,15 @@ func (s *Configured) ready() error {
 	return s.fault
 }
 
+// BindHost activates observation only for a ready selected profile. The host
+// release cancels and joins Messaging observers independently of Factory work.
+func (s *Configured) BindHost() func() {
+	if s.ready() != nil {
+		return func() {}
+	}
+	return s.engine.BindHost()
+}
+
 func (s *Configured) Send(ctx context.Context, request agentmessages.SendRequest, caller *workersessions.CallerIdentity, factory string) (agentmessages.Message, error) {
 	if err := s.ready(); err != nil {
 		return agentmessages.Message{}, err

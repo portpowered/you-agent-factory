@@ -3582,7 +3582,7 @@ components:
         reason:
           type: string
           nullable: true
-          description: Typed code only. QUEUED may report REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. Uncertain admission remains queued with REVIVE_FAILED.
+          description: Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED.
         hop:
           type: integer
           minimum: 0

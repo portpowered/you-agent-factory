@@ -196,11 +196,15 @@ Running recipients receive queued inbox records without execution changes.
 The default `ifEnded` is `REVIVE`.
 An ended eligible recipient resumes its recorded Provider Session in one direct successor, using the normalized message body.
 Messaging does not create Work or acquire a Factory execution slot.
-Confirmed admission and durable delivery produce `DELIVERED_REVIVE` with `revivedWorkerSessionId` and `to.deliveredWorkerSessionId`.
+Admission leaves the message `QUEUED` with `REVIVE_PENDING` while the provider resumes.
+Send returns without waiting for provider progress.
+Provider-confirmed resumed progress and durable delivery produce `DELIVERED_REVIVE` with `revivedWorkerSessionId` and `to.deliveredWorkerSessionId`.
+Use message read or follow to observe that outcome.
 Concurrent sends never branch the recipient chain.
 Messages sent while its newest successor is running remain queued.
 
 Missing continuation capability leaves `QUEUED` with `REVIVE_UNSUPPORTED`.
+Provider-classified resume rejection also leaves the message queued with `REVIVE_UNSUPPORTED`; the successor ends `FAILED`.
 Rejected or uncertain admission leaves `QUEUED` with `REVIVE_FAILED`.
 The rolling limit permits six accepted revivals per recipient chain per hour; further messages remain queued with `REVIVE_LIMIT`.
 Retries preserve the original message and never spend another revival.

@@ -1815,7 +1815,7 @@ type AgentMessage struct {
 	// MessageId Globally unique msg-<ULID> identity.
 	MessageId string `json:"messageId"`
 
-	// Reason Typed code only. QUEUED may report REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. Uncertain admission remains queued with REVIVE_FAILED.
+	// Reason Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED.
 	Reason             *string                  `json:"reason"`
 	RepliedByMessageId *string                  `json:"repliedByMessageId"`
 	ReplyIfEnded       AgentMessageReplyIfEnded `json:"replyIfEnded"`

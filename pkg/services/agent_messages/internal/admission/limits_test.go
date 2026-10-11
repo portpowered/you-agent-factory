@@ -40,6 +40,7 @@ func TestReviveLimitCountsOnlyAcceptedAdmissionsAndReleasesAtHour(t *testing.T) 
 	// The oldest accepted facts leave the open rolling window exactly at an hour.
 	f.now = f.now.Add(time.Hour)
 	got, err := f.engine.Send(t.Context(), engineRequest("next-hour", "next hour ask"), f.caller, "")
+	got = confirmEngineDelivery(t, f, got)
 	if err != nil || got.Status != agentmessages.DeliveredRevive || calls != 8 {
 		t.Fatal("rolling window did not release quota", err)
 	}
@@ -78,6 +79,7 @@ func assertSixRevivesAndRetries(t *testing.T, f *engineFixture, calls *int) {
 	for i := range 6 {
 		request := engineRequest(fmt.Sprint(i), fmt.Sprintf("accepted %d", i))
 		got, err := f.engine.Send(t.Context(), request, f.caller, "")
+		got = confirmEngineDelivery(t, f, got)
 		if err != nil || got.Status != agentmessages.DeliveredRevive {
 			t.Fatalf("revive %d was not admitted: %v", i+1, err)
 		}
@@ -118,6 +120,7 @@ func TestEndedRecipientBatchesOnlyEligibleQueuedBodiesInSendOrder(t *testing.T) 
 			SuccessorWorkerSessionID: request.SuccessorWorkerSessionID, Session: workersessions.Session{ID: request.SuccessorWorkerSessionID}}, nil
 	}
 	got, err := f.engine.Send(t.Context(), engineRequest("new", "new eligible"), f.caller, "")
+	got = confirmEngineDelivery(t, f, got)
 	if err != nil || got.Status != agentmessages.DeliveredRevive || calls != 1 {
 		t.Fatal("ordered batch was not admitted once", err)
 	}
@@ -136,6 +139,22 @@ func assertEligibleBatchOutcome(t *testing.T, f *engineFixture, got agentmessage
 		f.ledger.entries[3].Message.Status != agentmessages.Replied || f.ledger.entries[4].Message.Status != agentmessages.Expired {
 		t.Fatal("batch changed excluded messages or invented a public message")
 	}
+}
+
+// This component witness explicitly supplies confirmation. Public functional
+// journeys own proof that a provider record actually produces this transition.
+func confirmEngineDelivery(t *testing.T, f *engineFixture, message agentmessages.Message) agentmessages.Message {
+	t.Helper()
+	for _, intent := range f.ledger.intents {
+		if intent.State == store.IntentAdmitted {
+			f.engine.settleDelivery(t.Context(), intent, store.IntentAccepted, "")
+		}
+	}
+	entry, found, _, err := f.ledger.LookupMessage(message.MessageID)
+	if err != nil || !found {
+		t.Fatal("confirmation lost admitted message", err)
+	}
+	return entry.Message
 }
 
 func TestLimitsCountsSuccessfulChainSendsAcrossStatuses(t *testing.T) {

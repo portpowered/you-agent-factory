@@ -35,6 +35,139 @@ type reviveInputGate struct {
 
 type reviveRecordingDirectory string
 
+func TestProviderConfirmationSettlesPendingRevival(t *testing.T) {
+	t.Parallel()
+	for _, rejected := range []bool{false, true} {
+		t.Run(map[bool]string{false: "resumed progress", true: "missing rollout"}[rejected], func(t *testing.T) {
+			t.Parallel()
+			progress := make(chan struct{})
+			revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+			if rejected {
+				revival.result = &platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("No rollout found for thread id controlled-thread\n")}
+			}
+			core, _ := observer.New(zap.InfoLevel)
+			signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+			f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{ProcessLogger: zap.New(signal)}, nil, revival, "lead", "lane")
+			lead := f.invoke(t, "lead", nil)
+			lane := f.invoke(t, "lane", lead)
+			f.endWorker(t, "lead")
+			before := messageFactoryStreams(t, f, "lead", "lane")
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			frames, finished := make(chan []byte, 8), make(chan error, 1)
+			go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+			select {
+			case <-signal.ready:
+			case <-ctx.Done():
+				t.Fatal("follow did not register")
+			}
+			request := map[string]any{"requestId": "provider-confirmation", "to": map[string]string{"workerSessionId": "lead"}, "body": "normalized continuation input"}
+			message := f.sendRaw(t, request, lane)
+			assertPendingProviderResponse(t, message)
+			assertPendingCLIParity(t, f, lane, message)
+			assertProviderRetry(t, f, request, lane, message)
+			assertPendingProviderFrames(t, ctx, message, frames, finished)
+			var successor map[string]string
+			select {
+			case successor = <-revival.started:
+			case <-ctx.Done():
+				t.Fatal("successor did not start")
+			}
+			command := <-revival.requests
+			if string(command.Stdin) != message.Body || !strings.Contains(strings.Join(command.Args, " "), "resume controlled-thread") {
+				t.Fatal("pending revival changed recorded resume input")
+			}
+			if rejected {
+				close(revival.release)
+			} else {
+				close(progress)
+			}
+			final := f.awaitDeliveryOutcome(t, lane, message)
+			assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, rejected)
+			assertProviderRetry(t, f, request, lane, final)
+			if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+				t.Fatal("provider outcome changed Factory Events")
+			}
+			cancel()
+			select {
+			case <-finished:
+			case <-time.After(15 * time.Second):
+				t.Fatal("provider outcome follow did not join")
+			}
+			if !rejected {
+				close(revival.release)
+			}
+			f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+		})
+	}
+}
+
+func assertProviderRetry(t *testing.T, f *fixture, request map[string]any, lane map[string]string, message api.AgentMessage) {
+	t.Helper()
+	if retry := f.sendRaw(t, request, lane); !reflect.DeepEqual(retry, message) {
+		t.Fatal("retry changed durable provider outcome")
+	}
+}
+
+func assertPendingCLIParity(t *testing.T, f *fixture, lane map[string]string, message api.AgentMessage) {
+	t.Helper()
+	var response api.AgentMessageSendResponse
+	raw := f.cli(t, lane, "lead", "--request-id", "provider-confirmation", "--body", "normalized continuation input")
+	if json.Unmarshal(raw, &response) != nil || !reflect.DeepEqual(response.Message, message) {
+		t.Fatal("CLI exact retry differs from pending HTTP response")
+	}
+}
+
+func (f *fixture) sendRaw(t *testing.T, request map[string]any, caller map[string]string) api.AgentMessage {
+	t.Helper()
+	status, raw := f.request(t, http.MethodPost, "/messages", request, caller)
+	var response api.AgentMessageSendResponse
+	if status != http.StatusAccepted || json.Unmarshal(raw, &response) != nil {
+		t.Fatalf("send: %d %s", status, raw)
+	}
+	return response.Message
+}
+
+func assertPendingProviderResponse(t *testing.T, message api.AgentMessage) {
+	t.Helper()
+	if message.Status != "QUEUED" || message.Reason == nil || *message.Reason != "REVIVE_PENDING" || message.RevivedWorkerSessionId != nil || message.To.DeliveredWorkerSessionId != nil {
+		t.Fatal("admission claimed provider delivery")
+	}
+}
+
+func assertPendingProviderFrames(t *testing.T, ctx context.Context, message api.AgentMessage, frames <-chan []byte, finished <-chan error) {
+	t.Helper()
+	for _, kind := range []string{"SENT", "DELIVERY_UPDATED"} {
+		var observation api.AgentMessageObservation
+		if json.Unmarshal(nextFrame(t, ctx, frames, finished), &observation) != nil || string(observation.Kind) != kind || observation.Message.MessageId != message.MessageId || observation.Message.RevivedWorkerSessionId != nil {
+			t.Fatal("pending follow lost ordered admission")
+		}
+		if kind == "DELIVERY_UPDATED" {
+			assertPendingProviderResponse(t, observation.Message)
+		}
+	}
+	select {
+	case <-frames:
+		t.Fatal("delivery published before provider progress")
+	default:
+	}
+}
+
+func assertProviderFinalOutcome(t *testing.T, ctx context.Context, f *fixture, final api.AgentMessage, successor map[string]string, frames <-chan []byte, finished <-chan error, rejected bool) {
+	t.Helper()
+	want := "DELIVERED_REVIVE"
+	if rejected {
+		want = "DELIVERY_UPDATED"
+		assertRejectedProviderOutcome(t, f, final, successor)
+	} else if final.Status != "DELIVERED_REVIVE" || final.RevivedWorkerSessionId == nil || *final.RevivedWorkerSessionId != successor["YOU_WORKER_SESSION_ID"] || final.Reason != nil {
+		t.Fatal("resumed progress lost durable successor facts")
+	}
+	var outcome api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || string(outcome.Kind) != want || !reflect.DeepEqual(outcome.Message, final) {
+		t.Fatal("provider outcome differs between follow and public read")
+	}
+}
+
 func (d reviveRecordingDirectory) Getwd() (string, error) { return string(d), nil }
 
 func (g *reviveInputGate) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
@@ -169,6 +302,8 @@ func assertReviveOutcomeFrames(t *testing.T, ctx context.Context, message api.Ag
 	if reject {
 		wantKind = "DELIVERY_UPDATED"
 		assertRejectedRevive(t, message)
+	} else {
+		assertPendingOutcomeFrame(t, ctx, frames, finished)
 	}
 	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || string(outcome.Kind) != wantKind || !reflect.DeepEqual(outcome.Message, message) || outcome.Sequence <= sent.Sequence {
 		t.Fatal("follow lost durable admission outcome")
@@ -675,4 +810,29 @@ func (f *fixture) workerEnded(t *testing.T, id string) bool {
 	var observation api.WorkerSessionObservation
 	return status == http.StatusOK && json.Unmarshal(raw, &observation) == nil &&
 		(observation.State == "COMPLETED" || observation.State == "FAILED")
+}
+
+func assertPendingOutcomeFrame(t *testing.T, ctx context.Context, frames <-chan []byte, finished <-chan error) {
+	t.Helper()
+	var pending api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &pending) != nil || pending.Kind != "DELIVERY_UPDATED" {
+		t.Fatal("follow lost pending admission")
+	}
+	assertPendingProviderResponse(t, pending.Message)
+}
+
+func assertRejectedProviderOutcome(t *testing.T, f *fixture, final api.AgentMessage, successor map[string]string) {
+	t.Helper()
+	if final.Status != "QUEUED" || final.Reason == nil || *final.Reason != "REVIVE_UNSUPPORTED" || final.RevivedWorkerSessionId != nil {
+		t.Fatal("provider rejection claimed delivery or lost readable typed reason")
+	}
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	status, raw := f.request(t, http.MethodGet, "/worker-sessions/"+successor["YOU_WORKER_SESSION_ID"], nil, nil)
+	var observation api.WorkerSessionObservation
+	if status != http.StatusOK || json.Unmarshal(raw, &observation) != nil || observation.State != "FAILED" {
+		t.Fatal("rejected provider lost failed successor")
+	}
+	if observation.Failure == nil || observation.Failure.Kind == "" || observation.Failure.Detail == "" {
+		t.Fatal("rejected successor lost its public failure cause")
+	}
 }

@@ -139,13 +139,14 @@ func TestReviveOutcomePublishesDeliveryWithoutRegressingInbox(t *testing.T) {
 					SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
 			}
 			got, err := f.engine.Send(t.Context(), engineRequest("ask", "safe input"), f.caller, "")
+			got = confirmEngineDelivery(t, f, got)
 			if err != nil || got.Status != status || got.RevivedWorkerSessionID == "" ||
 				(status == agentmessages.Replied && got.RepliedByMessageID != "reply") {
 				t.Fatal("admission outcome lost newer inbox state", got, err)
 			}
 			observations := decodedObservations(t, a)
-			assertObservationKinds(t, observations, []string{store.Sent, string(agentmessages.DeliveredRevive)})
-			if observations[1].Message != got || !validObservationKind(observations[1]) {
+			assertObservationKinds(t, observations, []string{store.Sent, string(status), string(agentmessages.DeliveredRevive)})
+			if observations[2].Message != got || !validObservationKind(observations[2]) {
 				t.Fatal("delivered observation lost monotonic state or cannot follow")
 			}
 		})

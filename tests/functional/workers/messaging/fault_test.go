@@ -66,13 +66,21 @@ func (f *messageOutcomeFile) Write(data []byte) (int, error) {
 func (f *messageOutcomeFile) Sync() error {
 	if f.outcome {
 		f.outcome = false // Rollback's Sync must flush without entering again.
-		close(f.gate.entered)
+		f.gate.unblockEnter()
 		<-f.gate.release
 		if f.gate.reject {
 			return errors.New("controlled-private-outcome-flush-failure")
 		}
 	}
 	return f.File.Sync()
+}
+
+func (g *messageOutcomeFileSystem) unblockEnter() {
+	select {
+	case <-g.entered:
+	default:
+		close(g.entered)
+	}
 }
 
 type outcomeSendResponse struct {
@@ -185,14 +193,16 @@ func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lan
 		t.Fatal("committed flush lost send outcome")
 	}
 	var outcome api.AgentMessageObservation
-	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || outcome.Kind != "DELIVERED_REVIVE" || !reflect.DeepEqual(outcome.Message, responseBody.Message) {
+	assertPendingOutcomeFrame(t, ctx, frames, finished)
+	message := f.awaitDeliveryOutcome(t, lane, responseBody.Message)
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || outcome.Kind != "DELIVERED_REVIVE" || !reflect.DeepEqual(outcome.Message, message) {
 		t.Fatal("committed delivery differs from follow")
 	}
 	got := readPage(t, f, "/messages?threadId="+queued.ThreadId, lane)
-	if len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], responseBody.Message) {
+	if len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], message) {
 		t.Fatal("committed delivery differs from read")
 	}
-	successor := assertReviveAdmission(t, f, revival, responseBody.Message, lead)
+	successor := assertReviveAdmission(t, f, revival, message, lead)
 	close(revival.release)
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
 }

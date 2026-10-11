@@ -180,7 +180,7 @@ func provideHTTPRuntimeBindingWithMetrics(
 		if err != nil {
 			return nil, err
 		}
-		return workerExecutionEndpointHandler{Handler: handler, bind: endpointBinding}, nil
+		return workerExecutionEndpointHandler{Handler: handler, bind: endpointBinding, bindMessages: messages.BindHost}, nil
 	}, nil
 }
 
@@ -188,12 +188,18 @@ func provideHTTPRuntimeBindingWithMetrics(
 // advertise an execution endpoint. Workflow-only hosts retain their own shell.
 type workerExecutionEndpointHandler struct {
 	http.Handler
-	bind workersessions.ExecutionEndpointBinding
+	bind         workersessions.ExecutionEndpointBinding
+	bindMessages func() func()
 }
 
 func (handler workerExecutionEndpointHandler) ObserveHostBinding(binding platformhttpserver.Binding) func() {
 	endpoint := "http://" + net.JoinHostPort(binding.Host, fmt.Sprint(binding.Port))
-	return handler.bind(endpoint)
+	release := handler.bind(endpoint)
+	releaseMessages := handler.bindMessages()
+	return func() {
+		releaseMessages()
+		release()
+	}
 }
 
 func newHTTPRuntimeHandlerWithMetrics(

@@ -232,6 +232,8 @@ func TestInvalidCallerNeverFallsBackToOperator(t *testing.T) {
 func TestEndedRecipientKeepsQueueIntentWithoutExecution(t *testing.T) {
 	t.Parallel()
 	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	// Cancellation precedes native provider-session discovery in this cell.
+	f.runner.workers["lead"].progress = make(chan struct{})
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	status, _ := f.request(t, http.MethodPost, "/worker-sessions/lead/cancel", map[string]any{}, nil)
