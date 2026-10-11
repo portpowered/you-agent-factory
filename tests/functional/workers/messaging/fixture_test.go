@@ -277,17 +277,27 @@ func (f *fixture) startReplayPeer(t *testing.T, worker, session, dir, path strin
 			t.Error("legacy replay did not stop")
 		}
 	})
-	_, err := support.WaitForObservation(15*time.Second, func() (int, error) {
+	// An ambiguous unscoped read only proves that replay has published the
+	// association. Wait for its terminal observation before testing candidates.
+	_, err := support.WaitForObservation(15*time.Second, func() (bool, error) {
 		select {
 		case err := <-done:
 			done <- err
-			return 0, fmt.Errorf("replay exited: %v %s", err, inputs.Stderr())
+			return false, fmt.Errorf("replay exited: %v %s", err, inputs.Stderr())
 		default:
 		}
-		status, _ := f.request(t, http.MethodGet, "/worker-sessions/"+worker, nil, nil)
-		return status, nil
-	}, func(status int) bool { return status == http.StatusConflict })
+		status, data := f.request(t, http.MethodGet, "/worker-sessions/"+worker+"?factorySessionId="+session, nil, nil)
+		var observation api.WorkerSessionObservation
+		if status != http.StatusOK {
+			return false, nil
+		}
+		if err := json.Unmarshal(data, &observation); err != nil {
+			return false, err
+		}
+		return observation.WorkerSessionId == worker && observation.FactorySessionId != nil &&
+			*observation.FactorySessionId == session && observation.State == "COMPLETED", nil
+	}, func(ready bool) bool { return ready })
 	if err != nil {
-		t.Fatalf("legacy replay did not expose its equal-ID peer: %v", err)
+		t.Fatalf("legacy replay did not expose its completed equal-ID peer: %v", err)
 	}
 }

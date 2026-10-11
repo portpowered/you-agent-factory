@@ -145,7 +145,7 @@ func assertRecipientCandidates(t *testing.T, data []byte, live, peer string) {
 		owners[candidate.FactorySessionId] = string(candidate.State)
 	}
 	if owners[live] != "RUNNING" || owners[peer] != "COMPLETED" {
-		t.Fatal("ambiguity candidates lost exact owner or state")
+		t.Fatalf("ambiguity candidates lost exact owner or state: live=%s peer=%s response=%s", live, peer, data)
 	}
 }
 
