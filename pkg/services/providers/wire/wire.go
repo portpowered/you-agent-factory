@@ -14,7 +14,6 @@ import (
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
@@ -51,12 +50,6 @@ const (
 	DefaultPTYHardTimeout     = providerservice.DefaultPTYHardTimeout
 )
 
-// DefaultPTYSessionConfig returns the bounded native-session defaults used by
-// the Providers Agy adapter.
-func DefaultPTYSessionConfig() PTYSessionConfig {
-	return providerservice.DefaultPTYSessionConfig()
-}
-
 const (
 	OutputStreamStdout = providerservice.OutputStreamStdout
 	OutputStreamStderr = providerservice.OutputStreamStderr
@@ -87,14 +80,6 @@ func NewClaudeEffect(runner CommandRunner, clock platformclock.Source) ClaudeEff
 // NewAgyCommandEffect constructs one AGY print-mode effect.
 func NewAgyCommandEffect(runner CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) AgyEffect {
 	return executionwire.NewAgyCommandEffect(runner, clock, scheduler)
-}
-
-// AgyPTYPolicy contains detached native-session policy, without host effects.
-type AgyPTYPolicy = executionwire.AgyPTYPolicy
-
-// NewAgyPTYEffect constructs one native effect over individually supplied ports.
-func NewAgyPTYEffect(allocator PTYAllocator, locator platformprocess.ExecutableLocator, inspector platformfilesystem.PathInspector, clock platformclock.Source, policy AgyPTYPolicy) AgyEffect {
-	return executionwire.NewAgyPTYEffect(allocator, locator, inspector, clock, policy)
 }
 
 // CatalogCapabilityOverride supplies an authoritative capability view for one

@@ -35,16 +35,6 @@ const (
 	DefaultPTYHardTimeout     = 10 * time.Minute
 )
 
-// DefaultPTYSessionConfig returns the bounded native-session defaults used by
-// the Providers Agy adapter.
-func DefaultPTYSessionConfig() PTYSessionConfig {
-	return PTYSessionConfig{
-		MaxCaptureBytes: DefaultPTYMaxCaptureBytes,
-		IdleTimeout:     DefaultPTYIdleTimeout,
-		HardTimeout:     DefaultPTYHardTimeout,
-	}
-}
-
 // PTYProcessLaunch is the typed subprocess description for one Agy PTY run.
 type PTYProcessLaunch struct {
 	Executable string

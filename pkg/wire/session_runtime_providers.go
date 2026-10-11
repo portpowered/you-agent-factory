@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -163,26 +162,6 @@ func provideProvidersStdioPipeFactory(edges serviceedges.Edges) platformprocess.
 		return edges.ProvidersStdioPipeFactory
 	}
 	return platformprocess.NewParentOwnedStdio
-}
-
-func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {
-	return edges.Clock
-}
-
-// Operational waits use the scheduler already selected at the process boundary.
-func effectiveProviderScheduler(edges serviceedges.Edges) platformclock.TimerSource {
-	return edges.ProcessScheduler
-}
-
-func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []providers.ACPIntegration {
-	result := make([]providers.ACPIntegration, 0, len(integrations))
-	for _, integration := range integrations {
-		result = append(result, providers.ACPIntegration{
-			ID: integration.ID, Name: providers.ID(integration.Name),
-			Transport: integration.Transport, Command: integration.Command,
-		})
-	}
-	return result
 }
 
 func providePlatformProcessCommandFactory(edges serviceedges.Edges) platformprocess.CommandFactory {

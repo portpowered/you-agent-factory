@@ -60,7 +60,7 @@ func TestProvideAgyPTYAllocatorPreservesInjectedNativeHost(t *testing.T) {
 	}
 	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{
 		Executable: "agy", Argv: []string{"agy"},
-	}, providerswire.DefaultPTYSessionConfig())
+	}, testDefaultPTYSessionConfig())
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}
@@ -170,7 +170,7 @@ func TestProvideAgyPTYAllocatorUsesProcessSchedulerWithNowOnlyOverride(t *testin
 	if scheduler.calls != 0 || override.calls.Load() != 0 {
 		t.Fatal("construction must not start time effects")
 	}
-	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, providerswire.DefaultPTYSessionConfig())
+	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, testDefaultPTYSessionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func startSelectionPTY(t *testing.T, edges serviceedges.Edges) (*selectionPTYHos
 	}
 	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{
 		Executable: "agy", Argv: []string{"agy", "--print", "selected time"},
-	}, providerswire.DefaultPTYSessionConfig())
+	}, testDefaultPTYSessionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +516,7 @@ func TestAgyPTYTimeSelectionLegacyRealScheduler(t *testing.T) {
 	if facts.calls.Load() != 0 || len(waits.created) != 0 {
 		t.Fatal("construction caused time effects")
 	}
-	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, providerswire.DefaultPTYSessionConfig())
+	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, testDefaultPTYSessionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +551,7 @@ func TestAgyPTYTimeSelectionFailuresDisposeOwnedResources(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, providerswire.DefaultPTYSessionConfig())
+			session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{Executable: "agy", Argv: []string{"agy"}}, testDefaultPTYSessionConfig())
 			if name == "allocate" {
 				assertSelectionPTYAllocationFailure(t, session, err, host, waits)
 				return

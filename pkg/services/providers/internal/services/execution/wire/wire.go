@@ -5,8 +5,6 @@ import (
 	"context"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
@@ -65,7 +63,6 @@ func NewUnsupportedContinuation() execution.ContinuationAttempt {
 type CodexEffect = codexadapter.Effect
 type ClaudeEffect = claudeadapter.Effect
 type AgyEffect = agyadapter.Effect
-type AgyPTYPolicy = agyadapter.PTYPolicy
 
 // BuiltInRegistrations binds individually supplied native effects.
 func BuiltInRegistrations(antigravity AgyEffect, codex CodexEffect, claude ClaudeEffect) []execution.Registration {
@@ -85,9 +82,4 @@ func NewClaudeEffect(runner providerservice.CommandRunner, clock platformclock.S
 // NewAgyCommandEffect constructs one native AGY command effect.
 func NewAgyCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) AgyEffect {
 	return agyadapter.NewCommandEffect(runner, clock, scheduler)
-}
-
-// NewAgyPTYEffect constructs the intentionally selected legacy PTY effect.
-func NewAgyPTYEffect(allocator providerservice.PTYAllocator, locator platformprocess.ExecutableLocator, inspector platformfilesystem.PathInspector, clock platformclock.Source, policy AgyPTYPolicy) AgyEffect {
-	return agyadapter.NewPTYEffect(allocator, locator, inspector, clock, policy)
 }

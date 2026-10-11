@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -247,7 +246,6 @@ func newCompletedPeersFixture(t *testing.T) *completedPeersFixture {
 			f.pipeCalls.Add(1)
 			return nil, errors.New("controlled channel unavailable")
 		},
-		PlatformProcessCommandFactory: func(name string, args ...string) *exec.Cmd { return exec.Command(name, args...) },
 	})
 	if err != nil {
 		t.Fatal(err)

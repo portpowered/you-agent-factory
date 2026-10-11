@@ -13,7 +13,7 @@ import (
 )
 
 func TestPOSIXPTYSessionRun_CapturesCleanedOutput(t *testing.T) {
-	result, session := runWiredPOSIXPTY(t, []string{"/usr/bin/printf", "\x1b[31magy-pty\x1b[0m"}, providerswire.DefaultPTYSessionConfig())
+	result, session := runWiredPOSIXPTY(t, []string{"/usr/bin/printf", "\x1b[31magy-pty\x1b[0m"}, testDefaultPTYSessionConfig())
 	defer session.Close()
 	if result.CleanedText != "agy-pty" {
 		t.Fatalf("CleanedText = %q", result.CleanedText)
@@ -21,7 +21,7 @@ func TestPOSIXPTYSessionRun_CapturesCleanedOutput(t *testing.T) {
 }
 
 func TestPOSIXPTYSessionRun_IdleTimeoutTerminatesProcess(t *testing.T) {
-	cfg := providerswire.DefaultPTYSessionConfig()
+	cfg := testDefaultPTYSessionConfig()
 	cfg.IdleTimeout, cfg.HardTimeout = 100*time.Millisecond, time.Hour
 	result, session := runWiredPOSIXPTY(t, []string{"/bin/sleep", "120"}, cfg)
 	defer session.Close()
@@ -31,7 +31,7 @@ func TestPOSIXPTYSessionRun_IdleTimeoutTerminatesProcess(t *testing.T) {
 }
 
 func TestPOSIXPTYSessionRun_ClosesPTYAfterRun(t *testing.T) {
-	_, session := runWiredPOSIXPTY(t, []string{"/bin/echo", "close"}, providerswire.DefaultPTYSessionConfig())
+	_, session := runWiredPOSIXPTY(t, []string{"/bin/echo", "close"}, testDefaultPTYSessionConfig())
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
