@@ -87,7 +87,7 @@ func TestLegacyRecipientAmbiguityRequiresExplicitOwner(t *testing.T) {
 	}
 	peer := uuid.NewString()
 	f.replayPeer(t, "lane", peer)
-	request := map[string]any{"requestId": "resolve-recipient", "to": map[string]string{"workerSessionId": "lane"}, "body": "explicit owned recipient"}
+	request := map[string]any{"requestId": "resolve-recipient", "to": map[string]string{"workerSessionId": "lane"}, "body": "explicit owned recipient", "ifEnded": "HOLD"}
 	status, data = f.request(t, http.MethodPost, "/messages", request, lead)
 	var refused api.ErrorResponse
 	if status != http.StatusConflict || json.Unmarshal(data, &refused) != nil || refused.Code != "WORKER_SESSION_AMBIGUOUS" {
@@ -103,13 +103,19 @@ func TestLegacyRecipientAmbiguityRequiresExplicitOwner(t *testing.T) {
 	if status != http.StatusAccepted || json.Unmarshal(data, &result) != nil || result.Message.To.FactorySessionId == nil || *result.Message.To.FactorySessionId != *live.FactorySessionId {
 		t.Fatalf("scoped owned recipient: %d %s", status, data)
 	}
-	if replay := f.cliSend(t, lead, "lane", "--session", *live.FactorySessionId, "--request-id", "resolve-recipient", "--body", "explicit owned recipient"); replay.MessageId != result.Message.MessageId {
+	if replay := f.cliSend(t, lead, "lane", "--session", *live.FactorySessionId, "--request-id", "resolve-recipient", "--body", "explicit owned recipient", "--if-ended", "hold"); replay.MessageId != result.Message.MessageId {
 		t.Fatal("CLI explicit recipient scope did not replay the HTTP record")
 	}
 	assertError(t, f, http.MethodPost, "/messages?factorySessionId="+peer, map[string]any{"requestId": "peer", "to": map[string]string{"workerSessionId": "lane"}, "body": "foreign historical peer"}, lead, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
 	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 1 {
 		t.Fatal("explicit scope widened permission or duplicated the record")
 	}
+	// HOLD prevents teardown from starting a revival. Join complete captures
+	// before profile removal using the exact owner for the ambiguous recipient;
+	// the equal-ID replay peer keeps its existing independent cleanup join.
+	f.endWorker(t, "lead")
+	close(f.runner.workers["lane"].release)
+	support.GetWorkerSessionEventsForSessionByIDAt(t, f.baseURL(), *live.FactorySessionId, "lane")
 }
 
 func assertCLIAmbiguousRecipient(t *testing.T, f *fixture, lead map[string]string, live, peer string) {
