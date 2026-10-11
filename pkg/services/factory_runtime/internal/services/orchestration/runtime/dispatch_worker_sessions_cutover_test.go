@@ -973,6 +973,37 @@ func TestRecordedWorkerSessionObservationConfirmsMatchingLiveTerminalOutcome(t *
 	}
 }
 
+func TestRecordedWorkerSessionObservationPreservesCapturedTerminalConfirmation(t *testing.T) {
+	t.Parallel()
+	for _, state := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled, workersessions.StateTerminated} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			for _, available := range []bool{false, true} {
+				rows := []workersessions.Observation{
+					{State: state, ConfirmationState: workersessions.ConfirmationStateConfirmed, RecordingHealth: recordings.WorkerRecordingStatusComplete},
+					{State: state, ConfirmationState: workersessions.ConfirmationStateConfirmed, StateSequenceKnown: true, StateSequence: 2, StreamGenerationID: "foreign"},
+					{State: workersessions.StateRunning, ConfirmationState: workersessions.ConfirmationStateConfirmed},
+					{State: state, ConfirmationState: workersessions.ConfirmationStateConfirmed},
+					{State: state, ConfirmationState: workersessions.ConfirmationStateConfirmed, RecordingHealth: recordings.WorkerRecordingStatusIncomplete},
+					{State: state, ConfirmationState: workersessions.ConfirmationStateUnconfirmed, RecordingHealth: recordings.WorkerRecordingStatusIncomplete},
+				}
+				sample := completedFlushWatermarkSample{available: available, generationID: "generation", watermark: recordings.CanonicalEventCursor{Sequence: 3, StreamGenerationID: "generation"}}
+				(&recordedWorkerSessionObservation{}).applyConfirmation(rows, sample)
+				want := []workersessions.ConfirmationState{
+					workersessions.ConfirmationStateConfirmed, workersessions.ConfirmationStateUnconfirmed,
+					workersessions.ConfirmationStateUnconfirmed, workersessions.ConfirmationStateUnconfirmed,
+					workersessions.ConfirmationStateConfirmed, workersessions.ConfirmationStateUnconfirmed,
+				}
+				for index, row := range rows {
+					if row.ConfirmationState != want[index] {
+						t.Fatalf("capture confirmation or Factory watermark fence lost at row %d: %+v", index, rows)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestRecordedDispatchFactsBranches(t *testing.T) {
 	base, events := recordedDispatchFactTestEvents(t)
 	associations, requests := recordedDispatchFacts(events)

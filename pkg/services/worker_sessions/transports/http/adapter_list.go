@@ -14,9 +14,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// ListWorkerSessions verifies Work existence and returns every authoritative
-// Worker Session attempt correlated with it. A known Work with no observation
-// projection is represented as an empty array rather than a not-found error.
+// ListWorkerSessions verifies current Work or exact captured membership and
+// returns its authoritative attempts. A known current Work with no attempts
+// is represented as an empty array rather than a not-found error.
 func (a *Adapter) ListWorkerSessions(
 	ctx context.Context,
 	sessionID string,
@@ -43,10 +43,15 @@ func (a *Adapter) ListWorkerSessions(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return factoryapi.ListWorkerSessionsResponse{}, ctxErr
 		}
-		if !errors.Is(err, work.ErrWorkNotFound) {
-			if _, scopeErr := a.resolveWorkerSessionScope(ctx, sessionID); scopeErr != nil {
-				return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", scopeErr)
+		_, scopeErr := a.resolveWorkerSessionScope(ctx, sessionID)
+		if (scopeErr == nil && errors.Is(err, work.ErrWorkNotFound)) || errors.Is(scopeErr, workersessions.ErrObservationSessionNotFound) {
+			if scopeErr != nil {
+				err = fmt.Errorf("resolve Factory Session scope: %w", scopeErr)
 			}
+			return a.listArchivedWorkerSessionsForWork(ctx, strings.TrimSpace(sessionID), workID, err)
+		}
+		if scopeErr != nil {
+			return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", scopeErr)
 		}
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
@@ -61,7 +66,11 @@ func (a *Adapter) ListWorkerSessions(
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 
-	return a.listWorkerSessionsForWork(ctx, scope, workID, workModel.Name)
+	result, err := a.listWorkerSessionsForWork(ctx, scope, workID, workModel.Name)
+	if err != nil {
+		return result, err
+	}
+	return a.mergeArchivedWorkerSessionsForWork(ctx, scope.observationID(), workID, result)
 }
 
 func (a *Adapter) listWorkerSessionsForWork(
@@ -173,7 +182,6 @@ func (a *Adapter) resolveWorkAttribution(
 	// Each session read clones its runtime snapshot. Share that read only within
 	// this request, including failed reads, and keep session identities separate.
 	namesBySession := make(map[string]map[string]string)
-	available := make(map[string]bool)
 	requests := make([]recordings.WorkerWorkAttributionRequest, 0, len(observations))
 	for _, observation := range observations {
 		if len(observation.WorkIDs) == 0 || strings.TrimSpace(observation.WorkIDs[0]) == "" {
@@ -198,7 +206,6 @@ func (a *Adapter) resolveWorkAttribution(
 					IncludeSuperseded: true, MaxResults: math.MaxInt,
 				})
 				if err == nil {
-					available[sessionID] = true
 					for _, model := range result.Results {
 						if _, exists := names[model.WorkID]; !exists {
 							names[model.WorkID] = model.Name
@@ -219,7 +226,7 @@ func (a *Adapter) resolveWorkAttribution(
 			namesBySession[sessionID] = names
 		}
 		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID, WorkName: names[workID]}
-		if !available[sessionID] {
+		if names[workID] == "" {
 			requests = append(requests, recordings.WorkerWorkAttributionRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: sessionID, WorkID: workID})
 		}
 	}

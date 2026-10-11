@@ -18,6 +18,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -120,8 +122,13 @@ func assertArchivedMCPReplayRecords(t *testing.T, logs factoryapi.WorkerSessionL
 
 func assertArchivedUnknownMCPReads(t *testing.T, ctx context.Context, connection *mcp.ClientSession) {
 	t.Helper()
+	assertArchivedMissingMCPReads(t, ctx, connection, "unknown-archive-id")
+}
+
+func assertArchivedMissingMCPReads(t *testing.T, ctx context.Context, connection *mcp.ClientSession, id string) {
+	t.Helper()
 	for _, view := range []string{"summary", "logs", "events"} {
-		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": view, "workerSessionId": "unknown-archive-id"}})
+		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": view, "workerSessionId": id}})
 		if err != nil || !result.IsError || len(result.Content) != 1 {
 			t.Fatalf("unknown MCP %s: %+v %v", view, result, err)
 		}
@@ -286,4 +293,154 @@ func assertArchivedUnknownCLIHTTP(t *testing.T, server *support.FunctionalAPISer
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("foreign scope replay status=%d", response.StatusCode)
 	}
+}
+
+// The legacy cell supplies compatible committed input at the authorized store
+// edge. It proves public reading of a pre-catalog name, not current production
+// emission of that format. All identities and terminal records remain real.
+type legacyOpeningNameStore struct {
+	*terminalCommitGate
+	namelessScope string
+	readFault     atomic.Pointer[archivedSummaryFault]
+}
+
+// Faults affect only the selected materialized summary at the authorized
+// recording edge. Other captures and the stored records remain real.
+type archivedSummaryFault struct {
+	id                string
+	err               error
+	entered, detached chan struct{}
+}
+
+func (store *legacyOpeningNameStore) ListWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	page, err := store.WorkerRecordingStore.ListWorkerSessionCaptures(ctx, request)
+	return store.applyCatalogReadFault(ctx, page, err)
+}
+
+func (store *legacyOpeningNameStore) ListPreparedWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	page, err := store.WorkerRecordingStore.ListPreparedWorkerSessionCaptures(ctx, request)
+	return store.applyCatalogReadFault(ctx, page, err)
+}
+
+func (store *legacyOpeningNameStore) applyCatalogReadFault(ctx context.Context, page recordings.WorkerCapturedCatalogPage, err error) (recordings.WorkerCapturedCatalogPage, error) {
+	if err != nil {
+		return page, err
+	}
+	for _, item := range page.Items {
+		if fault := store.readFault.Load(); fault != nil && fault.id == item.Catalog.WorkerSessionID {
+			return recordings.WorkerCapturedCatalogPage{}, fault.read(ctx)
+		}
+	}
+	return page, nil
+}
+
+func (store *legacyOpeningNameStore) LookupWorkerSessionCapture(ctx context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
+	if fault := store.readFault.Load(); fault != nil && fault.id == id {
+		return recordings.WorkerSessionCatalogEntry{}, fault.read(ctx)
+	}
+	return store.WorkerRecordingStore.LookupWorkerSessionCapture(ctx, id)
+}
+
+func (fault *archivedSummaryFault) read(ctx context.Context) error {
+	if fault.err != nil {
+		return fault.err
+	}
+	close(fault.entered)
+	<-ctx.Done()
+	close(fault.detached)
+	return ctx.Err()
+}
+
+func (store *legacyOpeningNameStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if fault := store.readFault.Load(); fault != nil && fault.id == id {
+		return recordings.WorkerCapturedSummary{}, fault.read(ctx)
+	}
+	return store.terminalCommitGate.LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	// Compatible legacy captures can retain exact membership without a name or
+	// originating board artifact. Supply that absence at the authorized storage
+	// edge; the current board still knows the public Work's name.
+	if record.FactorySessionID == store.namelessScope {
+		record.WorkName, record.OriginatingArtifact = "", ""
+		var err error
+		record.Record.Payload, err = namelessArchivedPayload(record.Record.Payload)
+		if err != nil {
+			return err
+		}
+	}
+	if record.WorkName == "legacy-name" {
+		var draft workers.Draft
+		var opening workers.SessionPayload
+		if err := json.Unmarshal(record.Record.Payload, &draft); err != nil {
+			return err
+		}
+		if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted {
+			if err := json.Unmarshal(draft.Payload, &opening); err != nil {
+				return err
+			}
+			metadata := make(map[string]json.RawMessage)
+			if len(opening.SessionMetadata) > 0 {
+				if err := json.Unmarshal(opening.SessionMetadata, &metadata); err != nil {
+					return err
+				}
+			}
+			metadata["labels"] = json.RawMessage(`["tag:_work_name=legacy-name"]`)
+			var err error
+			opening.SessionMetadata, err = json.Marshal(metadata)
+			if err != nil {
+				return err
+			}
+			draft.Payload, err = json.Marshal(opening)
+			if err != nil {
+				return err
+			}
+			record.Record.Payload, err = json.Marshal(draft)
+			if err != nil {
+				return err
+			}
+			record.WorkName = ""
+		}
+	}
+	return store.terminalCommitGate.PersistWorkerRecord(ctx, record)
+}
+
+func namelessArchivedPayload(payload json.RawMessage) (json.RawMessage, error) {
+	var draft workers.Draft
+	if err := json.Unmarshal(payload, &draft); err != nil {
+		return nil, err
+	}
+	// Explicit zero counters are compatible committed input. Normal native
+	// command normalization can omit zero-only usage; actual configured mock
+	// emission is a separate prebuilt-artifact witness, not claimed here.
+	if draft.Kind == workers.KindUsage {
+		draft.Payload = json.RawMessage(`{"origin":"SYNTHETIC","inputTokens":0,"outputTokens":0,"totalTokens":0}`)
+		return json.Marshal(draft)
+	}
+	if draft.Kind != workers.KindSession {
+		return payload, nil
+	}
+	var session workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &session); err != nil {
+		return nil, err
+	}
+	var metadata map[string]json.RawMessage
+	if len(session.SessionMetadata) == 0 {
+		return payload, nil
+	}
+	if err := json.Unmarshal(session.SessionMetadata, &metadata); err != nil {
+		return nil, err
+	}
+	delete(metadata, "labels")
+	var err error
+	session.SessionMetadata, err = json.Marshal(metadata)
+	if err != nil {
+		return nil, err
+	}
+	draft.Payload, err = json.Marshal(session)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(draft)
 }

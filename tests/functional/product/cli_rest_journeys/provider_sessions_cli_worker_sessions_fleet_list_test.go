@@ -275,8 +275,8 @@ func assertBoundedFleetObservation(t *testing.T, label string, session workerSes
 	if session.AttemptID == "" || session.StartedAt == nil || session.EndedAt == nil || session.DurationMillis == nil || *session.DurationMillis < 0 || session.DurationBasis != "RECORDED_TIMESTAMPS" {
 		t.Fatalf("%s row %q omitted recorded timing facts: %#v", label, session.WorkerSessionID, session)
 	}
-	if session.Transcript != "AVAILABLE" || session.ConfirmationState != "UNCONFIRMED" || session.Parse.EventCount != 0 || session.Parse.MalformedLineCount != 0 || session.Parse.UnknownEventCount != 0 || len(session.Parse.Errors) != 0 {
-		t.Fatalf("%s row %q lost committed transcript availability or invented confirmation/parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
+	if session.Transcript != "AVAILABLE" || session.ConfirmationState != "CONFIRMED" || session.Parse.EventCount != 0 || session.Parse.MalformedLineCount != 0 || session.Parse.UnknownEventCount != 0 || len(session.Parse.Errors) != 0 {
+		t.Fatalf("%s row %q lost committed transcript/confirmation or invented parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
 	}
 	if !containsString(session.WorkIDs, want.WorkID) {
 		t.Fatalf("%s row %q Work IDs=%v, want %q", label, session.WorkerSessionID, session.WorkIDs, want.WorkID)

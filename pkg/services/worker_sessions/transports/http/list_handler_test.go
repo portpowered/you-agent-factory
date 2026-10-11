@@ -557,3 +557,30 @@ func assertArchivedAttributionRows(t *testing.T, rows []factoryapi.WorkerSession
 		}
 	}
 }
+
+func TestArchivedWorkAttributionMissingRowOnAvailableBoard(t *testing.T) {
+	t.Parallel()
+	// Both scopes list successfully but lack the original primary Work row.
+	// Reused names on the board must not replace the committed attribution.
+	observations := []workersessions.Observation{
+		{WorkerSessionID: "worker-a", FactorySessionID: "scope-a", WorkIDs: []string{"reused"}},
+		{WorkerSessionID: "worker-b", FactorySessionID: "scope-b", WorkIDs: []string{"reused"}},
+		{WorkerSessionID: "direct"},
+	}
+	service := &fakeObservationService{getByWorkerResult: observations[0], topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: observations}}
+	reader := &fleetWorkReader{reads: make(map[string]int)}
+	recorded := &recordedAttributionFake{}
+	adapter := &Adapter{observations: service, topLevel: service, work: reader, attribution: recorded}
+	listed, err := adapter.ListTopLevelWorkerSessions(t.Context(), "", "", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertArchivedAttributionRows(t, listed.Sessions)
+	selected, err := adapter.GetTopLevelWorkerSessionObservation(t.Context(), "worker-a", "")
+	if err != nil || selected.WorkName == nil || *selected.WorkName != "scope-a/recorded" {
+		t.Fatalf("selected attribution = %+v, %v", selected, err)
+	}
+	if len(recorded.requests) != 2 || len(recorded.requests[0]) != 2 || len(recorded.requests[1]) != 1 {
+		t.Fatalf("missing row requests = %+v", recorded.requests)
+	}
+}

@@ -761,9 +761,9 @@ func (s *recordedWorkerSessionObservation) sampleCompletedFlushWatermark() compl
 
 // applyConfirmation decorates observations with a previously sampled
 // completed-flush watermark. The process-local registry remains the fallback
-// source, so every observation starts UNCONFIRMED and can become CONFIRMED
-// only when its recorded state cursor is known and covered by the
-// generation-matching watermark.
+// source. Worker Sessions may already confirm a physical terminal from its
+// exact committed capture; Factory event confirmation must preserve that fact.
+// Other observations require a generation-matching completed-flush watermark.
 func (s *recordedWorkerSessionObservation) applyConfirmation(
 	observations []workersessions.Observation,
 	sample completedFlushWatermarkSample,
@@ -772,6 +772,9 @@ func (s *recordedWorkerSessionObservation) applyConfirmation(
 		return
 	}
 	for index := range observations {
+		if capturedTerminalConfirmed(observations[index]) {
+			continue
+		}
 		observations[index].ConfirmationState = workersessions.ConfirmationStateUnconfirmed
 	}
 	if !sample.available {
@@ -784,6 +787,9 @@ func (s *recordedWorkerSessionObservation) applyConfirmation(
 func applyKnownConfirmation(observations []workersessions.Observation, sample completedFlushWatermarkSample) {
 	for index := range observations {
 		observation := &observations[index]
+		if capturedTerminalConfirmed(*observation) {
+			continue
+		}
 		observation.ConfirmationState = workersessions.ConfirmationStateUnconfirmed
 		if sample.available && observation.StateSequenceKnown &&
 			observation.StreamGenerationID == sample.generationID &&
@@ -791,6 +797,16 @@ func applyKnownConfirmation(observations []workersessions.Observation, sample co
 			observation.ConfirmationState = workersessions.ConfirmationStateConfirmed
 		}
 	}
+}
+
+// Worker Sessions supplies capture health with a committed physical outcome.
+// A cursor-free process-local confirmation alone is not durable evidence.
+// Factory cursors continue to use the Factory recording's flush boundary.
+func capturedTerminalConfirmed(observation workersessions.Observation) bool {
+	return observation.State.Terminal() && !observation.StateSequenceKnown &&
+		observation.ConfirmationState == workersessions.ConfirmationStateConfirmed &&
+		(observation.RecordingHealth == recordings.WorkerRecordingStatusComplete ||
+			observation.RecordingHealth == recordings.WorkerRecordingStatusIncomplete)
 }
 
 // Scoped lists confirm live terminal outcomes from selected committed response
@@ -819,7 +835,7 @@ func confirmSelectedTerminalStates(
 	completed := recordedDispatchStateMaps(facts.World)
 	for index := range observations {
 		observation := &observations[index]
-		if observation.StateSequenceKnown || !observation.State.Terminal() {
+		if capturedTerminalConfirmed(*observation) || observation.StateSequenceKnown || !observation.State.Terminal() {
 			continue
 		}
 		id := observation.AttemptID
@@ -845,7 +861,7 @@ func (s *recordedWorkerSessionObservation) confirmLiveTerminalStates(
 ) {
 	needsConfirmation := false
 	for _, observation := range observations {
-		if observation.State.Terminal() && !observation.StateSequenceKnown {
+		if observation.State.Terminal() && !observation.StateSequenceKnown && !capturedTerminalConfirmed(observation) {
 			needsConfirmation = true
 			break
 		}
@@ -879,7 +895,7 @@ func (s *recordedWorkerSessionObservation) confirmLiveTerminalStates(
 	}
 	for index := range observations {
 		observation := &observations[index]
-		if observation.StateSequenceKnown || !observation.State.Terminal() {
+		if capturedTerminalConfirmed(*observation) || observation.StateSequenceKnown || !observation.State.Terminal() {
 			continue
 		}
 		if recorded, ok := byWorker[observation.WorkerSessionID]; ok && recorded.State == observation.State && recorded.AttemptID == observation.AttemptID {

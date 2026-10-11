@@ -32,6 +32,7 @@ func testWorkerSessionsListWorkScopedCorrelatedScopes(t *testing.T) {
 	defer cancel()
 	seen := make(map[string]bool)
 	var reread []func()
+	var archived []func()
 	for index := range 2 {
 		c := newWorkerSessionsCLICase(t)
 		route := fmt.Sprintf("worker-session-correlated-scope-%d", index)
@@ -70,12 +71,37 @@ func testWorkerSessionsListWorkScopedCorrelatedScopes(t *testing.T) {
 			t.Fatalf("physical identity leaked across Factory Sessions: %q", physicalID)
 		}
 		seen[physicalID] = true
+		archived = append(archived, func() {
+			c.cleanup(t)
+			assertGlobalCorrelatedArchive(t, c.fixture.baseURL, sessionID, physicalID)
+		})
 	}
 	for _, read := range reread {
 		read()
 	}
+	for _, read := range archived {
+		read()
+	}
 }
 
+// Closing the exact Session removes live Work names. A genuinely global
+// archive request must then attribute its two-input capture from committed
+// facts while ordinary peer Sessions continue executing on the shared host.
+func assertGlobalCorrelatedArchive(t *testing.T, baseURL, sessionID, workerID string) {
+	t.Helper()
+	listed := support.GetJSON[workerSessionListJSON](t, baseURL+"/worker-sessions?history=archived")
+	for _, row := range listed.Sessions {
+		if row.WorkerSessionID != workerID {
+			continue
+		}
+		if row.FactorySessionID == nil || *row.FactorySessionID != sessionID || row.WorkID == nil || *row.WorkID != "correlated-plan" || row.WorkName == nil || *row.WorkName != "plan" || row.State != "COMPLETED" || !containsString(row.WorkIDs, "correlated-task") {
+			t.Fatalf("global multi-Work archive lost original primary attribution: %+v", row)
+		}
+		assertScopedCapturedUsage(t, row)
+		return
+	}
+	t.Fatalf("global archive omitted multi-Work attempt %s", workerID)
+}
 func writeCorrelatedScopedFactory(t *testing.T, factoryDir, route string) {
 	t.Helper()
 	types := make([]any, 0, 2)

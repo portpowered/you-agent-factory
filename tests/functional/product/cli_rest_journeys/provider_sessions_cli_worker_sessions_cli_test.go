@@ -631,10 +631,10 @@ func assertRepeatedWorkerSessionReads(
 	secondShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
 	var shown workerSessionJSON
 	decodeCLIJSON(t, firstShow, &shown)
-	// Worker Session observations come from the source-native Events stream.
-	// No completed recording cursor covers their current terminal state.
-	if shown.State != "COMPLETED" || shown.ConfirmationState != "UNCONFIRMED" {
-		t.Fatalf("Worker Session terminal confirmation = %s/%s, want COMPLETED/UNCONFIRMED", shown.State, shown.ConfirmationState)
+	// Exact committed terminal capture confirms the source-native observation,
+	// independently of a completed Factory recording cursor.
+	if shown.State != "COMPLETED" || shown.ConfirmationState != "CONFIRMED" {
+		t.Fatalf("Worker Session terminal confirmation = %s/%s, want COMPLETED/CONFIRMED", shown.State, shown.ConfirmationState)
 	}
 	if strings.TrimSpace(firstShow.Stdout()) != strings.TrimSpace(secondShow.Stdout()) {
 		t.Fatalf("repeated show output changed:\nfirst:\n%s\nsecond:\n%s", firstShow.Stdout(), secondShow.Stdout())
