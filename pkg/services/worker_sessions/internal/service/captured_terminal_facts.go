@@ -53,6 +53,9 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 		return observation
 	}
 	applySummaryTerminalCause(summary, captured)
+	// Descriptive metadata comes from the same validated opening as archived
+	// READ, including compatible captures whose labels differ from live input.
+	observation.Requester, observation.Correlation, observation.Labels = captured.Requester, captured.Correlation, captured.Labels
 	if captured.StartedAt != nil && captured.EndedAt != nil && captured.Duration != nil {
 		observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
 		observation.DurationBasis = captured.DurationBasis

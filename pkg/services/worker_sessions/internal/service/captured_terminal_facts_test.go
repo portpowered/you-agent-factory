@@ -221,12 +221,23 @@ func TestCapturedTerminalEnrichmentUsesCommittedConfirmationAndOptionalFailure(t
 				}
 				draft.Payload, _ = json.Marshal(payload)
 				item.MetadataRecords[1].Payload, _ = json.Marshal(draft)
+				var openingDraft workers.Draft
+				var opening workers.SessionPayload
+				_ = json.Unmarshal(item.Opening.Payload, &openingDraft)
+				_ = json.Unmarshal(openingDraft.Payload, &opening)
+				opening.SessionMetadata = json.RawMessage(`{"requester":null,"labels":["tag:_work_name=legacy-name"]}`)
+				openingDraft.Payload, _ = json.Marshal(opening)
+				item.Opening.Payload, _ = json.Marshal(openingDraft)
 				reader := &terminalSummaryReader{item: item}
 				r := &registry{logs: &LogReader{reader: reader}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
 				original := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: state, ConfirmationState: workersessions.ConfirmationStateUnconfirmed, Failure: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "live only", ProviderFailureKind: providers.ExecuteFailureKindTimeout}}
+				original.Labels = []string{"live-only"}
 				got := r.withCapturedTerminalObservation(t.Context(), original)
 				archived, err := r.logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"})
 				assertCommittedTerminalEnrichment(t, state, recorded, got, archived, err)
+				if !reflect.DeepEqual(got.Labels, archived.Labels) || !reflect.DeepEqual(got.Labels, []string{"tag:_work_name=legacy-name"}) || original.Labels[0] != "live-only" {
+					t.Fatalf("committed labels differ or mutated live metadata: live=%v archived=%v original=%v", got.Labels, archived.Labels, original.Labels)
+				}
 			}
 		})
 	}

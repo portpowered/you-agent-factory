@@ -171,6 +171,35 @@ func awaitTerminalArchiveGates(t *testing.T, f invokeArtifactFixture, cells []te
 	}
 }
 
+func awaitTerminalArchiveCapture(t *testing.T, f invokeArtifactFixture, server, id string) {
+	t.Helper()
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	first := true
+	for {
+		page := historyLogPage(t, f.ctx, f.binary, f.project, f.env, server, id, "")
+		terminal := len(page.Events) > 0 && page.Events[len(page.Events)-1].Delivery == "TERMINAL_REPLAY"
+		if first {
+			t.Logf("capture %s before archive: health=%s position=%d terminal=%t", id, page.Health, page.CommittedPosition, terminal)
+			first = false
+		}
+		if terminal {
+			if page.Health != api.COMPLETE {
+				t.Fatalf("terminal capture %s is damaged: %+v", id, page)
+			}
+			return
+		}
+		if page.Health != api.INCOMPLETE {
+			t.Fatalf("pending capture %s has unexpected health: %+v", id, page)
+		}
+		select {
+		case <-ticker.C:
+		case <-f.ctx.Done():
+			t.Fatalf("committed terminal capture %s: %v page=%+v", id, f.ctx.Err(), page)
+		}
+	}
+}
+
 func endTerminalArchiveCells(t *testing.T, f invokeArtifactFixture, server string, cells []terminalArchiveCell) {
 	t.Helper()
 	rows := historyRows(t, f.ctx, f.binary, f.project, f.env, server, "active")
@@ -199,6 +228,12 @@ func endTerminalArchiveCells(t *testing.T, f invokeArtifactFixture, server strin
 				t.Fatal(err)
 			}
 		}
+	}
+	// A control/provider return does not join the asynchronous capture writer.
+	// Observe each exact admitted attempt's durable terminal before archive LIST;
+	// pending projections retain their typed unavailable semantics.
+	for _, row := range rows {
+		awaitTerminalArchiveCapture(t, f, server, row.WorkerSessionId)
 	}
 }
 

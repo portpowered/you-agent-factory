@@ -472,7 +472,9 @@ func assertTerminalListed(t *testing.T, list factoryapi.ListWorkerSessionsRespon
 	for _, row := range list.Sessions {
 		if row.WorkerSessionId == shown.WorkerSessionId {
 			if !reflect.DeepEqual(row, shown) {
-				t.Fatalf("LIST/READ differ: list=%+v read=%+v", row, shown)
+				listed, _ := json.Marshal(row)
+				read, _ := json.Marshal(shown)
+				t.Fatalf("LIST/READ differ: list=%s read=%s", listed, read)
 			}
 			return
 		}
