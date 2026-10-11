@@ -67,14 +67,18 @@ func (r *registry) historyObservations(ctx context.Context, req workersessions.L
 
 func (s *LogReader) archivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
 	// Explicit history may hydrate captures; ordinary Work reads may not.
-	return s.collectArchivedHistory(ctx, req, owners, "", s.reader.ListWorkerSessionCaptures)
+	return s.retryArchivedHistory(ctx, req, owners, "", s.reader.ListWorkerSessionCaptures)
 }
 
 func (s *LogReader) readArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string) ([]workersessions.Observation, error) {
+	return s.retryArchivedHistory(ctx, req, owners, workID, s.reader.ListPreparedWorkerSessionCaptures)
+}
+
+func (s *LogReader) retryArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string, readPage func(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error)) ([]workersessions.Observation, error) {
 	// Concurrent capture admission invalidates the materialized catalog generation.
 	// Restart the whole selection, never combine pages from different generations.
 	for range 3 {
-		rows, err := s.collectArchivedHistory(ctx, req, owners, workID, s.reader.ListPreparedWorkerSessionCaptures)
+		rows, err := s.collectArchivedHistory(ctx, req, owners, workID, readPage)
 		if !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
 			return rows, err
 		}
@@ -96,7 +100,7 @@ func (s *LogReader) collectArchivedHistory(ctx context.Context, req workersessio
 		}
 		page, err := readPage(ctx, request)
 		if err != nil {
-			return nil, archivedWorkPageError(err, workID)
+			return nil, archivedWorkPageError(err)
 		}
 		for _, item := range page.Items {
 			if !catalogHistoryMatches(item.Catalog, req) {
@@ -232,8 +236,8 @@ func historyOpening(item recordings.WorkerCapturedCatalogItem) (workers.SessionP
 	return opening, nil
 }
 
-func archivedWorkPageError(err error, workID string) error {
-	if workID != "" && errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+func archivedWorkPageError(err error) error {
+	if errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
 		return err
 	}
 	return workersessions.ErrObservationProjectionUnavailable
