@@ -46,12 +46,12 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 
 }
 
-func TestHTTPRuntimeBindingRejectsUnknownSession(t *testing.T) {
+func TestHTTPRuntimeBindingRejectsEmptySessionSelection(t *testing.T) {
 	t.Parallel()
 
-	_, err := newHTTPRuntimeHandlerWithMetrics(&factorysessionwire.Root{}, nil, nil, nil, nil, "session-1", nil, nil, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "process root is required") {
-		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want unavailable session", err)
+	_, err := newHTTPRuntimeHandlerWithMetrics(&factorysessionwire.Root{}, nil, nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "application Factory Session ID is required") {
+		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want invalid session selection", err)
 	}
 }
 

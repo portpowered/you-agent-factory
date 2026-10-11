@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -80,10 +79,8 @@ type RuntimeFactory struct {
 	runtimeLogs              factory.RuntimeLogOwner
 	runtimeMetrics           factory.RuntimeMetricsOwner
 	newID                    factory.IDGenerator
-	workRequestIDs           work.RequestIDGenerator
 	runtimeDirs              factory.RuntimeDirectoryFileSystem
 	inputFiles               inputFileSystem
-	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
 	engineOpening            engineOpening
 	definitionMapper         definitionmapping.Mapping
@@ -112,10 +109,8 @@ func NewRuntimeFactory(
 	runtimeLogs factory.RuntimeLogOwner,
 	runtimeMetrics factory.RuntimeMetricsOwner,
 	newID factory.IDGenerator,
-	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles inputFileSystem,
-	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper definitionmapping.Mapping,
@@ -130,10 +125,8 @@ func NewRuntimeFactory(
 		runtimeLogs:              runtimeLogs,
 		runtimeMetrics:           runtimeMetrics,
 		newID:                    newID,
-		workRequestIDs:           workRequestIDs,
 		runtimeDirs:              runtimeDirs,
 		inputFiles:               inputFiles,
-		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
 		workerAttemptScheduler:   workerAttemptScheduler,
 		definitionMapper:         definitionMapper,
@@ -462,9 +455,6 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 	}
 
 	bundle.Factory = activeFactory
-	bundle.InputFiles = f.inputFiles
-	bundle.InputDirectoryWalker = f.inputDirectoryWalker
-	bundle.WorkRequestIDs = f.workRequestIDs
 	return bundle, nil
 }
 

@@ -18,10 +18,13 @@ import (
 // RuntimeSidecars supplies metrics, input-listener and automation behavior.
 // Runtime handles own scoped state; Initializer decides when to start it.
 type RuntimeSidecars struct {
-	automation       runtimeAutomationLifecycle
-	enabled          bool
-	metricsClock     platformclock.TimerSource
-	historicalReplay bool
+	automation           runtimeAutomationLifecycle
+	enabled              bool
+	metricsClock         platformclock.TimerSource
+	historicalReplay     bool
+	inputFiles           inputFileSystem
+	inputDirectoryWalker factory.InputDirectoryWalker
+	workRequestIDs       work.RequestIDGenerator
 }
 
 // RuntimeAutomationLifecycle is the complete process-selected Automations role.
@@ -45,10 +48,13 @@ type SidecarOpening struct {
 func NewSidecarOpening(
 	automation runtimeAutomationLifecycle,
 	metricsClock platformclock.TimerSource,
+	inputFiles inputFileSystem,
+	inputDirectoryWalker factory.InputDirectoryWalker,
+	workRequestIDs work.RequestIDGenerator,
 ) *SidecarOpening {
 	return &SidecarOpening{
-		foreground: RuntimeSidecars{automation: automation, metricsClock: metricsClock},
-		service:    RuntimeSidecars{automation: automation, enabled: true, metricsClock: metricsClock},
+		foreground: RuntimeSidecars{automation: automation, metricsClock: metricsClock, inputFiles: inputFiles, inputDirectoryWalker: inputDirectoryWalker, workRequestIDs: workRequestIDs},
+		service:    RuntimeSidecars{automation: automation, enabled: true, metricsClock: metricsClock, inputFiles: inputFiles, inputDirectoryWalker: inputDirectoryWalker, workRequestIDs: workRequestIDs},
 		historical: RuntimeSidecars{automation: automation, metricsClock: metricsClock, historicalReplay: true},
 	}
 }
@@ -71,7 +77,7 @@ func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeR
 	if s.historicalReplay {
 		return nil
 	}
-	if _, err := s.automation.ActivateRuntime(ctx, runtimeActivationRequest(bundle, s.enabled)); err != nil {
+	if _, err := s.automation.ActivateRuntime(ctx, s.runtimeActivationRequest(bundle, s.enabled)); err != nil {
 		return fmt.Errorf("activate automation runtime for Factory Session %q (Runtime %q): %w", bundle.FactorySessionID, bundle.RuntimeInstanceID, err)
 	}
 	return nil
@@ -106,7 +112,7 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) 
 
 // startAdmission activates live inputs and schedules for this runtime only.
 func (s *RuntimeSidecars) startAdmission(sidecarCtx context.Context, handle *factoryhost.Handle, cancel context.CancelFunc) error {
-	if _, err := s.automation.ActivateRuntime(sidecarCtx, runtimeActivationRequest(handle.Bundle, s.enabled)); err != nil {
+	if _, err := s.automation.ActivateRuntime(sidecarCtx, s.runtimeActivationRequest(handle.Bundle, s.enabled)); err != nil {
 		return s.failStart(sidecarCtx, handle, cancel, fmt.Errorf("activate automation runtime for Factory Session %q (Runtime %q): %w", handle.Bundle.FactorySessionID, handle.Bundle.RuntimeInstanceID, err))
 	}
 	if err := handle.Bundle.Factory.RecoverInvocationSchedules(sidecarCtx); err != nil {
@@ -118,7 +124,7 @@ func (s *RuntimeSidecars) startAdmission(sidecarCtx context.Context, handle *fac
 	return nil
 }
 
-func runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) automations.RuntimeActivationRequest {
+func (s *RuntimeSidecars) runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) automations.RuntimeActivationRequest {
 	if bundle == nil || bundle.RuntimeCfg == nil {
 		return automations.RuntimeActivationRequest{}
 	}
@@ -149,22 +155,20 @@ func runtimeActivationRequest(bundle *factoryhost.Bundle, startSchedulers bool) 
 			}),
 		},
 	}
-	if bundle.InputFiles != nil && bundle.InputDirectoryWalker != nil && bundle.WorkRequestIDs != nil {
-		knownWorkTypes := make([]string, 0)
-		if bundle.Net != nil {
-			knownWorkTypes = make([]string, 0, len(bundle.Net.WorkTypes))
-			for workType := range bundle.Net.WorkTypes {
-				knownWorkTypes = append(knownWorkTypes, workType)
-			}
-			sort.Strings(knownWorkTypes)
+	knownWorkTypes := make([]string, 0)
+	if bundle.Net != nil {
+		knownWorkTypes = make([]string, 0, len(bundle.Net.WorkTypes))
+		for workType := range bundle.Net.WorkTypes {
+			knownWorkTypes = append(knownWorkTypes, workType)
 		}
-		request.Inputs.Filesystem = automations.RuntimeFilesystemInputs{
-			Files:             bundle.InputFiles,
-			WalkDirectory:     automations.FilesystemDirectoryWalker(bundle.InputDirectoryWalker),
-			WorkRequestIDs:    bundle.WorkRequestIDs,
-			KnownWorkTypes:    knownWorkTypes,
-			ValidStatesByType: validStatesForBundle(bundle),
-		}
+		sort.Strings(knownWorkTypes)
+	}
+	request.Inputs.Filesystem = automations.RuntimeFilesystemInputs{
+		Files:             s.inputFiles,
+		WalkDirectory:     automations.FilesystemDirectoryWalker(s.inputDirectoryWalker),
+		WorkRequestIDs:    s.workRequestIDs,
+		KnownWorkTypes:    knownWorkTypes,
+		ValidStatesByType: validStatesForBundle(bundle),
 	}
 	return request
 }

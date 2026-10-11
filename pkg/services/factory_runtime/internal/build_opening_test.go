@@ -87,7 +87,7 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 		return partial, openingErr
 	}
 	sessions := &stubWorkerSessionsService{}
-	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{}, nil)
+	opening, err := factoryinternal.NewBundleOpening(selected, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,11 +265,10 @@ func TestAssemblyUsesFixedExecutionAndRecordingEffectsForInitialAndReplacement(t
 	loader := func(path string, _ interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loadedFactoryFixture(path)
 	}
-	scopes := &testRuntimeScopeServiceStub{ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "selected-recording"}}
 	var snapshotSources []interfaces.LoadedFactorySource
 	snapshot := &interfaces.FactorySnapshot{}
 	capture := captureSelectedOpeningSnapshot(&snapshotSources, snapshot)
-	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, capture)
+	opening, err := factoryinternal.NewBundleOpening(resources.Open, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, capture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +568,7 @@ func TestBundleOpeningReusesBehaviorAfterFailureWithoutChangingPeer(t *testing.T
 	var captured recordings.RuntimeScopeRequest
 	scopes := &testRuntimeScopeServiceStub{openErr: openingErr, recorder: recorder, capturedRequest: &captured,
 		ledger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "candidate-runtime"}}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(&testRuntimeScopeServiceStub{bySession: map[string]*testRuntimeScopeServiceStub{"peer": peerScopes, "candidate": scopes}}).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{bySession: map[string]*testRuntimeScopeServiceStub{"peer": peerScopes, "candidate": scopes}}, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(&testRuntimeScopeServiceStub{bySession: map[string]*testRuntimeScopeServiceStub{"peer": peerScopes, "candidate": scopes}}).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +691,7 @@ func TestBundleOpeningPreservesCallerSpecOnFailureAndCancellation(t *testing.T) 
 			scopes.openErr = openingErr
 			wantErr = openingErr
 		}
-		opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(scopes).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, nil)
+		opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(scopes).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

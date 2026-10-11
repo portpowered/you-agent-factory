@@ -393,11 +393,11 @@ func TestBuild_InitialOpeningFailureRetainsCleanupAtRootAndRetriesSameIdentity(t
 	loader := func(string, interfaces.WorkstationLoader) (interfaces.MutableLoadedFactorySource, error) {
 		return loaded, nil
 	}
-	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(scopes).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, nil)
+	opening, err := factoryinternal.NewBundleOpening(testRuntimeFactory(scopes).Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}, nil, nil, nil), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -523,11 +523,11 @@ func TestInitialActivationReplacementRetainsSelectionsAndCanRetry(t *testing.T) 
 	}
 	engines := &controlledEngineOpening{}
 	runtimeOwner := testRuntimeFactoryWithEffectsAndOpening(testRuntimeLogOwner{}, testRuntimeMetricsOwner{}, nil, nil, nil, scopes, engines)
-	opening, err := factoryinternal.NewBundleOpening(runtimeOwner.Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, scopes, snapshot)
+	opening, err := factoryinternal.NewBundleOpening(runtimeOwner.Build, platformclock.Real{}, testRuntimeWorkers{}, sessions, sessions, nil, snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil)
+	assembly, err := factoryinternal.NewAssembly(opening.Open, factoryinternal.NewSidecarOpening(nil, platformclock.Real{}, nil, nil, nil), testCleanupAssemblyHost{}, runtimebuild.New(nil, loader, testRuntimeID, zap.NewNop(), nil, nil, nil, nil), scopes, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

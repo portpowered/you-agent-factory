@@ -86,6 +86,15 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	detached := newInitialOpeningScenario(t)
 	selectedModels := newSelectedModelsScenario(t)
 	inputFailure := newInitialOpeningScenario(t)
+	preseed := newInitialOpeningScenario(t)
+	preseedPath := filepath.Join(preseed.candidateDir, factorydefinitions.InputsDir, "task", "default", "selected.json")
+	if err := os.MkdirAll(filepath.Dir(preseedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preseedPath, []byte(`{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"selected-input","payload":"disk payload"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	preseedFiles := &completedLifecycleInputFiles{path: preseedPath, cause: errors.New("selected input walk unavailable")}
 	replayFailure := newInitialOpeningScenario(t)
 	failed := newInitialOpeningScenario(t)
 	canceled := newInitialOpeningScenario(t)
@@ -155,13 +164,19 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		// Each reusable process owns its durable Worker recordings. Parallel
+		// process fixtures must not share the package's working-directory store.
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
 		// Preserve actual recording bytes and errors without the platform's
 		// Windows replacement retry loop on absent hydration files. OS file
 		// replacement races belong to the compiled integration lane.
-		RecordingReadFile:         os.ReadFile,
-		ProcessLogger:             zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
-		Clock:                     initialOpeningClock{},
-		FactoryRuntimeDirectories: files,
+		RecordingReadFile:                          os.ReadFile,
+		ProcessLogger:                              zap.New(logCore).With(zap.String("selected_backend", "initial-opening")),
+		Clock:                                      initialOpeningClock{},
+		FactoryRuntimeDirectories:                  files,
+		FactoryRuntimeInputs:                       preseedFiles,
+		FactoryRuntimeInputDirectoryWalker:         preseedFiles.walk,
+		WorkRequestIDGenerator:                     preseedFiles.newID,
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
@@ -239,6 +254,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("selected bytes survive authored changes and peer opening", func(t *testing.T) {
 		t.Parallel()
 		testSelectedInputDetachment(t, sessions, detached, definitionFiles, effects)
+	})
+	t.Run("selected input preseed replacement failure and corrected read preserve peer", func(t *testing.T) {
+		t.Parallel()
+		testCompletedLifecycleInputRetry(t, sessions, api.WaitForURL(t), preseed, preseedFiles)
 	})
 	t.Run("definition failures preserve peer and allow corrected retry", func(t *testing.T) {
 		t.Parallel()
@@ -1060,8 +1079,9 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	api := support.NewProcessAPIServer()
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProcessLogger: zap.New(core, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&rejectedWrites)))),
-		Clock:         initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
+		ProcessLogger:                   zap.New(core, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&rejectedWrites)))),
+		Clock:                           initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
 		// Hydration preserves real bytes/errors through the same read effect as
 		// the healthy matrix, without Windows replacement retries on absent files.
 		RecordingReadFile:  os.ReadFile,
@@ -1106,6 +1126,161 @@ type selectedInputFiles struct {
 	failure               error
 	gated, failed         atomic.Bool
 	once                  sync.Once
+}
+
+// Selected effects route only this scenario's input. Read failures retain the
+// existing skip-unreadable-input policy; a walk failure aborts opening.
+type completedLifecycleInputFiles struct {
+	platformfilesystem.Local
+	path               string
+	cause              error
+	failWalk, failRead atomic.Bool
+	reads, walks       atomic.Int32
+	replacement        atomic.Bool
+	ids                sync.Map
+}
+
+func (files *completedLifecycleInputFiles) ReadFile(path string) ([]byte, error) {
+	if filepath.Clean(path) != files.path {
+		return os.ReadFile(path)
+	}
+	files.reads.Add(1)
+	if files.failRead.CompareAndSwap(true, false) {
+		return nil, files.cause
+	}
+	payload := "selected input payload"
+	if files.replacement.Load() {
+		payload = "selected replacement payload"
+	}
+	return []byte(fmt.Sprintf(`{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"selected-input","payload":%q}]}`, payload)), nil
+}
+
+func (files *completedLifecycleInputFiles) walk(path string, visit fs.WalkDirFunc) error {
+	if filepath.Clean(path) == filepath.Dir(filepath.Dir(filepath.Dir(files.path))) {
+		files.walks.Add(1)
+		if files.failWalk.CompareAndSwap(true, false) {
+			return files.cause
+		}
+	}
+	return filepath.WalkDir(path, visit)
+}
+
+func (files *completedLifecycleInputFiles) newID() string {
+	id := uuid.NewString()
+	files.ids.Store(id, true)
+	return id
+}
+
+func testCompletedLifecycleInputRetry(t *testing.T, sessions factorysessions.Service, baseURL string, scenario initialOpeningScenario, files *completedLifecycleInputFiles) {
+	t.Helper()
+	peerHistory := scenario.startPeer(t, sessions)
+	request := scenario.request()
+	startInitialOpeningSession(t, sessions, request)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, scenario.candidateID, "/work"))
+	if len(listed.Results) != 1 || fmt.Sprint(listed.Results[0].Payload) != "selected input payload" {
+		t.Fatalf("selected input Work = %#v", listed)
+	}
+	found := false
+	if listed.Results[0].RequestId != nil {
+		_, found = files.ids.Load(strings.TrimPrefix(*listed.Results[0].RequestId, "request-"))
+	}
+	if !found || files.reads.Load() < 1 || files.walks.Load() < 1 {
+		t.Fatalf("selected effects missing: request=%v reads=%d walks=%d", found, files.reads.Load(), files.walks.Load())
+	}
+	// Join a public invocation before the idle-only replacement boundary.
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	testCompletedLifecycleInputReplacement(t, sessions, baseURL, scenario, files)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
+func testCompletedLifecycleInputReplacement(t *testing.T, sessions factorysessions.Service, baseURL string, scenario initialOpeningScenario, files *completedLifecycleInputFiles) {
+	t.Helper()
+	selected := baseURL + "/factory-sessions/" + scenario.candidateID
+	current := support.GetJSON[factoryapi.Factory](t, selected+"/factory")
+	if current.Version == nil {
+		t.Fatal("Current Factory has no version")
+	}
+	current.Version.Logical++
+	current.Version.Physical = current.Version.Physical.Add(time.Millisecond)
+	body, err := json.Marshal(map[string]any{"factory": current})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := initialOpeningHistory(t, sessions, scenario.candidateID)
+	files.failWalk.Store(true)
+	responsesBefore := support.GetFactoryResponseEventsAt(t, baseURL, scenario.candidateID)
+	// A filesystem supervision fault maps to the existing safe INTERNAL_ERROR
+	// response; definition-validation faults use the separate 400 mapping.
+	failed := completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusInternalServerError)
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(failed, &failure); err != nil || failure.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("selected replacement failure = %s, %v", failed, err)
+	}
+	if files.failWalk.Load() {
+		t.Fatal("replacement did not reach selected walk")
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.candidateID, before)
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	responsesAfterFailure := support.GetFactoryResponseEventsAt(t, baseURL, scenario.candidateID)
+	if len(responsesAfterFailure) <= len(responsesBefore) || !reflect.DeepEqual(responsesAfterFailure[:len(responsesBefore)], responsesBefore) {
+		t.Fatal("failed replacement lost the prior generation response history prefix")
+	}
+	cursor := responsesAfterFailure[len(responsesAfterFailure)-1].Sequence
+	// An unreadable candidate input follows the existing omission policy. A
+	// later replacement uses a new generation and admits the corrected bytes.
+	files.failRead.Store(true)
+	completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusOK)
+	if files.failRead.Load() {
+		t.Fatal("candidate did not read the selected input")
+	}
+	current = support.GetJSON[factoryapi.Factory](t, selected+"/factory")
+	current.Version.Logical++
+	current.Version.Physical = current.Version.Physical.Add(time.Millisecond)
+	body, err = json.Marshal(map[string]any{"factory": current})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files.replacement.Store(true)
+	completedHTTPRequest(t, http.MethodPut, selected+"/factory", string(body), http.StatusOK)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, selected+"/work")
+	found := false
+	for _, item := range listed.Results {
+		if fmt.Sprint(item.Payload) == "selected replacement payload" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("replacement did not preseed selected bytes: %#v", listed)
+	}
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	// Retained history belongs to the selected runtime generation. Successful
+	// replacement continues the Session sequence and accepts the prior cursor.
+	initialOpeningHistory(t, sessions, scenario.candidateID)
+	assertCompletedLifecycleReplacementCursor(t, baseURL, scenario.candidateID, cursor)
+}
+
+func assertCompletedLifecycleReplacementCursor(t *testing.T, baseURL, sessionID string, cursor int64) {
+	t.Helper()
+	responsesAfter := support.GetFactoryResponseEventsAt(t, baseURL, sessionID)
+	if len(responsesAfter) == 0 {
+		t.Fatal("replacement has no observable response history")
+	}
+	stream := support.OpenFactoryResponseEventStreamAt(t,
+		support.SessionResponseEventsURLWithAfterSequence(baseURL, sessionID, cursor))
+	defer stream.Close()
+	if !stream.HasRetainedFrameCount || stream.RetainedFrameCount != len(responsesAfter) {
+		t.Fatalf("replacement cursor catch-up count = %d, want %d", stream.RetainedFrameCount, len(responsesAfter))
+	}
+	for _, event := range responsesAfter {
+		if event.Sequence <= cursor {
+			t.Fatalf("replacement sequence = %d, want greater than %d", event.Sequence, cursor)
+		}
+		if frame := stream.NextFrame(initialOpeningReadCeiling); !reflect.DeepEqual(frame.Event, event) {
+			t.Fatalf("replacement cursor event = %#v, want %#v", frame.Event, event)
+		}
+		cursor = event.Sequence
+	}
 }
 
 func (files *selectedInputFiles) unblock() { files.once.Do(func() { close(files.release) }) }

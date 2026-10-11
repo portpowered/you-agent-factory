@@ -116,8 +116,8 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 	// Retained legacy cutover wiring coverage; new opening unit fixtures use
 	// controlled compilation and engine effects instead of Wire providers.
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		testRuntimeLoggerFactory, nil, nil, testRuntimeID, testRuntimeID,
-		localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		testRuntimeLoggerFactory, nil, nil, testRuntimeID,
+		localRuntimeFiles{}, localRuntimeFiles{},
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), nil, nil)),
 		platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(nil, nil, nil, nil, factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
@@ -180,7 +180,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
 		testRuntimeLoggerFactory, nil, nil,
-		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{},
 		factoryruntimeorchestrationowner.NewCompilation(orchestrationwire.New(testDefinitionMapper(), workflows, workflows)),
 		platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(

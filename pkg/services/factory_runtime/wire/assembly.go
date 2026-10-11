@@ -65,10 +65,8 @@ func NewRuntimeFactory(
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	runtimeMetrics factoryruntime.RuntimeMetricsOwner,
 	newID factoryruntime.IDGenerator,
-	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
 	inputFiles InputFileSystem,
-	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper DefinitionMapper,
@@ -83,10 +81,8 @@ func NewRuntimeFactory(
 		runtimeLogs,
 		runtimeMetrics,
 		newID,
-		workRequestIDs,
 		runtimeDirs,
 		inputFiles,
-		inputDirectoryWalker,
 		orchestrationCompilation,
 		workerAttemptScheduler,
 		definitionMapper,
@@ -155,11 +151,10 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factoryruntime.WorkerAttemptOpener,
 	requestResolver *WorkstationRequestExecutor,
-	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 ) (BundleOpening, error) {
 	opening, err := factoryruntimeinternal.NewBundleOpening(factoryruntimeinternal.SelectedRuntimeFactory(runtimeFactory).Build, workerAttemptScheduler, workerService,
-		workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
+		workerSessions, workerAttempts, requestResolver, initialFactorySnapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +166,8 @@ type SidecarOpening = factoryruntimeinternal.SidecarOpening
 type RuntimeAutomationLifecycle = factoryruntimeinternal.RuntimeAutomationLifecycle
 type InvocationSchedulePreparation = func(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error)
 
-func NewSidecarOpening(automation RuntimeAutomationLifecycle, metricsClock platformclock.TimerSource) *SidecarOpening {
-	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock)
+func NewSidecarOpening(automation RuntimeAutomationLifecycle, metricsClock platformclock.TimerSource, inputFiles InputFileSystem, inputDirectoryWalker factoryruntime.InputDirectoryWalker, workRequestIDs work.RequestIDGenerator) *SidecarOpening {
+	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock, inputFiles, inputDirectoryWalker, workRequestIDs)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator
