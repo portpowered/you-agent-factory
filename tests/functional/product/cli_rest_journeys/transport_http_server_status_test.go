@@ -8,9 +8,39 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func testTransporthttpserverAPIStatusMissingSessionDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+	fixture := c06SharedHTTPServer(t)
+	missing := uuid.NewString()
+	response, err := http.Get(fixture.URL() + "/factory-sessions/" + missing + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &failure); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusNotFound || failure.Code != factoryapi.ErrorResponseCodeNOTFOUND || failure.Message != "factory session not found" {
+		t.Fatalf("missing addressed status = %d %s", response.StatusCode, body)
+	}
+	assertStatusResponseDoesNotExposeFactoryPaths(t, body, fixture.factoryDir)
+	// A missing explicit selection must not borrow the healthy current session.
+	current := support.GetJSON[factoryapi.StatusResponse](t, fixture.URL()+"/status")
+	if current.RuntimeStatus == "" || current.FactoryState == "" {
+		t.Fatalf("current session after missing addressed read = %#v", current)
+	}
+}
 
 // TestAPIStatusReportsReadyAfterStartup proves GET /status returns HTTP 200 with a
 // populated public runtime summary after the customer process starts.
