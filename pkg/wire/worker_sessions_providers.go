@@ -79,7 +79,7 @@ func provideWorkerRecordingWriter(
 		}
 		storage := platformreplay.NewLocal(runtime.GOOS)
 		store, err := recordingswire.NewWorkerRecordingFileWriter(
-			workerCaptureStorage{Local: storage, readFile: edges.RecordingReadFile}, storage, storage, platformclock.Ensure(edges.Clock),
+			workerCaptureStorage{Local: storage, readFile: edges.RecordingReadFile}, storage, storage, edges.Clock,
 			filepath.Join(projectRoot, ".you-agent-factory", "worker-recordings"),
 			uuid.NewString(),
 		)
@@ -143,8 +143,17 @@ func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.
 	return opener, nil
 }
 
+// Distinguish the completed source from its owner in the composition graph.
+type directFleetObservationSource interface {
+	workersessions.Service
+}
+
+func provideDirectFleetObservationSource(owner workersessions.Service) (directFleetObservationSource, error) {
+	return workersessionswire.NewDirectFleetObservationSource(owner)
+}
+
 // Catalog membership is evaluated on each read, after new Sessions are admitted.
-func provideFleetObservationCatalog(root *factorysessionwire.Root, logs workersessions.Service) workersessionswire.ObservationServiceCatalog {
+func provideFleetObservationCatalog(root *factorysessionwire.Root, direct directFleetObservationSource) workersessionswire.ObservationServiceCatalog {
 	return func(ctx context.Context) ([]workersessions.Service, error) {
 		hostID, _ := workersessionshttp.RuntimeHostSession(ctx)
 		selected, err := workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
@@ -152,10 +161,6 @@ func provideFleetObservationCatalog(root *factorysessionwire.Root, logs workerse
 			return nil, err
 		}
 		// Direct successors remain owned here after their Factory runtime closes.
-		direct, err := workersessionswire.NewDirectFleetObservationSource(logs)
-		if err != nil {
-			return nil, err
-		}
 		return append(selected, direct), nil
 	}
 }

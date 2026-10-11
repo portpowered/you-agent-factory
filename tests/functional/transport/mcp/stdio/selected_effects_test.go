@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -22,6 +23,34 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// One completed process serves two connection-owned profiles. Reads and
+// reconnect cursors remain attributable after the other connection closes.
+func testCompletedMCPConnectionReads(t *testing.T, process support.Process) {
+	t.Parallel()
+	first, peer := startComposedMemoryMCP(t, process), startComposedMemoryMCP(t, process)
+	initializeMCPClient(t, first.client)
+	initializeMCPClient(t, peer.client)
+	firstID := assertComposedMCPSync(t, first, "completed-first")
+	peerID := assertComposedMCPSync(t, peer, "completed-peer")
+	if firstID == peerID {
+		t.Fatal("connections shared session identity")
+	}
+	assertComposedMCPEvents(t, first.client, firstID)
+	before := assertComposedMCPEvents(t, peer.client, peerID)
+	assertComposedReadError(t, peer.client, factorysessionmcp.ReadEventsInput{SessionID: "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")}, "factory_session.session.not_found", "")
+	first.closeInput(t)
+	after := assertComposedMCPEvents(t, peer.client, peerID)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("peer close changed retained events")
+	}
+	tail := decodeComposedTool[factorysessionmcp.ReadEventsResult](t, composedEventRead(peer.client, factorysessionmcp.ReadEventsInput{SessionID: peerID, AfterEventID: before.Events[len(before.Events)-1].Id}))
+	if tail.SessionID != peerID || len(tail.Events) != 0 {
+		t.Fatalf("retained tail = %#v", tail)
+	}
+	assertComposedMCPSync(t, peer, "completed-after-close")
+	peer.closeInput(t)
+}
 
 type selectedSyncPoll struct {
 	delay time.Duration
@@ -103,7 +132,7 @@ func (scheduler *selectedSyncScheduler) advance() {
 // One immutable root serves independent connection-owned profiles/sessions.
 // Cases are ordered because advancing a shared scheduler intentionally affects
 // all its sessions. The whole cohort runs alongside unrelated functional tests.
-func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
+func TestCompletedMCPConnectionsSelectedSchedulerControlsSyncOperations(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
 	facts := platformclock.NewDeterministic(base, time.Second)

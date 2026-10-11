@@ -186,9 +186,6 @@ func textResult(text string, isError bool) *mcp.CallToolResult {
 
 // ServeStdio runs the already-constructed server over caller-owned streams.
 func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) error {
-	if s == nil || s.sdk == nil {
-		return fmt.Errorf("serve MCP stdio: server is required")
-	}
 	if in == nil {
 		return fmt.Errorf("serve MCP stdio: input is required")
 	}
@@ -205,9 +202,6 @@ func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) er
 // Serve runs the server over an SDK transport. It is useful for process-owned
 // transports other than stdio and for protocol-level integration tests.
 func (s *Server) Serve(ctx context.Context, transport mcp.Transport) error {
-	if s == nil || s.sdk == nil {
-		return fmt.Errorf("serve MCP: server is required")
-	}
 	if transport == nil {
 		return fmt.Errorf("serve MCP: transport is required")
 	}
