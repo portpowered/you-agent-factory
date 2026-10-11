@@ -582,6 +582,7 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	}
 	return climanifestcobra.NewMCPCommand(mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
 		InitializeStdio: initializeStdio,
+		LookupEnv:       options.lookupEnv,
 	}))
 }
 

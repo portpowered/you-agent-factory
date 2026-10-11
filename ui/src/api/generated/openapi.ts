@@ -1417,6 +1417,8 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Recognized failure category selected by the invocation owner. Absent for successful invocations and failures without a recognized category. */
+      failureReason?: components["schemas"]["WorkFailureType"];
       /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
       sessionId?: string;
       /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
@@ -1764,6 +1766,20 @@ export interface components {
     WorkerSessionObservation: {
       /** @description Stable Worker Session identity. */
       workerSessionId: string;
+      /** @description Recorded requester, when verified at admission. Null or absent when no requester was recorded. */
+      requester?: {
+        /** @enum {string} */
+        kind: WorkerSessionObservationRequesterKind;
+        workerSessionId: string;
+        workId?: string;
+      } | null;
+      /** @description Work and Factory Session identities recorded at admission, when known. */
+      correlation?: {
+        workId?: string;
+        factorySessionId?: string;
+      };
+      /** @description Descriptive labels recorded at admission. */
+      labels?: string[];
       /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
       direct: boolean;
       /** @description Explicit Factory Session scope used for this observation. */
@@ -3948,6 +3964,10 @@ export interface components {
     FactorySessionResultStatus: FactorySessionResultStatus;
     OpenFactorySessionRequest: {
       folderPath: string;
+      /** @description Packaged Factory name, such as @you/subagent, resolved by the host. Cannot be combined with target or initNewFactory. folderPath remains the working root. */
+      factoryId?: string;
+      /** @description Idempotency key for live activation. Repeating the key returns the existing live session. */
+      requestId?: string;
       target?: components["schemas"]["FactorySessionTargetRef"];
       /** @description When true, validate the folder and optional target selection without creating a live session. */
       validateOnly?: boolean;
@@ -8388,7 +8408,10 @@ export interface operations {
   startWorkerSession: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -8408,6 +8431,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Worker Session caller credentials are invalid. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       409: components["responses"]["WorkerSessionStartConflict"];
       503: components["responses"]["WorkerSessionStartUnavailable"];
     };
@@ -9134,7 +9166,10 @@ export interface operations {
   invokeFactorySessionBySessionId: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
         session_id: components["parameters"]["SessionID"];
@@ -9157,6 +9192,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
@@ -9720,7 +9764,10 @@ export interface operations {
   startDurableFactorySessionAsync: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9740,6 +9787,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       409: components["responses"]["ExecutionRequestIdConflict"];
       500: components["responses"]["InternalError"];
     };
@@ -9747,7 +9803,10 @@ export interface operations {
   startDurableFactorySessionSync: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9767,6 +9826,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       409: components["responses"]["ExecutionRequestIdConflict"];
       500: components["responses"]["InternalError"];
     };
@@ -9799,7 +9867,10 @@ export interface operations {
   openFactorySession: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Caller Worker Session identity. Requires its execution-only bearer token. */
+        "X-You-Worker-Session-Id"?: string;
+      };
       path?: never;
       cookie?: never;
     };
@@ -9819,6 +9890,15 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      /** @description Invalid Worker Session caller credentials. */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
@@ -10697,6 +10777,11 @@ export const WorkerSessionControlResponseState = {
 } as const;
 export type WorkerSessionControlResponseState =
   (typeof WorkerSessionControlResponseState)[keyof typeof WorkerSessionControlResponseState];
+export const WorkerSessionObservationRequesterKind = {
+  WORKER_SESSION: "WORKER_SESSION",
+} as const;
+export type WorkerSessionObservationRequesterKind =
+  (typeof WorkerSessionObservationRequesterKind)[keyof typeof WorkerSessionObservationRequesterKind];
 export const WorkerSessionObservationState = {
   WorkerSessionObservationStateReserved: "RESERVED",
   WorkerSessionObservationStateStarting: "STARTING",
@@ -11016,6 +11101,8 @@ export const ErrorResponseCode = {
     "WORKER_SESSION_START_REQUEST_ID_CONFLICT",
   // The requested Worker Session identity is already reserved or terminal.
   WORKER_SESSION_NOT_STARTABLE: "WORKER_SESSION_NOT_STARTABLE",
+  // Worker Session caller credentials are invalid or no longer belong to a running owner.
+  WORKER_SESSION_CALLER_INVALID: "WORKER_SESSION_CALLER_INVALID",
   // The Worker Session opening record could not be published.
   WORKER_SESSION_START_OPENING_FAILED: "WORKER_SESSION_START_OPENING_FAILED",
   // The Worker Session event topic did not reach the required readiness barrier.

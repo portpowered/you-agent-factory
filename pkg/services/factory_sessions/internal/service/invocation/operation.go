@@ -193,6 +193,7 @@ func (o *operation) InvokeFactory(
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
+	request.Caller = request.Caller.Clone()
 	if o == nil || o.sessions == nil {
 		return outcome, errors.New("invocation session service is required")
 	}
@@ -239,6 +240,7 @@ func (o *operation) InvokeFactory(
 func sessionInvokeRequest(sessionID string, request factorysessions.InvocationRequest) factorysessions.SessionInvokeRequest {
 	invoke := factorysessions.SessionInvokeRequest{
 		SessionID:       sessionID,
+		Caller:          request.Caller.Clone(),
 		Input:           request.PreparedInvocationInput,
 		Content:         request.Content,
 		ContentProvided: request.ContentProvided,
@@ -281,6 +283,7 @@ func InvokeJavaScriptFactoryViaSessions(
 	request factorysessions.InvocationRequest,
 	configure func(*factorysessions.StartRequest),
 ) (factorydefinitions.FactoryInvocationResult, error) {
+	request.Caller = request.Caller.Clone()
 	resolved, err := inputs.ResolveInvocationInputForSession(ctx, sessionID, request)
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
@@ -409,6 +412,7 @@ func javaScriptStartRequest(
 	}
 	return factorysessions.StartRequest{
 		RequestID:       requestID,
+		Caller:          request.Caller.Clone(),
 		ProjectRoot:     javaScriptInvocationProjectRoot(projection, target),
 		Source:          source,
 		Args:            args,

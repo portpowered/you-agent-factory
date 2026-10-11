@@ -257,6 +257,13 @@ func adaptWorkflowContext(request workers.ExecuteRequest) adaptedWorkflowContext
 	)
 	projectID := firstNonEmpty(request.Input.Dispatch.ProjectID, workflow.ProjectID)
 	envVars := mergeStringMaps(workflow.EnvVars, request.Target.Environment.Vars)
+	// Authored variables cannot replace the execution-only identity supplied
+	// by Worker Sessions, or invent one for an unattributed execution.
+	for name := range envVars {
+		if reservedWorkerIdentityEnvironment(name) {
+			delete(envVars, name)
+		}
+	}
 	workflow.FactoryDirectory = factoryDirectory
 	workflow.WorkDirectory = workingDirectory
 	workflow.ProjectID = projectID
@@ -268,6 +275,30 @@ func adaptWorkflowContext(request workers.ExecuteRequest) adaptedWorkflowContext
 		factoryDirectory: factoryDirectory,
 		projectID:        projectID,
 		envVars:          envVars,
+	}
+}
+
+// Inherited identity belongs to the parent process, never the new execution.
+// Explicit ProcessEnvironment is retained separately as the supervisor's
+// execution-only handoff. Match case-insensitively for Windows environments.
+func inheritedExecutionEnvironment(environment []string) []string {
+	filtered := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, _ := strings.Cut(entry, "=")
+		if !reservedWorkerIdentityEnvironment(name) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
+func reservedWorkerIdentityEnvironment(name string) bool {
+	switch strings.ToUpper(name) {
+	case "YOU_SERVER", "YOU_WORKER_SESSION_ID", "YOU_WORKER_SESSION_TOKEN",
+		"YOU_MESSAGE_TARGET", "YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -28,6 +28,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	webhooks "github.com/portpowered/infinite-you/pkg/services/webhooks"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
@@ -171,9 +172,10 @@ func NewRoot(
 	recordingsService recordings.Service,
 	modelInvocation RuntimeModelInvocationOperation,
 	generateSessionID factorysessions.SessionIDGenerator,
+	callerValidator workersessions.CallerValidator,
 ) (*Root, error) {
 	return service.NewRoot(assembly, durable, start, liveChangeCoordinator, inspectHistorical,
-		definitions, recordingsService, modelInvocation, generateSessionID)
+		definitions, recordingsService, modelInvocation, generateSessionID, callerValidator)
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {

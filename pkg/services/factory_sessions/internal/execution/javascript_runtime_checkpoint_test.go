@@ -922,7 +922,7 @@ func TestChildStartProgressBridgePreservesDurableOwnerAndPeer(t *testing.T) {
 				}
 				forwarded++
 				bridgeOwner.PublishWorkerProgress(fragment)
-			})
+			}, nil)
 			executor := hooks.NewChildExecutor(sessionID, newChildRecordSink(), factory.JavaScriptPolicy{})
 			if _, err := executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "hello", ModelProvider: "codex"}); err != nil {
 				t.Fatalf("Execute: %v", err)

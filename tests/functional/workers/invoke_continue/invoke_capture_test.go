@@ -3,6 +3,7 @@ package acceptance
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,10 +16,227 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
+
+// M13 uses the real recording store except for the selected recipe write.
+// Each attributed failure owns separate routes and Factory Sessions, so a
+// parallel peer cannot supply the credential or mask a provider launch.
+func TestRequesterRecipeFailureBeforeAdmission(t *testing.T) {
+	t.Cleanup(func() {
+		if !t.Failed() {
+			functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.continue", "cli/you.worker-sessions.show")
+		}
+	})
+	for _, operation := range []string{"start", "continue"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			runRequesterRecipeFailure(t, operation)
+		})
+	}
+}
+
+func runRequesterRecipeFailure(t *testing.T, operation string) {
+	t.Helper()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	parent := fixture.scenario(t, "requester-recipe-parent-"+operation)
+	child := fixture.scenario(t, "requester-recipe-child-"+operation)
+	defer parent.close(t)
+	defer child.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := parent.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	parentID := scenarioScopedID(parent, "requester-recipe-parent")
+	start := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatal("recipe-failure requester did not start")
+	}
+	t19AwaitSignal(t, ctx, runner.started, "recipe-failure requester running")
+	token := requesterSourceToken(t, runner, parentID)
+	parentBefore := requesterObservation(t, fixture, parent, ctx, parentID)
+	failedID := "requester-recipe-failed-" + scenarioScopedID(child, operation)
+	args := []string{"invoke", "--execution", requesterExecutionPath(t, child, failedID), "--async"}
+	expectedCode, expectedCalls := "WORKER_SESSION_START_OPENING_FAILED", 0
+	if operation == "continue" {
+		sourceID := scenarioScopedID(child, "requester-recipe-source")
+		invoke := t7RemoteCLIInputs(child, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, child, sourceID))
+		invoke.Input.Env = append(invoke.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
+		if err := fixture.process.Execute(invoke.Input); err != nil {
+			t.Fatal("attributed recipe-failure source did not complete")
+		}
+		assertRequesterChild(t, fixture, child, ctx, sourceID, parentID, token)
+		source := requesterObservation(t, fixture, child, ctx, sourceID)
+		if source.ProviderSession == nil {
+			t.Fatal("attributed source did not retain its provider identity")
+		}
+		awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, child.homeDirectory, child.workingDirectory, sourceID, source.ProviderSession.Id)
+		defer assertRequesterRecipeSourceUnchanged(t, fixture, child, ctx, sourceID, source)
+		args = []string{"continue", sourceID, "--request-id", failedID + "-request", "--successor-worker-session-id", failedID, "--user-message", "recipe failure follow-up", "--async"}
+		expectedCode, expectedCalls = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", 1
+	}
+	for range 2 {
+		input := t7RemoteCLIInputs(child, ctx, fixture.baseURL, args...)
+		input.Input.Env = append(input.Input.Env, "YOU_WORKER_SESSION_ID="+parentID, "YOU_WORKER_SESSION_TOKEN="+token)
+		if err := fixture.process.Execute(input.Input); err == nil {
+			t.Fatal("failed recipe write admitted a provider execution")
+		}
+		assertDirectWorkerSessionCLIError(t, input, expectedCode)
+		assertRequesterTokenAbsent(t, token, input.Stdout()+input.Stderr())
+		if strings.Contains(input.Stdout()+input.Stderr(), "private-recipe-sync-detail") {
+			t.Fatal("recipe failure disclosed private storage diagnostics")
+		}
+	}
+	if child.providerRunner.CallCount() != expectedCalls || runner.CallCount() != 1 {
+		t.Fatal("recipe failure or replay launched a provider or changed its peer")
+	}
+	failed := requesterObservation(t, fixture, child, ctx, failedID)
+	if string(failed.State) != "FAILED" || failed.Revivable == nil || *failed.Revivable {
+		t.Fatal("unadmitted recipe failure fabricated a runnable retained session")
+	}
+	parentAfter := requesterObservation(t, fixture, parent, ctx, parentID)
+	parentBefore.DurationMillis, parentAfter.DurationMillis = nil, nil
+	if !reflect.DeepEqual(parentBefore, parentAfter) {
+		t.Fatal("recipe failure mutated the independent running requester")
+	}
+}
+
+func assertRequesterRecipeSourceUnchanged(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, id string, before api.WorkerSessionObservation) {
+	t.Helper()
+	after := requesterObservation(t, fixture, child, ctx, id)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("unadmitted successor changed source metadata, state or continuation head")
+	}
+}
+
+// M11 observes the actual admitted credential echoed by the native command
+// edge, through live capture and terminal public CLI/HTTP representations.
+// Each parallel scenario owns its session and provider route on the shared host.
+func TestRequesterExecutionTokenPrivacy(t *testing.T) {
+	t.Cleanup(func() {
+		if !t.Failed() {
+			functionalevidence.Covers(t, "cli/you.worker-sessions.invoke", "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "rest/readWorkerSessionLogs", "rest/readWorkerSessionTranscriptByWorkerSessionId", "rest/getWorkerSessionObservationByWorkerSessionId", "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId")
+		}
+	})
+	for _, outcome := range []string{"success", "failure"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			fixture := ensureInvokeContinuePackageFixture(t)
+			scenario := fixture.scenario(t, "requester-privacy-"+outcome)
+			defer scenario.close(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+			defer cancel()
+			runner := scenario.providerRunner.(*t7GatedProviderRunner)
+			defer t7ReleaseAndJoin(t, ctx, runner)()
+			id := scenarioScopedID(scenario, "requester-private")
+			path := requesterExecutionPath(t, scenario, id)
+			start := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path, "--async")
+			if err := fixture.process.Execute(start.Input); err != nil {
+				t.Fatal("privacy admission failed")
+			}
+			t19AwaitSignal(t, ctx, runner.started, "credential echo progress")
+			token := requesterSourceToken(t, runner, id)
+			awaitRequesterPrivacyLogs(t, fixture, ctx, id, "public credential progress", token)
+			close(runner.release)
+			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+			joinErr := fixture.process.Execute(join.Input)
+			if (joinErr != nil) != (outcome == "failure") {
+				t.Fatal("credential echo execution did not retain its expected outcome")
+			}
+			assertRequesterTokenAbsent(t, token, start.Stdout()+start.Stderr()+join.Stdout()+join.Stderr())
+			awaitRequesterPrivacyLogs(t, fixture, ctx, id, `"health":"COMPLETE"`, token)
+			assertRequesterPrivacyReads(t, fixture, scenario, ctx, id, token, outcome)
+			assertRequesterDurableTokenPrivacy(t, fixture, ctx, id, token)
+			assertRequesterRefusal(t, fixture, scenario, ctx, "terminal-privacy", id, token)
+			if runner.CallCount() != 1 {
+				t.Fatal("privacy replay or refused retired credential launched another attempt")
+			}
+		})
+	}
+}
+
+func requesterPrivacyProgress(request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) {
+	if observe == nil || !strings.HasPrefix(filepath.Base(request.WorkDir), "requester-privacy-") {
+		return
+	}
+	token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{
+		"id": "credential-progress", "type": "command_execution", "exit_code": 0,
+		"command": "public credential command " + token, "aggregated_output": "public credential progress " + token,
+	}})
+	observe(platformprocess.OutputStreamStdout, append(item, '\n'))
+	observe(platformprocess.OutputStreamStderr, []byte("public credential diagnostic "+token+"\n"))
+}
+
+func requesterPrivacyResult(request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	token := requesterEnvironment(request.Env)["YOU_WORKER_SESSION_TOKEN"]
+	output := directCodexSessionOutput("requester-private-thread", "public credential result "+token)
+	diagnostic := []byte("public credential failure " + token + "\n")
+	failed := filepath.Base(request.WorkDir) == "requester-privacy-failure"
+	if failed {
+		failure, _ := json.Marshal(map[string]any{"type": "turn.failed", "error": map[string]string{"message": "public credential failure " + token}})
+		output = append([]byte("{\"type\":\"thread.started\",\"thread_id\":\"requester-private-thread\"}\n"), append(failure, '\n')...)
+	}
+	if observe != nil {
+		observe(platformprocess.OutputStreamStdout, output)
+		observe(platformprocess.OutputStreamStderr, diagnostic)
+	}
+	result := platformprocess.CommandResult{Stdout: output, Stderr: diagnostic}
+	if failed {
+		result.ExitCode = 1
+		return result, errors.New("public credential runner failure " + token)
+	}
+	return result, nil
+}
+
+func awaitRequesterPrivacyLogs(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, id, marker, token string) {
+	t.Helper()
+	// Capture commits asynchronously after the command callback; only a public
+	// read can establish that this session's echoed progress is durably readable.
+	body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+		_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+		assertRequesterTokenAbsent(t, token, body)
+		return body, nil
+	}, func(body string) bool { return strings.Contains(body, marker) })
+	if err != nil || !strings.Contains(body, "redacted") {
+		t.Fatal("public capture did not retain sanitized credential echo evidence")
+	}
+}
+
+func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, id, token, outcome string) {
+	t.Helper()
+	state := "COMPLETED"
+	if outcome == "failure" {
+		state = "FAILED"
+	}
+	observation := requesterObservation(t, fixture, scenario, ctx, id)
+	if string(observation.State) != state {
+		t.Fatal("privacy observation lost the terminal execution outcome")
+	}
+	for _, view := range []string{"transcript", "logs"} {
+		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
+		if err := fixture.process.Execute(read.Input); err != nil {
+			t.Fatalf("public privacy %s read failed", view)
+		}
+		assertRequesterTokenAbsent(t, token, read.Stdout()+read.Stderr())
+		if !strings.Contains(read.Stdout(), "public credential") || !strings.Contains(read.Stdout(), "redacted") {
+			t.Fatalf("public privacy %s read lost the sanitized ordinary content", view)
+		}
+	}
+	assertRequesterPrivacyListShow(t, fixture, scenario, ctx, observation, token)
+	for _, suffix := range []string{"", "/transcript", "/logs", "/events?replayOnly=true"} {
+		status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+suffix, nil)
+		if status != http.StatusOK {
+			t.Fatalf("public privacy HTTP %s read failed: %d", suffix, status)
+		}
+		assertRequesterTokenAbsent(t, token, body)
+		if strings.HasPrefix(suffix, "/events") && !strings.Contains(body, "public credential progress") {
+			t.Fatal("retained Events replay lost the observed credential echo")
+		}
+	}
+}
 
 type recordingPrivateProfile struct {
 	host                         invokeContinueStartedProcess
@@ -47,7 +265,7 @@ func TestRecordingContentPrivateProfilesFenceReadsAndCursors(t *testing.T) {
 			writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt", workingDirectory: dir, userMessage: "ordinary private-profile prompt"})
 			summaryRestartCLI(t, started, home, dir, "invoke", "--execution", path)
 		}
-		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, started.baseURL+"/worker-sessions/same-worker-id/logs?limit=1")
+		page := support.GetJSON[api.WorkerSessionLogPage](t, started.baseURL+"/worker-sessions/same-worker-id/logs?limit=1")
 		if page.NextToken == nil {
 			t.Fatal("private recording has no continuation cursor")
 		}
@@ -95,7 +313,7 @@ func assertRecordingPrivateProfileReadable(t *testing.T, profile, foreign record
 func assertRecordingReadDenial(t *testing.T, endpoint string, wantStatus int, wantCode string, privateValues ...string) {
 	t.Helper()
 	status, body := t7HTTP(t, t.Context(), http.MethodGet, endpoint, nil)
-	var failure factoryapi.ErrorResponse
+	var failure api.ErrorResponse
 	if err := json.Unmarshal([]byte(body), &failure); err != nil || status != wantStatus || string(failure.Code) != wantCode {
 		t.Fatalf("recording read denial: status=%d error=%v body=%s", status, err, body)
 	}
@@ -163,7 +381,7 @@ func runRecordingContentDirect(t *testing.T, name string) {
 func assertRecordingDirectReads(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, name string) {
 	t.Helper()
 	_, summary := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id, nil)
-	var observation factoryapi.WorkerSessionObservation
+	var observation api.WorkerSessionObservation
 	if err := json.Unmarshal([]byte(summary), &observation); err != nil {
 		t.Fatal(err)
 	}
@@ -192,9 +410,87 @@ func assertRecordingDirectReads(t *testing.T, ctx context.Context, fixture *invo
 	}
 }
 
+func assertRequesterPrivacyListShow(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, observation api.WorkerSessionObservation, token string) {
+	t.Helper()
+	listed := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "list", "--history", "all")
+	if err := fixture.process.Execute(listed.Input); err != nil {
+		t.Fatal("privacy list failed")
+	}
+	assertRequesterTokenAbsent(t, token, listed.Stdout()+listed.Stderr())
+	var rows api.ListWorkerSessionsResponse
+	decodeDirectWorkerSessionResult(t, listed.Stdout(), &rows)
+	found := false
+	for _, row := range rows.Sessions {
+		if row.WorkerSessionId == observation.WorkerSessionId {
+			found = true
+			if row.State != observation.State || !reflect.DeepEqual(row.Requester, observation.Requester) ||
+				!reflect.DeepEqual(row.Correlation, observation.Correlation) || !reflect.DeepEqual(row.Labels, observation.Labels) {
+				t.Fatal("privacy list changed terminal identity or metadata")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("privacy list omitted the terminal execution")
+	}
+	show := support.FakeInputs(ctx, []string{"you", "--remote", "--server", fixture.baseURL, "worker-sessions", "show", "--worker-session-id", observation.WorkerSessionId})
+	show.Input.Env, show.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatal("human privacy show failed")
+	}
+	assertRequesterTokenAbsent(t, token, show.Stdout()+show.Stderr())
+	if !strings.Contains(show.Stdout(), observation.WorkerSessionId) || !strings.Contains(show.Stdout(), string(observation.State)) {
+		t.Fatal("human privacy show lost terminal identity")
+	}
+}
+
+func assertRequesterTokenAbsent(t *testing.T, token, body string) {
+	t.Helper()
+	if token == "" || strings.Contains(body, token) {
+		t.Fatal("public output exposed the admitted execution credential or no credential was tested")
+	}
+}
+
+// Public archived reads prove capture completeness and credential exclusion.
+// Private continuation-recipe envelopes are verified by their owning serializer
+// in TestRestartRecipePersistsImmutableDetachedInputAcrossReopen.
+func assertRequesterDurableTokenPrivacy(t *testing.T, fixture *invokeContinuePackageFixture, ctx context.Context, id, token string) {
+	t.Helper()
+	status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+	if status != http.StatusOK {
+		t.Fatal("archived Worker logs unavailable")
+	}
+	assertRequesterTokenAbsent(t, token, body)
+	var logs api.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(body), &logs); err != nil || logs.WorkerSessionId != id || string(logs.Health) != "COMPLETE" || len(logs.Events) < 2 {
+		t.Fatal("archived Worker logs omitted complete execution evidence")
+	}
+	terminal := false
+	for _, event := range logs.Events {
+		if event.WorkerSessionId != id {
+			t.Fatal("archived Worker logs included another execution")
+		}
+		if event.Event.Payload["kind"] == "SESSION" {
+			switch event.Event.Payload["phase"] {
+			case "COMPLETED", "FAILED", "CANCELED":
+				terminal = true
+			}
+		}
+	}
+	if !terminal {
+		t.Fatal("archived Worker logs omitted the terminal execution event")
+	}
+	for _, suffix := range []string{"", "/transcript"} {
+		status, body = t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+suffix, nil)
+		if status != http.StatusOK {
+			t.Fatal("archived Worker observation or transcript unavailable")
+		}
+		assertRequesterTokenAbsent(t, token, body)
+	}
+}
+
 func assertRecordingDirectTranscript(t *testing.T, cliBody, body, name string) {
 	t.Helper()
-	var cli, httpResult factoryapi.WorkerSessionTranscriptResponse
+	var cli, httpResult api.WorkerSessionTranscriptResponse
 	if err := json.Unmarshal([]byte(cliBody), &cli); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +532,7 @@ func runRecordingContentFactoryResult(t *testing.T, name string) {
 	writeRecordingContentAgentFactory(t, scenario.workingDirectory)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, scenario.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
-	item := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, factoryapi.SubmitWorkRequest{
+	item := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{
 		WorkTypeName: "task", Payload: "FACTORY_CAPTURE_ALPHA COMPLETE",
 	})
 	if item.WorkId == nil {
@@ -248,7 +544,7 @@ func runRecordingContentFactoryResult(t *testing.T, name string) {
 	if !gated {
 		support.WaitForSessionTerminalStatus(t, fixture.baseURL, opened.Session.Id, 30*time.Second)
 	}
-	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/worker-sessions?workId="+*item.WorkId)
+	rows := support.GetJSON[api.ListWorkerSessionsResponse](t, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/worker-sessions?workId="+*item.WorkId)
 	if len(rows.Sessions) != 1 {
 		t.Fatalf("Factory attempts = %+v", rows)
 	}
@@ -296,11 +592,11 @@ func writeRecordingContentAgentFactory(t *testing.T, directory string) {
 
 func assertRecordingFactoryTranscript(t *testing.T, body, baseURL, id string, gated bool) {
 	t.Helper()
-	var transcript factoryapi.WorkerSessionTranscriptResponse
+	var transcript api.WorkerSessionTranscriptResponse
 	if err := json.Unmarshal([]byte(body), &transcript); err != nil {
 		t.Fatal(err)
 	}
-	httpTranscript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, baseURL+"/worker-sessions/"+id+"/transcript")
+	httpTranscript := support.GetJSON[api.WorkerSessionTranscriptResponse](t, baseURL+"/worker-sessions/"+id+"/transcript")
 	wantEntries := 1
 	if !gated {
 		wantEntries = 2
@@ -329,13 +625,13 @@ func (r *recordingStreamingRetryRunner) RunStreaming(ctx context.Context, reques
 	return result, err
 }
 
-func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string) factoryapi.WorkerSessionLogPage {
+func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string) api.WorkerSessionLogPage {
 	t.Helper()
 	endpoint := baseURL + "/worker-sessions/" + id + "/logs?limit=2"
-	var result factoryapi.WorkerSessionLogPage
+	var result api.WorkerSessionLogPage
 	for pages := 0; pages < 100; pages++ {
 		status, body := t7HTTP(t, ctx, http.MethodGet, endpoint, nil)
-		var page factoryapi.WorkerSessionLogPage
+		var page api.WorkerSessionLogPage
 		if err := json.Unmarshal([]byte(body), &page); err != nil || status != http.StatusOK || page.Health != "COMPLETE" {
 			t.Fatalf("committed logs: status=%d error=%v body=%s", status, err, body)
 		}
@@ -364,7 +660,7 @@ func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string
 	return result
 }
 
-func assertRecordingMessageProvenance(t *testing.T, page factoryapi.WorkerSessionLogPage, agentLoop, finalOnly bool) {
+func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPage, agentLoop, finalOnly bool) {
 	t.Helper()
 	var native, synthesized []workers.Draft
 	for _, event := range page.Events {
@@ -489,7 +785,7 @@ func runRecordingContentSecrets(t *testing.T, name string) {
 
 func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, observation string) {
 	t.Helper()
-	var summary factoryapi.WorkerSessionObservation
+	var summary api.WorkerSessionObservation
 	if err := json.Unmarshal([]byte(observation), &summary); err != nil || summary.State != "FAILED" || summary.Failure == nil {
 		t.Fatalf("failed prefix fabricated completion: error=%v summary=%s", err, observation)
 	}
@@ -506,8 +802,8 @@ func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *inv
 	if err := fixture.process.Execute(read.Input); err != nil {
 		t.Fatalf("failed prefix transcript: %v %s", err, read.Stderr())
 	}
-	httpTranscript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, fixture.baseURL+"/worker-sessions/"+id+"/transcript")
-	var transcript factoryapi.WorkerSessionTranscriptResponse
+	httpTranscript := support.GetJSON[api.WorkerSessionTranscriptResponse](t, fixture.baseURL+"/worker-sessions/"+id+"/transcript")
+	var transcript api.WorkerSessionTranscriptResponse
 	if err := json.Unmarshal([]byte(read.Stdout()), &transcript); err != nil || !reflect.DeepEqual(transcript, httpTranscript) || transcript.State != "FAILED" {
 		t.Fatalf("failed transcript parity: error=%v transcript=%s", err, read.Stdout())
 	}

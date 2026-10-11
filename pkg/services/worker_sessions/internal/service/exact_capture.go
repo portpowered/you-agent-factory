@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -25,7 +26,7 @@ func (r *registry) bindDirectRecording(req *workersessions.StartRequest) {
 // Unreconstructible requests remain invocable. Only an actual artifact-store
 // failure rejects admission; unsafe settings never become a changed recipe.
 func (r *registry) saveRestartRecipe(ctx context.Context, req workersessions.InvokeSessionRequest) error {
-	_, metadata, ok := r.loadObservationState(req.ID)
+	session, metadata, ok := r.loadObservationState(req.ID)
 	if !ok {
 		return nil
 	}
@@ -55,7 +56,11 @@ func (r *registry) saveRestartRecipe(ctx context.Context, req workersessions.Inv
 		r.logger.Info("worker session restart recipe unavailable", "sessionID", publicWorkerID(req.ID), "attemptID", target.ExpectedAttemptID, "outcome", "unsafe_input")
 		return nil
 	}
-	err := r.restart.SaveWorkerRestartRecipe(ctx, target, req.Execution)
+	facts, err := encodeSessionMetadata(session.Metadata)
+	if err != nil {
+		return err
+	}
+	err = r.restart.SaveWorkerRestartRecipe(ctx, target, req.Execution, facts)
 	if errors.Is(err, recordings.ErrInvalidRecordingRedactionRequest) {
 		r.logger.Info("worker session restart recipe unavailable", "sessionID", publicWorkerID(req.ID), "attemptID", target.ExpectedAttemptID, "outcome", "unsafe_input")
 		return nil
@@ -202,6 +207,10 @@ func (r *registry) readCapturedContinuationRecipe(ctx context.Context, target re
 		captured.Execution.Execution.FactorySessionID != target.FactorySessionID {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
+	metadata, metadataErr := decodeSessionMetadata(captured.SessionMetadata)
+	if metadataErr != nil || !reflect.DeepEqual(metadata, source.Metadata) {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
 	if captured.Reference != source.ProviderSessionAssociation.Reference || captured.Terminal.Status != string(source.State) {
 		return nil, workersessions.ErrContinuationProviderSessionInvalid
 	}
@@ -257,4 +266,30 @@ func (r *registry) lookupContinuationSource(ctx context.Context, target recordin
 		return r.restart.LookupPreparedWorkerContinuationSource(ctx, target)
 	}
 	return r.restart.ValidateWorkerContinuationSource(ctx, target)
+}
+
+// Captured metadata has the same strict field and duplicate-member contract as
+// control outcomes. Legacy absence stays absent instead of inventing a root.
+func decodeSessionMetadata(payload json.RawMessage) (*workersessions.SessionMetadata, error) {
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	if !uniqueInterruptJSONFields(payload) || !validInterruptMetadataJSON(payload) {
+		return nil, workersessions.ErrInvalidSessionMetadata
+	}
+	var metadata workersessions.SessionMetadata
+	if err := json.Unmarshal(payload, &metadata); err != nil {
+		return nil, workersessions.ErrInvalidSessionMetadata
+	}
+	return metadata.Clone(), nil
+}
+
+func encodeSessionMetadata(metadata *workersessions.SessionMetadata) (json.RawMessage, error) {
+	if metadata == nil {
+		return nil, nil
+	}
+	if err := metadata.Validate(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(metadata)
 }

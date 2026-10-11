@@ -46,6 +46,9 @@ type InvokeConfig struct {
 	Context context.Context
 	Server  string
 	Remote  bool
+	// LookupEnv reads execution-only caller credentials through the process edge.
+	LookupEnv func(string) (string, bool)    `json:"-"`
+	Caller    *workersessions.CallerIdentity `json:"-"`
 
 	RequestID        string
 	WorkerSessionID  string
@@ -126,6 +129,11 @@ type invokeCapture struct {
 
 func invoke(config InvokeConfig) error {
 	jsonOutput := config.JSON || strings.EqualFold(strings.TrimSpace(config.OutputFormat), "json")
+	caller, err := invokeCaller(config)
+	if err != nil {
+		return emitInvokeCLIError(config, jsonOutput, mapInvokeServiceError(err, false))
+	}
+	config.Caller = caller
 	if err := validateInvokeConfig(config); err != nil {
 		return emitInvokeCLIError(config, jsonOutput, err)
 	}
@@ -184,6 +192,10 @@ func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error
 	normalizedAPI, err := workersessionshttp.WorkerSessionStartRequestToAPI(serviceRequest)
 	if err != nil {
 		return normalizedInvokeRequest{}, newCLIError("WORKER_SESSION_INVOKE_INVALID", "failed to normalize direct Worker execution request", err)
+	}
+	if config.Caller != nil {
+		caller := *config.Caller
+		serviceRequest.Caller = &caller
 	}
 	return normalizedInvokeRequest{
 		API:              normalizedAPI,
@@ -444,6 +456,10 @@ func admitRemoteWorkerSession(config InvokeConfig, request normalizedInvokeReque
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json")
+	if request.Service.Caller != nil {
+		httpRequest.Header.Set("X-You-Worker-Session-Id", request.Service.Caller.WorkerSessionID)
+		httpRequest.Header.Set("Authorization", "Bearer "+request.Service.Caller.Token)
+	}
 	response, requestErr := config.HTTP.Execute(httpRequest)
 	if requestErr != nil {
 		return factoryapi.WorkerSessionStartResponse{}, remoteInvokeTransportError(config, requestErr)
@@ -851,6 +867,8 @@ func mapInvokeServiceError(err error, _ bool) error {
 		return newCLIError("WORKER_SESSION_INVOKE_INTERRUPTED", "Worker Session invocation was interrupted", context.Canceled)
 	}
 	switch {
+	case errors.Is(err, workersessions.ErrCallerInvalid):
+		return newCLIError("WORKER_SESSION_CALLER_INVALID", "Worker Session caller credentials are invalid", workersessions.ErrCallerInvalid)
 	case errors.Is(err, workersessions.ErrInvalidStartRequestID),
 		errors.Is(err, workersessions.ErrInvalidSessionID),
 		errors.Is(err, workersessions.ErrInvalidExecutionRequest):
@@ -874,6 +892,7 @@ func mapInvokeServiceError(err error, _ bool) error {
 }
 
 func emitInvokeCLIError(config InvokeConfig, jsonOutput bool, err error) error {
+	err = sanitizeInvokeCallerError(config.Caller, err)
 	if !jsonOutput || err == nil {
 		return err
 	}

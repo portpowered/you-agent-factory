@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -382,10 +383,8 @@ type s8ProviderSession struct {
 }
 
 type s8WorkerList struct {
-	Sessions          []s8WorkerObservation `json:"sessions"`
-	PaginationContext *struct {
-		NextToken string `json:"nextToken"`
-	} `json:"paginationContext"`
+	Sessions          []s8WorkerObservation         `json:"sessions"`
+	PaginationContext *factoryapi.PaginationContext `json:"paginationContext"`
 }
 
 func listS8RemoteWorkers(
@@ -401,23 +400,27 @@ func listS8RemoteWorkers(
 	for _, state := range states {
 		args = append(args, "--state", state)
 	}
-	// Direct scope is fleet-wide. Follow its snapshot cursor so parallel peer
-	// sessions cannot push the scenario's source or successor beyond one page.
-	// Small pages exercise continuation even in a focused scenario selection.
-	var sessions []s8WorkerObservation
-	for nextToken := ""; ; {
-		pageArgs := append([]string(nil), args...)
-		if nextToken != "" {
-			pageArgs = append(pageArgs, "--next-token", nextToken)
-		}
-		inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, pageArgs...)
+	// Parallel scenarios exceed the default page size. A fleet-wide list must
+	// drain its public cursor before asserting any scenario's presence/absence.
+	var observations []s8WorkerObservation
+	seen := make(map[string]bool)
+	for {
+		inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL, args...)
 		var result s8WorkerList
 		decodeS8JSON(t, inputs.Stdout(), &result)
-		sessions = append(sessions, result.Sessions...)
-		if result.PaginationContext == nil || result.PaginationContext.NextToken == "" {
-			return sessions
+		observations = append(observations, result.Sessions...)
+		if result.PaginationContext == nil || result.PaginationContext.NextToken == nil || *result.PaginationContext.NextToken == "" {
+			return observations
 		}
-		nextToken = result.PaginationContext.NextToken
+		next := *result.PaginationContext.NextToken
+		if seen[next] {
+			t.Fatal("public Worker Session list repeated a continuation cursor")
+		}
+		seen[next] = true
+		args = []string{"--json", "worker-sessions", "list", "--scope", "direct", "--next-token", next}
+		for _, state := range states {
+			args = append(args, "--state", state)
+		}
 	}
 }
 

@@ -339,6 +339,16 @@ type runtimeWorkerSessionBoundary struct {
 	runtimeID string
 }
 
+func (boundary runtimeWorkerSessionBoundary) ValidateCaller(ctx context.Context, caller *workersessions.CallerIdentity) error {
+	validator, ok := boundary.Service.(interface {
+		ValidateCaller(context.Context, *workersessions.CallerIdentity) error
+	})
+	if !ok || validator == nil {
+		return workersessions.ErrCallerInvalid
+	}
+	return validator.ValidateCaller(ctx, caller.Clone())
+}
+
 func (boundary runtimeWorkerSessionBoundary) Start(ctx context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
 	request.Execution.Execution = workers.CloneWorkstationExecutionRequest(request.Execution.Execution)
 	if supplied := strings.TrimSpace(request.Execution.Execution.RuntimeID); supplied != "" && supplied != boundary.runtimeID {

@@ -8,6 +8,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -41,6 +42,7 @@ func (c *capturingBootstrapRunner) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.InvocationRequest,
+	_ *workersessions.CallerIdentity,
 ) (apisurface.FactoryInvocationResult, error) {
 	c.lastRequest = cloneInvocationRequestForCapture(request)
 	result := apisurface.FactoryInvocationResult{

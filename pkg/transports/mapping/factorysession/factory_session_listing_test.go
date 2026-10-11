@@ -132,7 +132,10 @@ func TestSessionStartRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.
 		ValidateOnly: &validateOnly,
 	}
 
-	mapped := factorysession.SessionStartRequestFromAPI(request)
+	mapped, err := factorysession.SessionStartRequestFromAPI(request)
+	if err != nil {
+		t.Fatal(err)
+	}
 	name = "changed"
 	validateOnly = false
 
@@ -145,6 +148,49 @@ func TestSessionStartRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.
 	if mapped.Mode != factorysessions.SessionOperationModeLive || !mapped.ActivationOnly ||
 		mapped.RuntimeSelection == nil || mapped.RuntimeSelection.Mode != factorysessions.SessionRuntimeModeService {
 		t.Fatalf("start request = %#v, want live service-mode activation", mapped)
+	}
+}
+
+func TestSessionStartRequestFromAPI_PackagedSelection(t *testing.T) {
+	t.Parallel()
+	name, requestID := " @you/subagent ", " open-once "
+	mapped, err := factorysession.SessionStartRequestFromAPI(factoryapi.OpenFactorySessionRequest{
+		FolderPath: "/workspace", FactoryId: &name, RequestId: &requestID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name, requestID = "changed", "changed"
+	if mapped.Source.Kind != factory.WorkflowSourceKindFactoryID || mapped.Source.FactoryID != "@you/subagent" ||
+		mapped.Definition.FactoryID != "@you/subagent" || mapped.Correlation.RequestID != "open-once" ||
+		mapped.Args["workingRoot"] != "/workspace" || mapped.RuntimeSelection.ExecutionBaseDir != "/workspace" ||
+		!mapped.ActivationOnly || mapped.FolderPath != "/workspace" {
+		t.Fatalf("packaged selection = %+v", mapped)
+	}
+}
+
+func TestSessionStartRequestFromAPI_RefusesInvalidSelectors(t *testing.T) {
+	t.Parallel()
+	packaged, empty, invalid := "@you/subagent", " ", "local-name"
+	initialize := true
+	for _, test := range []struct {
+		name    string
+		request factoryapi.OpenFactorySessionRequest
+		field   string
+	}{
+		{"empty factory", factoryapi.OpenFactorySessionRequest{FactoryId: &empty}, "factoryId"},
+		{"invalid factory", factoryapi.OpenFactorySessionRequest{FactoryId: &invalid}, "factoryId"},
+		{"target conflict", factoryapi.OpenFactorySessionRequest{FactoryId: &packaged, Target: &factoryapi.FactorySessionTargetRef{Kind: factoryapi.FactorySessionTargetRefKindDefault}}, "factoryId"},
+		{"scaffold conflict", factoryapi.OpenFactorySessionRequest{FactoryId: &packaged, InitNewFactory: &initialize}, "factoryId"},
+		{"empty request", factoryapi.OpenFactorySessionRequest{RequestId: &empty}, "requestId"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := factorysession.SessionStartRequestFromAPI(test.request)
+			var rejected *factorysessions.DetachedRequestError
+			if !errors.As(err, &rejected) || rejected.Field != test.field {
+				t.Fatalf("error = %v, want typed %s refusal", err, test.field)
+			}
+		})
 	}
 }
 

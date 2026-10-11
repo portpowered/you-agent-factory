@@ -131,3 +131,29 @@ func (source *fleetObservationSource) StreamObservationsByWorkerSessionID(ctx co
 	}
 	return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
 }
+
+type callerValidationFixture struct {
+	workersessions.Service
+	calls int
+}
+
+func (s *callerValidationFixture) ValidateCaller(context.Context, *workersessions.CallerIdentity) error {
+	s.calls++
+	return workersessions.ErrCallerInvalid
+}
+func TestCallerValidationRequiresAndPreservesOwnerCapability(t *testing.T) {
+	t.Parallel()
+	for _, source := range []workersessions.Service{nil, newFleetObservationSource("legacy")} {
+		if capability, err := CallerValidation(source); capability != nil || err == nil {
+			t.Fatal("missing live-owner validator admitted at construction")
+		}
+	}
+	source := &callerValidationFixture{}
+	capability, err := CallerValidation(source)
+	if err != nil || capability == nil || source.calls != 0 {
+		t.Fatalf("validator selection = %T, %v", capability, err)
+	}
+	if err := capability(t.Context(), &workersessions.CallerIdentity{}); !errors.Is(err, workersessions.ErrCallerInvalid) || source.calls != 1 {
+		t.Fatalf("owner outcome = %v; calls = %d", err, source.calls)
+	}
+}

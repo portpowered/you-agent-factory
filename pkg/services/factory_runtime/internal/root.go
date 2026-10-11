@@ -14,6 +14,7 @@ import (
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // workStateSnapshotProvider is the migration-only capability kept out of the
@@ -699,6 +700,22 @@ func (service *boundRuntimeService) SubmitWorkRequest(ctx context.Context, reque
 		return work.WorkRequestSubmitResult{}, factoryruntime.ErrNotRunning
 	}
 	return ingress.SubmitWorkRequest(ctx, request)
+}
+
+func (service *boundRuntimeService) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
+	owner := service.target()
+	if owner == nil {
+		return work.SubmitRequest{}, nil, factoryruntime.ErrNotRunning
+	}
+	return owner.PrepareInvocation(ctx, request, caller)
+}
+
+func (r *Root) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
+	owner := r.delegate()
+	if owner == nil {
+		return work.SubmitRequest{}, nil, factoryruntime.ErrNotRunning
+	}
+	return owner.PrepareInvocation(ctx, request, caller)
 }
 
 func (service *boundRuntimeService) SubscribeFactoryEvents(

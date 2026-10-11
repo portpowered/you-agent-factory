@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
@@ -22,6 +24,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +60,11 @@ func prepareRunFactoryConfig(
 	if err := runcli.ValidateRunSessionIdentity(cfg); err != nil {
 		return runcli.RunConfig{}, err
 	}
+	caller, err := rootOptions.runCaller()
+	if err != nil {
+		return runcli.RunConfig{}, runcli.MapInvocationFailure(err)
+	}
+	cfg.Caller = caller
 	cfg = applyRunScopedServerMode(cfg)
 	if err := validateRunFactoryOptions(&cfg, defaultInvocation); err != nil {
 		return runcli.RunConfig{}, err
@@ -118,6 +126,19 @@ func prepareRunFactoryConfig(
 	}
 	configureRunFactoryOutput(cmd, &cfg, promptArgs, globals, policy)
 	return cfg, nil
+}
+
+func (options CommandFactory) runCaller() (*workersessions.CallerIdentity, error) {
+	headers := make(http.Header)
+	if options.lookupEnv != nil {
+		if id, present := options.lookupEnv("YOU_WORKER_SESSION_ID"); present {
+			headers.Set("X-You-Worker-Session-Id", id)
+		}
+		if token, present := options.lookupEnv("YOU_WORKER_SESSION_TOKEN"); present {
+			headers.Set("Authorization", "Bearer "+token)
+		}
+	}
+	return apisurface.WorkerSessionCallerFromHeaders(headers)
 }
 
 func prepareRunFactoryConfigInputs(

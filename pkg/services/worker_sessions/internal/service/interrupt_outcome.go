@@ -60,14 +60,28 @@ func exactInterruptSessionFields(payload json.RawMessage) bool {
 	if json.Unmarshal(payload, &fields) != nil || fields == nil {
 		return false
 	}
-	for name := range fields {
+	for name, value := range fields {
 		switch name {
 		case "ID", "State", "Model", "ReasoningEffort", "Result", "ProviderSessionAssociation", "PredecessorWorkerSessionID", "SuccessorWorkerSessionID":
+		case "Metadata":
+			if !validInterruptMetadataJSON(value) {
+				return false
+			}
 		default:
 			return false
 		}
 	}
 	return true
+}
+
+func validInterruptMetadataJSON(payload json.RawMessage) bool {
+	var fields map[string]json.RawMessage
+	var metadata workersessions.SessionMetadata
+	if json.Unmarshal(payload, &fields) != nil || fields == nil || fields["requester"] == nil ||
+		json.Unmarshal(payload, &metadata) != nil || metadata.Validate() != nil {
+		return false
+	}
+	return canonicalInterruptJSONFields(payload, metadata)
 }
 
 // Duplicate members can conceal credentials or contradictory facts behind a
@@ -181,7 +195,7 @@ func validInterruptOutcome(req workersessions.InterruptRequest, result workerses
 		return false
 	}
 	if result.Successor.ID == "" {
-		if result.Successor.State != "" || result.Accepted {
+		if result.Successor.State != "" || result.Successor.Metadata != nil || result.Accepted {
 			return false
 		}
 	} else if result.Successor.ID != req.SuccessorWorkerSessionID || !result.Successor.State.Valid() {
@@ -203,7 +217,7 @@ func validInterruptOutcome(req workersessions.InterruptRequest, result workerses
 // journal must not turn provider content or private diagnostics into a reply.
 func validInterruptSessionFacts(session workersessions.Session) bool {
 	return session.Model == nil && session.ReasoningEffort == nil &&
-		session.Result == nil && session.ProviderSessionAssociation == nil
+		session.Result == nil && session.ProviderSessionAssociation == nil && session.Metadata.Validate() == nil
 }
 
 func validInterruptResultIdentity(req workersessions.InterruptRequest, result workersessions.InterruptResult) bool {

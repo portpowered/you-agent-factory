@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -592,5 +593,70 @@ func assertDeliveredDisconnectedSession(t *testing.T, ctx context.Context, clien
 	detail := dispatches.Dispatches[0].FailureDetail
 	if detail.Reason != factoryapi.WorkFailureTypePermanentBadRequest || detail.Message != "provider session continuation is unsupported" {
 		t.Fatalf("disconnect reconciliation = %#v", detail)
+	}
+}
+
+// MCP RUN uses the selected compiled host's custom ACP provider. Executable
+// permission and EOF behavior belongs here, never in a functional test binary.
+func TestMCPSubagentCustomACPHandlesPermissionRequest(t *testing.T) {
+	t.Parallel()
+	binary := prebuiltCLI(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer, err := filepath.Abs(filepath.Join("testdata", "delivered-peer.cjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	directory := t.TempDir()
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(directory)
+	marker := filepath.Join(directory, "permission-outcome.txt")
+	launch := fmt.Sprintf("%q %q permission %q", node, peer, marker)
+	_, stderr, err := invokeCLI(ctx, binary, directory, env, "workers", "acp", "add", "--name", "mcp-test-acp", "--transport", "stdio", "--argument", launch)
+	if err != nil {
+		t.Fatalf("register permission peer: %v %s", err, stderr)
+	}
+	host := startDeliveredACPDaemon(t, ctx, binary, directory, env)
+	command := exec.CommandContext(ctx, binary, "--server", host, "server", "mcp", "--project-root", directory)
+	command.Dir, command.Env = directory, env
+	client := mcp.NewClient(&mcp.Implementation{Name: "permission-witness", Version: "1"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	for _, action := range []string{"", "RUN"} {
+		assertMCPPermissionCompletion(t, ctx, session, directory, action)
+		outcome, err := os.ReadFile(marker)
+		if err != nil || strings.TrimSpace(string(outcome)) != "allow-once" {
+			t.Fatalf("permission outcome = %q, %v; want allow-once", outcome, err)
+		}
+		if err := os.Remove(marker); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertMCPPermissionCompletion(t *testing.T, ctx context.Context, session *mcp.ClientSession, directory, action string) {
+	t.Helper()
+	args := map[string]any{"prompt": "Return the permission witness.", "provider": "mcp-test-acp", "model": "test-model", "workingRoot": directory}
+	if action != "" {
+		args["action"] = action
+	}
+	response, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+	if err != nil || response == nil || response.IsError {
+		t.Fatalf("RUN action=%q: %#v, %v", action, response, err)
+	}
+	text := ""
+	for _, item := range response.Content {
+		if part, ok := item.(*mcp.TextContent); ok {
+			text += part.Text
+		}
+	}
+	if !strings.Contains(text, "permission witness complete") {
+		t.Fatalf("RUN completion = %q", text)
 	}
 }

@@ -158,7 +158,14 @@ func productionWorkerSessionsCommand(
 		return executeGeneratedWorkerSessionsStreamWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.StreamWorkerSession, values)
 	}))
 	register("you.worker-sessions.invoke.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
-		return executeGeneratedWorkerSessionsInvokeWithValues(cmd, resolvedWorkerSessionPrompt(values, "you.worker-sessions.invoke.arg.0", nil), resolvedGlobals, resolvedDiagnostics, options.InvokeWorkerSession, options.LocalWorkerSessions, values)
+		invoke := options.InvokeWorkerSession
+		if invoke != nil {
+			invoke = func(config workersessionscli.InvokeConfig) error {
+				config.LookupEnv = options.lookupEnv
+				return options.InvokeWorkerSession(config)
+			}
+		}
+		return executeGeneratedWorkerSessionsInvokeWithValues(cmd, resolvedWorkerSessionPrompt(values, "you.worker-sessions.invoke.arg.0", nil), resolvedGlobals, resolvedDiagnostics, invoke, options.LocalWorkerSessions, values)
 	}))
 	register("you.worker-sessions.continue.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
 		return executeGeneratedWorkerSessionsContinueWithValues(cmd, nil, resolvedGlobals, resolvedDiagnostics, options.ContinueWorkerSession, options.LocalWorkerSessions, values)

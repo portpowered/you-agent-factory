@@ -171,6 +171,7 @@
         "you.flag.server": {
           "acceptedSources": [
             "cli",
+            "environment",
             "manifest-default"
           ],
           "aliases": [],
@@ -311,6 +312,14 @@
           "server": "you.flag.server"
         },
         "sideEffects": "none"
+      },
+      "sourceBindings": {
+        "you.flag.server.source.environment": {
+          "id": "you.flag.server.source.environment",
+          "source": "environment",
+          "externalKey": "YOU_SERVER",
+          "inputId": "you.flag.server"
+        }
       },
       "sideEffects": {
         "you.side-effect.filesystem": {

@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -843,24 +844,36 @@ type runtimeWorkerAttemptStarterProvider interface {
 	BeginWorkerAttempt(
 		context.Context,
 		*workers.ExecuteRequest,
+		*workersessions.CallerIdentity,
 	) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 }
 
+// runtimeWorkerAttemptStarter preserves the legacy registered scope boundary.
+// Registered and replayed scopes never retain invocation-local credentials.
 func runtimeWorkerAttemptStarter(
 	runtime interface{ RuntimeService() factoryruntime.Service },
 ) func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+	starter := runtimeCallerAttemptStarter(runtime)
+	if starter == nil {
+		return nil
+	}
+	return func(ctx context.Context, request *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		return starter(ctx, request, nil)
+	}
+}
+
+func runtimeCallerAttemptStarter(runtime interface{ RuntimeService() factoryruntime.Service }) factorysessions.WorkerAttemptStarter {
 	if runtime == nil {
 		return nil
 	}
-	if provider, ok := runtime.(runtimeWorkerAttemptStarterProvider); ok {
-		return provider.BeginWorkerAttempt
+	provider, ok := runtime.(runtimeWorkerAttemptStarterProvider)
+	if !ok && runtime.RuntimeService() != nil {
+		provider, _ = runtime.RuntimeService().(runtimeWorkerAttemptStarterProvider)
 	}
-	if service := runtime.RuntimeService(); service != nil {
-		if provider, ok := service.(runtimeWorkerAttemptStarterProvider); ok {
-			return provider.BeginWorkerAttempt
-		}
+	if provider == nil {
+		return nil
 	}
-	return nil
+	return provider.BeginWorkerAttempt
 }
 
 type historicalRecordingReader interface {

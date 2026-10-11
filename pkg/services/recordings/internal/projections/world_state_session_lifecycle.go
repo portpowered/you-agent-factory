@@ -1,6 +1,8 @@
 package projections
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	"sort"
 	"strings"
 	"time"
 
@@ -376,6 +378,8 @@ func (projection *IncrementalSessionProjection) Apply(event interfaces.FactoryEv
 // as the world reducer, so selection never walks those growing slices.
 type workerSessionWorkIndex struct {
 	known              map[string]struct{}
+	workNames          map[string]string
+	workIDsByName      map[string]map[string]struct{}
 	byWork             map[string]map[string]struct{}
 	workByDispatch     map[string][]string
 	dispatchByWorker   map[string]string
@@ -392,6 +396,7 @@ type workerSessionWorkIndex struct {
 
 func newWorkerSessionWorkIndex() *workerSessionWorkIndex {
 	return &workerSessionWorkIndex{
+		workNames: make(map[string]string), workIDsByName: make(map[string]map[string]struct{}),
 		known: make(map[string]struct{}), byWork: make(map[string]map[string]struct{}),
 		workByDispatch:   make(map[string][]string),
 		dispatchByWorker: make(map[string]string),
@@ -409,9 +414,14 @@ func newWorkerSessionWorkIndex() *workerSessionWorkIndex {
 func (index *workerSessionWorkIndex) apply(event interfaces.FactoryEvent, state interfaces.FactoryWorldState, completedBefore, providersBefore int) error {
 	for _, id := range sliceValue(event.Context.WorkIDs) {
 		index.known[id] = struct{}{}
+		index.indexWorkName(id, state.WorkItemsByID[id].DisplayName)
 	}
 	for position := completedBefore; position < len(state.CompletedDispatches); position++ {
-		index.completions[state.CompletedDispatches[position].DispatchID] = position
+		completion := state.CompletedDispatches[position]
+		index.completions[completion.DispatchID] = position
+		for _, id := range completion.WorkItemIDs {
+			index.indexWorkName(id, state.WorkItemsByID[id].DisplayName)
+		}
 	}
 	for position := providersBefore; position < len(state.ProviderSessions); position++ {
 		id := state.ProviderSessions[position].DispatchID
@@ -780,4 +790,78 @@ func cloneSessionBracketState(
 	}
 	cloned.FailureDetail = workerexecution.CloneFailureDetail(bracket.FailureDetail)
 	return &cloned
+}
+
+func (index *workerSessionWorkIndex) indexWorkName(id, name string) {
+	if old := index.workNames[id]; old != name {
+		delete(index.workIDsByName[old], id)
+	}
+	index.workNames[id] = name
+	if name == "" {
+		return
+	}
+	if index.workIDsByName[name] == nil {
+		index.workIDsByName[name] = make(map[string]struct{})
+	}
+	index.workIDsByName[name][id] = struct{}{}
+}
+
+// WorkOriginFacts copies only the selected ancestry and associated identities.
+// It does not choose a requester or interpret tags as authorization.
+func (projection *IncrementalSessionProjection) WorkOriginFacts(workID, relatedWorkName, relatedWorkTypeID string) sessionprojectionfacts.WorkOriginFacts {
+	facts := sessionprojectionfacts.WorkOriginFacts{ParentSnapshotsByID: make(map[string]work.WorkPayloadSnapshot), WorkerSessionIDsByDispatchID: make(map[string]string)}
+	if projection == nil || projection.reducer == nil || projection.workerWork == nil {
+		return facts
+	}
+	lineage := projection.reducer.stateValue.PayloadLineage
+	snapshotID := ""
+	if len(lineage.SnapshotIDsByWorkID[workID]) > 0 {
+		snapshotID = lineage.SnapshotIDsByWorkID[workID][0]
+	}
+	if snapshot, found := lineage.SnapshotsByID[snapshotID]; found {
+		snapshot.ParentSnapshotIDs = append([]string(nil), snapshot.ParentSnapshotIDs...)
+		snapshot.ParentWorkIDs = append([]string(nil), snapshot.ParentWorkIDs...)
+		snapshot.ParentLogicalWorkIDs = append([]string(nil), snapshot.ParentLogicalWorkIDs...)
+		snapshot.WorkItem = cloneFactoryWorkItem(snapshot.WorkItem)
+		facts.InitialSnapshot = &snapshot
+		facts.WorkerSessionID = projection.workerWork.associations[snapshot.DispatchID].WorkerSessionID
+	}
+	if facts.InitialSnapshot != nil {
+		pending := append([]string(nil), facts.InitialSnapshot.ParentSnapshotIDs...)
+		for len(pending) > 0 {
+			id := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if _, seen := facts.ParentSnapshotsByID[id]; seen {
+				continue
+			}
+			snapshot, found := lineage.SnapshotsByID[id]
+			if !found {
+				continue
+			}
+			snapshot.ParentSnapshotIDs = append([]string(nil), snapshot.ParentSnapshotIDs...)
+			snapshot.ParentWorkIDs = append([]string(nil), snapshot.ParentWorkIDs...)
+			snapshot.ParentLogicalWorkIDs = append([]string(nil), snapshot.ParentLogicalWorkIDs...)
+			snapshot.WorkItem = cloneFactoryWorkItem(snapshot.WorkItem)
+			facts.ParentSnapshotsByID[id] = snapshot
+			facts.WorkerSessionIDsByDispatchID[snapshot.DispatchID] = projection.workerWork.associations[snapshot.DispatchID].WorkerSessionID
+			pending = append(pending, snapshot.ParentSnapshotIDs...)
+		}
+	}
+
+	for id := range projection.workerWork.workIDsByName[relatedWorkName] {
+		if item, found := projection.reducer.stateValue.WorkItemsByID[id]; found && item.WorkTypeID == relatedWorkTypeID {
+			facts.RelatedWorkIDs = append(facts.RelatedWorkIDs, id)
+		}
+	}
+	sort.Strings(facts.RelatedWorkIDs)
+	return facts
+}
+
+func cloneFactoryWorkItem(item work.FactoryWorkItem) work.FactoryWorkItem {
+	item.PreviousChainingTraceIDs = append([]string(nil), item.PreviousChainingTraceIDs...)
+	item.Content = work.CloneWorkContentParts(item.Content)
+	item.Payload = append([]byte(nil), item.Payload...)
+	item.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+	item.Tags = work.CloneTags(item.Tags)
+	return item
 }

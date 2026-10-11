@@ -6,12 +6,14 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -134,11 +136,12 @@ func NewWithCapturedActivity(
 	snapshots *HistorySnapshotBudget,
 	continuationSupport providers.Service,
 	inspection providersessions.Service,
+	tokenEntropy io.Reader,
 ) (workersessions.Service, error) {
 	if snapshots == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable
 	}
-	service, err := New(execution, eventsAppender, logger, clock, scheduler, recording, operations, restart, inspection)
+	service, err := New(execution, eventsAppender, logger, clock, scheduler, recording, operations, restart, inspection, tokenEntropy)
 	if err != nil {
 		return nil, err
 	}
@@ -147,3 +150,102 @@ func NewWithCapturedActivity(
 	service.(*registry).logs = logs
 	return service, nil
 }
+
+// redactExecutionValue protects the supervised publication boundary even if a
+// controlled executor bypasses Providers' own sanitizer. Retired secrets remain
+// classified for late callbacks, independently of their revoked authority.
+func (r *registry) redactExecutionValue(id string, source, target any) (bool, error) {
+	r.mu.RLock()
+	secrets := append([]string(nil), r.executionSecrets[id]...)
+	r.mu.RUnlock()
+	if len(secrets) == 0 {
+		return false, nil
+	}
+	payload, err := json.Marshal(source)
+	if err != nil {
+		return false, errors.New("worker sessions: execution output cannot be sanitized")
+	}
+	safe := string(payload)
+	for _, secret := range secrets {
+		safe = strings.ReplaceAll(safe, secret, "[REDACTED]")
+	}
+	if safe == string(payload) {
+		return false, nil
+	}
+	if err := json.Unmarshal([]byte(safe), target); err != nil {
+		return false, errors.New("worker sessions: execution output cannot be sanitized")
+	}
+	return true, nil
+}
+
+func (r *registry) redactExecutionFragment(id string, fragment workers.ProgressFragment) (workers.ProgressFragment, error) {
+	var safe workers.ProgressFragment
+	changed, err := r.redactExecutionValue(id, fragment, &safe)
+	if err != nil {
+		return workers.ProgressFragment{}, err
+	}
+	if !changed {
+		return fragment, nil
+	}
+	// Preserve the typed canonical draft rather than decode it to an opaque map.
+	switch draft := fragment.CanonicalDraft.(type) {
+	case workers.Draft:
+		clone := workers.CloneDraft(draft)
+		if _, err := r.redactExecutionValue(id, draft, &clone); err != nil {
+			return workers.ProgressFragment{}, err
+		}
+		safe.CanonicalDraft = clone
+	case *workers.Draft:
+		if draft != nil {
+			clone := workers.CloneDraft(*draft)
+			if _, err := r.redactExecutionValue(id, draft, &clone); err != nil {
+				return workers.ProgressFragment{}, err
+			}
+			safe.CanonicalDraft = &clone
+		}
+	}
+	return safe, nil
+}
+
+func (r *registry) redactExecutionResult(id string, result workers.WorkstationDispatchResult, executionErr error) (workers.WorkstationDispatchResult, error) {
+	// Include transient content explicitly; its durable encoding omits it.
+	source := struct {
+		Result         workers.WorkstationDispatchResult
+		OutputContent  []work.WorkContentPart
+		ProposedOutput *workers.ProposedOutput
+	}{result, result.Result.OutputContent, result.ProposedOutput}
+	var sanitized struct {
+		Result         workers.WorkstationDispatchResult
+		OutputContent  []work.WorkContentPart
+		ProposedOutput *workers.ProposedOutput
+	}
+	changed, err := r.redactExecutionValue(id, source, &sanitized)
+	if err != nil {
+		return workers.WorkstationDispatchResult{DispatchID: result.DispatchID, TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed}, err
+	}
+	if changed {
+		result = sanitized.Result
+		result.Result.OutputContent = sanitized.OutputContent
+		result.ProposedOutput = sanitized.ProposedOutput
+	}
+	if executionErr == nil {
+		return result, nil
+	}
+	var text string
+	changed, err = r.redactExecutionValue(id, executionErr.Error(), &text)
+	if err != nil {
+		return result, err
+	}
+	if changed {
+		executionErr = &executionDiagnosticError{cause: executionErr, text: text}
+	}
+	return result, executionErr
+}
+
+type executionDiagnosticError struct {
+	cause error
+	text  string
+}
+
+func (e *executionDiagnosticError) Error() string { return e.text }
+func (e *executionDiagnosticError) Unwrap() error { return e.cause }

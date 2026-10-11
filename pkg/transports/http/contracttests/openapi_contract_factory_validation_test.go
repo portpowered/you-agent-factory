@@ -1,10 +1,68 @@
 package apicontract_test
 
 import (
+	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestWorkerSessionRequesterMetadataContractValidationAndClientParity(t *testing.T) {
+	t.Parallel()
+	properties := loadValidatedOpenAPIContract(t).Components.Schemas["WorkerSessionObservation"].Value.Properties
+	cases := []struct {
+		name, field, value string
+		valid              bool
+	}{
+		{"requester", "requester", `{"kind":"WORKER_SESSION","workerSessionId":"lead/exact","workId":"project-work"}`, true},
+		{"null root", "requester", `null`, true},
+		{"optional requester work", "requester", `{"kind":"WORKER_SESSION","workerSessionId":"lead/exact"}`, true},
+		{"operator", "requester", `{"kind":"OPERATOR","workerSessionId":"operator"}`, false},
+		{"empty identity", "requester", `{"kind":"WORKER_SESSION","workerSessionId":""}`, false},
+		{"missing kind", "requester", `{"workerSessionId":"lead"}`, false},
+		{"secret", "requester", `{"kind":"WORKER_SESSION","workerSessionId":"lead","token":"planted-secret"}`, false},
+		{"correlation", "correlation", `{"workId":"work","factorySessionId":"factory/exact"}`, true},
+		{"unknown correlation", "correlation", `{"token":"planted-secret"}`, false},
+		{"empty correlation ID", "correlation", `{"workId":""}`, false},
+		{"labels", "labels", `["project:agent-messaging"]`, true},
+		{"label limit", "labels", `["` + strings.Repeat("x", 200) + `"]`, true},
+		{"oversize label", "labels", `["` + strings.Repeat("x", 201) + `"]`, false},
+		{"too many labels", "labels", `[` + strings.Repeat(`"label",`, 32) + `"label"]`, false},
+	}
+	for _, cell := range cases {
+		t.Run(cell.name, func(t *testing.T) {
+			var value any
+			if err := json.Unmarshal([]byte(cell.value), &value); err != nil {
+				t.Fatal(err)
+			}
+			if err := properties[cell.field].Value.VisitJSON(value); (err == nil) != cell.valid {
+				t.Fatalf("%s validation = %v, want valid=%t", cell.field, err, cell.valid)
+			}
+		})
+	}
+	const input = `{"workerSessionId":"child/exact","requester":{"kind":"WORKER_SESSION","workerSessionId":"lead/exact","workId":"project-work"},"correlation":{"workId":"work","factorySessionId":"factory/exact"},"labels":["project:agent-messaging"]}`
+	var server factoryapi.WorkerSessionObservation
+	var client generatedclient.WorkerSessionObservation
+	decodeRoundTripJSON(t, []byte(input), &server, "server observation")
+	decodeRoundTripJSON(t, []byte(input), &client, "client observation")
+	serverJSON, err := json.Marshal(server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientJSON, err := json.Marshal(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var serverValue, clientValue any
+	decodeRoundTripJSON(t, serverJSON, &serverValue, "server JSON")
+	decodeRoundTripJSON(t, clientJSON, &clientValue, "client JSON")
+	if !reflect.DeepEqual(serverValue, clientValue) {
+		t.Fatalf("server/client observation representations differ: %s / %s", serverJSON, clientJSON)
+	}
+}
 
 func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)

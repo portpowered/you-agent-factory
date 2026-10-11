@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ func runtimeAttemptPreparation(
 	request workers.WorkstationDispatchRequest,
 	executeRequest workers.ExecuteRequest,
 	allowRetry bool,
+	caller *workersessions.CallerIdentity,
 ) attemptPreparation {
 	if cfg == nil || cfg.workerAttempts == nil {
 		return nil
@@ -56,6 +58,14 @@ func runtimeAttemptPreparation(
 		if executing != nil {
 			admissionRequest.Execution.AttemptControlObserver = executing.Input.AttemptControlObserver
 		}
+		metadata, err := cfg.dispatchRequesterMetadata(ctx, admissionRequest, executeRequest)
+		if err != nil {
+			return nil, err
+		}
+		admittedCaller := caller.Clone()
+		if admittedCaller == nil {
+			admittedCaller = cfg.invocationCaller(executeRequest.Input.Work)
+		}
 		attempt, err := recorder.BeginRuntimeAttempt(
 			context.WithoutCancel(ctx),
 			workersessions.RuntimeAttemptRequest{
@@ -65,7 +75,14 @@ func runtimeAttemptPreparation(
 				ID:                          sessionID,
 				AttemptID:                   executeRequest.Correlation.AttemptID,
 				Execution:                   admissionRequest,
-				BindAttemptControl:          bindRuntimeAttemptControl(executing, runtimeForceDispositionAvailable(cfg, request, executeRequest)),
+				Metadata:                    metadata,
+				Caller:                      admittedCaller,
+				BindEnvironment: func(environment []string) {
+					if executing != nil {
+						executing.Target.Environment.SupervisedEnvironment = append([]string(nil), environment...)
+					}
+				},
+				BindAttemptControl: bindRuntimeAttemptControl(executing, runtimeForceDispositionAvailable(cfg, request, executeRequest)),
 			},
 			execution,
 			clock,
@@ -78,6 +95,9 @@ func runtimeAttemptPreparation(
 			},
 		)
 		if err != nil {
+			if errors.Is(err, workersessions.ErrCallerInvalid) {
+				cfg.refuseInvocationCaller(executeRequest.Input.Work)
+			}
 			return nil, err
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) (workers.ExecuteResult, error) {
@@ -104,6 +124,52 @@ func runtimeAttemptPreparation(
 			return result, errors.Join(executeErr, completionErr)
 		}, nil
 	}
+}
+
+// Dispatch facts are descriptive. Work tags and parent hints cannot establish
+// requester authority; that requires the producing dispatch's scoped lineage.
+func runtimeDispatchMetadata(request workers.WorkstationDispatchRequest, execution workers.ExecuteRequest) *workersessions.SessionMetadata {
+	metadata := &workersessions.SessionMetadata{}
+	sessionID := strings.TrimSpace(request.Execution.FactorySessionID)
+	labels := make(map[string]struct{})
+	if sessionID != "" {
+		metadata.Correlation = &workersessions.Correlation{FactorySessionID: sessionID}
+		labels["factory-session:"+sessionID] = struct{}{}
+	}
+	if station := strings.TrimSpace(request.WorkstationName); station != "" {
+		labels["workstation:"+station] = struct{}{}
+	}
+	workIDs := make(map[string]struct{})
+	for _, input := range execution.Input.Work {
+		if input.Kind == string(workers.DataTypeResource) || input.WorkID == "" {
+			continue
+		}
+		workIDs[input.WorkID] = struct{}{}
+		labels["work:"+input.WorkID] = struct{}{}
+		for key, value := range input.Tags {
+			// Previous output is unbounded internal routing state, not a label.
+			// Keep it on the canonical Work without projecting it into metadata.
+			if key == "_last_output" {
+				continue
+			}
+			labels["tag:"+key+"="+value] = struct{}{}
+		}
+	}
+	// A multi-Work dispatch has no singular source Work. Preserve its labels
+	// rather than choosing one input's identity based on incidental ordering.
+	if len(workIDs) == 1 {
+		if metadata.Correlation == nil {
+			metadata.Correlation = &workersessions.Correlation{}
+		}
+		for id := range workIDs {
+			metadata.Correlation.WorkID = id
+		}
+	}
+	for label := range labels {
+		metadata.Labels = append(metadata.Labels, label)
+	}
+	sort.Strings(metadata.Labels)
+	return metadata
 }
 
 // Factory force must have an authored terminal destination for every input

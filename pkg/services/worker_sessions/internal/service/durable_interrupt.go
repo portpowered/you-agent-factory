@@ -271,6 +271,7 @@ func (r *registry) commitInterruptPhase(ctx context.Context, operation *recordin
 func interruptSessionFacts(session workersessions.Session) workersessions.Session {
 	return workersessions.Session{
 		ID: session.ID, State: session.State,
+		Metadata:                   session.Metadata.Clone(),
 		PredecessorWorkerSessionID: session.PredecessorWorkerSessionID,
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
 	}

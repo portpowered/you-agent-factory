@@ -15,6 +15,30 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
+func TestInterruptMetadataJSONRejectsUnknownOrMalformedFacts(t *testing.T) {
+	t.Parallel()
+	for _, payload := range []string{
+		`null`, `{}`, `{"Requester":null}`, `{"requester":null,"token":"secret"}`,
+		`{"requester":{"Kind":"WORKER_SESSION","workerSessionId":"lead"}}`,
+		`{"requester":{"kind":"OPERATOR","workerSessionId":"lead"}}`,
+		`{"requester":{"kind":"WORKER_SESSION","workerSessionId":""}}`,
+		`{"requester":null,"correlation":{"WorkID":"work"}}`,
+		`{"requester":null,"labels":["` + strings.Repeat("x", 201) + `"]}`,
+	} {
+		if validInterruptMetadataJSON(json.RawMessage(payload)) {
+			t.Fatal("accepted malformed persisted metadata")
+		}
+	}
+	for _, payload := range []string{
+		`{"requester":null}`,
+		`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead"},"correlation":{"workId":"work"},"labels":["parent:lead"]}`,
+	} {
+		if !validInterruptMetadataJSON(json.RawMessage(payload)) {
+			t.Fatal("rejected valid nonsecret persisted metadata")
+		}
+	}
+}
+
 type interruptInputStore struct {
 	stopOperationStore
 	input         json.RawMessage
@@ -743,6 +767,12 @@ func TestInterruptJournalReplayPreservesAcceptedLineageWithoutPrivateMetadata(t 
 		ID: "successor", State: workersessions.StateRunning, ReasoningEffort: &private,
 		PredecessorWorkerSessionID: "worker",
 	}
+	result.Source.Metadata = &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
+		Correlation: &workersessions.Correlation{WorkID: "work", FactorySessionID: "factory"},
+		Labels:      []string{"parent:lead"},
+	}
+	result.Successor.Metadata = result.Source.Metadata.Clone()
 	if err := r.commitInterruptResult(t.Context(), operation, result, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -763,6 +793,8 @@ func TestInterruptJournalReplayPreservesAcceptedLineageWithoutPrivateMetadata(t 
 		t.Fatalf("accepted snapshot changed: got=%#v want=%#v found=%v err=%v", replayed, want, found, err)
 	}
 	replayed.Source.PredecessorWorkerSessionID = "caller-mutation"
+	replayed.Source.Metadata.Requester.WorkerSessionID = "caller-mutation"
+	replayed.Successor.Metadata.Labels[0] = "caller-mutation"
 	refetched, _, err := r.replayDurableInterrupt(t.Context(), plan.request)
 	if err != nil || !reflect.DeepEqual(refetched, want) || len(store.records) != 4 {
 		t.Fatalf("retry mutated snapshot or journal: got=%#v err=%v records=%d", refetched, err, len(store.records))

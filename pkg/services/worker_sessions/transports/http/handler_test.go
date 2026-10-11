@@ -532,6 +532,7 @@ func TestStartWorkerSessionMapsStableServiceFailures(t *testing.T) {
 		code factoryapi.ErrorResponseCode
 		want int
 	}{
+		{name: "caller invalid", err: workersessions.ErrCallerInvalid, code: factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID, want: http.StatusForbidden},
 		{name: "request id conflict", err: workersessions.ErrStartRequestIDConflict, code: factoryapi.ErrorResponseCodeWORKERSESSIONSTARTREQUESTIDCONFLICT, want: http.StatusConflict},
 		{name: "identity conflict", err: workersessions.ErrSessionNotStartable, code: factoryapi.ErrorResponseCodeWORKERSESSIONNOTSTARTABLE, want: http.StatusConflict},
 		{name: "event unavailable", err: workersessions.ErrEventTopicUnavailable, code: factoryapi.ErrorResponseCodeWORKERSESSIONEVENTTOPICUNAVAILABLE, want: http.StatusServiceUnavailable},

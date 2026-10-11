@@ -11,6 +11,7 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -44,12 +45,17 @@ func (h *Handler) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "request payload is required", "BAD_REQUEST")
 		return
 	}
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		h.writeMappedStartError(w, err)
+		return
+	}
 	decoded, err := decodeWorkerSessionStartRequestWithDiagnostics(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	response, err := h.adapter.StartWorkerSession(r.Context(), decoded.Value)
+	response, err := h.adapter.StartWorkerSession(r.Context(), decoded.Value, caller)
 	if err != nil {
 		h.writeMappedStartError(w, err)
 		return

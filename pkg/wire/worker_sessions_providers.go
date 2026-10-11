@@ -114,6 +114,7 @@ func provideWorkerHistorySnapshotBudget() *workersessionswire.HistorySnapshotBud
 }
 
 func provideWorkerSessionsService(
+	edges serviceedges.Edges,
 	execution workers.Service,
 	eventsService events.Service,
 	logger logging.Logger,
@@ -127,7 +128,11 @@ func provideWorkerSessionsService(
 	providerService providers.Service,
 	inspection providersessions.Service,
 ) (workersessions.Service, error) {
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, logs, operations, restart, snapshots, providerService, inspection)
+	tokenEntropy := edges.WorkerSessionTokenEntropy
+	if tokenEntropy == nil {
+		tokenEntropy = rand.Reader
+	}
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, logs, operations, restart, snapshots, providerService, inspection, tokenEntropy)
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {
@@ -139,10 +144,19 @@ func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.
 }
 
 // Catalog membership is evaluated on each read, after new Sessions are admitted.
-func provideFleetObservationCatalog(root *factorysessionwire.Root) workersessionswire.ObservationServiceCatalog {
+func provideFleetObservationCatalog(root *factorysessionwire.Root, logs workersessions.Service) workersessionswire.ObservationServiceCatalog {
 	return func(ctx context.Context) ([]workersessions.Service, error) {
 		hostID, _ := workersessionshttp.RuntimeHostSession(ctx)
-		return workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
+		selected, err := workerSessionObservationSources(ctx, root, root.WorkerSessionsObservationForSession(hostID))
+		if err != nil {
+			return nil, err
+		}
+		// Direct successors remain owned here after their Factory runtime closes.
+		direct, err := workersessionswire.NewDirectFleetObservationSource(logs)
+		if err != nil {
+			return nil, err
+		}
+		return append(selected, direct), nil
 	}
 }
 

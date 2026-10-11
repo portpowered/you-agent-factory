@@ -65,6 +65,7 @@ var servicesSet = wire.NewSet(
 	workersessionswire.NewFleetHistory,
 	workersessionswire.NewFleetObservationService,
 	provideWorkerSessionsService,
+	workersessionswire.CallerValidation,
 	provideWorkerHistorySnapshotBudget,
 	provideWorkerAttemptOpener,
 	provideApplicationProcessLifecycle,

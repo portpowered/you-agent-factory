@@ -208,6 +208,27 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionLogs",
+        "rest/readWorkerSessionTranscriptByWorkerSessionId",
+        "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterRecipeFailureBeforeAdmission",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
@@ -224,10 +245,43 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show",
+        "rest/continueWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "rest/moveWorkBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "rest/moveWorkBySessionId"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
       "stableIds": [
         "cli/you.worker-sessions.cancel",
         "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.show",
         "rest/readWorkerSessionLogs"
       ]
     },
@@ -243,6 +297,22 @@
       "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7UnreachableHostNeverFallsBackToLocalProvider",
       "stableIds": [
         "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
+      "stableIds": [
+        "cli/you.run",
+        "cli/you.server.mcp"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+      "stableIds": [
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/startDurableFactorySessionAsync",
+        "rest/startDurableFactorySessionSync"
       ]
     },
     {
@@ -270,6 +340,15 @@
       ]
     },
     {
+      "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+      "stableIds": [
+        "cli/you.run",
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
       "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
       "stableIds": [
         "cli/you.worker-sessions.invoke",
@@ -292,6 +371,104 @@
         "cli/you.worker-sessions.invoke",
         "cli/you.worker-sessions.terminate",
         "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+      "stableIds": [
+        "cli/you.worker-sessions.interrupt",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.show",
+        "rest/interruptWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
+      "stableIds": [
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+      "stableIds": [
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+      "stableIds": [
+        "cli/you.run",
+        "rest/startDurableFactorySessionAsync",
+        "rest/startDurableFactorySessionSync"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+      "stableIds": [
+        "cli/you.server.mcp",
+        "mcp/mcp.tool.you.subagent",
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/terminateFactorySession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+      "stableIds": [
+        "cli/you.server.mcp",
+        "mcp/mcp.tool.you.subagent",
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/terminateFactorySession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+      "stableIds": [
+        "cli/you.server.mcp",
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.invoke",
+        "cli/you.worker-sessions.show",
+        "mcp/mcp.tool.you.subagent",
+        "rest/closeFactorySession",
+        "rest/invokeFactorySessionBySessionId",
+        "rest/openFactorySession",
+        "rest/startWorkerSession",
+        "rest/terminateFactorySession"
       ]
     },
     {

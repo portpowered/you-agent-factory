@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"testing"
@@ -55,7 +56,7 @@ func (s stubInvocationService) GetFactoryEvents(context.Context) ([]interfaces.F
 	return events, nil
 }
 
-func (s stubInvocationService) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+func (s stubInvocationService) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest, caller *workersessions.CallerIdentity) (apisurface.FactoryInvocationResult, error) {
 	return s.invoke(ctx, sessionID, request)
 }
 

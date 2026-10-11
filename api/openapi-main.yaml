@@ -175,6 +175,17 @@ paths:
       tags:
         - Worker Sessions
       operationId: startWorkerSession
+      security:
+        - {}
+        - WorkerSessionCaller: []
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       summary: Start one directly resolved Worker Session
       description: >-
         Reserves and starts one already-resolved Worker execution. The server
@@ -197,6 +208,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkerSessionStartResponse'
+        '403':
+          description: Worker Session caller credentials are invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -1001,6 +1018,9 @@ paths:
       tags:
         - Work
       operationId: invokeFactorySessionBySessionId
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Invoke one factory session and return its primary result
       description: >-
         Session selectors accept ~default, a lowercase hyphenated UUID, or
@@ -1022,6 +1042,13 @@ paths:
         resolved, the response status is FAILED with
         INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
       parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
         - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
@@ -1036,6 +1063,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InvocationResponse'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -1691,6 +1724,9 @@ paths:
       tags:
         - Factory
       operationId: startDurableFactorySessionAsync
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Start durable factory session execution asynchronously
       description: >-
         Primary durable execution entrypoint for dynamic workflow-backed factory
@@ -1705,6 +1741,14 @@ paths:
         existing session instead of starting duplicate work. Reusing requestId
         with materially different inputs returns 409 Conflict with
         EXECUTION_REQUEST_ID_CONFLICT.
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -1718,6 +1762,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FactorySessionExecutionResponse'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -1729,6 +1779,9 @@ paths:
       tags:
         - Factory
       operationId: startDurableFactorySessionSync
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Start durable factory session execution synchronously
       description: >-
         Durable execution entrypoint that waits for terminal completion or a sync
@@ -1739,6 +1792,14 @@ paths:
         response includes FactorySessionResult. Timeout responses use
         syncOutcome = TIMED_OUT and must not imply the session was canceled
         unless wait.cancelOnTimeout was explicitly true in the request.
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -1752,6 +1813,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FactorySessionSyncExecutionResponse'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '409':
@@ -1790,6 +1857,9 @@ paths:
       tags:
         - Factory
       operationId: openFactorySession
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Open another live factory session
       description: >-
         Live-session compatibility API for opening workspace tabs from a folder
@@ -1800,6 +1870,14 @@ paths:
         target selection without creating a session. When the folder exposes more
         than one runnable target and no explicit target was provided, the response
         returns typed target metadata instead of creating a session yet.
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -1813,6 +1891,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OpenFactorySessionResponse'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
         '500':
@@ -2557,6 +2641,9 @@ paths:
           $ref: '#/components/responses/InternalError'
 
 components:
+  securitySchemes:
+    WorkerSessionCaller:
+      $ref: './components/securitySchemes/WorkerSessionCaller.yaml'
   parameters:
     SessionID:
       $ref: './components/parameters/SessionID.yaml'

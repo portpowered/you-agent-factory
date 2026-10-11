@@ -67,6 +67,7 @@ func TestTerminalCaptureKeepsExactAttemptReferenceWithoutCredentials(t *testing.
 }
 
 type restartRecipeStore struct {
+	metadata  json.RawMessage
 	target    recordings.WorkerControlTarget
 	execution workers.WorkstationDispatchRequest
 	calls     int
@@ -75,11 +76,14 @@ type restartRecipeStore struct {
 	input     func() json.RawMessage
 }
 
-func (store *restartRecipeStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+func (store *restartRecipeStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return store.err
 }
 
-func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
+func (store *restartRecipeStore) SaveWorkerRestartRecipe(_ context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
+	if len(metadata) == 1 {
+		store.metadata = append(json.RawMessage(nil), metadata[0]...)
+	}
 	store.calls++
 	store.target = target
 	store.execution = execution
@@ -202,7 +206,7 @@ func TestControlOpeningBindsAcknowledgedCaptureIdentity(t *testing.T) {
 			t.Parallel()
 			r := newTestRegistry(t)
 			id := scopedWorkerAddress("worker", "factory")
-			r.reserveIfAbsent(id)
+			r.reserveIfAbsent(id, nil)
 			identity := exactCaptureIdentity()
 			switch mismatch {
 			case "missing-generation":

@@ -152,6 +152,17 @@ paths:
       tags:
         - Worker Sessions
       operationId: startWorkerSession
+      security:
+        - {}
+        - WorkerSessionCaller: []
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       summary: Start one directly resolved Worker Session
       description: Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
       requestBody:
@@ -169,6 +180,12 @@ paths:
                 $ref: '#/components/schemas/WorkerSessionStartResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Worker Session caller credentials are invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
@@ -876,9 +893,19 @@ paths:
       tags:
         - Work
       operationId: invokeFactorySessionBySessionId
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Invoke one factory session and return its primary result
       description: Session selectors accept ~default, a lowercase hyphenated UUID, or dur-sess- followed by 32 lowercase hexadecimal digits. Unsupported selectors return BAD_REQUEST before Work admission; valid absent identities retain NOT_FOUND. Live-session compatibility API for invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Requests may use legacy text-first compatibility content or structured invocationSignature args. Structured args normalize through the shared backend argument resolver, while content preserves the legacy compatibility carrier. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
       parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
         - $ref: '#/components/parameters/SessionID'
       requestBody:
         required: true
@@ -895,6 +922,12 @@ paths:
                 $ref: '#/components/schemas/InvocationResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1463,8 +1496,19 @@ paths:
       tags:
         - Factory
       operationId: startDurableFactorySessionAsync
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Start durable factory session execution asynchronously
       description: 'Primary durable execution entrypoint for dynamic workflow-backed factory sessions. Accepts the normalized FactorySessionExecutionRequest, resolves the requested source, and returns session identity plus polling links without waiting for terminal completion. WORKFLOW_FILE and WORKFLOW_NAME sources resolve in order: project `.claude/workflows`, user `~/.you-agent-factory/workflows`, package-relative workflow directories, built-in/global JavaScript factories, then explicit factory lookup when requested or required. Replaying the same requestId with the same normalized source, args, orchestrator, and requested policy returns the existing session instead of starting duplicate work. Reusing requestId with materially different inputs returns 409 Conflict with EXECUTION_REQUEST_ID_CONFLICT.'
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -1480,6 +1524,12 @@ paths:
                 $ref: '#/components/schemas/FactorySessionExecutionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/ExecutionRequestIdConflict'
         '500':
@@ -1489,8 +1539,19 @@ paths:
       tags:
         - Factory
       operationId: startDurableFactorySessionSync
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Start durable factory session execution synchronously
       description: Durable execution entrypoint that waits for terminal completion or a sync timeout before returning. Accepts the same normalized FactorySessionExecutionRequest as POST /factory-sessions/async and uses the same workflow source resolution order and requestId idempotency semantics. When the session reaches a terminal result before timeout, the response includes FactorySessionResult. Timeout responses use syncOutcome = TIMED_OUT and must not imply the session was canceled unless wait.cancelOnTimeout was explicitly true in the request.
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -1506,6 +1567,12 @@ paths:
                 $ref: '#/components/schemas/FactorySessionSyncExecutionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/ExecutionRequestIdConflict'
         '500':
@@ -1534,8 +1601,19 @@ paths:
       tags:
         - Factory
       operationId: openFactorySession
+      security:
+        - {}
+        - WorkerSessionCaller: []
       summary: Open another live factory session
       description: Live-session compatibility API for opening workspace tabs from a folder path and optional target selection. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+      parameters:
+        - name: X-You-Worker-Session-Id
+          in: header
+          required: false
+          description: Caller Worker Session identity. Requires its execution-only bearer token.
+          schema:
+            type: string
+            minLength: 1
       requestBody:
         required: true
         content:
@@ -1551,6 +1629,12 @@ paths:
                 $ref: '#/components/schemas/OpenFactorySessionResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Invalid Worker Session caller credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/result:
@@ -2213,6 +2297,11 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 components:
+  securitySchemes:
+    WorkerSessionCaller:
+      type: http
+      scheme: bearer
+      bearerFormat: base64url-32-bytes-unpadded
   parameters:
     SessionID:
       name: session_id
@@ -3020,6 +3109,9 @@ components:
         message:
           type: string
           description: Human-readable failure summary when status is not `COMPLETED`.
+        failureReason:
+          $ref: '#/components/schemas/WorkFailureType'
+          description: Recognized failure category selected by the invocation owner. Absent for successful invocations and failures without a recognized category.
         sessionId:
           type: string
           description: Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
@@ -3885,6 +3977,43 @@ components:
         workerSessionId:
           type: string
           description: Stable Worker Session identity.
+        requester:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required:
+            - kind
+            - workerSessionId
+          description: Recorded requester, when verified at admission. Null or absent when no requester was recorded.
+          properties:
+            kind:
+              type: string
+              enum:
+                - WORKER_SESSION
+            workerSessionId:
+              type: string
+              minLength: 1
+            workId:
+              type: string
+              minLength: 1
+        correlation:
+          type: object
+          additionalProperties: false
+          description: Work and Factory Session identities recorded at admission, when known.
+          properties:
+            workId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              minLength: 1
+        labels:
+          type: array
+          maxItems: 32
+          description: Descriptive labels recorded at admission.
+          items:
+            type: string
+            maxLength: 200
         direct:
           type: boolean
           description: Whether this observation was admitted through the direct top-level Worker Session surface.
@@ -5902,6 +6031,7 @@ components:
             - REQUEST_CONFLICT
             - WORKER_SESSION_START_REQUEST_ID_CONFLICT
             - WORKER_SESSION_NOT_STARTABLE
+            - WORKER_SESSION_CALLER_INVALID
             - WORKER_SESSION_START_OPENING_FAILED
             - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
             - WORKER_SESSION_EVENT_CURSOR_INVALID
@@ -5970,6 +6100,7 @@ components:
             - A live-change requestId was reused with a different normalized request body.
             - Worker Session start requestId was reused with different normalized inputs.
             - The requested Worker Session identity is already reserved or terminal.
+            - Worker Session caller credentials are invalid or no longer belong to a running owner.
             - The Worker Session opening record could not be published.
             - The Worker Session event topic did not reach the required readiness barrier.
             - The Worker Session event cursor is malformed.
@@ -8362,6 +8493,14 @@ components:
       properties:
         folderPath:
           type: string
+        factoryId:
+          type: string
+          minLength: 1
+          description: Packaged Factory name, such as @you/subagent, resolved by the host. Cannot be combined with target or initNewFactory. folderPath remains the working root.
+        requestId:
+          type: string
+          minLength: 1
+          description: Idempotency key for live activation. Repeating the key returns the existing live session.
         target:
           $ref: '#/components/schemas/FactorySessionTargetRef'
         validateOnly:

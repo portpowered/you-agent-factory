@@ -15,6 +15,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
@@ -311,7 +312,7 @@ func TestProvideLocalWorkerSessionsBoundaryRetainsSelectedFactClockOnOpeningFail
 	factTime := time.Date(2035, 5, 6, 7, 8, 9, 0, time.UTC)
 	facts := platformclock.NewDeterministic(factTime, time.Second)
 	deadlines := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-	service, err := provideWorkerSessionsService(localBoundaryWorkersService{}, localBoundaryRejectedEvents{},
+	service, err := provideWorkerSessionsService(serviceedges.Edges{}, localBoundaryWorkersService{}, localBoundaryRejectedEvents{},
 		logging.NoopLogger{}, facts, deadlines, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil, nil)
 	if err != nil {
 		t.Fatal(err)

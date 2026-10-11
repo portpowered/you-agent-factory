@@ -41,7 +41,7 @@ func newObservationService(
 	clock platformclock.Source,
 ) workersessions.Service {
 	t.Helper()
-	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
+	service, err := workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.NoopLogger{}, clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 	if err != nil {
 		t.Fatalf("worker session service construction: %v", err)
 	}
@@ -735,11 +735,11 @@ func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, rec
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
 
-func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return recordings.ErrMissingWorkerRestartInputStore
 }
 
-func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return recordings.ErrWorkerRecordingPersistence
 }
 

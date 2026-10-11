@@ -168,6 +168,7 @@ func (wrapped *invocationScheduleFactory) BindModelsRuntimeScope(scope modelprov
 func (wrapped *invocationScheduleFactory) BeginWorkerAttempt(
 	ctx context.Context,
 	request *workers.ExecuteRequest,
+	caller *workersessions.CallerIdentity,
 ) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if wrapped == nil {
 		return nil, factory.ErrNotRunning
@@ -176,12 +177,13 @@ func (wrapped *invocationScheduleFactory) BeginWorkerAttempt(
 		BeginWorkerAttempt(
 			context.Context,
 			*workers.ExecuteRequest,
+			*workersessions.CallerIdentity,
 		) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 	})
 	if provider == nil {
 		return nil, factory.ErrNotRunning
 	}
-	return provider.BeginWorkerAttempt(ctx, request)
+	return provider.BeginWorkerAttempt(ctx, request, caller)
 }
 
 func (wrapped *invocationScheduleFactory) ControlPause(ctx context.Context, request factory.PauseRequest) (factory.PauseResult, error) {
@@ -222,6 +224,14 @@ func (wrapped *invocationScheduleFactory) AcceptDispatchResult(ctx context.Conte
 
 func (wrapped *invocationScheduleFactory) InvokeWorker(ctx context.Context, request factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
 	return wrapped.runtimeService().InvokeWorker(ctx, request)
+}
+
+func (wrapped *invocationScheduleFactory) PrepareInvocation(ctx context.Context, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
+	owner := wrapped.runtimeService()
+	if owner == nil {
+		return work.SubmitRequest{}, nil, factory.ErrNotRunning
+	}
+	return owner.PrepareInvocation(ctx, request, caller)
 }
 
 func (wrapped *invocationScheduleFactory) PreviewResourceCapacity(

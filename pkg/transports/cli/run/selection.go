@@ -177,6 +177,7 @@ func (s *selection) runDirectJavaScript(
 		return err
 	}
 	request := factorysessions.DirectJavaScriptRunRequest{
+		Caller:     cfg.Caller.Clone(),
 		SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
 		JSONOutput: cfg.JSONOutput,
 		RecordPath: recordPath.servicePath,

@@ -25,9 +25,10 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
 	history.RecordWorkRequest(7, work.WorkRequestRecord{
-		RequestID: "request-generated-lineage",
-		Type:      workdomain.WorkRequestTypeFactoryRequestBatch,
-		TraceID:   "trace-generated-current",
+		RequestID:           "request-generated-lineage",
+		ProducingDispatchID: "producer-dispatch",
+		Type:                workdomain.WorkRequestTypeFactoryRequestBatch,
+		TraceID:             "trace-generated-current",
 		WorkItems: []workdomain.FactoryWorkItem{{
 			ID:                       "work-generated-lineage",
 			WorkTypeID:               "task",
@@ -45,6 +46,9 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	if stringValueForEventHistoryTest(events[0].Context.DispatchId) != "producer-dispatch" {
+		t.Fatal("Work request lost producing dispatch context")
 	}
 	payload, err := events[0].Payload.AsWorkRequestEventPayload()
 	if err != nil {

@@ -13,6 +13,11 @@ type FleetObservationService = internalservice.FleetObservationService
 type FleetHistory = internalservice.FleetHistory
 type LogReader = internalservice.LogReader
 
+// NewDirectFleetObservationSource constructs the process-owned fleet source.
+func NewDirectFleetObservationSource(owner workersessions.Service) (workersessions.Service, error) {
+	return internalservice.NewDirectFleetObservationSource(owner)
+}
+
 func NewFleetObservationService(catalog ObservationServiceCatalog, history *FleetHistory) *FleetObservationService {
 	return internalservice.NewFleetObservationService(catalog, history)
 }

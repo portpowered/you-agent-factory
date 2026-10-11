@@ -144,7 +144,7 @@ func TestBeginWorkerAttemptResolvesForceAndRecoversDetachedResult(t *testing.T) 
 				eventHistory: &recordingfixtures.ScriptedRuntimeLedger{},
 			}
 			request := detachedTargetRequest()
-			complete, err := f.BeginWorkerAttempt(t.Context(), &request)
+			complete, err := f.BeginWorkerAttempt(t.Context(), &request, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

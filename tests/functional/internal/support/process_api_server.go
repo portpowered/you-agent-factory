@@ -80,11 +80,11 @@ func (server *ProcessAPIServer) Start(
 	))
 	server.url = httpServer.URL
 	if request.OnBound != nil {
-		boundPort := request.Port
+		binding := platformhttpserver.Binding{Host: request.Host, Port: request.Port}
 		if address, ok := httpServer.Listener.Addr().(*net.TCPAddr); ok {
-			boundPort = address.Port
+			binding.Host, binding.Port = address.IP.String(), address.Port
 		}
-		request.OnBound(platformhttpserver.Binding{Port: boundPort})
+		request.OnBound(binding)
 	}
 	close(server.ready)
 	server.mu.Unlock()

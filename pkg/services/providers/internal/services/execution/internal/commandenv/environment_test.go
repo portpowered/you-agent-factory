@@ -2,6 +2,7 @@ package commandenv_test
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -22,6 +23,48 @@ func TestBuildEnforcesAutomationDefaultsAfterProviderOverrides(t *testing.T) {
 	assertEnvValue(t, env, "AGENT_FACTORY_CUSTOM_ENV", "present")
 	if len(commandenv.AutomationDefaults()) == 0 {
 		t.Fatal("AutomationDefaults() returned no defaults")
+	}
+}
+
+func TestBuildEnvironmentReservesWorkerSessionIdentity(t *testing.T) {
+	t.Parallel()
+	for _, supplied := range []bool{false, true} {
+		t.Run(map[bool]string{false: "unattributed", true: "supervised"}[supplied], func(t *testing.T) {
+			t.Parallel()
+			vars := map[string]string{"CUSTOM": "provider", "EDITOR": "interactive"}
+			base := []string{"CUSTOM=process"}
+			keys := []string{
+				"YOU_SERVER", "YOU_WORKER_SESSION_ID", "YOU_WORKER_SESSION_TOKEN",
+				"YOU_MESSAGE_TARGET", "YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID",
+			}
+			for _, key := range keys {
+				vars[key] = "authored"
+				vars[strings.ToLower(key)] = "authored"
+				if supplied {
+					base = append(base, key+"=supervisor")
+				}
+			}
+			before := append([]string(nil), base...)
+			env := commandenv.Build(base, vars)
+			assertEnvValue(t, env, "CUSTOM", "provider")
+			assertEnvValue(t, env, "EDITOR", "true")
+			for _, entry := range env {
+				name, value, _ := strings.Cut(entry, "=")
+				for _, key := range keys {
+					if strings.EqualFold(name, key) && (!supplied || name != key || value != "supervisor") {
+						t.Fatalf("reserved environment key %s did not retain supervisor authority", name)
+					}
+				}
+			}
+			if supplied {
+				for _, key := range keys {
+					assertEnvValue(t, env, key, "supervisor")
+				}
+			}
+			if !reflect.DeepEqual(base, before) || vars["YOU_WORKER_SESSION_TOKEN"] != "authored" {
+				t.Fatal("Build mutated caller-owned environment")
+			}
+		})
 	}
 }
 

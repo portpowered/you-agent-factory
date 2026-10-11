@@ -454,6 +454,7 @@ func runFactoryInvocationWithResult(
 	presentation factoryvisualization.ResponsePresentation,
 	presentations factorysessions.OpeningPresentationOwner,
 ) (apisurface.FactoryInvocationResult, error) {
+	cfg.Caller = cfg.Caller.Clone()
 	if invocation == nil {
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("run factory invocation: operation is required")
 	}
@@ -490,6 +491,7 @@ func runFactoryInvocationWithResult(
 		target.EventScopeID = scopeID
 	}
 	invocationRequest := factorysessionmapping.InvocationRequestFromAPI(request)
+	invocationRequest.Caller = cfg.Caller.Clone()
 	if cfg.PreparedInvocationInput != nil {
 		invocationRequest.Args = nil
 		invocationRequest.Content = nil
@@ -497,6 +499,7 @@ func runFactoryInvocationWithResult(
 		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
 	}
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest)
+	err = sanitizeFactoryCallerError(cfg.Caller, err)
 	result := outcome.Result
 	if result.Status == "" {
 		return apisurface.FactoryInvocationResult{}, runFactoryInvocationWithoutTerminalResult(err, outputWriter, streamRenderer)

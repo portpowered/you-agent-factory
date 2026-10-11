@@ -59,6 +59,7 @@ func (operation *directJavaScriptRun) Run(
 	cancellation initializer.InvocationCancellation,
 	discloseStartup func(),
 ) error {
+	request.Caller = request.Caller.Clone()
 	if operation == nil || operation.sessions == nil {
 		return fmt.Errorf("Factory Sessions service is required")
 	}
@@ -85,6 +86,7 @@ func (operation *directJavaScriptRun) Run(
 		childMode = factorysessions.ChildExecutorModeFake
 	}
 	start := factorysessions.SessionStartRequest{
+		Caller:      request.Caller.Clone(),
 		Mode:        factorysessions.SessionOperationModeDurable,
 		FolderPath:  filepath.Dir(sourcePath),
 		Synchronous: true,
