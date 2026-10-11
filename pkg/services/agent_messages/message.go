@@ -8,10 +8,11 @@ import "time"
 type Status string
 
 const (
-	Queued  Status = "QUEUED"
-	Read    Status = "READ"
-	Replied Status = "REPLIED"
-	Expired Status = "EXPIRED"
+	Queued          Status = "QUEUED"
+	Read            Status = "READ"
+	Replied         Status = "REPLIED"
+	Expired         Status = "EXPIRED"
+	DeliveredRevive Status = "DELIVERED_REVIVE"
 )
 
 // Sender identifies the authenticated Worker that admitted a message.

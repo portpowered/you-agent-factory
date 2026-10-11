@@ -93,6 +93,14 @@ func (a *Authorizer) resolve(ctx context.Context, request workersessions.GetObse
 		return Identity{}, agentmessages.ErrNotPermitted
 	}
 	observation, err := a.read(ctx, request)
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.captured != nil {
+		// Retained terminal identity is read through Worker Sessions' prepared
+		// public projection. It supplies relationship facts, never credentials.
+		observation, err = a.captured(ctx, request)
+		if err == nil && !observation.State.Terminal() {
+			return Identity{}, agentmessages.ErrNotPermitted
+		}
+	}
 	if err != nil {
 		return Identity{}, err
 	}

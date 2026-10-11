@@ -121,7 +121,14 @@ func (a *Adapter) listQuery(config ListConfig, query url.Values) {
 }
 
 func (a *Adapter) writeMessage(output io.Writer, message factoryapi.AgentMessage) error {
-	_, err := fmt.Fprintf(output, "%s %s %s -> %s\n%s\n", message.MessageId, message.Status,
-		message.From.WorkerSessionId, message.To.WorkerSessionId, message.Body)
+	facts := ""
+	if message.Reason != nil && *message.Reason != "" {
+		facts += " reason=" + *message.Reason
+	}
+	if message.RevivedWorkerSessionId != nil && *message.RevivedWorkerSessionId != "" {
+		facts += " successor=" + *message.RevivedWorkerSessionId
+	}
+	_, err := fmt.Fprintf(output, "%s %s %s -> %s%s\n%s\n", message.MessageId, message.Status,
+		message.From.WorkerSessionId, message.To.WorkerSessionId, facts, message.Body)
 	return err
 }

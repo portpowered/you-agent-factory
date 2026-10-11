@@ -145,7 +145,7 @@ func applyCapturedTerminalPayload(observation *workersessions.Observation, termi
 		return workersessions.ErrObservationProjectionUnavailable
 	}
 	if observation.State != workersessions.StateCompleted && failure.FailureCause != "" {
-		cause := &workersessions.FailureCause{Kind: workersessions.FailureCauseKind(failure.FailureCause), Detail: failure.FailureDetail, AgentRunFailureClass: failure.AgentRunFailureClass}
+		cause := failure.failure()
 		if cause.Validate() != nil {
 			return workersessions.ErrObservationProjectionUnavailable
 		}

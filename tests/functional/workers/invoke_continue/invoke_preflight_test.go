@@ -360,12 +360,12 @@ func TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget(t *testing.T) {
 			if status != http.StatusOK || observation.WorkerSessionID != id || observation.State != "FAILED" || observation.Failure.Detail != "family=retryable type=timeout" {
 				t.Fatalf("admitted failure HTTP %d: %s", status, body)
 			}
-			// The one-attempt committed terminal records failure detail, but no
-			// provider classification. The legacy retry terminal has a different
-			// physical attempt and retains unconfirmed, live-only classification.
+			// The committed terminal records the provider timeout classification.
+			// The retry terminal has a different physical attempt and retains
+			// unconfirmed classification on the original supervised identity.
 			if cell.attempts == 1 {
-				if observation.ConfirmationState != "CONFIRMED" || observation.Failure.ProviderFailureKind != nil {
-					t.Fatalf("invented committed timeout classification: %s", body)
+				if observation.ConfirmationState != "CONFIRMED" || observation.Failure.ProviderFailureKind == nil || *observation.Failure.ProviderFailureKind != "timeout" {
+					t.Fatalf("lost confirmed timeout classification: %s", body)
 				}
 			} else if observation.ConfirmationState != "UNCONFIRMED" || observation.Failure.ProviderFailureKind == nil || *observation.Failure.ProviderFailureKind != "timeout" {
 				t.Fatalf("lost unconfirmed retry classification: %s", body)
@@ -422,8 +422,8 @@ func t7AssertRetryHistory(t *testing.T, body string, attempts int) {
 		t.Fatalf("retry history budget/completeness: %s", body)
 	}
 	terminal := logs.Events[len(logs.Events)-1].Event.Payload.Payload
-	if terminal.Status != "FAILED" || terminal.FailureDetail != "family=retryable type=timeout" || terminal.ProviderFailureKind != nil {
-		t.Fatalf("last captured timeout facts = %+v, want FAILED/detail without unrecorded provider classification", terminal)
+	if terminal.Status != "FAILED" || terminal.FailureDetail != "family=retryable type=timeout" || terminal.ProviderFailureKind == nil || *terminal.ProviderFailureKind != "timeout" {
+		t.Fatalf("last captured timeout facts = %+v, want FAILED/detail with recorded timeout classification", terminal)
 	}
 }
 

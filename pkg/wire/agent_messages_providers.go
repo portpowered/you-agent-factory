@@ -10,14 +10,19 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	agentmessageswire "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 )
 
-func provideMessageJournal() (*agentmessageswire.Journal, error) {
-	return agentmessageswire.NewJournal(platformfilesystem.Local{}, "")
+func provideMessageJournal(edges serviceedges.Edges) (*agentmessageswire.Journal, error) {
+	files := edges.AgentMessageStoreFileSystem
+	if files == nil {
+		files = platformfilesystem.Local{}
+	}
+	return agentmessageswire.NewJournal(files, "")
 }
 
 func provideMessageStartup(journal *agentmessageswire.Journal, clock platformclock.Source, logger logging.Logger) (*agentmessageswire.Startup, error) {
@@ -36,12 +41,12 @@ func provideMessageQuota() (agentmessageswire.Quota, error) {
 	return agentmessageswire.NewQuota(10, 8, 3)
 }
 
-func provideMessageEngine(authority agentmessageswire.Authority, validator agentmessageswire.InputValidator, quota agentmessageswire.Quota, journal *agentmessageswire.Journal, clock platformclock.Source, stream events.Service, logger logging.Logger) (*agentmessageswire.Engine, error) {
+func provideMessageEngine(authority agentmessageswire.Authority, validator agentmessageswire.InputValidator, quota agentmessageswire.Quota, journal *agentmessageswire.Journal, clock platformclock.Source, scheduler platformclock.TimerSource, stream events.Service, logger logging.Logger, sessions workersessions.Service) (*agentmessageswire.Engine, error) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
-	return agentmessageswire.NewService(true, authority, validator, quota, journal, clock.Now, func() string {
+	return agentmessageswire.NewService(true, authority, validator, quota, journal, clock.Now, scheduler, func() string {
 		id := uuid.New()
 		millis := uint64(clock.Now().UnixMilli())
 		for i := 5; i >= 0; i-- {
@@ -49,7 +54,7 @@ func provideMessageEngine(authority agentmessageswire.Authority, validator agent
 			millis >>= 8
 		}
 		return "msg-" + messageIDText(id[:])
-	}, key, stream, logger)
+	}, key, stream, logger, sessions.Continue, sessions.Get, sessions.StreamObservationsByWorkerSessionID)
 }
 
 func messageIDText(bytes []byte) string {

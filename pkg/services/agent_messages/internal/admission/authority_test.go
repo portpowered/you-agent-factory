@@ -172,6 +172,70 @@ func TestAuthorizerScopedAddressAndAmbiguity(t *testing.T) {
 	}
 }
 
+func TestAuthorizerRetainedRecipientRequiresExactTerminalFacts(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"terminal", "running archive", "foreign owner", "wrong worker", "unavailable", "ambiguous", "invalid caller"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			live := &authorityReader{err: workersessions.ErrObservationSessionNotFound}
+			archived := authorityObservation("lead", "factory", "project-work", "")
+			archived.State = workersessions.StateCompleted
+			switch cell {
+			case "running archive":
+				archived.State = workersessions.StateRunning
+			case "foreign owner":
+				archived.FactorySessionID = "foreign"
+			case "wrong worker":
+				archived.WorkerSessionID = "other"
+			case "unavailable":
+				live.err = workersessions.ErrObservationProjectionUnavailable
+			case "ambiguous":
+				live.err = &workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{
+					{WorkerSessionID: "lead", FactorySessionID: "factory"}, {WorkerSessionID: "lead", FactorySessionID: "foreign"},
+				}}
+			}
+			reads := 0
+			authorizer := NewAuthorizer(func(context.Context, *workersessions.CallerIdentity) error {
+				return workersessions.ErrCallerInvalid
+			}, live.read, func(_ context.Context, request workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+				reads++
+				if request.WorkerSessionID != "lead" || request.FactorySessionID != "factory" {
+					t.Fatal("captured lookup lost the exact requested owner")
+				}
+				return archived, nil
+			})
+			if cell == "invalid caller" {
+				_, err := authorizer.Authenticate(t.Context(), &workersessions.CallerIdentity{WorkerSessionID: "lead", Token: "expired-token"})
+				if !errors.Is(err, agentmessages.ErrNotPermitted) || reads != 0 || len(live.requests) != 0 {
+					t.Fatal("archived identity restored caller authority", err)
+				}
+				return
+			}
+			assertRetainedIdentityOutcome(t, cell, authorizer, &reads)
+		})
+	}
+}
+
+func assertRetainedIdentityOutcome(t *testing.T, cell string, authorizer *Authorizer, reads *int) {
+	t.Helper()
+	identity, err := authorizer.Recipient(t.Context(), "lead", "factory")
+	if cell == "terminal" {
+		if err != nil || identity.Chain != scopedIdentity("factory", "lead") || identity.Work != scopedIdentity("factory", "project-work") || *reads != 1 {
+			t.Fatal("retained recipient lost exact chain/Work facts", err)
+		}
+		return
+	}
+	if err == nil || identity.Chain != "" {
+		t.Fatal("unproved retained identity accepted")
+	}
+	if (cell == "unavailable" || cell == "ambiguous") && *reads != 0 {
+		t.Fatal("captured lookup bypassed a live failure or ambiguity")
+	}
+	if cell == "ambiguous" && !errors.Is(err, workersessions.ErrWorkerSessionAmbiguous) {
+		t.Fatal("live ambiguity lost its public classification")
+	}
+}
+
 func TestAuthorizerRevalidatesWithoutRetainingCredentials(t *testing.T) {
 	t.Parallel()
 	valid := true
@@ -236,7 +300,7 @@ func TestAuthorizerInboxUsesScopedWorkAndVerifiedContinuation(t *testing.T) {
 	}
 }
 
-func TestAuthorizerCapturedReadIsOnlyForPredecessors(t *testing.T) {
+func TestAuthorizerCapturedReadResolvesTerminalRecipientsAndPredecessors(t *testing.T) {
 	t.Parallel()
 	old := authorityObservation("old", "factory", "work", "")
 	old.State, old.SuccessorWorkerSessionID = workersessions.StateCompleted, "new"
@@ -254,9 +318,8 @@ func TestAuthorizerCapturedReadIsOnlyForPredecessors(t *testing.T) {
 				return live.read(ctx, req)
 			}
 			authorizer := NewAuthorizer(nil, read, captured.read)
-			if _, err := authorizer.Recipient(t.Context(), "old", "factory"); !errors.Is(err, agentmessages.ErrRecipientNotFound) || len(captured.requests) != 0 {
-				t.Fatalf("archived recipient used captured reader: %v, %#v", err, captured.requests)
-			}
+			assertCapturedRecipientFallback(t, authorizer, captured, readError)
+			captured.requests = nil
 			identity, err := authorizer.Recipient(t.Context(), "new", "factory")
 			if errors.Is(readError, workersessions.ErrObservationSessionNotFound) {
 				if err != nil || identity.Chain != scopedIdentity("factory", "old") || len(captured.requests) != 1 || captured.requests[0].FactorySessionID != "factory" {
@@ -266,6 +329,18 @@ func TestAuthorizerCapturedReadIsOnlyForPredecessors(t *testing.T) {
 				t.Fatalf("projection failure fell back to capture: %v, %#v", err, captured.requests)
 			}
 		})
+	}
+}
+
+func assertCapturedRecipientFallback(t *testing.T, authorizer *Authorizer, captured *authorityReader, readError error) {
+	t.Helper()
+	identity, err := authorizer.Recipient(t.Context(), "old", "factory")
+	if errors.Is(readError, workersessions.ErrObservationSessionNotFound) {
+		if err != nil || identity.Chain != scopedIdentity("factory", "old") || len(captured.requests) != 1 || captured.requests[0].FactorySessionID != "factory" {
+			t.Fatalf("archived recipient not resolved exactly: %#v, %v, %#v", identity, err, captured.requests)
+		}
+	} else if !errors.Is(err, agentmessages.ErrRecipientNotFound) || len(captured.requests) != 0 {
+		t.Fatalf("recipient projection failure fell back to capture: %v, %#v", err, captured.requests)
 	}
 }
 

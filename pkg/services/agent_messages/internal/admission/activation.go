@@ -77,6 +77,7 @@ func (s *Configured) Activate(ctx context.Context, configPath string) error {
 	validator.BodyBytes, validator.DefaultExpirySeconds = settings.MaxBodyBytes, settings.DefaultExpirySeconds
 	s.engine.validator = validator
 	s.engine.quota = Limits{SendsPerHour: settings.SendsPerChainPerHour, ThreadMessages: settings.MessagesPerThread, HopLimit: &settings.MaxHop}
+	s.engine.revivesPerHour = settings.RevivesPerChainPerHour
 	s.engine.enabled = settings.Enabled
 	s.path, s.selected = configPath, true
 	return nil
@@ -95,6 +96,15 @@ func (s *Configured) ready() error {
 		return agentmessages.ErrDisabled
 	}
 	return s.fault
+}
+
+// BindHost activates observation only for a ready selected profile. The host
+// release cancels and joins Messaging observers independently of Factory work.
+func (s *Configured) BindHost() func() {
+	if s.ready() != nil {
+		return func() {}
+	}
+	return s.engine.BindHost()
 }
 
 func (s *Configured) Send(ctx context.Context, request agentmessages.SendRequest, caller *workersessions.CallerIdentity, factory string) (agentmessages.Message, error) {

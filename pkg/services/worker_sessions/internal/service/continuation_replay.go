@@ -150,7 +150,7 @@ func continuationTerminalResult(payload json.RawMessage, status, attemptID strin
 			return nil, workersessions.ErrContinuationExecutionUnavailable
 		}
 		result.Outcome = workersessions.TerminalOutcomeFailed
-		result.Cause = &workersessions.FailureCause{Kind: workersessions.FailureCauseKind(terminal.FailureCause), Detail: terminal.FailureDetail, AgentRunFailureClass: terminal.AgentRunFailureClass}
+		result.Cause = terminal.failure()
 	}
 	if result.Validate() != nil {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
