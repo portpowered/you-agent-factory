@@ -1,95 +1,55 @@
 package wire
 
 import (
+	"context"
 	"os"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio"
 )
 
-func bindASRStaging(
-	options invocationRuntimeOptions,
-	tempDirectory RuntimeTempDirectory,
-	tempFile RuntimeCreateTempFile,
-	writeFile AssetWriteFile,
-	readFile AssetReadFile,
-	removeFile AssetRemovePath,
-) invocationRuntimeOptions {
-	if options.ASRTempDirectory == nil && tempDirectory != nil {
-		options.ASRTempDirectory = func() string { return tempDirectory() }
-	}
-	if options.ASRCreateTemp == nil {
-		options.ASRCreateTemp = adaptASRTempFile(tempFile)
-	}
-	if options.ASRWriteFile == nil && writeFile != nil {
-		options.ASRWriteFile = func(path string, content []byte) error {
-			return writeFile(path, content, 0o600)
-		}
-	}
-	if options.ASRReadFile == nil && readFile != nil {
-		options.ASRReadFile = func(path string) ([]byte, error) { return readFile(path) }
-	}
-	if options.ASRRemoveFile == nil && removeFile != nil {
-		options.ASRRemoveFile = func(path string) error { return removeFile(path) }
-	}
-	return options
-}
+type InvocationTempFile = localai.TempFileFactory
+type InvocationWriteFile = localai.InputFileWriter
+type InvocationRemoveFile = localai.InputFileRemover
 
-func adaptASRTempFile(next RuntimeCreateTempFile) localai.TempFileFactory {
-	if next == nil {
-		return nil
-	}
+func NewInvocationTempFile(next RuntimeCreateTempFile) InvocationTempFile {
 	return func(directory, pattern string) (localai.TempFile, error) {
 		file, err := next(directory, pattern)
-		if err != nil || file == nil {
-			return localai.TempFile(file), err
-		}
-		return localai.TempFile(file), nil
+		return file, err
 	}
 }
 
-func bindTTSStaging(
-	options invocationRuntimeOptions,
-	tempDirectory RuntimeTempDirectory,
-	tempFile RuntimeCreateTempFile,
-	writeFile AssetWriteFile,
-	inspectFile RuntimeInspectFile,
-	readFile AssetReadFile,
-	removeFile AssetRemovePath,
-) invocationRuntimeOptions {
-	if options.TTSTempDirectory == nil && tempDirectory != nil {
-		options.TTSTempDirectory = func() string { return tempDirectory() }
-	}
-	if options.TTSCreateTemp == nil {
-		options.TTSCreateTemp = adaptTTSTempFile(tempFile)
-	}
-	if options.TTSWriteFile == nil && writeFile != nil {
-		options.TTSWriteFile = func(path string, content []byte) error {
-			return writeFile(path, content, 0o600)
-		}
-	}
-	if options.TTSInspectFile == nil && inspectFile != nil {
-		options.TTSInspectFile = func(path string) (os.FileInfo, error) {
-			return inspectFile(path)
-		}
-	}
-	if options.TTSReadFile == nil && readFile != nil {
-		options.TTSReadFile = func(path string) ([]byte, error) { return readFile(path) }
-	}
-	if options.TTSRemoveFile == nil && removeFile != nil {
-		options.TTSRemoveFile = func(path string) error { return removeFile(path) }
-	}
-	return options
+func NewInvocationWriteFile(next AssetWriteFile) InvocationWriteFile {
+	return func(path string, content []byte) error { return next(path, content, 0o600) }
 }
 
-func adaptTTSTempFile(next RuntimeCreateTempFile) localai.TempFileFactory {
-	if next == nil {
-		return nil
+func NewPinnedInvocationASRBackend(dialer InvocationProtocolDialer, temp RuntimeTempDirectory,
+	create InvocationTempFile, write InvocationWriteFile, remove InvocationRemoveFile) ASRBackend {
+	return localai.NewPinnedASRBackend(dialer, temp, create, write, remove)
+}
+
+func NewPinnedInvocationEmbeddingBackend(dialer InvocationProtocolDialer) EmbeddingBackend {
+	return localai.NewPinnedEmbeddingBackend(dialer)
+}
+
+func NewPinnedInvocationTTSBackend(dialer InvocationProtocolDialer, temp RuntimeTempDirectory,
+	create InvocationTempFile, write InvocationWriteFile, inspect RuntimeInspectFile,
+	read AssetReadFile, remove InvocationRemoveFile) InvocationTTSBackend {
+	return localai.NewPinnedTTSBackend(dialer, temp, create, write,
+		func(path string) (os.FileInfo, error) { return inspect(path) }, localai.TTSOutputReader(read), remove)
+}
+
+func NewInvocationVideoAudioTransform(runner platformprocess.CommandRunner, temp RuntimeTempDirectory,
+	create InvocationTempFile, write InvocationWriteFile, read AssetReadFile, remove InvocationRemoveFile) InvocationAudioTransform {
+	return func(ctx context.Context, video []byte) ([]byte, error) {
+		return videoaudio.ExtractVideoAudio(ctx, runner, video, temp, create, write, read, remove)
 	}
-	return func(directory, pattern string) (localai.TempFile, error) {
-		file, err := next(directory, pattern)
-		if err != nil || file == nil {
-			return localai.TempFile(file), err
-		}
-		return localai.TempFile(file), nil
+}
+
+func NewInvocationAudioNormalizer(runner platformprocess.CommandRunner, temp RuntimeTempDirectory,
+	create InvocationTempFile, write InvocationWriteFile, read AssetReadFile, remove InvocationRemoveFile) InvocationAudioTransform {
+	return func(ctx context.Context, audio []byte) ([]byte, error) {
+		return videoaudio.NormalizeAudio(ctx, runner, audio, temp, create, write, read, remove)
 	}
 }

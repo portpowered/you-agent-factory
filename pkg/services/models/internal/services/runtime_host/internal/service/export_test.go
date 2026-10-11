@@ -307,3 +307,66 @@ type idleTestProcess struct{ stops int }
 func (*idleTestProcess) HealthEndpoint() string       { return "" }
 func (*idleTestProcess) Wait() error                  { return nil }
 func (p *idleTestProcess) Stop(context.Context) error { p.stops++; return nil }
+
+type slotFactsScopes struct {
+	runtimescopes.Service
+	binding models.RuntimeBinding
+	err     error
+}
+
+func (s slotFactsScopes) Resolve(runtimescopes.Reference) (models.RuntimeBinding, error) {
+	return s.binding, s.err
+}
+
+type slotFactsAssets struct {
+	scopedassets.Service
+	err error
+}
+
+func (a slotFactsAssets) InspectRuntimeCache(context.Context, models.InspectModelAssetsRequest) (scopedassets.RuntimeCacheInspection, error) {
+	return scopedassets.RuntimeCacheInspection{}, a.err
+}
+
+func TestSlotFactsPreservesCapacityAbsenceAndCancellation(t *testing.T) {
+	t.Parallel()
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:slot-facts-unit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := &models.RuntimeConfig{Resources: []models.RuntimeResource{{Type: models.RuntimeResourceTypeModel, Model: "selected", Capacity: 3}}}
+	scopes := slotFactsScopes{binding: models.RuntimeBinding{RuntimeConfig: func() *models.RuntimeConfig { return config }}}
+	assets := slotFactsAssets{}
+	state := NewSlotState()
+	facts := NewSlotFacts(scopes, assets, state)
+	for _, test := range []struct {
+		name     string
+		capacity int
+	}{{"selected", 3}, {"missing-resource", models.DefaultInvocationCapacity}} {
+		got, err := facts.SlotFacts(t.Context(), scope, test.name)
+		if err != nil || got.Capacity != test.capacity || got.Readiness != models.ReadinessStateUnsupported {
+			t.Fatalf("%s facts = %#v, %v", test.name, got, err)
+		}
+	}
+	state.runtimeSlots[runtimeSlotKey(scope, "selected")] = &supervisedRuntime{state: supervisedStateLoading}
+	got, err := facts.SlotFacts(t.Context(), scope, "selected")
+	if err != nil || got.ContendedHolder != slotContendedLoadingHolder {
+		t.Fatalf("loading facts = %#v, %v", got, err)
+	}
+	for _, scopeErr := range []error{runtimescopes.ErrScopeUnknown, runtimescopes.ErrScopeForeign, runtimescopes.ErrScopeClosed} {
+		scopes.err = scopeErr
+		_, err := NewSlotFacts(scopes, assets, state).SlotFacts(t.Context(), scope, "selected")
+		if !errors.Is(err, map[error]error{runtimescopes.ErrScopeUnknown: models.ErrRuntimeScopeStale, runtimescopes.ErrScopeForeign: models.ErrRuntimeScopeForeign, runtimescopes.ErrScopeClosed: models.ErrRuntimeScopeClosed}[scopeErr]) {
+			t.Fatalf("scope failure = %v", err)
+		}
+	}
+	scopes.err = nil
+	assets.err = models.ErrModelReferenceUnknown
+	if _, err := NewSlotFacts(scopes, assets, state).SlotFacts(t.Context(), scope, "selected"); !errors.Is(err, assets.err) {
+		t.Fatalf("asset failure = %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := facts.SlotFacts(ctx, scope, "selected"); !errors.Is(err, models.ErrHostCancelled) {
+		t.Fatalf("cancellation = %v", err)
+	}
+}

@@ -37,7 +37,7 @@ func TestInferenceRuntimeRoutesDefaultASRThroughPinnedProtocol(t *testing.T) {
 	endpoint := "grpc://127.0.0.1:45906"
 	dialer := &asrRuntimeDialer{response: responsePayload}
 	tempDir := t.TempDir()
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Dialer:           dialer,
 		ASRTempDirectory: func() string { return tempDir },
 		ASRCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
@@ -94,7 +94,7 @@ func TestQwenASRNormalizesNoncanonicalAudioBeforeCodec(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			calls := 0
 			backendError := errors.New("native backend detailed failure")
-			runtime, err := newASRInvocationRuntime(func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+			runtime, err := NewASRInvocationRuntime(func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
 				if !bytes.Equal(request.Audio, wav16) || request.MediaType != "audio/wav" {
 					t.Fatalf("backend received unnormalized audio: %s", request.MediaType)
 				}
@@ -207,11 +207,11 @@ func assertSelectedMediaCommand(t *testing.T, request platformprocess.CommandReq
 	}
 }
 
-func mediaAdapterOptions(t *testing.T, staged map[string][]byte, input, audio []byte) invocationRuntimeOptions {
+func mediaAdapterOptions(t *testing.T, staged map[string][]byte, input, audio []byte) invocationFixtureOptions {
 	t.Helper()
 	directory := filepath.Join("controlled", "media")
 	nextPath := 0
-	return invocationRuntimeOptions{
+	return invocationFixtureOptions{
 		ASRTempDirectory: func() string { return directory },
 		ASRCreateTemp: func(dir, pattern string) (localai.TempFile, error) {
 			if dir != directory {
@@ -307,7 +307,7 @@ func newTestASRInvocationRuntime(
 	tempDirectory string,
 ) invocationRuntime {
 	t.Helper()
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Dialer:           dialer,
 		ASRTempDirectory: func() string { return tempDirectory },
 		ASRCreateTemp: func(directory, pattern string) (localai.TempFile, error) {

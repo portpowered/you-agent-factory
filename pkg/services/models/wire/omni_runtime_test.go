@@ -203,16 +203,9 @@ func TestNewInvocationRuntimeUsesFailClosedFallbackForNonOmni(t *testing.T) {
 func TestInferenceRuntimeFailsClosedWithoutProductionAdapters(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{})
+	runtime, err := invocationFixture(invocationFixtureOptions{})
 	if err != nil {
 		t.Fatalf("inferenceRuntime: %v", err)
-	}
-	composed, ok := runtime.(operationInvocationRuntime)
-	if !ok {
-		t.Fatalf("inferenceRuntime type = %T, want operationInvocationRuntime", runtime)
-	}
-	if _, ok := composed.generic.(failClosedInvocationRuntime); !ok {
-		t.Fatalf("production default generic runtime = %T, want fail-closed runtime", composed.generic)
 	}
 
 	catalog := models.GenericOperationCatalog{}
@@ -248,7 +241,7 @@ func TestInferenceRuntimeRoutesOmniBeforeGenericBackend(t *testing.T) {
 
 	scope := mustRoutingScope(t)
 	genericCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			genericCalls++
 			return []models.InferenceContent{{Name: "generic", Content: "generic answer"}}, nil, nil
@@ -293,7 +286,7 @@ func TestInferenceRuntimeRoutesASRBeforeGenericBackend(t *testing.T) {
 
 	scope := mustRoutingScope(t)
 	asrCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			return []models.InferenceContent{{Name: "generic"}}, nil, nil
 		},

@@ -17,6 +17,7 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	"go.uber.org/zap"
@@ -311,7 +312,7 @@ func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
 	}
 	request := models.InvokeModelRequest{Operation: models.OperationEMBED}
 	var received models.InvokeModelRequest
-	runtime := backendInvocationRuntime{backend: func(
+	backend := InvocationBackend(func(
 		_ context.Context,
 		request models.InvokeModelRequest,
 	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
@@ -320,7 +321,8 @@ func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
 			Artifact: artifactRef, Name: "fixture-output", MediaType: "application/octet-stream",
 			SizeBytes: 2, Properties: map[string]string{"source": "fixture"},
 		}}, nil
-	}}
+	})
+	runtime := NewGenericInvocationRuntime(backend)
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: request})
 	if err != nil {
@@ -338,9 +340,9 @@ func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
 	}
 
 	wantErr := errors.New("fixture backend failed")
-	runtime.backend = func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	runtime = NewGenericInvocationRuntime(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 		return nil, nil, wantErr
-	}
+	})
 	if _, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{}); !errors.Is(err, wantErr) {
 		t.Fatalf("backend error = %v, want %v", err, wantErr)
 	}
@@ -351,7 +353,10 @@ func TestOperationInvocationRuntimeSelectsASROnlyForASROperations(t *testing.T) 
 
 	generic := &recordingInvocationRuntime{result: inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Content: "generic"}}}}
 	asr := &recordingInvocationRuntime{result: inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Content: "asr"}}}}
-	runtime := operationInvocationRuntime{generic: generic, asr: asr}
+	runtime, err := NewInvocationRuntime(generic, NewUnavailableInvocationRuntime(), asr, generic, NewUnavailableInvocationRuntime())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
 		Request: models.InvokeModelRequest{Operation: models.OperationASR},
@@ -390,7 +395,7 @@ func TestInferenceRuntimeUsesASRBackendAndMapsResponse(t *testing.T) {
 		t.Fatalf("parse artifact reference: %v", err)
 	}
 	var received models.ASRBackendRequest
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			return []models.InferenceContent{{Content: "generic"}}, nil, nil
 		},
@@ -404,7 +409,7 @@ func TestInferenceRuntimeUsesASRBackendAndMapsResponse(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("inferenceRuntime() error = %v", err)
+		t.Fatalf("invocationFixture() error = %v", err)
 	}
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{
@@ -445,9 +450,9 @@ func TestInferenceRuntimeUsesPinnedEmbeddingBackendWhenEdgeIsAbsent(t *testing.T
 	}
 	connection := &embeddingRuntimeConnection{response: response}
 	dialer := &embeddingRuntimeDialer{connection: connection}
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{Dialer: dialer})
+	runtime, err := invocationFixture(invocationFixtureOptions{Dialer: dialer})
 	if err != nil {
-		t.Fatalf("inferenceRuntime() error = %v", err)
+		t.Fatalf("invocationFixture() error = %v", err)
 	}
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
@@ -475,7 +480,7 @@ func TestInferenceRuntimePreservesExplicitGenericBackendOverPinnedEmbedding(t *t
 	connection := &embeddingRuntimeConnection{}
 	dialer := &embeddingRuntimeDialer{connection: connection}
 	genericCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			genericCalls++
 			return []models.InferenceContent{{
@@ -486,7 +491,7 @@ func TestInferenceRuntimePreservesExplicitGenericBackendOverPinnedEmbedding(t *t
 		Dialer: dialer,
 	})
 	if err != nil {
-		t.Fatalf("inferenceRuntime() error = %v", err)
+		t.Fatalf("invocationFixture() error = %v", err)
 	}
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
@@ -657,7 +662,7 @@ func newModelsServiceWithFixtureEffects(
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
 		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination,
 		runtimeEvidence, resolveSymlinks, backendResolver,
-		invocationRuntimeOptions{
+		invocationFixtureOptions{
 			Backend: invocationBackend, ASR: asrBackend, Embedding: embeddingBackend,
 			Client: invocationProtocol, Dialer: protocolDialer,
 		}, revisionResolvers...,
@@ -695,7 +700,7 @@ func composeModelsService(
 	runtimeEvidence RuntimeEvidenceRecorder,
 	resolveSymlinks modelseffects.HostResolveSymlinks,
 	backendResolver BackendArtifactResolver,
-	runtimeOptions invocationRuntimeOptions,
+	runtimeOptions invocationFixtureOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
@@ -732,10 +737,19 @@ func composeModelsService(
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := NewInvocationRuntime(
-		runtimeOptions.Backend, runtimeOptions.ASR, runtimeOptions.Embedding, runtimeOptions.Client, runtimeOptions.Dialer,
-		runtimeRunner, runtimeTempDir, runtimeTempFile, assetWriteFile, runtimeInspect, assetReadFile, assetRemove,
-	)
+	runtimeOptions.VideoAudioRunner = runtimeRunner
+	runtimeOptions.ASRTempDirectory = runtimeTempDir
+	runtimeOptions.ASRCreateTemp = NewInvocationTempFile(runtimeTempFile)
+	runtimeOptions.ASRWriteFile = NewInvocationWriteFile(assetWriteFile)
+	runtimeOptions.ASRReadFile = assetReadFile
+	runtimeOptions.ASRRemoveFile = localai.InputFileRemover(assetRemove)
+	runtimeOptions.TTSTempDirectory = runtimeTempDir
+	runtimeOptions.TTSCreateTemp = NewInvocationTempFile(runtimeTempFile)
+	runtimeOptions.TTSWriteFile = NewInvocationWriteFile(assetWriteFile)
+	runtimeOptions.TTSInspectFile = localai.TTSOutputInspector(runtimeInspect)
+	runtimeOptions.TTSReadFile = localai.TTSOutputReader(assetReadFile)
+	runtimeOptions.TTSRemoveFile = localai.InputFileRemover(assetRemove)
+	runtime, err := invocationFixture(runtimeOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -767,4 +781,111 @@ func firstRevisionResolver(
 		return nil
 	}
 	return resolvers[0]
+}
+
+type invocationFixtureOptions struct {
+	Backend          InvocationBackend
+	ASR              ASRBackend
+	Embedding        EmbeddingBackend
+	Client           InvocationProtocolClient
+	Dialer           InvocationProtocolDialer
+	VideoAudioRunner platformprocess.CommandRunner
+	ASRTempDirectory func() string
+	ASRCreateTemp    localai.TempFileFactory
+	ASRWriteFile     localai.InputFileWriter
+	ASRReadFile      func(string) ([]byte, error)
+	ASRRemoveFile    localai.InputFileRemover
+	TTSTempDirectory func() string
+	TTSCreateTemp    localai.TempFileFactory
+	TTSWriteFile     localai.InputFileWriter
+	TTSInspectFile   localai.TTSOutputInspector
+	TTSReadFile      localai.TTSOutputReader
+	TTSRemoveFile    localai.InputFileRemover
+}
+
+// invocationFixture assembles controlled roles for retained integration coverage.
+func invocationFixture(options invocationFixtureOptions) (invocationRuntime, error) {
+	generic := NewGenericInvocationRuntime(options.Backend)
+	omni := newInvocationRuntime(options.Client, options.Dialer, videoAudioExtractor(options))
+	var asr ASRInvocationRuntime = generic
+	backend := options.ASR
+	if backend == nil && options.Backend == nil {
+		backend = localai.NewPinnedASRBackend(options.Dialer, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRRemoveFile)
+	}
+	if backend != nil {
+		role, err := NewASRInvocationRuntime(backend, videoAudioExtractor(options), audioNormalizer(options))
+		if err != nil {
+			return nil, err
+		}
+		asr = role
+	}
+	var embedding EmbeddingInvocationRuntime = generic
+	embedBackend := options.Embedding
+	if embedBackend == nil && options.Backend == nil {
+		embedBackend = localai.NewPinnedEmbeddingBackend(options.Dialer)
+	}
+	if embedBackend != nil {
+		role, err := NewEmbeddingInvocationRuntime(embedBackend)
+		if err != nil {
+			return nil, err
+		}
+		embedding = role
+	}
+	var tts TTSInvocationRuntime = NewUnavailableInvocationRuntime()
+	ttsBackend := localai.NewPinnedTTSBackend(options.Dialer, options.TTSTempDirectory, options.TTSCreateTemp,
+		options.TTSWriteFile, options.TTSInspectFile, options.TTSReadFile, options.TTSRemoveFile)
+	if ttsBackend != nil {
+		role, err := NewTTSInvocationRuntime(ttsBackend)
+		if err != nil {
+			return nil, err
+		}
+		tts = role
+	}
+	return NewInvocationRuntime(generic, omni, asr, embedding, tts)
+}
+
+// newInvocationRuntime keeps OMNI on the pinned protocol path. A missing
+// client fails closed for OMNI, while non-OMNI operations also fail closed
+// unless an explicit operation backend is composed.
+func newInvocationRuntime(
+	client InvocationProtocolClient,
+	dialer InvocationProtocolDialer,
+	extractors ...localai.VideoAudioExtractor,
+) invocationRuntime {
+
+	if isNilDependency(client) {
+		client = nil
+	}
+	var protocolClient localai.ProtocolClient
+	if client != nil {
+		protocolClient = invocationProtocolAdapter{client: client}
+	} else if dialer != nil {
+		protocolClient = localai.NewPinnedGRPCProtocolClient(dialer)
+	}
+	var extract localai.VideoAudioExtractor
+	if len(extractors) > 0 {
+		extract = extractors[0]
+	}
+
+	return omniInvocationRuntime{
+		codec: localai.NewPinnedOmniCodec(protocolClient, extract),
+	}
+}
+
+func videoAudioExtractor(options invocationFixtureOptions) localai.VideoAudioExtractor {
+	if options.VideoAudioRunner == nil {
+		return nil
+	}
+	return func(ctx context.Context, video []byte) ([]byte, error) {
+		return videoaudio.ExtractVideoAudio(ctx, options.VideoAudioRunner, video, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
+	}
+}
+
+func audioNormalizer(options invocationFixtureOptions) localai.VideoAudioExtractor {
+	if options.VideoAudioRunner == nil {
+		return nil
+	}
+	return func(ctx context.Context, audio []byte) ([]byte, error) {
+		return videoaudio.NormalizeAudio(ctx, options.VideoAudioRunner, audio, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
+	}
 }
