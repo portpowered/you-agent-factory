@@ -156,13 +156,7 @@ func continuousJSONJourney(t *testing.T, process support.Process, starters chan<
 	select {
 	case err := <-done:
 		joined = true
-		if strings.HasPrefix(name, "J03") {
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("cancellation identity: %v", err)
-			}
-		} else if err != nil {
-			t.Fatalf("ordinary stop: %v; stderr=%s", err, inputs.Stderr())
-		}
+		requireContinuousInvocationResult(t, name, err, inputs.Stderr())
 	case <-time.After(time.Minute):
 		t.Fatal("owned invocation did not stop")
 	}
@@ -171,6 +165,17 @@ func continuousJSONJourney(t *testing.T, process support.Process, starters chan<
 		recording = findContinuousRecording(t, home.home)
 	}
 	requireContinuousRecording(t, process, starters, home, recording, strings.HasPrefix(name, "J01"))
+}
+
+func requireContinuousInvocationResult(t *testing.T, name string, err error, stderr string) {
+	t.Helper()
+	if strings.HasPrefix(name, "J03") {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancellation identity: %v", err)
+		}
+	} else if err != nil {
+		t.Fatalf("ordinary stop: %v; stderr=%s", err, stderr)
+	}
 }
 
 func assertContinuousJSONOutput(t *testing.T, name, baseURL, output string) {
@@ -273,6 +278,11 @@ func requireContinuousRecording(t *testing.T, process support.Process, starters 
 	}()
 	baseURL := server.WaitForURL(t)
 	events := support.GetFactoryEventsForSessionAt(t, baseURL, "~default")
+	requireContinuousHistory(t, events, work)
+}
+
+func requireContinuousHistory(t *testing.T, events []factoryapi.FactoryEvent, work bool) {
+	t.Helper()
 	if len(events) < 2 {
 		t.Fatal("recording has no complete history")
 	}
@@ -293,15 +303,19 @@ func requireContinuousRecording(t *testing.T, process support.Process, starters 
 			completed = completed || payload.ToState == "complete"
 		}
 	}
-	last := events[len(events)-1]
+	requireContinuousTerminalEvent(t, events[len(events)-1])
+	if work && !completed {
+		t.Fatal("recording lost completed Work")
+	}
+}
+
+func requireContinuousTerminalEvent(t *testing.T, last factoryapi.FactoryEvent) {
+	t.Helper()
 	if last.Type != factoryapi.FactoryEventTypeSessionCompleted {
 		t.Fatalf("terminal history: %#v", last)
 	}
 	state, err := last.Payload.AsSessionCompletedEventPayload()
 	if err != nil || state.FinalStatus != "SUCCEEDED" {
 		t.Fatalf("terminal state: %#v, %v", state, err)
-	}
-	if work && !completed {
-		t.Fatal("recording lost completed Work")
 	}
 }
