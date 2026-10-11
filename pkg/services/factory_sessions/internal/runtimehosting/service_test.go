@@ -1,6 +1,7 @@
 package runtimehosting
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ type lifecycleRuntime struct {
 	failErr       error
 	completeErr   error
 	failedBecause error
+	onFailure     func()
 	hosted        roles.RuntimeObservations
 }
 
@@ -56,6 +59,9 @@ func (*lifecycleRuntime) StopLifecycle(context.Context) error {
 func (runtime *lifecycleRuntime) FailStartup(err error) error {
 	runtime.record("fail")
 	runtime.failedBecause = err
+	if runtime.onFailure != nil {
+		runtime.onFailure()
+	}
 	return runtime.failErr
 }
 
@@ -241,12 +247,19 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 	t.Parallel()
 
 	core, observed := observer.New(zapcore.ErrorLevel)
-	logger := zap.New(core)
+	logger := zap.New(core).With(zap.String("session_id", "startup"))
+	selectedCore, selectedLogs := observer.New(zapcore.ErrorLevel)
+	writer := &logLifetimeWriter{}
+	var rejected bytes.Buffer
+	selectedLogger := zap.New(zapcore.NewTee(selectedCore,
+		zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), writer, zapcore.ErrorLevel)),
+		zap.ErrorOutput(zapcore.AddSync(&rejected))).With(zap.String("session_id", "startup"))
 	const secret = "PRIVATE_STARTER_PAYLOAD"
 	primary := &fs.PathError{Op: "open", Path: "retained.json", Err: fs.ErrPermission}
 	cleanup := &fs.PathError{Op: "close", Path: "retained.json", Err: fs.ErrClosed}
 	apiErr := fmt.Errorf("%s: %w", secret, errors.Join(primary, cleanup))
-	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
+	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded"), onFailure: writer.Close,
+		hosted: hostedRuntime{logger: selectedLogger}}
 	err := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return apiErr
 	}).Run(
@@ -275,6 +288,13 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 	}
 	if !errors.Is(runtime.failedBecause, primary) || !errors.Is(runtime.failedBecause, cleanup) {
 		t.Fatalf("startup failure lost joined cause identities: %v", runtime.failedBecause)
+	}
+	selected := selectedLogs.FilterMessage("API server error").All()
+	if len(selected) != 1 || selected[0].ContextMap()["cause"] != want || selected[0].ContextMap()["session_id"] != "startup" {
+		t.Fatalf("selected startup diagnostic = %+v, want attributed safe cause", selected)
+	}
+	if writer.closes.Load() != 1 || rejected.Len() != 0 {
+		t.Fatalf("startup sink closes=%d rejected writes=%s", writer.closes.Load(), rejected.String())
 	}
 }
 
@@ -356,6 +376,7 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 
 	core, observed := observer.New(zapcore.InfoLevel)
 	logger := zap.New(core)
+	transportLogger := logger.With(zap.String("transport", "api"))
 	startedAt := time.Date(2026, time.July, 20, 10, 11, 12, 13, time.UTC)
 	runtime := &lifecycleRuntime{hosted: hostedRuntime{
 		logger: logger,
@@ -366,8 +387,8 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 	}}
 
 	err := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
-		if request.Logger != logger {
-			t.Error("HTTP hosting lost the selected runtime logger")
+		if request.Logger != transportLogger {
+			t.Error("HTTP hosting lost the supplied transport logger")
 		}
 		request.OnBound(platformhttpserver.Binding{Port: request.Port + 1})
 		<-ctx.Done()
@@ -376,7 +397,7 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 		context.Background(),
 		http.NewServeMux(),
 		runtime,
-		zap.NewNop(),
+		transportLogger,
 		factorysessions.RuntimeHostRequest{
 			Directory: "/factory", RuntimeMode: interfaces.RuntimeModeService,
 			MockWorkers: true, Port: 8123,
@@ -413,6 +434,89 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 type hostedRuntime struct {
 	logger      *zap.Logger
 	diagnostics factoryruntime.RuntimeLogDiagnostics
+}
+
+type logLifetimeRuntime struct {
+	lifecycleRuntime
+	wait func() error
+	stop func() error
+}
+
+func (runtime *logLifetimeRuntime) WaitForRuntime(context.Context) error { return runtime.wait() }
+func (runtime *logLifetimeRuntime) StopLifecycle(context.Context) error  { return runtime.stop() }
+
+type logLifetimeWriter struct {
+	closed atomic.Bool
+	closes atomic.Int32
+}
+
+func (writer *logLifetimeWriter) Write(data []byte) (int, error) {
+	if writer.closed.Load() {
+		return 0, fs.ErrClosed
+	}
+	return len(data), nil
+}
+func (*logLifetimeWriter) Sync() error { return nil }
+func (writer *logLifetimeWriter) Close() {
+	writer.closes.Add(1)
+	writer.closed.Store(true)
+}
+
+func TestServiceLogLifetimeThroughJoinedTransport(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"success", "cancel", "flush failure"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			core, logs := observer.New(zap.DebugLevel)
+			var rejected bytes.Buffer
+			logger := zap.New(core, zap.ErrorOutput(zapcore.AddSync(&rejected))).With(
+				zap.String("session_id", "selected"), zap.String("runtime_id", "generation"))
+			writer := &logLifetimeWriter{}
+			sinkLogger := logger.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+				return zapcore.NewTee(core, zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), writer, zap.DebugLevel))
+			}))
+			cause := &fs.PathError{Op: "flush", Path: "selected.json", Err: fs.ErrPermission}
+			runtime := &logLifetimeRuntime{lifecycleRuntime: lifecycleRuntime{hosted: hostedRuntime{
+				logger: sinkLogger, diagnostics: factoryruntime.RuntimeLogDiagnostics{Path: "selected.log"},
+			}}}
+			runtime.wait = func() error {
+				if mode == "success" {
+					writer.Close()
+					return nil
+				}
+				return context.Canceled
+			}
+			runtime.stop = func() error {
+				writer.Close()
+				if mode == "flush failure" {
+					return cause
+				}
+				return nil
+			}
+			host := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+				<-ctx.Done()
+				request.Logger.Info("transport joined")
+				return fmt.Errorf("PRIVATE_PAYLOAD: %w", cause)
+			})
+			err := host.Run(t.Context(), http.NewServeMux(), runtime, logger, factorysessions.RuntimeHostRequest{Port: 8123}, nil)
+			if (mode == "flush failure" && !errors.Is(err, cause)) || (mode != "flush failure" && err != nil) {
+				t.Fatalf("Run = %v", err)
+			}
+			if writer.closes.Load() != 1 || rejected.Len() != 0 {
+				t.Fatalf("sink closes=%d rejected writes=%s", writer.closes.Load(), rejected.String())
+			}
+			for _, message := range []string{"factory started", "transport joined", "API server error"} {
+				entries := logs.FilterMessage(message).All()
+				if len(entries) != 1 || entries[0].ContextMap()["session_id"] != "selected" || entries[0].ContextMap()["runtime_id"] != "generation" {
+					t.Fatalf("missing attributed %q: %+v", message, entries)
+				}
+			}
+			if got := logs.FilterMessage("API server error").All()[0].ContextMap()["cause"]; got != `flush "selected.json": permission denied` {
+				t.Fatalf("safe transport cause = %v", got)
+			}
+		})
+	}
 }
 
 func (runtime hostedRuntime) RuntimeLogger() *zap.Logger { return runtime.logger }

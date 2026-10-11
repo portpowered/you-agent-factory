@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type completionRegistration struct {
@@ -194,7 +195,8 @@ func newCompletionSelectionFixture(t *testing.T) completionSelectionFixture {
 	t.Helper()
 	calls := []string{}
 	registration := &completionRegistration{sessions: map[string]*livesession.LiveSession{}}
-	logger, clock := zap.NewNop(), openingCoordinatorClock{}
+	core, logs := observer.New(zap.InfoLevel)
+	logger, clock := zap.New(core), openingCoordinatorClock{}
 	definitionHost := &struct{ factorysessions.DefinitionHost }{}
 	activation := &struct {
 		factorysessions.DefinitionActivationGateway
@@ -225,8 +227,11 @@ func newCompletionSelectionFixture(t *testing.T) completionSelectionFixture {
 		}, nil
 	})
 	host := completionHost(func(lifecycle roles.LifecycleRuntime, request factorysessions.RuntimeHostRequest, gotLogger *zap.Logger) (roles.ProcessRuntime, error) {
-		if gotLogger != logger {
-			t.Fatal("host logger substituted")
+		gotLogger.Info("transport bound")
+		entries := logs.FilterMessage("transport bound").All()
+		fields := entries[len(entries)-1].ContextMap()
+		if fields["session_id"] != request.WorkFile || fields["runtime_instance_id"] != request.WorkFile+"-runtime" || fields["generation_id"] != request.WorkFile+"-generation" {
+			t.Fatalf("host diagnostic lost selected backend or correlation: %+v", fields)
 		}
 		wrapped, ok := lifecycle.(*successorBoardStartup)
 		if !ok || wrapped.publish == nil {

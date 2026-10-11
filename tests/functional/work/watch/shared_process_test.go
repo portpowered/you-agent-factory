@@ -1,12 +1,14 @@
 package watch_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,7 +19,32 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+var observationLogErrors watchLogErrors
+var observationLogCore, observationLogs = observer.New(zap.DebugLevel)
+
+type watchLogErrors struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (w *watchLogErrors) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buffer.Write(data)
+	w.buffer.Write(debug.Stack())
+	return n, err
+}
+
+func (w *watchLogErrors) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buffer.String()
+}
 
 var watchProfileRoot string
 var workWatchProcess support.ApplicationProcess
@@ -140,6 +167,7 @@ func initializeWatchProcesses() error {
 	// This cohort exercises actual provider execution through the command edge;
 	// the existing timing cohorts deliberately contain no workers.
 	observationWatchProcess, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProcessLogger:         zap.New(observationLogCore, zap.ErrorOutput(zapcore.AddSync(&observationLogErrors))),
 		ProviderCommandRunner: &observationCommands, APIServerStarter: watchAPIStarter,
 		RecordingsRootObserver: func(service recordings.Service) { observationRecordings = service },
 		RecordingWriteFile: func(target string, content []byte) error {
@@ -164,6 +192,9 @@ func closeWatchProcesses() error {
 	}
 	if watchProfileRoot != "" {
 		errs = append(errs, os.RemoveAll(watchProfileRoot))
+	}
+	if rejected := observationLogErrors.String(); rejected != "" {
+		errs = append(errs, fmt.Errorf("runtime diagnostics rejected writes through joined cleanup:\n%s", rejected))
 	}
 	return errors.Join(errs...)
 }
