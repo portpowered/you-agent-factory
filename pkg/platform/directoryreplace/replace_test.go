@@ -1,6 +1,8 @@
 package directoryreplace
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +10,10 @@ import (
 	"strings"
 	"testing"
 )
+
+func copyTestDirectory(source, destination string) error {
+	return os.CopyFS(destination, os.DirFS(source))
+}
 
 func TestCommitAndRestore(t *testing.T) {
 	parentDir := t.TempDir()
@@ -17,7 +23,7 @@ func TestCommitAndRestore(t *testing.T) {
 	writeFixture(t, filepath.Join(targetDir, "workers", "stale-worker"), "AGENTS.md", "STALE_MARKER")
 	writeFixture(t, stagingDir, "value.txt", "new")
 
-	store := NewLocal(runtime.GOOS)
+	store := NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, copyTestDirectory)
 	backupDir, err := store.Commit(parentDir, targetDir, stagingDir)
 	if err != nil {
 		t.Fatalf("Commit: %v", err)
@@ -42,7 +48,7 @@ func TestCommitRollsBackWhenStagingIsMissing(t *testing.T) {
 	stagingDir := filepath.Join(parentDir, ".alpha.staging")
 	writeFixture(t, targetDir, "value.txt", "old")
 
-	store := NewLocal(runtime.GOOS)
+	store := NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, copyTestDirectory)
 	backupDir, err := store.Commit(parentDir, targetDir, stagingDir)
 	if err == nil {
 		t.Fatal("Commit succeeded with a missing staging directory")
@@ -90,7 +96,7 @@ func TestRestoreIsNoOpForEmptyOrMissingBackup(t *testing.T) {
 			writeFixture(t, targetDir, "value.txt", "old")
 			beforeEntries := directoryEntries(t, parentDir)
 
-			NewLocal(runtime.GOOS).Restore(targetDir, test.backupPath(parentDir))
+			NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, copyTestDirectory).Restore(targetDir, test.backupPath(parentDir))
 
 			assertFixture(t, targetDir, "value.txt", "old")
 			afterEntries := directoryEntries(t, parentDir)
@@ -174,7 +180,7 @@ func TestCommitRetainsOpaqueStateAndRestoresPreviousState(t *testing.T) {
 	writeFixture(t, target, "definition", "old")
 	writeFixture(t, filepath.Join(target, "runtime", "cursors"), "committed", "cursor-one")
 	writeFixture(t, stage, "definition", "new")
-	store := NewLocal(runtime.GOOS)
+	store := NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, copyTestDirectory)
 	backup, err := store.Commit(root, target, stage, "runtime", "absent")
 	if err != nil {
 		t.Fatal(err)
@@ -197,11 +203,47 @@ func TestCommitRejectedRetentionLeavesTargetUnchanged(t *testing.T) {
 			target, stage := filepath.Join(root, "factory"), filepath.Join(root, "stage")
 			writeFixture(t, target, "not-directory", "old")
 			writeFixture(t, stage, "definition", "new")
-			_, err := NewLocal(runtime.GOOS).Commit(root, target, stage, retained)
+			_, err := NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, copyTestDirectory).Commit(root, target, stage, retained)
 			if err == nil {
 				t.Fatal("invalid retention succeeded")
 			}
 			assertFixture(t, target, "not-directory", "old")
+		})
+	}
+}
+
+func TestCommitRetentionEffectFailuresLeaveTargetUnchanged(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"inspect", "stage", "copy"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			target, stage := filepath.Join(root, "target"), filepath.Join(root, "stage")
+			writeFixture(t, target, "definition", "old")
+			writeFixture(t, filepath.Join(target, "runtime"), "cursor", "committed")
+			writeFixture(t, stage, "definition", "new")
+			failure := errors.New("selected retention effect failed")
+			stat, mkdirAll, copyDirectory := os.Stat, os.MkdirAll, copyTestDirectory
+			switch operation {
+			case "inspect":
+				stat = func(string) (fs.FileInfo, error) { return nil, failure }
+			case "stage":
+				mkdirAll = func(string, fs.FileMode) error { return failure }
+			case "copy":
+				copyDirectory = func(source, destination string) error {
+					if source != filepath.Join(target, "runtime") || destination != filepath.Join(stage, "runtime") {
+						t.Fatalf("copy paths = %q, %q, want selected runtime directories", source, destination)
+					}
+					return failure
+				}
+			}
+			backup, err := NewLocal(runtime.GOOS, stat, mkdirAll, copyDirectory).Commit(root, target, stage, "runtime")
+			if backup != "" || !errors.Is(err, failure) || !strings.Contains(err.Error(), operation+" retained directory") {
+				t.Fatalf("Commit = %q, %v, want selected %s failure before publication", backup, err, operation)
+			}
+			assertFixture(t, target, "definition", "old")
+			assertFixture(t, target, filepath.Join("runtime", "cursor"), "committed")
+			assertFixture(t, stage, "definition", "new")
 		})
 	}
 }

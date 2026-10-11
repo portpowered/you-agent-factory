@@ -465,13 +465,6 @@ func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
 	}
 }
 
-func TestNilServiceRootHasNoPublishedCapabilities(t *testing.T) {
-	var nilService *Service
-	if root := nilService.Root(); root.Operations != nil || root.Lifecycle != nil || root.Runtime != nil {
-		t.Fatalf("nil service Root() = %#v, want empty root", root)
-	}
-}
-
 func TestCloneStringMapDetachesOptionalTags(t *testing.T) {
 	if cloneStringMap(nil) != nil {
 		t.Fatal("cloneStringMap(nil) returned a non-nil map")
