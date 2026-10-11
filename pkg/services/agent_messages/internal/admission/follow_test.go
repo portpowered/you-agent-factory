@@ -48,6 +48,39 @@ func newFollowStream() *followStream {
 		Next: events.Cursor{Topic: topic, Position: 4}, Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 4}}}
 }
 
+func TestFollowPreservesAdmittedContentAcrossDeliveryTransitions(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	queued, err := f.engine.Send(t.Context(), engineRequest("one", "normalized body"), f.caller, "factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivered := queued
+	delivered.Status = agentmessages.DeliveredRevive
+	delivered.RevivedWorkerSessionID, delivered.To.DeliveredWorkerSessionID = "successor", "successor"
+	read := delivered
+	read.Status = agentmessages.Read
+	failed := queued
+	failed.Reason = "REVIVE_FAILED"
+	for _, pair := range [][2]agentmessages.Message{{queued, delivered}, {delivered, delivered}, {delivered, read}, {queued, failed}, {failed, delivered}} {
+		if !sameAdmittedContent(pair[0], pair[1]) {
+			t.Fatal("legal delivery transition invalidated an immutable observation")
+		}
+		for _, alter := range []func(*agentmessages.Message){
+			func(m *agentmessages.Message) { m.Body = "foreign body" },
+			func(m *agentmessages.Message) { m.To.WorkerSessionID = "foreign recipient" },
+			func(m *agentmessages.Message) { m.From.WorkerSessionID = "foreign sender" },
+			func(m *agentmessages.Message) { m.BodySHA256 = "foreign hash" },
+		} {
+			changed := pair[0]
+			alter(&changed)
+			if sameAdmittedContent(changed, pair[1]) {
+				t.Fatal("delivery transition bypassed immutable content validation")
+			}
+		}
+	}
+}
+
 type followAuthority struct {
 	Authority
 	tokens []string

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,9 +16,170 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+// Control only the external continuation-input sync. The real selected-profile
+// store and Worker Sessions still own reservation, admission and replay.
+type reviveInputGate struct {
+	recordings.WorkerRecordingStore
+	entered, release chan struct{}
+	unblock          sync.Once
+	reject           bool
+}
+
+type reviveRecordingDirectory string
+
+func (d reviveRecordingDirectory) Getwd() (string, error) { return string(d), nil }
+
+func (g *reviveInputGate) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return g.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (g *reviveInputGate) RecoverWorkerOwners(ctx context.Context) error {
+	return g.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}
+
+func (g *reviveInputGate) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
+	if strings.HasPrefix(key.RequestID, "continue/msg-") {
+		close(g.entered)
+		select {
+		case <-g.release:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		if g.reject {
+			return "", errors.New("private-controlled-continuation-sync-failure")
+		}
+	}
+	return g.WorkerRecordingStore.PersistWorkerControlInput(ctx, key, input)
+}
+
+func TestReviveAdmissionPublishesDurableOutcomeToReadAndFollow(t *testing.T) {
+	t.Parallel()
+	for _, reject := range []bool{false, true} {
+		t.Run(map[bool]string{false: "accepted", true: "rejected"}[reject], func(t *testing.T) {
+			t.Parallel()
+			gate := &reviveInputGate{entered: make(chan struct{}), release: make(chan struct{}), reject: reject}
+			defer gate.unblock.Do(func() { close(gate.release) })
+			core, _ := observer.New(zap.InfoLevel)
+			signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+			revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+			dir := t.TempDir()
+			f := startHostRunner(t, t.TempDir(), dir, "", edges.Edges{
+				FactorySessionsWorkingDirectory: reviveRecordingDirectory(dir),
+				WorkerRecordingWriter:           gate, WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { gate.WorkerRecordingStore = store },
+				ProcessLogger: zap.New(signal),
+			}, nil, revival, "lead", "lane")
+			lead := f.invoke(t, "lead", nil)
+			lane := f.invoke(t, "lane", lead)
+			f.endWorker(t, "lead")
+			before := messageFactoryStreams(t, f, "lead", "lane")
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			frames, finished := make(chan []byte, 4), make(chan error, 1)
+			go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+			select {
+			case <-signal.ready:
+			case <-ctx.Done():
+				t.Fatal("sender follow did not register")
+			}
+			result := make(chan api.AgentMessage, 1)
+			go func() {
+				result <- f.cliSend(t, lane, "lead", "--request-id", "barrier", "--body", "durable admission input")
+			}()
+			select {
+			case <-gate.entered:
+			case message := <-result:
+				t.Fatalf("send finished without input sync: status=%s reason=%v", message.Status, message.Reason)
+			case <-ctx.Done():
+				t.Fatal("continuation did not reach input sync barrier")
+			}
+			assertReviveWaitsForAdmission(t, result, revival)
+			gate.unblock.Do(func() { close(gate.release) })
+			var message api.AgentMessage
+			select {
+			case message = <-result:
+			case <-ctx.Done():
+				t.Fatal("send did not finish after input sync")
+			}
+			assertReviveOutcomeObservers(t, ctx, f, lane, message, frames, finished, reject)
+			if reject {
+				select {
+				case <-revival.requests:
+					t.Fatal("rejected input started a provider")
+				default:
+				}
+			} else {
+				assertReviveAdmission(t, f, revival, message, lead)
+			}
+			if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+				t.Fatal("admission outcome changed canonical Factory Events")
+			}
+			cancel()
+			select {
+			case <-finished:
+			case <-time.After(15 * time.Second):
+				t.Fatal("admission follow did not join")
+			}
+		})
+	}
+}
+
+func assertReviveWaitsForAdmission(t *testing.T, result <-chan api.AgentMessage, revival *workerGate) {
+	t.Helper()
+	select {
+	case <-result:
+		t.Fatal("send claimed an outcome before continuation input sync")
+	default:
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("provider started before continuation input sync")
+	default:
+	}
+}
+
+func assertReviveOutcomeObservers(t *testing.T, ctx context.Context, f *fixture, lane map[string]string, message api.AgentMessage, frames <-chan []byte, finished <-chan error, reject bool) {
+	t.Helper()
+	assertReviveOutcomeFrames(t, ctx, message, frames, finished, reject)
+	var read api.AgentMessageListResponse
+	if json.Unmarshal(f.cli(t, lane, "list", "--thread", message.ThreadId), &read) != nil || len(read.Messages) != 1 || !reflect.DeepEqual(read.Messages[0], message) {
+		t.Fatal("CLI read differs from send and HTTP follow outcome")
+	}
+	request := map[string]any{"requestId": "barrier", "to": map[string]string{"workerSessionId": "lead"}, "body": "durable admission input"}
+	if retry := f.send(t, request, lane); !reflect.DeepEqual(retry, message) {
+		t.Fatal("admission retry lost durable outcome")
+	}
+}
+
+func assertReviveOutcomeFrames(t *testing.T, ctx context.Context, message api.AgentMessage, frames <-chan []byte, finished <-chan error, reject bool) {
+	t.Helper()
+	var sent, outcome api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &sent) != nil || sent.Kind != "SENT" || sent.Message.MessageId != message.MessageId ||
+		sent.Message.Status != "QUEUED" || sent.Message.RevivedWorkerSessionId != nil || sent.Message.To.DeliveredWorkerSessionId != nil {
+		t.Fatal("follow lost the queued admission or published premature delivery facts")
+	}
+	wantKind := "DELIVERED_REVIVE"
+	if reject {
+		wantKind = "DELIVERY_UPDATED"
+		assertRejectedRevive(t, message)
+	}
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || string(outcome.Kind) != wantKind || !reflect.DeepEqual(outcome.Message, message) || outcome.Sequence <= sent.Sequence {
+		t.Fatal("follow lost durable admission outcome")
+	}
+}
+
+func assertRejectedRevive(t *testing.T, message api.AgentMessage) {
+	t.Helper()
+	if message.Status != "QUEUED" || message.Reason == nil || *message.Reason != "REVIVE_FAILED" || message.RevivedWorkerSessionId != nil {
+		t.Fatal("rejected admission claimed success or lost typed reason")
+	}
+}
 
 func TestConcurrentMessagesUseOneSuccessorAndStableRequest(t *testing.T) {
 	t.Parallel()

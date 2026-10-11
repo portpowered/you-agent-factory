@@ -162,7 +162,7 @@ func decodeObservation(record events.Record) (agentmessages.Observation, error) 
 // must never substitute different content or addresses for an admitted ID.
 func sameAdmittedContent(observed, admitted agentmessages.Message) bool {
 	switch observed.Status {
-	case agentmessages.Queued, agentmessages.Read, agentmessages.Replied, agentmessages.Expired:
+	case agentmessages.Queued, agentmessages.Read, agentmessages.DeliveredRevive, agentmessages.Replied, agentmessages.Expired:
 	default:
 		return false
 	}
@@ -170,6 +170,8 @@ func sameAdmittedContent(observed, admitted agentmessages.Message) bool {
 		return false
 	}
 	observed.Status, observed.RepliedByMessageID = admitted.Status, admitted.RepliedByMessageID
+	observed.Reason, observed.RevivedWorkerSessionID = admitted.Reason, admitted.RevivedWorkerSessionID
+	observed.To.DeliveredWorkerSessionID = admitted.To.DeliveredWorkerSessionID
 	observed.SentAt, observed.ExpiresAt = admitted.SentAt, admitted.ExpiresAt
 	return observed == admitted
 }
