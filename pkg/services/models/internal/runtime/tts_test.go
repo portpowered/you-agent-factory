@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
@@ -184,6 +185,42 @@ func TestInvocationRejectsIncompleteRoles(t *testing.T) {
 	var missingRole *fixedInvocationRole
 	if _, err := ttsruntime.NewInvocationRuntime(missingRole, role, role, role, role); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
 		t.Fatalf("typed nil role: %v", err)
+	}
+}
+
+func TestInvocationUnavailablePreservesContextFailureAndTypedError(t *testing.T) {
+	t.Parallel()
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	expired, release := context.WithDeadline(t.Context(), time.Time{})
+	t.Cleanup(release)
+	for _, test := range []struct {
+		name string
+		ctx  context.Context
+		want error
+	}{
+		{name: "nil", want: models.ErrUnavailable},
+		{name: "active", ctx: t.Context(), want: models.ErrUnavailable},
+		{name: "canceled", ctx: canceled, want: context.Canceled},
+		{name: "expired", ctx: expired, want: context.DeadlineExceeded},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := (ttsruntime.UnavailableInvocationRuntime{}).Invoke(test.ctx, inference.InvocationRuntimeRequest{
+				Operation: models.Operation{Name: " ASR "},
+				Request:   models.InvokeModelRequest{Operation: models.OperationTTS},
+			})
+			if !errors.Is(err, test.want) || result.Content != nil || result.Artifacts != nil {
+				t.Fatalf("unavailable invocation = %#v, %v; want %v and no output", result, err, test.want)
+			}
+			var failure *models.InvocationFailure
+			if errors.Is(test.want, models.ErrUnavailable) {
+				if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassConfiguration || failure.Operation != models.OperationASR {
+					t.Fatalf("unavailable error = %v; want typed configuration failure for ASR", err)
+				}
+			} else if errors.As(err, &failure) || errors.Is(err, models.ErrUnavailable) {
+				t.Fatalf("context error = %v; want cancellation or deadline without unavailable wrapping", err)
+			}
+		})
 	}
 }
 

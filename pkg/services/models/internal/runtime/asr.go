@@ -263,11 +263,10 @@ func (UnavailableInvocationRuntime) Invoke(
 	ctx context.Context,
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := ctx.Err(); err != nil {
-		return inference.InvocationRuntimeResult{}, err
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return inference.InvocationRuntimeResult{}, err
+		}
 	}
 	operation := strings.TrimSpace(request.Operation.Name)
 	if operation == "" {
