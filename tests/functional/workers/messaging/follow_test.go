@@ -6,18 +6,126 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+// Hold one customer response write, without changing the handler, Events or
+// durable store. Three messages suffice to exhaust a one-record subscription.
+type heldStreamWriter struct {
+	http.ResponseWriter
+	ctx              context.Context
+	entered, release chan struct{}
+	once             sync.Once
+}
+
+func (w *heldStreamWriter) Write(body []byte) (int, error) {
+	if strings.Contains(string(body), "event: message") {
+		w.once.Do(func() {
+			close(w.entered)
+			select {
+			case <-w.release:
+			case <-w.ctx.Done():
+			}
+		})
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *heldStreamWriter) Flush() { w.ResponseWriter.(http.Flusher).Flush() }
+
+func heldFollowTransport(entered, release chan struct{}) func(platformhttpserver.Starter) platformhttpserver.Starter {
+	return func(start platformhttpserver.Starter) platformhttpserver.Starter {
+		return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			handler := request.Handler
+			request.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/messages" && r.URL.Query().Get("follow") == "true" {
+					w = &heldStreamWriter{ResponseWriter: w, ctx: r.Context(), entered: entered, release: release}
+				}
+				handler.ServeHTTP(w, r)
+			})
+			return start(ctx, request)
+		}
+	}
+}
+
+func TestInboxFollowBackpressurePreservesDurablePull(t *testing.T) {
+	t.Parallel()
+	core, _ := observer.New(zap.InfoLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+	entered, release := make(chan struct{}), make(chan struct{})
+	f := startHostTransport(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{ProcessLogger: zap.New(signal)}, heldFollowTransport(entered, release), "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 8), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true&toMe=true&maxResults=1", lead, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("follow did not register")
+	}
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
+	first := f.send(t, map[string]any{"requestId": "slow-0", "to": map[string]string{"workerSessionId": "lead"}, "body": "slow consumer first"}, lane)
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("follow did not reach controlled transport write")
+	}
+	for i := 1; i < 3; i++ {
+		f.send(t, map[string]any{"requestId": fmt.Sprintf("slow-%d", i), "to": map[string]string{"workerSessionId": "lead"}, "body": fmt.Sprintf("slow consumer %d", i)}, lane)
+	}
+	close(release)
+	released = true
+	assertBackpressureFrames(t, ctx, frames, finished, first.MessageId)
+	page := readPage(t, f, "/messages?toMe=true", lead)
+	if len(page.Messages) != 3 {
+		t.Fatal("backpressure lost committed inbox records")
+	}
+	for _, message := range page.Messages {
+		if message.Status != "QUEUED" {
+			t.Fatal("follow changed durable read status")
+		}
+	}
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		t.Fatal("follow did not terminate")
+	}
+}
+
+func assertBackpressureFrames(t *testing.T, ctx context.Context, frames <-chan []byte, finished <-chan error, first string) {
+	t.Helper()
+	var observation api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &observation) != nil || observation.Message.MessageId != first {
+		t.Fatal("slow stream lost its initial admitted record")
+	}
+	// Events drains the already queued record before reporting its terminal fault.
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &observation) != nil || observation.Kind != "SENT" {
+		t.Fatal("slow stream did not drain the queued observation")
+	}
+	var failure api.ErrorResponse
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &failure) != nil || failure.Code != "MESSAGE_STREAM_BACKPRESSURE" {
+		t.Fatal("slow stream did not report typed backpressure")
+	}
+}
 
 // An injected diagnostic sink supplies a registration gate, never the
 // behavioral assertion. Assertions consume only the customer HTTP stream.

@@ -2,16 +2,78 @@ package messaging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// Hold the existing timestamp effect after authentication and before the
+// durable write. Lifecycle deadlines continue using the real scheduler.
+type admissionClock struct {
+	armed            atomic.Bool
+	entered, release chan struct{}
+}
+
+func (c *admissionClock) Now() time.Time {
+	if c.armed.CompareAndSwap(true, false) {
+		close(c.entered)
+		<-c.release
+	}
+	return time.Now().UTC()
+}
+
+func TestAdmissionRevalidatesCallerAfterWaiting(t *testing.T) {
+	t.Parallel()
+	clock := &admissionClock{entered: make(chan struct{}), release: make(chan struct{})}
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{Clock: clock}, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	existing := f.send(t, map[string]any{"requestId": "existing", "to": map[string]string{"workerSessionId": "lead"}, "body": "existing inbox"}, lane)
+	clock.armed.Store(true)
+	released := false
+	defer func() {
+		if !released {
+			close(clock.release)
+		}
+	}()
+	finished := make(chan struct{}, 1)
+	go func() {
+		defer close(finished)
+		assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "waiting", "to": map[string]string{"workerSessionId": "lead"}, "body": "must never be admitted"}, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	}()
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	select {
+	case <-clock.entered:
+	case <-ctx.Done():
+		t.Fatal("admission did not reach timestamp gate")
+	}
+	status, _ := f.request(t, http.MethodPost, "/worker-sessions/lane/cancel", map[string]any{}, nil)
+	if status != http.StatusOK {
+		t.Fatal("caller did not lose execution authority")
+	}
+	close(clock.release)
+	released = true
+	select {
+	case <-finished:
+	case <-ctx.Done():
+		t.Fatal("waiting admission did not join")
+	}
+	page := readPage(t, f, "/messages", nil)
+	if len(page.Messages) != 1 || page.Messages[0].MessageId != existing.MessageId || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("caller loss persisted a waiting send or changed the existing inbox")
+	}
+}
 
 func TestLegacyRecipientAmbiguityRequiresExplicitOwner(t *testing.T) {
 	t.Parallel()

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -70,6 +71,11 @@ func startHostMode(t *testing.T, home, dir, settings string, mock bool, workers 
 
 func startHostEffects(t *testing.T, home, dir, settings string, mock bool, effects serviceedges.Edges, workers ...string) *fixture {
 	t.Helper()
+	return startHostTransport(t, home, dir, settings, mock, effects, nil, workers...)
+}
+
+func startHostTransport(t *testing.T, home, dir, settings string, mock bool, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, workers ...string) *fixture {
+	t.Helper()
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -98,9 +104,10 @@ func startHostEffects(t *testing.T, home, dir, settings string, mock bool, effec
 	}
 	f.server = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WorkingDirectory: dir, Env: f.env,
-		UseMockWorkers: mock,
-		Args:           []string{"--server", "http://127.0.0.1:1"},
-		Edges:          serviceedges.Merge(serviceedges.Edges{ProviderCommandRunner: f.runner}, effects),
+		UseMockWorkers:       mock,
+		Args:                 []string{"--server", "http://127.0.0.1:1"},
+		Edges:                serviceedges.Merge(serviceedges.Edges{ProviderCommandRunner: f.runner}, effects),
+		WrapAPIServerStarter: wrap,
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
 			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, dir)
 		},
