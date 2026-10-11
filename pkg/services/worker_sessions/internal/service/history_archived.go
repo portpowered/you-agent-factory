@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 
@@ -64,9 +65,17 @@ func (r *registry) historyObservations(ctx context.Context, req workersessions.L
 }
 
 func (s *LogReader) archivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
+	return s.readArchivedHistory(ctx, req, owners, "")
+}
+
+func (s *LogReader) readArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string) ([]workersessions.Observation, error) {
 	result := make([]workersessions.Observation, 0)
 	seen := make(map[historyIdentity]struct{})
 	request := recordings.WorkerCapturedCatalogRequest{Limit: 1000}
+	if workID != "" {
+		request.FactorySessionID = req.FactorySessionID
+		request.PreparedSummariesOnly, request.RequireCompleteMembership = true, true
+	}
 	for {
 		if err := observationContextError(ctx); err != nil {
 			return nil, err
@@ -78,6 +87,15 @@ func (s *LogReader) archivedHistory(ctx context.Context, req workersessions.List
 		for _, item := range page.Items {
 			if !catalogHistoryMatches(item.Catalog, req) {
 				continue
+			}
+			if workID != "" {
+				opening, err := historyOpening(item)
+				if err != nil {
+					return nil, err
+				}
+				if !slices.Contains(opening.WorkIDs, workID) {
+					continue
+				}
 			}
 			observation, err := capturedHistoryIdentity(item, owners)
 			if err != nil {

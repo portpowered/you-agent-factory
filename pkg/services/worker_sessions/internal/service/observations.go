@@ -345,8 +345,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 	r.logger.Debug("worker session observation candidate selection", "candidate_visits", candidateVisits, "candidate_count", len(ids))
 	idCollectionDuration := r.clock.Now().Sub(listStartedAt)
 	if len(ids) == 0 {
-		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")
-		return workersessions.ListObservationsResult{}, workersessions.ErrObservationWorkNotFound
+		return r.withArchivedWorkObservations(ctx, req, nil)
 	}
 	orderComparisons := sortObservationOrder(ids)
 
@@ -390,7 +389,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		"total_duration_ms", r.clock.Now().Sub(listStartedAt).Milliseconds(),
 	)
 	r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "success", "result_count", len(observations))
-	return workersessions.ListObservationsResult{Observations: observations}, nil
+	return r.withArchivedWorkObservations(ctx, req, observations)
 }
 
 // Preserve the owned identity if optional activity exceeds the list budget.

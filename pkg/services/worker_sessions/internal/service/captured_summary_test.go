@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"testing"
@@ -194,6 +195,39 @@ func (f *capturedActivityFake) LookupWorkerSessionSummary(context.Context, strin
 func summaryTestItem(page recordings.WorkerCapturedActivityPage) recordings.WorkerCapturedCatalogItem {
 	return recordings.WorkerCapturedCatalogItem{Catalog: page.Catalog, Opening: page.Opening, Terminal: page.Terminal,
 		Health: page.Health, HealthReason: page.HealthReason, OwnerLost: page.OwnerLost, SuccessorWorkerSessionID: page.SuccessorWorkerSessionID}
+}
+
+func TestCapturedArchivedSummarySelectsWorkBeforeTerminalProjection(t *testing.T) {
+	t.Parallel()
+	selected := completedSummaryFixture(t, false)
+	unrelated := completedSummaryFixture(t, false)
+	var draft workers.Draft
+	var opening workers.SessionPayload
+	if err := json.Unmarshal(unrelated.Opening.Payload, &draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(draft.Payload, &opening); err != nil {
+		t.Fatal(err)
+	}
+	opening.WorkIDs = []string{"other-work"}
+	draft.Payload, _ = json.Marshal(opening)
+	unrelated.Opening.Payload, _ = json.Marshal(draft)
+	// The other Work has unusable terminal metadata. Membership is selected
+	// from its validated opening, so it cannot supply or poison selected facts.
+	unrelated.MetadataRecords[len(unrelated.MetadataRecords)-1].Payload = []byte(`{"invalid":true}`)
+	reader := &LogReader{reader: &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{unrelated, selected}}}
+	rows, err := reader.readArchivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "factory"}, nil, "work")
+	if err != nil || len(rows) != 1 || rows[0].AttemptID != "attempt" || rows[0].State != workersessions.StateCompleted {
+		t.Fatalf("exact Work selection=%+v err=%v", rows, err)
+	}
+	_, err = reader.readArchivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "factory"}, nil, "other-work")
+	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("selected damage was hidden: %v", err)
+	}
+	rows, err = reader.readArchivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "foreign"}, nil, "work")
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("foreign scope exposed selected Work: %+v %v", rows, err)
+	}
 }
 
 func summaryTestSnapshot(page recordings.WorkerCapturedActivityPage, snapshot recordings.WorkerRecordingSnapshot) recordings.WorkerCapturedSummary {

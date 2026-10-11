@@ -372,6 +372,7 @@ func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
 	}
 	for index := range cases {
 		assertArchivedKnownName(t, assertTerminalReadParity(t, server, before[index].WorkerSessionId), names[index])
+		assertArchivedOwnScopeReads(t, server, before[index])
 	}
 	server.Close(t)
 	config.BeforeStart = func(tb testing.TB, process support.Process, _ root.Input) {
@@ -387,8 +388,66 @@ func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
 		}
 		got := assertTerminalReadParity(t, reopened, before[index].WorkerSessionId)
 		assertArchivedKnownName(t, got, names[index])
+		assertArchivedOwnScopeReads(t, reopened, got)
 		if got.FactorySessionId == nil || *got.FactorySessionId != cell.scope || got.AttemptId != before[index].AttemptId || !reflect.DeepEqual(got.WorkId, before[index].WorkId) {
 			t.Fatalf("archived name changed original identity: %+v", got)
+		}
+	}
+	reopened.Close(t)
+	// The retained original Factory need not have a reopened runtime at all.
+	// Its capture remains read-only, exact-scope authority on the same profile.
+	config.BeforeStart = nil
+	closedScopes := support.StartFunctionalAPIServer(t, config)
+	for index := range cases {
+		got := assertTerminalReadParity(t, closedScopes, before[index].WorkerSessionId)
+		assertArchivedKnownName(t, got, names[index])
+		assertArchivedOwnScopeReads(t, closedScopes, got)
+	}
+}
+
+func assertArchivedOwnScopeReads(t *testing.T, server *support.FunctionalAPIServer, shown factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	scope, workID := support.StringPointerValue(shown.FactorySessionId), support.StringPointerValue(shown.WorkId)
+	base := server.URL() + "/factory-sessions/" + scope + "/worker-sessions"
+	list := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, base+"?workId="+workID)
+	assertTerminalListed(t, list, shown)
+	own := support.GetJSON[factoryapi.WorkerSessionObservation](t, base+"/"+shown.WorkerSessionId)
+	if !reflect.DeepEqual(own, shown) {
+		t.Fatalf("own-scope summary differs: own=%+v unscoped=%+v", own, shown)
+	}
+	// This command-edge fixture does not supply a third-party continuation.
+	// The unchanged transcript contract reports typed unavailability in both scopes.
+	for _, url := range []string{base + "/" + shown.WorkerSessionId + "/transcript", server.URL() + "/worker-sessions/" + shown.WorkerSessionId + "/transcript"} {
+		response, err := http.Get(url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var failure factoryapi.ErrorResponse
+		err = json.NewDecoder(response.Body).Decode(&failure)
+		_ = response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusInternalServerError || failure.Code != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
+			t.Fatalf("transcript absence differs: status=%d error=%+v decode=%v", response.StatusCode, failure, err)
+		}
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "list", "--session", scope, "--work-id", workID, "--output", "json"})
+	if err := server.Execute(t, input.Input); err != nil {
+		t.Fatalf("own-scope CLI list: %v %s", err, input.Stderr())
+	}
+	var cli factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal([]byte(input.Stdout()), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cli, list) {
+		t.Fatalf("own-scope CLI/HTTP list differs: %+v / %+v", cli, list)
+	}
+	for _, query := range []string{"?workId=unknown-work", "/unknown-worker"} {
+		response, err := http.Get(base + query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("unknown identity %s: %d", query, response.StatusCode)
 		}
 	}
 }

@@ -92,6 +92,17 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 		WorkerSessionID:  workerSessionID,
 		FactorySessionID: scope.observationID(),
 	})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		return a.closedScopeWorkerSessionObservation(ctx, workerSessionID, strings.TrimSpace(sessionID))
+	}
+	if err == nil && observation.State.Terminal() && a.logs != nil {
+		captured, captureErr := a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: workerSessionID, FactorySessionID: strings.TrimSpace(sessionID),
+		})
+		if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) {
+			observation, err = captured, captureErr
+		}
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
@@ -180,6 +191,12 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 		WorkerSessionID:  workerSessionID,
 		FactorySessionID: scope.observationID(),
 	})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		scope = workerSessionScope{effectiveID: strings.TrimSpace(sessionID)}
+		result, err = a.logs.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
+			WorkerSessionID: workerSessionID, FactorySessionID: scope.effectiveID,
+		})
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
 	}
