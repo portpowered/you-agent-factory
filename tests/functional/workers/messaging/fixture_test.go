@@ -27,11 +27,12 @@ import (
 )
 
 type workerGate struct {
-	started  chan map[string]string
-	release  chan struct{}
-	requests chan platformprocess.CommandRequest
-	result   *platformprocess.CommandResult
-	progress <-chan struct{}
+	started            chan map[string]string
+	release            chan struct{}
+	requests           chan platformprocess.CommandRequest
+	result             *platformprocess.CommandResult
+	progress           <-chan struct{}
+	startupDiagnostics []byte
 }
 
 type commandRunner struct {
@@ -93,6 +94,16 @@ func (gate *workerGate) observeStart(ctx context.Context, observe platformproces
 			}
 		}
 		observe(platformprocess.OutputStreamStdout, []byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n{\"type\":\"turn.started\"}\n"))
+		if len(gate.startupDiagnostics) != 0 {
+			for _, line := range bytes.SplitAfter(gate.startupDiagnostics, []byte("\n")) {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if len(line) != 0 {
+					observe(platformprocess.OutputStreamStderr, line)
+				}
+			}
+		}
 	}
 	return nil
 }

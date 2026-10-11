@@ -106,25 +106,57 @@ func (e *Engine) observeRecipient(ctx context.Context, entry store.Entry, recipi
 		defer cancel()
 		defer e.forgetDeliveryObserver(life, key, observer)
 		topic := workersessions.Topic(recipient.Observation.WorkerSessionID)
-		sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: workersessions.DefaultObservationStreamLimit})
-		// Even unavailable/retention-gapped streams may have an authoritative
-		// ended head. No event payload alone grants continuation authority.
-		if e.deliverEndedRecipient(ctx, entry, key, observer) || err != nil {
+		e.watchRecipient(ctx, entry, topic, key, observer)
+	}()
+}
+
+func (e *Engine) watchRecipient(ctx context.Context, entry store.Entry, topic events.Topic, key string, observer *deliveryObserver) {
+	sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: workersessions.DefaultObservationStreamLimit})
+	// Even unavailable/retention-gapped streams may have an authoritative
+	// ended head. No event payload alone grants continuation authority.
+	if e.deliverEndedRecipient(ctx, entry, key, observer) || err != nil {
+		return
+	}
+	for {
+		delivery := sub.Next(ctx)
+		if ctx.Err() != nil || e.deliverEndedRecipient(ctx, entry, key, observer) {
 			return
 		}
-		for {
-			delivery := sub.Next(ctx)
-			if ctx.Err() != nil || e.deliverEndedRecipient(ctx, entry, key, observer) {
-				return
-			}
-			if delivery.Kind == events.DeliveryGap && delivery.Gap != nil && delivery.Gap.Validate() == nil && delivery.Gap.Topic == topic {
-				continue // Events resumes retained catch-up, then live delivery.
-			}
-			if delivery.Kind != events.DeliveryRecord {
-				return
-			}
+		if delivery.Kind == events.DeliveryGap && delivery.Gap != nil && delivery.Gap.Validate() == nil && delivery.Gap.Topic == topic {
+			continue // Events resumes retained catch-up, then live delivery.
 		}
-	}()
+		if delivery.Kind == events.DeliveryBackpressure {
+			// Only the authoritative head determines completion. A bounded
+			// subscription can overflow on retained or live progress; resume
+			// at the current Events head and check completion after registering
+			// so an end between the read and subscription is never lost.
+			sub, err = e.recipientLiveSubscription(ctx, topic)
+			if e.deliverEndedRecipient(ctx, entry, key, observer) || err != nil {
+				return
+			}
+			continue
+		}
+		if delivery.Kind != events.DeliveryRecord {
+			return
+		}
+	}
+}
+
+func (e *Engine) recipientLiveSubscription(ctx context.Context, topic events.Topic) (events.Subscription, error) {
+	head, err := e.events.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 1})
+	if err != nil || head.Validate() != nil || head.Outcome == events.ReadOutcomeInvalidCursor {
+		return nil, agentmessages.ErrStreamUnavailable
+	}
+	position := head.Retained.Head
+	if head.Outcome == events.ReadOutcomeGap {
+		position = head.Gap.Head
+	}
+	sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic,
+		From: events.Cursor{Topic: topic, Position: position}, Limit: workersessions.DefaultObservationStreamLimit})
+	if err != nil || sub == nil {
+		return nil, agentmessages.ErrStreamUnavailable
+	}
+	return sub, nil
 }
 
 // Returns true once the observed head has ended. A new head is observed by

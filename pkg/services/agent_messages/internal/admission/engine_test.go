@@ -384,11 +384,20 @@ type deliveryStreamAppender struct {
 
 type recipientEndStream struct {
 	observationAppender
-	next chan struct{}
-	wake chan events.Delivery
+	next    chan struct{}
+	wake    chan events.Delivery
+	resumed chan events.Cursor
+}
+
+func (*recipientEndStream) Read(_ context.Context, request events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{Outcome: events.ReadOutcomeGap,
+		Gap: &events.GapFacts{Topic: request.Topic, Requested: 0, EarliestRetained: 2, Head: 3}}, nil
 }
 
 func (s *recipientEndStream) Subscribe(ctx context.Context, request events.SubscribeRequest) (events.Subscription, error) {
+	if request.From.Position != 0 {
+		s.resumed <- request.From
+	}
 	return func(context.Context) events.Delivery {
 		select {
 		case s.next <- struct{}{}:
@@ -411,7 +420,7 @@ func TestRecipientObserverSurvivesRetainedGapUntilAuthoritativeEnd(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stream := &recipientEndStream{next: make(chan struct{}), wake: make(chan events.Delivery)}
+	stream := &recipientEndStream{next: make(chan struct{}), wake: make(chan events.Delivery), resumed: make(chan events.Cursor, 1)}
 	f.engine.events = stream
 	admitted := make(chan workersessions.ContinueRequest, 1)
 	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
@@ -425,6 +434,11 @@ func TestRecipientObserverSurvivesRetainedGapUntilAuthoritativeEnd(t *testing.T)
 	topic := workersessions.Topic("lead")
 	stream.wake <- events.Delivery{Kind: events.DeliveryGap, Gap: &events.GapFacts{Topic: topic, Requested: 1, EarliestRetained: 2, Head: 3}}
 	awaitRecipientRead(t, stream.next)
+	stream.wake <- events.Delivery{Kind: events.DeliveryBackpressure}
+	awaitRecipientRead(t, stream.next)
+	if cursor := <-stream.resumed; cursor.Topic != topic || cursor.Position != 3 {
+		t.Fatal("backpressure recovery did not resume at the retained head")
+	}
 	select {
 	case <-admitted:
 		t.Fatal("a gap guessed an ended recipient")

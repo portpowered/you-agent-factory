@@ -8,18 +8,123 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+// A blocked alias flush lets the real recipient subscription fill its live
+// buffer. Gates act only on injected filesystem/provider edges, not Events.
+func TestRecipientEndDeliverySurvivesObservationBackpressure(t *testing.T) {
+	t.Parallel()
+	core, _ := observer.New(zap.InfoLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}, backpressureTopic: "worker-session/lead/events",
+		registered: make(chan string, 2)}
+	flush := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), kind: "REQUEST_ALIAS"}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{ProcessLogger: zap.New(signal), AgentMessageStoreFileSystem: flush}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { flush.unblock.Do(func() { close(flush.release) }) })
+	gate := f.runner.workers["lead"]
+	// Source-native stderr progress uses the same Worker topic, without
+	// claiming provider-confirmed resumed work.
+	var output strings.Builder
+	for i := range 128 {
+		fmt.Fprintf(&output, "controlled progress %d\n", i)
+	}
+	gate.startupDiagnostics = []byte(output.String())
+	progress := make(chan struct{})
+	gate.progress = progress
+	lead := f.invoke(t, "lead", nil)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	lane := f.invoke(t, "lane", lead)
+	first := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", "first after backpressure")
+	select {
+	case cursor := <-signal.registered:
+		if cursor != "0" {
+			t.Fatal("initial observer omitted retained catch-up")
+		}
+	case <-ctx.Done():
+		t.Fatal("recipient observer did not register")
+	}
+	aliases := make(chan api.AgentMessage, 1)
+	go func() { aliases <- f.cliSend(t, lane, "lead", "--request-id", "alias", "--body", first.Body) }()
+	select {
+	case <-flush.entered:
+	case <-ctx.Done():
+		t.Fatal("alias did not reach its durable flush")
+	}
+	close(progress)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("recipient observer did not encounter actual backpressure")
+	}
+	flush.unblock.Do(func() { close(flush.release) })
+	select {
+	case alias := <-aliases:
+		if !reflect.DeepEqual(alias, first) {
+			t.Fatal("blocked alias changed the original message")
+		}
+	case <-ctx.Done():
+		t.Fatal("alias did not complete after flush release")
+	}
+	select {
+	case cursor := <-signal.registered:
+		if cursor == "0" {
+			t.Fatal("backpressure replayed the entire retained stream")
+		}
+	case <-ctx.Done():
+		t.Fatal("recipient observer did not recover after backpressure")
+	}
+	assertBackpressureRevival(t, f, revival, first, lead, lane)
+}
+
+func assertBackpressureRevival(t *testing.T, f *fixture, revival *workerGate, first api.AgentMessage, lead, lane map[string]string) {
+	t.Helper()
+	second := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second after backpressure")
+	held := f.cliSend(t, lane, "lead", "--request-id", "hold", "--body", "keep held", "--if-ended", "hold")
+	if first.Status != "QUEUED" || second.Status != "QUEUED" || f.workerEnded(t, "lead") {
+		t.Fatal("backpressure guessed recipient completion")
+	}
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	f.endWorker(t, "lead")
+	pending := "REVIVE_PENDING"
+	first.Reason = &pending
+	final := f.awaitDeliveryOutcome(t, lane, first)
+	batch := final
+	batch.Body = first.Body + "\n\n" + second.Body
+	head := assertReviveAdmission(t, f, revival, batch, lead)
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 3 || page.Messages[0].MessageId != first.MessageId || page.Messages[1].MessageId != second.MessageId ||
+		page.Messages[1].Status != "DELIVERED_REVIVE" || page.Messages[1].RevivedWorkerSessionId == nil ||
+		*page.Messages[1].RevivedWorkerSessionId != head["YOU_WORKER_SESSION_ID"] || !reflect.DeepEqual(page.Messages[2], held) {
+		t.Fatal("backpressure lost ordered delivery or changed HOLD")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	if retry := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", first.Body); !reflect.DeepEqual(retry, final) {
+		t.Fatal("backpressure delivery retry changed durable successor facts")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("retained/live replay duplicated continuation")
+	default:
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("backpressure messaging changed Factory Events")
+	}
+}
 
 // Hold one customer response write, without changing the handler, Events or
 // durable store. Three messages suffice to exhaust a one-record subscription.
@@ -131,12 +236,15 @@ func assertBackpressureFrames(t *testing.T, ctx context.Context, frames <-chan [
 // behavioral assertion. Assertions consume only the customer HTTP stream.
 type subscriptionSignal struct {
 	zapcore.Core
-	ready chan struct{}
-	once  *sync.Once
+	ready             chan struct{}
+	once              *sync.Once
+	backpressureTopic string
+	registered        chan string
 }
 
 func (c *subscriptionSignal) With(fields []zapcore.Field) zapcore.Core {
-	return &subscriptionSignal{Core: c.Core.With(fields), ready: c.ready, once: c.once}
+	return &subscriptionSignal{Core: c.Core.With(fields), ready: c.ready, once: c.once, backpressureTopic: c.backpressureTopic,
+		registered: c.registered}
 }
 func (c *subscriptionSignal) Check(entry zapcore.Entry, checked *zapcore.CheckedEntry) *zapcore.CheckedEntry {
 	if c.Enabled(entry.Level) {
@@ -150,7 +258,18 @@ func (c *subscriptionSignal) Write(entry zapcore.Entry, fields []zapcore.Field) 
 		field.AddTo(values)
 	}
 	if entry.Message == "events subscribe outcome" && values.Fields["topic"] == "agent-messages/events" && values.Fields["outcome"] == "accepted" {
+		if c.backpressureTopic == "" {
+			c.once.Do(func() { close(c.ready) })
+		}
+	}
+	if c.backpressureTopic != "" && entry.Message == "events subscribe backpressure" && values.Fields["topic"] == c.backpressureTopic {
 		c.once.Do(func() { close(c.ready) })
+	}
+	if c.registered != nil && entry.Message == "events subscribe outcome" && values.Fields["topic"] == c.backpressureTopic && fmt.Sprint(values.Fields["limit"]) == "64" {
+		select {
+		case c.registered <- fmt.Sprint(values.Fields["from"]):
+		default:
+		}
 	}
 	return c.Core.Write(entry, fields)
 }
