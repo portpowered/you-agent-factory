@@ -232,7 +232,7 @@ func TestWriteFailurePreservesDecodedServerResponse(t *testing.T) {
 	authored := testResponseCodedError{response: factoryapi.ErrorResponse{
 		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		Family:  factoryapi.ErrorFamilyNotFound,
-		Message: "server supplied message",
+		Message: "  server supplied message\n",
 	}}
 	var output bytes.Buffer
 	if !WriteFailure(&output, authored) {
@@ -242,7 +242,7 @@ func TestWriteFailurePreservesDecodedServerResponse(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("decode response-coded diagnostic: %v", err)
 	}
-	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND || response.Family != factoryapi.ErrorFamilyNotFound || response.Message != "server supplied message" {
+	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND || response.Family != factoryapi.ErrorFamilyNotFound || response.Message != "  server supplied message\n" {
 		t.Fatalf("response = %#v, want decoded server fields", response)
 	}
 }

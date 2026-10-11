@@ -130,8 +130,8 @@ func assertCapturedCredentialPrivacy(t *testing.T, encoded, workerToken string) 
 
 func assertCapturedCredentialPeer(t *testing.T, encoded, name string, cases []capturedCredentialCase) {
 	t.Helper()
-	if !strings.Contains(encoded, "tool-safe peer["+name+"]") {
-		t.Fatal("redaction lost this peer's tool result")
+	if !strings.Contains(encoded, "peer["+name+"]") || !strings.Contains(encoded, "command_execution") || !strings.Contains(encoded, "tool_call") || !strings.Contains(encoded, "tool_output") {
+		t.Fatal("redaction lost this peer's public message and structured tool")
 	}
 	for _, peer := range cases {
 		if peer.name != name && strings.Contains(encoded, "peer["+peer.name+"]") {
@@ -167,7 +167,7 @@ func (runner capturedCredentialRunner) RunStreaming(_ context.Context, request p
 	}
 	runner.tokens[scenario] <- workerToken
 	output := capturedCodexOutput("credential-" + scenario)
-	output = bytes.ReplaceAll(output, []byte("captured answer COMPLETE"), []byte(text))
+	output = bytes.ReplaceAll(output, []byte("captured answer COMPLETE"), []byte("peer["+scenario+"] "+text))
 	output = bytes.ReplaceAll(output, []byte("public result"), []byte("tool-safe peer["+scenario+"] planted-api-credential planted-token-credential "+workerToken))
 	if scenario != "completed" {
 		output = bytes.ReplaceAll(output, []byte(`{"type":"item.completed","item":{"id":"answer"`), []byte(`{"type":"item.updated","item":{"id":"answer"`))

@@ -29,21 +29,6 @@ func NamedFactory(
 	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
 	directories factorydefinitions.DirectoryReplacementStore,
 ) (string, error) {
-	if write == nil {
-		return "", fmt.Errorf("Factory Definitions layout writer is required")
-	}
-	if validate == nil {
-		return "", fmt.Errorf("Factory Definitions layout validator is required")
-	}
-	if fileSystem == nil {
-		return "", fmt.Errorf("Factory Definitions persistence filesystem is required")
-	}
-	if requireDefinitionDir == nil {
-		return "", fmt.Errorf("Factory Definition directory validator is required")
-	}
-	if directories == nil {
-		return "", fmt.Errorf("directory replacement store is required")
-	}
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

@@ -410,6 +410,7 @@ func provideFactoryDefinitionCompilation(
 func provideFactoryDefinitionsHost(
 	router *factorysessions.DefinitionRuntimeRouter,
 	persistence factorydefinitions.Persistence,
+	authoring factorydefinitionswire.AuthoringLayout,
 	loader *factorydefinitionswire.Loader,
 	paths factorydefinitions.NamedPathResolver,
 	prepare factorydefinitions.PortableFactoryConfigPreparer,
@@ -418,7 +419,7 @@ func provideFactoryDefinitionsHost(
 	if router == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: runtime router is required")
 	}
-	return factorydefinitionswire.NewLifecycleHost(router.Host(), persistence, loader, paths, prepare, capture)
+	return factorydefinitionswire.NewLifecycleHost(router.Host(), persistence, authoring, loader, paths, prepare, capture)
 }
 
 func provideFactoryDefinitionsRoot(
@@ -490,6 +491,7 @@ func provideFactoryDefinitionsAuthoredWriter(
 
 func provideFactoryDefinitionsAuthoringLayout(
 	validator factorydefinitions.Validator,
+	validateDefinition factorydefinitions.DefinitionValidationOperation,
 	loader *factorydefinitionswire.Loader,
 	writer *factorydefinitionswire.AuthoredLayoutWriter,
 	materialize factorydefinitions.PortableBundledFilesMaterializer,
@@ -501,7 +503,7 @@ func provideFactoryDefinitionsAuthoringLayout(
 	directories factorydefinitions.DirectoryReplacementStore,
 ) (factorydefinitionswire.AuthoringLayout, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	return factorydefinitionswire.NewAuthoringLayout(validator, validationentry.MapFactoryJSONForPersistence,
+	return factorydefinitionswire.NewAuthoringLayout(validator, validateDefinition, validationentry.MapFactoryJSONForPersistence,
 		mapper.Expand, authoredmapping.AuthoredFactoryConfigForExpandedLayout, mapper.Flatten,
 		factorydefinitionswire.PreparedAuthoredLayoutWriter(writer, materialize, prune),
 		factorydefinitionswire.AuthoredLayoutValidator(loader, validate), loader.FlattenFactoryConfig,

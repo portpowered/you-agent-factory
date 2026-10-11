@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
@@ -78,7 +79,14 @@ func newControlledAuthoringService(validator stubValidator, fileSystem factoryde
 	directories factorydefinitions.DirectoryReplacementStore,
 	write func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error, validate func(string) error,
 ) authoringlayout.Service {
-	return authoringlayoutservice.New(validator,
+	return newControlledAuthoringRoles(validator, validator, fileSystem, directories, write, validate)
+}
+
+func newControlledAuthoringRoles(validator factorydefinitions.Validator, validation factorydefinitions.DefinitionValidationOperation, fileSystem factorydefinitions.PersistenceFileSystem,
+	directories factorydefinitions.DirectoryReplacementStore,
+	write func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error, validate func(string) error,
+) authoringlayout.Service {
+	return authoringlayoutservice.New(validator, validation,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return factorydefinitions.DefinitionValidationRequest{CanonicalPayload: payload}, nil
 		},
@@ -353,20 +361,27 @@ func assertAtomicFailure(t *testing.T, err, cause error) {
 func TestAuthoringLayout_CanceledRequestDoesNotCallPorts(t *testing.T) {
 	t.Parallel()
 	svc := newAuthoringLayoutService(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, prepareErr := svc.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{Payload: []byte("{}")})
-	_, flattenErr := svc.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{Path: "alpha"})
-	_, expandErr := svc.ExpandFactoryLayout(ctx, factorydefinitions.ExpandFactoryLayoutRequest{Path: "alpha"})
-	_, createErr := svc.CreateNamedFactory(ctx, factorydefinitions.CreateNamedFactoryRequest{RootDir: "factories", Name: "alpha"})
-	_, replaceErr := svc.ReplaceNamedFactory(ctx, factorydefinitions.ReplaceNamedFactoryRequest{RootDir: "factories", Name: "alpha"})
-	for _, err := range []error{prepareErr, flattenErr, expandErr, createErr, replaceErr} {
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("error = %v, want cancellation", err)
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		ctx, cancel := context.WithCancel(t.Context())
+		if errors.Is(cause, context.DeadlineExceeded) {
+			cancel()
+			ctx, cancel = context.WithDeadline(t.Context(), time.Time{})
 		}
-		var failure *factorydefinitions.AtomicFactoryWriteFailure
-		if errors.As(err, &failure) {
-			t.Fatal("cancellation wrapped as atomic write failure")
+		cancel()
+
+		_, prepareErr := svc.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{Payload: []byte("{}")})
+		_, flattenErr := svc.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{Path: "alpha"})
+		_, expandErr := svc.ExpandFactoryLayout(ctx, factorydefinitions.ExpandFactoryLayoutRequest{Path: "alpha"})
+		_, createErr := svc.CreateNamedFactory(ctx, factorydefinitions.CreateNamedFactoryRequest{RootDir: "factories", Name: "alpha"})
+		_, replaceErr := svc.ReplaceNamedFactory(ctx, factorydefinitions.ReplaceNamedFactoryRequest{RootDir: "factories", Name: "alpha"})
+		for _, err := range []error{prepareErr, flattenErr, expandErr, createErr, replaceErr} {
+			if !errors.Is(err, cause) {
+				t.Fatalf("error = %v, want cancellation", err)
+			}
+			var failure *factorydefinitions.AtomicFactoryWriteFailure
+			if errors.As(err, &failure) {
+				t.Fatal("cancellation wrapped as atomic write failure")
+			}
 		}
 	}
 }
@@ -425,5 +440,31 @@ func assertRejectedLayoutRetainsTargetsAndCleansStage(t *testing.T, effects *mem
 	}
 	if len(effects.removed) != 1 || effects.removed[0] != filepath.Join(root, ".owned-stage") {
 		t.Fatalf("owned stage cleanup = %#v", effects.removed)
+	}
+}
+
+type pruneOnlyValidator struct{ factorydefinitions.Validator }
+
+func (pruneOnlyValidator) PruneLayout(context.Context, *factorydefinitions.FactoryConfig, factorydefinitions.PendingFactoryGraphTopology) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
+}
+func TestPrepareFactoryLayoutAcceptsSeparateValidationRole(t *testing.T) {
+	t.Parallel()
+	validated := false
+	svc := newControlledAuthoringRoles(pruneOnlyValidator{}, stubValidator{validate: func(_ context.Context, request factorydefinitions.DefinitionValidationRequest) (factorydefinitions.ValidationResult, error) {
+		validated = true
+		if request.Profile != factorydefinitions.ValidationProfilePrePersist {
+			t.Fatal("validation profile changed")
+		}
+		return factorydefinitions.ValidationResult{}, nil
+	}}, stubPersistenceFileSystem{t: t}, stubDirectoryReplacementStore{},
+		func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error {
+			t.Fatal("unexpected write")
+			return nil
+		},
+		func(string) error { t.Fatal("unexpected validation write"); return nil })
+	result, err := svc.PrepareFactoryLayout(t.Context(), factorydefinitions.PrepareFactoryLayoutRequest{Name: "alpha", Payload: validAlphaPayload(t)})
+	if err != nil || !validated || result.Prepared.Config.Name != "alpha" {
+		t.Fatalf("prepared = %#v, %v, validated=%v", result, err, validated)
 	}
 }

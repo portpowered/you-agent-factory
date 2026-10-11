@@ -17,9 +17,6 @@ func FactoryLayout(
 	path string,
 	flatten factorydefinitions.FactoryLayoutFlattener,
 ) ([]byte, error) {
-	if flatten == nil {
-		return nil, fmt.Errorf("Factory Definitions layout flattener is required")
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

@@ -476,6 +476,15 @@ func progressFactVocabulary(fragment workers.ProgressFragment) (workers.Kind, wo
 		phase, ok := progressPhase(rawPhase, workers.KindReasoning)
 		return workers.KindReasoning, phase, ok
 	case "tool":
+		if native := fragment.Metadata["native_event"]; native == "item.started" || native == "item.updated" || native == "item.completed" {
+			// Codex updates carry cumulative snapshots. ACP status mapping
+			// applies only to ACP observations, whose updates are increments.
+			if native == "item.updated" {
+				rawPhase = "started"
+			}
+			phase, ok := progressPhase(rawPhase, workers.KindTool)
+			return workers.KindTool, phase, ok
+		}
 		// A tool call's transition is carried by its ACP status, not by the
 		// fact's phase: a client sends tool_call once and then any number of
 		// tool_call_updates whose only distinguishing field is Status.
@@ -688,9 +697,9 @@ func toolDraftPayload(phase workers.Phase, detail string, metadata map[string]st
 		return workers.ToolDeltaPayload{ToolCallID: toolCallID, OutputDelta: output}, true
 	}
 
-	name := strings.TrimSpace(detail)
+	name := strings.TrimSpace(metadata["tool_name"])
 	if name == "" {
-		name = strings.TrimSpace(metadata["tool_name"])
+		name = strings.TrimSpace(detail)
 	}
 	if name == "" {
 		name = "tool"

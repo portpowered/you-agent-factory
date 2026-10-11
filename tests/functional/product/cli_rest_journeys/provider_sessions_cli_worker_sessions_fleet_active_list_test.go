@@ -229,10 +229,11 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 		"worker-sessions", "read", "--session", terminalOwner, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
 	var transcript transcriptJSON
 	decodeCLIJSON(t, inputs, &transcript)
-	if transcript.ProviderSession.ID != workerSessionsCodexSuccessID || transcript.State != "COMPLETED" || len(transcript.Entries) != 2 ||
-		transcript.Entries[0].Type != "tool_call" || transcript.Entries[1].Type != "assistant_message" || transcript.Entries[1].Text != "Codex fixture answer COMPLETE" {
+	if transcript.ProviderSession.ID != workerSessionsCodexSuccessID || transcript.State != "COMPLETED" || len(transcript.Entries) != 3 ||
+		transcript.Entries[0].Type != "tool_call" || transcript.Entries[1].Type != "tool_output" || transcript.Entries[2].Type != "assistant_message" || transcript.Entries[2].Text != "Codex fixture answer COMPLETE" {
 		t.Fatalf("denied native file changed captured transcript: %#v", transcript)
 	}
+	assertFixtureCapturedTool(t, transcript)
 	assertSuccessfulWorkerSession(t, ctx, f.process, env, c.factoryDir, f.baseURL, terminalOwner, terminalWork)
 }
 

@@ -46,8 +46,5 @@ func NewService(
 		materializePortableFiles,
 		validateMaterializeWrites,
 	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Factory Definitions snapshots_portability: implementation rejected its dependencies")
-	}
 	return service, nil
 }

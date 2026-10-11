@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -197,15 +198,44 @@ func (p *transcriptProjection) tool(draft workers.Draft, record WorkerCapturedRe
 		key.anonymous = 0
 	}
 	entry := p.slot(key.withPart("call"), "tool_call", record)
-	entry.Name, entry.CallID, entry.Status = transcriptText(payload.ToolName), transcriptText(payload.ToolCallID), transcriptText(payload.Status)
+	// A native type-only fallback carries no new target identity. Preserve the
+	// previously captured type:server/tool name when a later snapshot omits it.
+	if payload.ToolName != "" && (entry.Name == nil || !strings.HasPrefix(*entry.Name, payload.ToolName+":")) {
+		entry.Name = transcriptText(payload.ToolName)
+	}
+	if payload.ToolCallID != "" {
+		entry.CallID = transcriptText(payload.ToolCallID)
+	}
+	if payload.Status != "" {
+		entry.Status = transcriptText(payload.Status)
+	}
 	if len(payload.ArgumentsSummary) > 0 {
 		entry.Arguments = transcriptText(string(payload.ArgumentsSummary))
 	}
 	if len(payload.ResultSummary) > 0 {
 		output := p.slot(key.withPart("output"), "tool_output", record)
-		output.CallID, output.Output, output.Status = transcriptText(payload.ToolCallID), transcriptSummary(payload.ResultSummary), transcriptText(payload.Status)
+		output.CallID = entry.CallID
+		output.Output = mergeTranscriptSummary(output.Output, payload.ResultSummary)
+		output.Status = entry.Status
 	}
 	return nil
+}
+
+func mergeTranscriptSummary(previous *string, raw json.RawMessage) *string {
+	var current map[string]json.RawMessage
+	if previous != nil && json.Unmarshal(raw, &current) == nil && current != nil {
+		var retained map[string]json.RawMessage
+		if json.Unmarshal([]byte(*previous), &retained) == nil && retained != nil {
+			for key, value := range current {
+				retained[key] = value
+			}
+			merged, err := json.Marshal(retained)
+			if err == nil {
+				return transcriptText(string(merged))
+			}
+		}
+	}
+	return transcriptSummary(raw)
 }
 
 func transcriptText(text string) *string {

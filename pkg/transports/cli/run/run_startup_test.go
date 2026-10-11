@@ -256,8 +256,38 @@ func TestRun_StartupOutputOmitsHomeForStructuredOutput(t *testing.T) {
 	}, service.RuntimeLogDiagnostics{}) {
 		t.Fatal("structured startup messages requested dashboard opening with no port")
 	}
-	if strings.Contains(output.String(), "Home directory:") {
-		t.Fatalf("structured startup output disclosed human home line: %q", output.String())
+	if output.Len() != 0 {
+		t.Fatalf("structured startup output emitted human text: %q", output.String())
+	}
+}
+
+func TestStartupJSONOutputPolicy(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"json", "json-output", "normal", "nil-writer"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			var human, canonical bytes.Buffer
+			cfg := RunConfig{StartupOutput: &human, Output: &canonical, OpenDashboard: true, Port: 7437,
+				JSON: mode == "json", JSONOutput: mode == "json-output"}
+			if mode == "nil-writer" {
+				cfg.StartupOutput = nil
+			}
+			owned := normalizeRunStartupOutput(cfg)
+			if owned.Output != cfg.Output || owned.OpenDashboard != cfg.OpenDashboard || cfg.SuppressDashboardRendering {
+				t.Fatal("normalization changed canonical output, browser policy or caller config")
+			}
+			if mode == "json" || mode == "json-output" {
+				if owned.StartupOutput != nil || !owned.SuppressDashboardRendering || cfg.StartupOutput != &human {
+					t.Fatal("structured policy did not stay invocation-local")
+				}
+				// The emitter also protects callers that have not normalized their config.
+				if emitStartupDetails(cfg, service.RuntimeLogDiagnostics{}) || human.Len() != 0 {
+					t.Fatalf("structured details emitted %q", human.String())
+				}
+			} else if opened := emitStartupDetails(owned, service.RuntimeLogDiagnostics{}); opened != (mode == "normal") {
+				t.Fatalf("normal/nil writer compatibility: opened=%t text=%q", opened, human.String())
+			}
+		})
 	}
 }
 

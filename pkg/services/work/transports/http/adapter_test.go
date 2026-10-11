@@ -43,11 +43,22 @@ func TestAdapter_BindsWorkRootViaFakeRootSeam(t *testing.T) {
 	}
 }
 
-func TestAdapterMissingRootReportsOperationError(t *testing.T) {
+func TestAdapterPreservesRequestContextCause(t *testing.T) {
 	t.Parallel()
-	_, err := NewAdapter(nil).invokeListWork(context.Background(), "session-1", work.ListOptions{})
-	if err == nil || err.Error() != "work service is required" {
-		t.Fatalf("missing root error = %v", err)
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			fake := &rootFake{listWork: func(ctx context.Context, session string, options work.ListOptions) (work.ListResult, error) {
+				if ctx != t.Context() || session != "session-1" || options.Name != "selected" {
+					t.Fatal("request context or selection changed")
+				}
+				return work.ListResult{}, cause
+			}}
+			_, err := NewAdapter(fake).invokeListWork(t.Context(), "session-1", work.ListOptions{Name: "selected"})
+			if !errors.Is(err, cause) {
+				t.Fatalf("error = %v, want %v", err, cause)
+			}
+		})
 	}
 }
 

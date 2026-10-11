@@ -23,6 +23,8 @@ import (
 const machineOutputProcessCloseTimeout = 5 * time.Second
 
 var machineOutputShared struct {
+	mu      sync.Mutex
+	owners  int
 	once    sync.Once
 	fixture *machineOutputFixture
 	err     error
@@ -31,10 +33,21 @@ var machineOutputShared struct {
 // initializeOutputFixture owns the machine-readable output process for the package. The
 // process is built lazily so isolated lifecycle tests retain their own roots.
 func initializeOutputFixture(t *testing.T) {
-	machineOutputShared.once = sync.Once{}
-	machineOutputShared.fixture = nil
-	machineOutputShared.err = nil
+	machineOutputShared.mu.Lock()
+	if machineOutputShared.owners == 0 {
+		machineOutputShared.once = sync.Once{}
+		machineOutputShared.fixture = nil
+		machineOutputShared.err = nil
+	}
+	machineOutputShared.owners++
+	machineOutputShared.mu.Unlock()
 	t.Cleanup(func() {
+		machineOutputShared.mu.Lock()
+		defer machineOutputShared.mu.Unlock()
+		machineOutputShared.owners--
+		if machineOutputShared.owners != 0 {
+			return
+		}
 		exitCode := 0
 		if fixture := machineOutputShared.fixture; fixture != nil {
 			closeContext, cancel := context.WithTimeout(context.Background(), machineOutputProcessCloseTimeout)
@@ -52,6 +65,7 @@ func initializeOutputFixture(t *testing.T) {
 }
 
 type machineOutputFixture struct {
+	logger         *zap.Logger
 	process        support.ApplicationProcess
 	router         *machineOutputCommandRouter
 	factorySources map[string]string
@@ -123,12 +137,13 @@ func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 	machineOutputShared.once.Do(func() {
 		router := newMachineOutputCommandRouter()
 		core, diagnostics := observer.New(zapcore.DebugLevel)
+		logger := zap.New(core)
 		api := support.NewProcessAPIServer()
 		process, err := support.BuildProcessWithContext(
 			context.Background(),
 			serviceedges.Edges{
 				ProviderCommandRunner: router,
-				ProcessLogger:         zap.New(core),
+				ProcessLogger:         logger,
 				APIServerStarter:      api.Start,
 				BrowserOpener:         func(context.Context, string) error { return nil },
 				RuntimeHostObserver:   func(factorysessions.RuntimeHostBinding) {},
@@ -162,6 +177,7 @@ func sharedMachineOutputFixture(t testing.TB) *machineOutputFixture {
 			return
 		}
 		machineOutputShared.fixture = &machineOutputFixture{
+			logger:         logger,
 			process:        process,
 			diagnostics:    diagnostics,
 			router:         router,
