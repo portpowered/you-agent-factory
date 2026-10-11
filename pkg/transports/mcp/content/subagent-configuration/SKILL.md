@@ -144,3 +144,17 @@ invocation will complete: the MCP client, server transport, and provider may
 each enforce a timeout. For long tasks, inspect the tool's timeout behavior
 and report the configured limit. A timeout should be surfaced as an execution
 failure rather than treated as a successful result.
+
+## Message and continue Worker Sessions
+
+Use the existing `you.subagent` MESSAGE action to ask your own lead or requester,
+then pull replies with `LIST` and `messages: true`. Use `inReplyTo` for replies.
+The selected host verifies execution credentials and recipient authority.
+Never include caller tokens in tool arguments or output.
+
+Use explicit REVIVE with a stable request and successor identity to continue an
+ended Worker Session without creating an Agent Message. Admission does not
+confirm delivery. Read `you docs mcp` and `you docs messaging` for the complete
+request shapes, inherited HOLD policy, finite paging, and delivery facts.
+Messages remain an independent side channel. Keep the mailbox as the fallback
+when a factory scope question cannot reach its lead through messaging.

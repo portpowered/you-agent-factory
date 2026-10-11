@@ -181,7 +181,7 @@
       "path": "generated/joined/contracts/manifest.schema.json"
     },
     "generated.mcp.manifest": {
-      "artifactHash": "f7754431d1e9a00e95c5bb2bbcab53f7727dd2614a6c5e74e525c40f6dc84385",
+      "artifactHash": "96007dc6f34f974d83fff1cd645cbb6fd14da6f36dfb45ce0137b44297b40041",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.mcp.manifest",
-        "sourceHash": "f7754431d1e9a00e95c5bb2bbcab53f7727dd2614a6c5e74e525c40f6dc84385",
+        "sourceHash": "96007dc6f34f974d83fff1cd645cbb6fd14da6f36dfb45ce0137b44297b40041",
         "visibility": "public"
       },
       "family": "mcp",

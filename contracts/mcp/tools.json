@@ -3805,7 +3805,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Start a direct subagent (START, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. Omitted route uses dedicated defaults.subagent. RUN returns a migration error. START returns admission without waiting for completion.",
+            "canonicalEnglish": "Start a direct subagent (START, default), or LIST, READ, CONTROL, MESSAGE and REVIVE Worker Sessions on the selected --server host. RUN returns a migration error. START and REVIVE return admission without waiting. MESSAGE requires current execution credentials and preserves durable host delivery facts.",
             "id": "mcp.tool.you.subagent.description"
           },
           "title": {
@@ -4011,7 +4011,9 @@
                 "RUN",
                 "LIST",
                 "READ",
-                "CONTROL"
+                "CONTROL",
+                "MESSAGE",
+                "REVIVE"
               ]
             }
           },
@@ -4138,6 +4140,149 @@
                 "provider",
                 "recorded"
               ]
+            }
+          },
+          "mcp.arg.you.subagent.message": {
+            "id": "mcp.arg.you.subagent.message",
+            "name": "message",
+            "required": false,
+            "constraints": {
+              "minLength": 1
+            },
+            "sensitivity": "secret"
+          },
+          "mcp.arg.you.subagent.in_reply_to": {
+            "id": "mcp.arg.you.subagent.in_reply_to",
+            "name": "inReplyTo",
+            "required": false,
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.subagent.factory_session_id": {
+            "id": "mcp.arg.you.subagent.factory_session_id",
+            "name": "factorySessionId",
+            "required": false,
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.subagent.body_secret": {
+            "id": "mcp.arg.you.subagent.body_secret",
+            "name": "bodySecret",
+            "required": false,
+            "default": false
+          },
+          "mcp.arg.you.subagent.delivery": {
+            "id": "mcp.arg.you.subagent.delivery",
+            "name": "delivery",
+            "required": false,
+            "constraints": {
+              "enum": [
+                "QUEUE",
+                "INTERRUPT"
+              ]
+            },
+            "default": "QUEUE"
+          },
+          "mcp.arg.you.subagent.if_ended": {
+            "id": "mcp.arg.you.subagent.if_ended",
+            "name": "ifEnded",
+            "required": false,
+            "constraints": {
+              "enum": [
+                "REVIVE",
+                "HOLD"
+              ]
+            }
+          },
+          "mcp.arg.you.subagent.reply_if_ended": {
+            "id": "mcp.arg.you.subagent.reply_if_ended",
+            "name": "replyIfEnded",
+            "required": false,
+            "constraints": {
+              "enum": [
+                "REVIVE",
+                "HOLD"
+              ]
+            }
+          },
+          "mcp.arg.you.subagent.expires_in_seconds": {
+            "id": "mcp.arg.you.subagent.expires_in_seconds",
+            "name": "expiresInSeconds",
+            "required": false,
+            "constraints": {
+              "minimum": 60,
+              "maximum": 604800
+            },
+            "default": 86400
+          },
+          "mcp.arg.you.subagent.correlation": {
+            "id": "mcp.arg.you.subagent.correlation",
+            "name": "correlation",
+            "required": false
+          },
+          "mcp.arg.you.subagent.messages": {
+            "id": "mcp.arg.you.subagent.messages",
+            "name": "messages",
+            "required": false,
+            "constraints": {
+              "enum": [
+                true
+              ]
+            }
+          },
+          "mcp.arg.you.subagent.thread_id": {
+            "id": "mcp.arg.you.subagent.thread_id",
+            "name": "threadId",
+            "required": false,
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.subagent.status": {
+            "id": "mcp.arg.you.subagent.status",
+            "name": "status",
+            "required": false
+          },
+          "mcp.arg.you.subagent.max_results": {
+            "id": "mcp.arg.you.subagent.max_results",
+            "name": "maxResults",
+            "required": false,
+            "constraints": {
+              "minimum": 1,
+              "maximum": 500
+            },
+            "default": 100
+          },
+          "mcp.arg.you.subagent.mark_read": {
+            "id": "mcp.arg.you.subagent.mark_read",
+            "name": "markRead",
+            "required": false,
+            "default": false
+          },
+          "mcp.arg.you.subagent.from_worker_session_id": {
+            "id": "mcp.arg.you.subagent.from_worker_session_id",
+            "name": "fromWorkerSessionId",
+            "required": false,
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.subagent.correlation_work_id": {
+            "id": "mcp.arg.you.subagent.correlation_work_id",
+            "name": "correlationWorkId",
+            "required": false,
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.subagent.correlation_factory_session_id": {
+            "id": "mcp.arg.you.subagent.correlation_factory_session_id",
+            "name": "correlationFactorySessionId",
+            "required": false,
+            "constraints": {
+              "minLength": 1
             }
           }
         },
@@ -4337,6 +4482,271 @@
                 "operation"
               ],
               "type": "object"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "MESSAGE"
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "requestId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "workerSessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "inReplyTo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "factorySessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "bodySecret": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "delivery": {
+                  "type": "string",
+                  "enum": [
+                    "QUEUE",
+                    "INTERRUPT"
+                  ],
+                  "default": "QUEUE"
+                },
+                "ifEnded": {
+                  "type": "string",
+                  "enum": [
+                    "REVIVE",
+                    "HOLD"
+                  ]
+                },
+                "replyIfEnded": {
+                  "type": "string",
+                  "enum": [
+                    "REVIVE",
+                    "HOLD"
+                  ]
+                },
+                "expiresInSeconds": {
+                  "type": "integer",
+                  "minimum": 60,
+                  "maximum": 604800,
+                  "default": 86400
+                },
+                "correlation": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "workId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "factorySessionId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "required": [
+                "action",
+                "message",
+                "requestId"
+              ],
+              "oneOf": [
+                {
+                  "required": [
+                    "workerSessionId"
+                  ],
+                  "not": {
+                    "required": [
+                      "inReplyTo"
+                    ]
+                  }
+                },
+                {
+                  "required": [
+                    "inReplyTo"
+                  ],
+                  "not": {
+                    "required": [
+                      "workerSessionId"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "LIST"
+                },
+                "messages": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "factorySessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "threadId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "QUEUED",
+                      "READ",
+                      "DELIVERED_REVIVE",
+                      "REPLIED",
+                      "EXPIRED"
+                    ]
+                  }
+                },
+                "maxResults": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 500,
+                  "default": 100
+                },
+                "nextToken": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "markRead": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "fromWorkerSessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "correlationWorkId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "correlationFactorySessionId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "action",
+                "messages"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "READ"
+                },
+                "workerSessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "messages": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "factorySessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "threadId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "QUEUED",
+                      "READ",
+                      "DELIVERED_REVIVE",
+                      "REPLIED",
+                      "EXPIRED"
+                    ]
+                  }
+                },
+                "maxResults": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 500,
+                  "default": 100
+                },
+                "nextToken": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "markRead": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "action",
+                "messages",
+                "workerSessionId"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "REVIVE"
+                },
+                "workerSessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "requestId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "successorWorkerSessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "factorySessionId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "action",
+                "workerSessionId",
+                "message",
+                "requestId",
+                "successorWorkerSessionId"
+              ]
             }
           ],
           "properties": {
@@ -4347,7 +4757,9 @@
                 "RUN",
                 "LIST",
                 "READ",
-                "CONTROL"
+                "CONTROL",
+                "MESSAGE",
+                "REVIVE"
               ],
               "type": "string"
             }
@@ -4411,6 +4823,264 @@
               "schema": {
                 "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
               }
+            },
+            "mcp.failure.you.subagent.invalid_request": {
+              "id": "mcp.failure.you.subagent.invalid_request",
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "workerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "$schema": "https://json-schema.org/draft/2020-12/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "worker_session.invalid_request",
+                    "message": "Selected host request refused",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.subagent.permission_denied": {
+              "id": "mcp.failure.you.subagent.permission_denied",
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "workerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "$schema": "https://json-schema.org/draft/2020-12/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "worker_session.permission_denied",
+                    "message": "Selected host request refused",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.subagent.host_unavailable": {
+              "id": "mcp.failure.you.subagent.host_unavailable",
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "workerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "$schema": "https://json-schema.org/draft/2020-12/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "worker_session.host_unavailable",
+                    "message": "Selected host request unavailable",
+                    "retryable": true
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.subagent.conflict": {
+              "id": "mcp.failure.you.subagent.conflict",
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "workerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "$schema": "https://json-schema.org/draft/2020-12/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "worker_session.conflict",
+                    "message": "Selected host request refused",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.subagent.limit_exceeded": {
+              "id": "mcp.failure.you.subagent.limit_exceeded",
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "workerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "$schema": "https://json-schema.org/draft/2020-12/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "worker_session.limit_exceeded",
+                    "message": "Selected host request refused",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.subagent.unavailable": {
+              "id": "mcp.failure.you.subagent.unavailable",
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "workerSessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "$schema": "https://json-schema.org/draft/2020-12/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "worker_session.unavailable",
+                    "message": "Selected host request unavailable",
+                    "retryable": true
+                  }
+                }
+              ]
             }
           },
           "success": {
@@ -4423,9 +5093,54 @@
                   "state": "RUNNING",
                   "eventTopic": "worker-session.worker-example"
                 }
+              },
+              {
+                "result": {
+                  "message": {
+                    "messageId": "msg-example",
+                    "threadId": "msg-example",
+                    "from": {
+                      "principal": "WORKER",
+                      "workerSessionId": "lane-example"
+                    },
+                    "to": {
+                      "kind": "WORKER_SESSION",
+                      "workerSessionId": "lead-example"
+                    },
+                    "body": "Please review the result",
+                    "bodySha256": "04e15a4e3a388dc736b248e31d21d6e9fedd2e96d6e52988467ee9ca7f56c72e",
+                    "bodyRedactionCount": 0,
+                    "delivery": "QUEUE",
+                    "ifEnded": "HOLD",
+                    "replyIfEnded": "HOLD",
+                    "status": "QUEUED",
+                    "hop": 0,
+                    "sentAt": "2026-10-11T12:00:00Z",
+                    "expiresAt": "2026-10-12T12:00:00Z"
+                  }
+                }
+              },
+              {
+                "result": {
+                  "messages": [],
+                  "nextToken": null
+                }
+              },
+              {
+                "result": {
+                  "requestId": "revive-example",
+                  "sourceWorkerSessionId": "ended-example",
+                  "predecessorWorkerSessionId": "ended-example",
+                  "successorWorkerSessionId": "successor-example",
+                  "accepted": true,
+                  "state": "STARTING",
+                  "eventTopic": "worker-session.successor-example"
+                }
               }
             ],
             "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
               "oneOf": [
                 {
                   "type": "object",
@@ -4506,7 +5221,8 @@
                 {
                   "type": "object",
                   "required": [
-                    "workerSessionId"
+                    "workerSessionId",
+                    "action"
                   ],
                   "properties": {
                     "workerSessionId": {
@@ -4536,7 +5252,8 @@
                 {
                   "type": "object",
                   "required": [
-                    "accepted"
+                    "accepted",
+                    "phase"
                   ],
                   "properties": {
                     "accepted": {
@@ -4564,10 +5281,462 @@
                     }
                   },
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "messageId",
+                        "threadId",
+                        "from",
+                        "to",
+                        "body",
+                        "bodySha256",
+                        "bodyRedactionCount",
+                        "delivery",
+                        "ifEnded",
+                        "replyIfEnded",
+                        "status",
+                        "hop",
+                        "sentAt",
+                        "expiresAt"
+                      ],
+                      "properties": {
+                        "messageId": {
+                          "type": "string",
+                          "description": "Globally unique msg-<ULID> identity."
+                        },
+                        "threadId": {
+                          "type": "string",
+                          "description": "Identity of the first message in the thread."
+                        },
+                        "inReplyTo": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "from": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "principal",
+                            "workerSessionId"
+                          ],
+                          "properties": {
+                            "principal": {
+                              "type": "string",
+                              "enum": [
+                                "WORKER"
+                              ]
+                            },
+                            "workerSessionId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "factorySessionId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          }
+                        },
+                        "to": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "kind",
+                            "workerSessionId"
+                          ],
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "WORKER_SESSION"
+                              ]
+                            },
+                            "workerSessionId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "factorySessionId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "deliveredWorkerSessionId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "description": "Exact successor reached after provider-confirmed resumed progress and durable delivery."
+                            }
+                          }
+                        },
+                        "correlation": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "workId": {
+                              "type": "string"
+                            },
+                            "factorySessionId": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "body": {
+                          "type": "string",
+                          "description": "Privacy-normalized body only. Unauthorized workers receive no record."
+                        },
+                        "bodySha256": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$",
+                          "description": "SHA-256 of the redacted UTF-8 body."
+                        },
+                        "bodyRedactionCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "delivery": {
+                          "type": "string",
+                          "enum": [
+                            "QUEUE",
+                            "INTERRUPT"
+                          ]
+                        },
+                        "ifEnded": {
+                          "type": "string",
+                          "enum": [
+                            "REVIVE",
+                            "HOLD"
+                          ]
+                        },
+                        "replyIfEnded": {
+                          "type": "string",
+                          "enum": [
+                            "REVIVE",
+                            "HOLD"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "QUEUED",
+                            "READ",
+                            "DELIVERED_REVIVE",
+                            "DELIVERED_INTERRUPT",
+                            "REPLIED",
+                            "EXPIRED",
+                            "REJECTED"
+                          ],
+                          "description": "Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved."
+                        },
+                        "reason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED."
+                        },
+                        "hop": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 3
+                        },
+                        "sentAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "revivedWorkerSessionId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit."
+                        },
+                        "repliedByMessageId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "message"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "messages"
+                  ],
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "messageId",
+                          "threadId",
+                          "from",
+                          "to",
+                          "body",
+                          "bodySha256",
+                          "bodyRedactionCount",
+                          "delivery",
+                          "ifEnded",
+                          "replyIfEnded",
+                          "status",
+                          "hop",
+                          "sentAt",
+                          "expiresAt"
+                        ],
+                        "properties": {
+                          "messageId": {
+                            "type": "string",
+                            "description": "Globally unique msg-<ULID> identity."
+                          },
+                          "threadId": {
+                            "type": "string",
+                            "description": "Identity of the first message in the thread."
+                          },
+                          "inReplyTo": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "from": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "principal",
+                              "workerSessionId"
+                            ],
+                            "properties": {
+                              "principal": {
+                                "type": "string",
+                                "enum": [
+                                  "WORKER"
+                                ]
+                              },
+                              "workerSessionId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "factorySessionId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          },
+                          "to": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "kind",
+                              "workerSessionId"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "WORKER_SESSION"
+                                ]
+                              },
+                              "workerSessionId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "factorySessionId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "deliveredWorkerSessionId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "description": "Exact successor reached after provider-confirmed resumed progress and durable delivery."
+                              }
+                            }
+                          },
+                          "correlation": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "workId": {
+                                "type": "string"
+                              },
+                              "factorySessionId": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "body": {
+                            "type": "string",
+                            "description": "Privacy-normalized body only. Unauthorized workers receive no record."
+                          },
+                          "bodySha256": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$",
+                            "description": "SHA-256 of the redacted UTF-8 body."
+                          },
+                          "bodyRedactionCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "delivery": {
+                            "type": "string",
+                            "enum": [
+                              "QUEUE",
+                              "INTERRUPT"
+                            ]
+                          },
+                          "ifEnded": {
+                            "type": "string",
+                            "enum": [
+                              "REVIVE",
+                              "HOLD"
+                            ]
+                          },
+                          "replyIfEnded": {
+                            "type": "string",
+                            "enum": [
+                              "REVIVE",
+                              "HOLD"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "QUEUED",
+                              "READ",
+                              "DELIVERED_REVIVE",
+                              "DELIVERED_INTERRUPT",
+                              "REPLIED",
+                              "EXPIRED",
+                              "REJECTED"
+                            ],
+                            "description": "Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved."
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED."
+                          },
+                          "hop": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 3
+                          },
+                          "sentAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "revivedWorkerSessionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit."
+                          },
+                          "repliedByMessageId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "nextToken": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "requestId",
+                    "sourceWorkerSessionId",
+                    "successorWorkerSessionId",
+                    "predecessorWorkerSessionId",
+                    "accepted",
+                    "state",
+                    "eventTopic"
+                  ],
+                  "description": "Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs.",
+                  "properties": {
+                    "requestId": {
+                      "type": "string",
+                      "description": "Caller idempotency key echoed for correlation."
+                    },
+                    "sourceWorkerSessionId": {
+                      "type": "string",
+                      "description": "Stable terminal Worker Session identity used as the source."
+                    },
+                    "successorWorkerSessionId": {
+                      "type": "string",
+                      "description": "Stable Worker Session identity reserved for the successor."
+                    },
+                    "predecessorWorkerSessionId": {
+                      "type": "string",
+                      "description": "Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId."
+                    },
+                    "accepted": {
+                      "type": "boolean",
+                      "description": "Always true for a 202 response."
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "RESERVED",
+                        "STARTING",
+                        "RUNNING",
+                        "PAUSED",
+                        "COMPLETED",
+                        "FAILED",
+                        "CANCELED",
+                        "TERMINATED"
+                      ]
+                    },
+                    "eventTopic": {
+                      "type": "string",
+                      "description": "Deterministic Events topic whose retained opening record is ready to read and subscribe."
+                    }
+                  }
                 }
-              ],
-              "$schema": "https://json-schema.org/draft/2020-12/schema",
-              "type": "object"
+              ]
             }
           }
         },
@@ -4613,6 +5782,33 @@
               {
                 "text": "{\"result\":{\"workerSessionId\":\"direct-worker-001\",\"outcome\":\"NOOP\"}}",
                 "type": "text"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"message\":{\"messageId\":\"msg-example\",\"threadId\":\"msg-example\",\"from\":{\"principal\":\"WORKER\",\"workerSessionId\":\"lane-example\"},\"to\":{\"kind\":\"WORKER_SESSION\",\"workerSessionId\":\"lead-example\"},\"body\":\"Please review the result\",\"bodySha256\":\"04e15a4e3a388dc736b248e31d21d6e9fedd2e96d6e52988467ee9ca7f56c72e\",\"bodyRedactionCount\":0,\"delivery\":\"QUEUE\",\"ifEnded\":\"HOLD\",\"replyIfEnded\":\"HOLD\",\"status\":\"QUEUED\",\"hop\":0,\"sentAt\":\"2026-10-11T12:00:00Z\",\"expiresAt\":\"2026-10-12T12:00:00Z\"}}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"messages\":[],\"nextToken\":null}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"requestId\":\"revive-example\",\"sourceWorkerSessionId\":\"ended-example\",\"predecessorWorkerSessionId\":\"ended-example\",\"successorWorkerSessionId\":\"successor-example\",\"accepted\":true,\"state\":\"STARTING\",\"eventTopic\":\"worker-session.successor-example\"}}"
               }
             ],
             "isError": false

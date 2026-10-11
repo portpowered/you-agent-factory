@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	client "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
 
@@ -36,7 +37,7 @@ func TestSubagentActionValidationBeforeEffects(t *testing.T) {
 		if input == `{}` { // Empty START is checked by the prompt decoder.
 			continue
 		}
-		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), run)
+		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), nil, run)
 		if err != nil || !strings.Contains(string(response), `"code":"worker_session.invalid_request"`) {
 			t.Fatalf("input=%s response=%s err=%v", input, response, err)
 		}
@@ -50,7 +51,7 @@ func TestSubagentDefaultAndExplicitStartPreserveArguments(t *testing.T) {
 		return nil, nil
 	})
 	for _, input := range []string{`{"prompt":"hello"}`, `{"action":"START","prompt":"hello"}`} {
-		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), nil, func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
 			if string(raw) != `{"prompt":"hello"}` {
 				t.Fatalf("START arguments=%s", raw)
 			}
@@ -658,7 +659,7 @@ func TestWorkerSessionInterruptForwardsResumeMode(t *testing.T) {
 func TestSubagentRunMigrationHasNoEffects(t *testing.T) {
 	t.Parallel()
 	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) { t.Fatal("RUN reached host"); return nil, nil })
-	raw, err := adapter.Subagent(context.Background(), json.RawMessage(`{"action":"RUN","prompt":"ignored"}`), func(context.Context, json.RawMessage) (json.RawMessage, error) {
+	raw, err := adapter.Subagent(context.Background(), json.RawMessage(`{"action":"RUN","prompt":"ignored"}`), nil, func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		t.Fatal("RUN started execution")
 		return nil, nil
 	})
@@ -750,5 +751,181 @@ func TestSubagentStartTypedRouteGuidance(t *testing.T) {
 				t.Fatalf("response=%s err=%v", raw, err)
 			}
 		})
+	}
+}
+
+func TestMessageAndReviveRejectMalformedInputBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) { t.Fatal("invalid input reached HTTP"); return nil, nil })
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	inputs := []string{
+		`{"action":"MESSAGE","message":"secret","requestId":"r"}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","inReplyTo":"msg"}`,
+		`{"action":"MESSAGE","message":" ","requestId":"r","workerSessionId":"w"}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":null}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","expiresInSeconds":59}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","expiresInSeconds":604801}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","ifEnded":"invalid"}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","correlation":{"workId":"x","workId":"y"}}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","correlation":{"WorkId":"x"}}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","correlation":{"workId":null}}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","toOperator":true}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","WorkerSessionId":"other"}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","requestId":"other"}`,
+		`{"action":"MESSAGE","message":"secret","requestId":"r","workerSessionId":"w","prompt":"wrong action"}`,
+		`{"action":"REVIVE","workerSessionId":"w","message":"secret","requestId":"r"}`,
+		`{"action":"REVIVE","workerSessionId":"w","message":"secret","requestId":"r","successorWorkerSessionId":"s","ifEnded":"REVIVE"}`,
+		`{"action":"LIST","messages":false}`,
+		`{"action":"LIST","messages":true,"limit":1}`,
+		`{"action":"LIST","messages":true,"maxResults":501}`,
+		`{"action":"LIST","messages":true,"status":["REJECTED"]}`,
+		`{"action":"READ","messages":true}`,
+		`{"action":"READ","messages":true,"workerSessionId":"w","view":"summary"}`,
+		`{"action":"READ","messages":true,"workerSessionId":"w","fromWorkerSessionId":"x"}`,
+		`{"action":"CONTROL","messages":true,"workerSessionId":"w","operation":"CANCEL"}`,
+		"{\"action\":\"MESSAGE\",\"message\":\"\xff\",\"requestId\":\"r\",\"workerSessionId\":\"w\"}",
+	}
+	long, _ := json.Marshal(map[string]any{"action": "MESSAGE", "message": strings.Repeat("ÃƒÂ©", 4097), "requestId": "r", "workerSessionId": "w"})
+	inputs = append(inputs, string(long))
+	for _, input := range inputs {
+		raw, err := adapter.Subagent(t.Context(), json.RawMessage(input), caller, nil)
+		if err != nil || !strings.Contains(string(raw), `"code":"worker_session.invalid_request"`) || strings.Contains(string(raw), "secret") {
+			t.Fatalf("unexpected invalid-input response: %s err=%v", raw, err)
+		}
+	}
+}
+
+func TestMessageCallerValidationBeforeEffects(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) { t.Fatal("invalid caller reached HTTP"); return nil, nil })
+	for _, caller := range []*workersessions.CallerIdentity{nil, {}, {WorkerSessionID: "caller"}, {Token: strings.Repeat("A", 43)}, {WorkerSessionID: "caller", Token: "malformed"}} {
+		for _, input := range []string{`{"action":"MESSAGE","message":"safe","requestId":"r","workerSessionId":"w"}`, `{"action":"LIST","messages":true}`} {
+			raw, err := adapter.Subagent(t.Context(), json.RawMessage(input), caller, nil)
+			if err != nil || !strings.Contains(string(raw), "WORKER_SESSION_CALLER_INVALID") {
+				t.Fatalf("caller refusal=%s err=%v", raw, err)
+			}
+		}
+	}
+}
+
+func TestMessageAndReviveMapStableRequests(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	for _, expiry := range []int{60, 604800} {
+		body := &trackedBody{Reader: strings.NewReader(`{"message":{"messageId":"msg","body":"[REDACTED]"}}`)}
+		adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+			assertMessageRequest(t, request, caller, expiry)
+			return &http.Response{StatusCode: 202, Body: body}, nil
+		})
+		input := fmt.Sprintf(`{"action":"MESSAGE","message":"secret","requestId":"stable","inReplyTo":"parent","factorySessionId":"factory","bodySecret":true,"replyIfEnded":"HOLD","expiresInSeconds":%d}`, expiry)
+		raw, err := adapter.Subagent(t.Context(), json.RawMessage(input), caller, nil)
+		if err != nil || !body.closed || strings.Contains(string(raw), "secret") || !strings.Contains(string(raw), "msg") {
+			t.Fatalf("message response=%s err=%v", raw, err)
+		}
+	}
+}
+
+func TestReviveMapsStableRequest(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+		var payload client.WorkerSessionContinueRequest
+		if request.URL.Path != "/worker-sessions/source/continue" || json.NewDecoder(request.Body).Decode(&payload) != nil || payload.RequestId != "r" || payload.SuccessorWorkerSessionId != "s" || payload.FollowUpInput != "follow up" || payload.ResolveHead == nil || !*payload.ResolveHead || *payload.FactorySessionId != "factory" {
+			t.Fatal("revive mapping changed")
+		}
+		return &http.Response{StatusCode: 202, Body: io.NopCloser(strings.NewReader(`{"accepted":true,"successorWorkerSessionId":"s"}`))}, nil
+	})
+	for range 2 {
+		raw, err := adapter.Subagent(t.Context(), json.RawMessage(`{"action":"REVIVE","workerSessionId":"source","message":"follow up","requestId":"r","successorWorkerSessionId":"s","factorySessionId":"factory"}`), caller, nil)
+		if err != nil || !strings.Contains(string(raw), `"successorWorkerSessionId":"s"`) {
+			t.Fatalf("revive=%s err=%v", raw, err)
+		}
+	}
+}
+
+func TestMessageReadsRemainFiniteAndHostErrorsPrivate(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+		query := request.URL.Query()
+		if request.Method != "GET" || request.URL.Path != "/messages" || query.Get("toMe") != "true" || query.Has("follow") || query.Get("maxResults") != "1" || query.Get("nextToken") != "cursor" || query.Get("fromWorkerSessionId") != "sender" || query.Get("markRead") != "true" {
+			t.Fatal("inbox paging mapping changed")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"messages":[],"nextToken":null}`))}, nil
+	})
+	raw, err := adapter.Subagent(t.Context(), json.RawMessage(`{"action":"LIST","messages":true,"maxResults":1,"nextToken":"cursor","fromWorkerSessionId":"sender","markRead":true}`), caller, nil)
+	if err != nil || !strings.Contains(string(raw), `"messages":[]`) {
+		t.Fatalf("inbox=%s err=%v", raw, err)
+	}
+}
+
+func TestMessageHostErrorsRemainPrivate(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	var adapter *Adapter
+	var raw json.RawMessage
+	var err error
+	for _, code := range safeMessageCodes {
+		body := &trackedBody{Reader: strings.NewReader(fmt.Sprintf(`{"code":%q,"message":%q,"details":{"arbitrary":%q}}`, code, "private body "+caller.Token, caller.Token))}
+		adapter = workerAdapter(t, func(*http.Request) (*http.Response, error) { return &http.Response{StatusCode: 409, Body: body}, nil })
+		raw, err = adapter.Subagent(t.Context(), json.RawMessage(`{"action":"MESSAGE","message":"private body","requestId":"r","workerSessionId":"w"}`), caller, nil)
+		if err != nil || !body.closed || !strings.Contains(string(raw), code) || strings.Contains(string(raw), "private body") || strings.Contains(string(raw), caller.Token) {
+			t.Fatalf("unsafe host failure=%s err=%v", raw, err)
+		}
+	}
+}
+
+func assertMessageRequest(t *testing.T, request *http.Request, caller *workersessions.CallerIdentity, expiry int) {
+	t.Helper()
+	if request.URL.Host != "selected-host:7437" || request.URL.Path != "/messages" || request.URL.Query().Get("factorySessionId") != "factory" || request.Header.Get("Authorization") != "Bearer "+caller.Token {
+		t.Fatal("lost selected host or injected authority")
+	}
+	var payload client.AgentMessageSendRequest
+	if json.NewDecoder(request.Body).Decode(&payload) != nil || payload.RequestId != "stable" || payload.To != nil || payload.InReplyTo == nil || *payload.InReplyTo != "parent" || payload.IfEnded != nil || *payload.ReplyIfEnded != "HOLD" || *payload.ExpiresInSeconds != expiry || !*payload.BodySecret {
+		t.Fatal("reply mapping changed")
+	}
+}
+
+func TestMessagePreservesSafeAmbiguityAndQuotaDetails(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	for _, cell := range []struct {
+		status            int
+		upstream, witness string
+	}{
+		{409, `{"code":"WORKER_SESSION_AMBIGUOUS","message":"unsafe","details":{"candidates":[{"factorySessionId":"factory","workerSessionId":"lead","workId":"work","state":"COMPLETED"}]}}`, `"factorySessionId":"factory"`},
+		{429, `{"code":"MESSAGE_LIMIT_EXCEEDED","details":{"dimension":"sender","retryAfterSeconds":9}}`, `"retryAfterSeconds":9`},
+	} {
+		body := &trackedBody{Reader: strings.NewReader(cell.upstream)}
+		adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: cell.status, Body: body}, nil
+		})
+		raw, err := adapter.Subagent(t.Context(), json.RawMessage(`{"action":"MESSAGE","workerSessionId":"lead","message":"safe body","requestId":"r"}`), caller, nil)
+		if err != nil || !body.closed || !strings.Contains(string(raw), cell.witness) || strings.Contains(string(raw), "unsafe") {
+			t.Fatalf("lost typed facts: %s err=%v", raw, err)
+		}
+	}
+}
+
+func TestNewActionsCloseResponseOnUnavailableHost(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	for _, input := range []string{
+		`{"action":"MESSAGE","workerSessionId":"lead","message":"private","requestId":"r"}`,
+		`{"action":"LIST","messages":true}`,
+		`{"action":"READ","messages":true,"workerSessionId":"lead"}`,
+		`{"action":"REVIVE","workerSessionId":"lead","message":"private","requestId":"r","successorWorkerSessionId":"next"}`,
+	} {
+		body := &trackedBody{Reader: strings.NewReader("private " + caller.Token)}
+		adapter := workerAdapter(t, func(request *http.Request) (*http.Response, error) {
+			if request.Context().Err() != nil {
+				t.Fatal("request lost live caller context")
+			}
+			return &http.Response{StatusCode: 503, Body: body}, errors.New("private " + caller.Token)
+		})
+		raw, err := adapter.Subagent(t.Context(), json.RawMessage(input), caller, nil)
+		if err != nil || !body.closed || !strings.Contains(string(raw), "worker_session.host_unavailable") || strings.Contains(string(raw), "private") || strings.Contains(string(raw), caller.Token) {
+			t.Fatalf("unsafe unavailable response: %s err=%v", raw, err)
+		}
 	}
 }

@@ -27,6 +27,7 @@ output-options:
     - getFactoryResponseEventsBySessionId
     - getWorkerSessionObservationByWorkerSessionId
     - startWorkerSession
+    - continueWorkerSession
     - listWorkerSessions
     - streamWorkerSessionEventsByTopLevelWorkerSessionId
     - cancelWorkerSession

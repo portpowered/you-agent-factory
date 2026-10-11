@@ -55,6 +55,7 @@ import (
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 	workersessionwire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -602,7 +603,11 @@ func provideMCPDispatch(worker *workersessionmcp.Adapter, tools factorysessionmc
 		if err != nil {
 			return nil, err
 		}
-		return worker.Subagent(ctx, raw, func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+		var caller *workersessions.CallerIdentity
+		if intent.WorkerSessionID != "" || intent.WorkerSessionToken != "" {
+			caller = &workersessions.CallerIdentity{WorkerSessionID: intent.WorkerSessionID, Token: intent.WorkerSessionToken}
+		}
+		return worker.Subagent(ctx, raw, caller, func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 			return worker.Start(ctx, input, intent.ProjectRoot, generateID)
 		})
 	}

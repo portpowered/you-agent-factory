@@ -10,6 +10,80 @@ Use this guide to install `you` in an MCP host, run a subagent, inspect
 Factory Sessions, and discover operator configuration and providers.
 `you docs mcp` is the packaged MCP setup topic.
 
+## Message a lead or requester
+
+A running Worker Session can use `you.subagent` to send an Agent Message to its
+own lead or requester. The selected HTTP host verifies the relationship.
+The MCP process inherits `YOU_WORKER_SESSION_ID` and `YOU_WORKER_SESSION_TOKEN`
+from the worker execution. Credentials travel in HTTP headers. Never put them
+in tool arguments, message text, logs, or output.
+
+```json
+{"action":"MESSAGE","workerSessionId":"lead-worker","message":"I need a scope decision","requestId":"ask-001","ifEnded":"HOLD","replyIfEnded":"HOLD"}
+```
+
+Supply exactly one `workerSessionId` or `inReplyTo`. A reply without a target
+addresses the original sender and retains its thread. Omit `ifEnded` on a reply
+to inherit the original message's `replyIfEnded` policy:
+
+```json
+{"action":"MESSAGE","inReplyTo":"msg-original","message":"Use the retained scope","requestId":"reply-001"}
+```
+
+Use a nonempty UTF-8 `message` of at most 8192 bytes and a stable `requestId`.
+Optional `bodySecret: true` redacts the body before durable storage. Optional
+`expiresInSeconds` accepts 60 through 604800. `delivery: "INTERRUPT"` returns
+`MESSAGE_INTERRUPT_UNSUPPORTED` before effects; use the existing CONTROL action
+for explicit lifecycle control. `factorySessionId` disambiguates a legacy
+recipient identity. Correlation labels grant no authority.
+
+Pull your own inbox with a finite page. Repeat with the returned `nextToken`
+and the same filters:
+
+```json
+{"action":"LIST","messages":true,"maxResults":100,"markRead":true}
+```
+
+Optional filters are `threadId`, `fromWorkerSessionId`, `status`,
+`correlationWorkId`, `correlationFactorySessionId`, and `factorySessionId`.
+Supported statuses are `QUEUED`, `READ`, `DELIVERED_REVIVE`, `REPLIED`, and `EXPIRED`.
+Use `maxResults` from 1 through 500. Message pages do not accept `limit`, `view`,
+`history`, `scope`, or `state`.
+
+Inspect an authorized recipient inbox or thread with READ:
+
+```json
+{"action":"READ","messages":true,"workerSessionId":"lead-worker","threadId":"msg-original","maxResults":100}
+```
+
+READ accepts `factorySessionId`, `status`, `nextToken`, and `markRead`.
+Only the eligible recipient can advance read status. An operator can observe
+messages with READ and cannot send them. Plain LIST and READ retain their
+Worker Session observation behavior.
+
+A default MESSAGE to an ended eligible recipient can revive it. Admission stays
+`QUEUED` with `REVIVE_PENDING` until provider-confirmed progress establishes
+`DELIVERED_REVIVE`. `HOLD` retains a message for pull. Unsupported, failed,
+limited, or expired delivery does not imply the recipient received the input.
+
+For an explicit continuation without an Agent Message, use REVIVE:
+
+```json
+{"action":"REVIVE","workerSessionId":"ended-worker","message":"Continue the retained task","requestId":"revive-001","successorWorkerSessionId":"worker-next"}
+```
+
+REVIVE calls the selected host's existing Continue operation with
+`followUpInput` set to `message` and `resolveHead: true`. Optional
+`factorySessionId` selects the exact source. It returns admission immediately;
+inspect the successor with plain READ. Reuse the exact message, request,
+source, successor, and Factory Session tuple after a disconnect. A changed
+tuple conflicts. No local execution or alternate host is selected on failure.
+
+Agent Messages are an independent side channel. They do not become Work
+results or Factory Events. MCP adds no blocking message wait. For factory
+scope decisions, message your own lead first; use the existing mailbox if
+messaging fails. See `you docs messaging` for delivery and authority details.
+
 ## Start The Stdio Server
 
 An MCP host must launch `you` as a child process:
@@ -20,7 +94,7 @@ you server mcp
 
 The server speaks MCP JSON-RPC over stdin and stdout. Keep stdout reserved for
 protocol messages; process diagnostics use stderr. HTTP and SSE MCP transports
-are not supported. LIST, READ and CONTROL actions connect to the HTTP host selected by
+are not supported. LIST, READ, CONTROL, MESSAGE and REVIVE actions connect to the HTTP host selected by
 `--server`. Factory Session tools use the local process.
 
 To inspect Worker Sessions on a selected host, start the stdio server with:
@@ -71,7 +145,7 @@ Confirmed force preserves that Work at FAILED without automatic retry.
 Reuse the same request and attempt identities when recovering a disconnected request.
 
 A failed host connection returns retryable `worker_session.host_unavailable`.
-LIST, READ and CONTROL use the selected host for every request.
+LIST, READ, CONTROL, MESSAGE and REVIVE use the selected host for every request.
 
 Configure these three host fields explicitly:
 
