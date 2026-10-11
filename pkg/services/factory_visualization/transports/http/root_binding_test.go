@@ -40,24 +40,23 @@ func TestHandlerFromRoot_ActivateInvokesVisualizationRoot(t *testing.T) {
 	}
 }
 
-func TestHandlerFromRoot_ActivateRequiresInjectedRoot(t *testing.T) {
+func TestHandlerFromRoot_ActivatePreservesCollaboratorFailure(t *testing.T) {
 	t.Parallel()
 
-	handler := factoryvisualizationhttp.NewHandlerFromRoot(
-		factoryvisualizationhttp.RootBinding{},
-		zap.NewNop(),
-	)
+	cause := &factoryvisualization.LifecycleError{Kind: factoryvisualization.LifecycleErrorNotActivated, Message: "selected lifecycle unavailable"}
+	handler := factoryvisualizationhttp.NewHandler(&httpVisualizationRootFake{activateErr: cause}, zap.NewNop())
 
 	_, err := handler.Activate(context.Background(), factoryvisualization.ActivateRequest{
 		Mode: factoryvisualization.ActivateModeRetainedThenLive,
 	})
-	if err == nil {
-		t.Fatal("Activate without injected root = nil, want error")
+	if !errors.Is(err, cause) {
+		t.Fatalf("Activate error = %v, want injected lifecycle failure", err)
 	}
 }
 
 type httpVisualizationRootFake struct {
 	activateInvoked bool
+	activateErr     error
 }
 
 var _ factoryvisualization.Root = (*httpVisualizationRootFake)(nil)
@@ -67,6 +66,9 @@ func (fake *httpVisualizationRootFake) Activate(
 	req factoryvisualization.ActivateRequest,
 ) (factoryvisualization.ActivateResult, error) {
 	fake.activateInvoked = true
+	if fake.activateErr != nil {
+		return factoryvisualization.ActivateResult{}, fake.activateErr
+	}
 	if req.Mode == "" {
 		return factoryvisualization.ActivateResult{}, &factoryvisualization.LifecycleError{
 			Kind:    factoryvisualization.LifecycleErrorMissingParameters,

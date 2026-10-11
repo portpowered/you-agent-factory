@@ -393,25 +393,12 @@ func provideModelInvocationOperation(
 }
 
 func provideSystemInitializationService(
-	persistence factorydefinitions.PackagedFactoryPersistence,
-	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
-	packagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
+	installer factorydefinitions.PackagedFactoryInstaller,
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	settings operatorsettings.Service,
 	inspectPath systeminitializationwire.InspectPath,
-	logger logging.Logger,
 ) (systeminitialization.Service, error) {
-	return systeminitializationwire.NewService(
-		settings,
-		packagedCatalog,
-		factorydefinitionswire.NewPackagedFactoryInstaller(
-			persistence,
-			packagedInstallationFileSystem,
-			packagedInstallationDirectoryCreator,
-			logger,
-		),
-		inspectPath,
-	)
+	return systeminitializationwire.NewService(settings, catalog, installer, inspectPath)
 }
 
 func provideSystemInitializationOperation(
@@ -453,16 +440,8 @@ func providePackagedFactoryCatalog(
 	return factorydefinitionswire.NewPackagedFactoryCatalog(definitions)
 }
 
-func providePackagedFactoryInstallation(
-	persistence factorydefinitions.PackagedFactoryPersistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
-	logger logging.Logger,
-) factorydefinitions.PackagedFactoryInstallationOperations {
-	installer := factorydefinitionswire.NewPackagedFactoryInstallationService(persistence, fileSystem, directoryCreator, logger)
-	return factorydefinitions.PackagedFactoryInstallationOperations{
-		Install: installer.InstallPackagedFactory,
-	}
+func providePackagedFactoryInstallation(installer *factorydefinitionswire.PackagedFactoryInstallationService) factorydefinitions.PackagedFactoryInstallationOperations {
+	return factorydefinitions.PackagedFactoryInstallationOperations{Install: installer.InstallPackagedFactory}
 }
 
 // provideDurableOpening binds the execution opener and provider identity

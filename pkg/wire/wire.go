@@ -348,6 +348,8 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
 	provideFactoryDefinitionPackagedInstallationDirectoryCreator,
+	factorydefinitionswire.NewPackagedFactoryInstallationService,
+	wire.Bind(new(factorydefinitions.PackagedFactoryInstaller), new(*factorydefinitionswire.PackagedFactoryInstallationService)),
 	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,

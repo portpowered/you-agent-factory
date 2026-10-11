@@ -76,9 +76,6 @@ func NewFactoryStatusAPI(
 }
 
 func (api *factoryStatusAPI) ProjectFactoryStatus(ctx context.Context, sessionID string) (apisurface.FactorySessionStatus, error) {
-	if api == nil || api.sessions == nil || api.projector == nil {
-		return apisurface.FactorySessionStatus{}, factoryruntime.ErrNotRunning
-	}
 	if sessionID = strings.TrimSpace(sessionID); sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}

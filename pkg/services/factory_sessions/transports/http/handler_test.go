@@ -196,6 +196,9 @@ type factoryStatusProjectorRole struct {
 type factoryStatusSessionRole struct {
 	observations int
 	sessionIDs   []string
+	observeErr   error
+	recoveryErr  error
+	recovery     *factorysessions.StartupRecovery
 }
 
 func (role *factoryStatusProjectorRole) ProjectFactoryStatusFromObservation(factoryruntime.Observation) factoryruntime.FactoryStatus {
@@ -204,7 +207,7 @@ func (role *factoryStatusProjectorRole) ProjectFactoryStatusFromObservation(fact
 }
 
 func (role *factoryStatusSessionRole) StartupRecoveryForSession(context.Context, string) (*factorysessions.StartupRecovery, error) {
-	return nil, nil
+	return role.recovery, role.recoveryErr
 }
 
 func (role *factoryStatusSessionRole) ObserveForSession(
@@ -214,6 +217,9 @@ func (role *factoryStatusSessionRole) ObserveForSession(
 ) (factoryruntime.ObserveResult, error) {
 	role.observations++
 	role.sessionIDs = append(role.sessionIDs, sessionID)
+	if role.observeErr != nil {
+		return factoryruntime.ObserveResult{}, role.observeErr
+	}
 	if sessionID == "missing" {
 		return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 	}
@@ -485,4 +491,29 @@ func factoryHTTPCallerInvocationAPI(t *testing.T, variant, token string, calls *
 		}
 	}}
 	return api
+}
+
+func TestFactoryStatusAPIPreservesObservationAndRecoveryFailures(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{factoryruntime.ErrNotRunning, context.DeadlineExceeded, factorysessions.ErrSessionNotFound} {
+		for _, recoveryFailure := range []bool{false, true} {
+			sessions := &factoryStatusSessionRole{}
+			if recoveryFailure {
+				sessions.recoveryErr = cause
+			} else {
+				sessions.observeErr = cause
+			}
+			projector := &factoryStatusProjectorRole{}
+			_, err := NewFactoryStatusAPI(sessions, projector).ProjectFactoryStatus(t.Context(), "selected-session")
+			if !errors.Is(err, cause) {
+				t.Fatalf("status error = %v, want %v", err, cause)
+			}
+			if len(sessions.sessionIDs) != 1 || sessions.sessionIDs[0] != "selected-session" {
+				t.Fatalf("selected session lost: %v", sessions.sessionIDs)
+			}
+			if projector.projections != 0 {
+				t.Fatal("failed status projected a success")
+			}
+		}
+	}
 }
