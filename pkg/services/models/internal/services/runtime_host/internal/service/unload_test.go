@@ -9,6 +9,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
@@ -136,18 +137,16 @@ func TestStopModelHostRejectsLoadingRuntime(t *testing.T) {
 func TestCloseRuntimeScopeCancelsAndJoinsInFlightHostLoad(t *testing.T) {
 	t.Parallel()
 
-	cacheDirectory := t.TempDir()
-	writeCacheFixture(t, cacheDirectory, true)
-	scopes := newScopes(t, "close-in-flight-load")
-	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
+	config := supervisedRuntimeConfig()
+	ref := mustParseScope(t, "close-in-flight-load")
+	scopes := &acceptedScopes{bindings: map[runtimescopes.Reference]models.RuntimeBinding{
+		runtimescopes.Reference(ref.String()): {CacheDirectory: "controlled-cache", RuntimeConfig: func() *models.RuntimeConfig { return &config }},
+	}}
+	assets := &acceptedAssets{inspection: scopedassets.RuntimeCacheInspection{Supported: true, Installed: true, CachePath: "controlled-cache", Revision: "revision"}}
 	launcher := newBlockedProcessLauncher()
-	service := newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, realHostClock{})
-	closer, ok := service.(interface {
-		CloseRuntimeScope(context.Context, models.RuntimeScopeRef) error
-	})
-	if !ok {
-		t.Fatal("runtime host does not expose CloseRuntimeScope")
-	}
+	service := acceptedHost(scopes, assets, launcher)
+	closer := service
+	t.Cleanup(func() { launcher.releaseLoad(); _ = service.Shutdown(context.Background()) })
 
 	ensureErrCh := make(chan error, 1)
 	go func() {
@@ -179,7 +178,11 @@ func TestCloseRuntimeScopeCancelsAndJoinsInFlightHostLoad(t *testing.T) {
 	if process == nil {
 		t.Fatal("launcher did not return the late-created managed process")
 	}
-	awaitSignal(t, process.stopCh, "late-created managed process survived scope close")
+	awaitSignal(t, process.stopped, "late-created managed process survived scope close")
+	awaitSignal(t, process.waited, "late-created managed process did not join")
+	if process.stopCalls.Load() != 1 || process.waitCalls.Load() != 1 {
+		t.Fatalf("late process Stop/Wait = %d/%d, want 1/1", process.stopCalls.Load(), process.waitCalls.Load())
+	}
 }
 
 func TestStopModelHostRejectsActiveCapacityHolder(t *testing.T) {
@@ -913,7 +916,7 @@ type blockedProcessLauncher struct {
 	cancelOnce     sync.Once
 	releaseOnce    sync.Once
 	mu             sync.Mutex
-	process        *fakeManagedProcess
+	process        *countedLateProcess
 }
 
 func newBlockedProcessLauncher() *blockedProcessLauncher {
@@ -969,7 +972,7 @@ func (launcher *blockedProcessLauncher) Start(
 	<-ctx.Done()
 	launcher.cancelOnce.Do(func() { close(launcher.cancelObserved) })
 	<-launcher.release
-	process := newFakeManagedProcess(spec.HealthEndpoint, nil)
+	process := &countedLateProcess{controlledManagedProcess: newControlledManagedProcess(spec.HealthEndpoint)}
 	launcher.mu.Lock()
 	launcher.process = process
 	launcher.mu.Unlock()
@@ -980,7 +983,7 @@ func (launcher *blockedProcessLauncher) releaseLoad() {
 	launcher.releaseOnce.Do(func() { close(launcher.release) })
 }
 
-func (launcher *blockedProcessLauncher) loadedProcess() *fakeManagedProcess {
+func (launcher *blockedProcessLauncher) loadedProcess() *countedLateProcess {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	return launcher.process
@@ -995,4 +998,20 @@ func (checker *blockingHealthChecker) Check(ctx context.Context, _ string) error
 	checker.once.Do(func() { close(checker.started) })
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+// Counts entries before the controlled process's idempotence can hide duplicates.
+type countedLateProcess struct {
+	*controlledManagedProcess
+	stopCalls atomic.Int32
+	waitCalls atomic.Int32
+}
+
+func (p *countedLateProcess) Stop(ctx context.Context) error {
+	p.stopCalls.Add(1)
+	return p.controlledManagedProcess.Stop(ctx)
+}
+func (p *countedLateProcess) Wait() error {
+	p.waitCalls.Add(1)
+	return p.controlledManagedProcess.Wait()
 }

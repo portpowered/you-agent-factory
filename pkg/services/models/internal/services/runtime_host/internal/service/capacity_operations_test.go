@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
@@ -76,3 +79,68 @@ type capacityProcess struct {
 func (p *capacityProcess) HealthEndpoint() string     { return p.endpoint }
 func (p *capacityProcess) Wait() error                { panic("component did not launch a wait goroutine") }
 func (p *capacityProcess) Stop(context.Context) error { p.stops++; return nil }
+
+func TestRuntimeHostAcceptedDependenciesSelectedIdleSchedulerPreservesActivePeer(t *testing.T) {
+	t.Parallel()
+	selected, _ := (models.RuntimeScopeRef{}).Parse("selected")
+	peer, _ := (models.RuntimeScopeRef{}).Parse("peer")
+	state := NewSlotState()
+	selectedProcess := &schedulerProcess{stopped: make(chan struct{})}
+	peerProcess := &schedulerProcess{stopped: make(chan struct{})}
+	state.runtimeSlots[runtimeSlotKey(selected, "llm")] = &supervisedRuntime{state: supervisedStateReady, process: selectedProcess}
+	state.runtimeSlots[runtimeSlotKey(peer, "llm")] = &supervisedRuntime{state: supervisedStateReady, process: peerProcess}
+	clock := &schedulerClock{timer: &schedulerTimer{events: make(chan time.Time, 1)}}
+	coordinator := NewSlotCoordinator(state, capacityScopes{}, clock, nil, nil, time.Minute)
+	coordinator.OnLeaseCapacityAcquired(selected, "llm")
+	coordinator.OnLeaseCapacityAcquired(peer, "llm")
+	coordinator.OnLeaseCapacityReleased(selected, "llm")
+	if clock.duration != time.Minute || selectedProcess.stops.Load() != 0 {
+		t.Fatalf("release scheduled duration=%s stops=%d", clock.duration, selectedProcess.stops.Load())
+	}
+	clock.timer.events <- clock.Now().Add(time.Minute)
+	select {
+	case <-selectedProcess.stopped:
+	case <-time.After(5 * time.Second): // Failure ceiling; the supplied timer drives cleanup.
+		t.Fatal("selected scheduler did not stop its process")
+	}
+	state.mu.Lock()
+	_, selectedRemains := state.runtimeSlots[runtimeSlotKey(selected, "llm")]
+	peerRemains := state.runtimeSlots[runtimeSlotKey(peer, "llm")]
+	peerHolders := state.capacityHolders[runtimeSlotKey(peer, "llm")]
+	state.mu.Unlock()
+	if selectedRemains || selectedProcess.stops.Load() != 1 || peerRemains == nil || peerHolders != 1 || peerProcess.stops.Load() != 0 {
+		t.Fatal("selected deadline did not unload exactly its idle slot and preserve active peer")
+	}
+	// No process was launched by this component witness; Stop is its owned effect.
+	// Canonical functional scenarios exercise actual lease admission and release.
+}
+
+type schedulerClock struct {
+	duration time.Duration
+	timer    *schedulerTimer
+}
+
+func (*schedulerClock) Now() time.Time { return time.Unix(0, 0) }
+func (c *schedulerClock) NewTimer(duration time.Duration) modelseffects.HostTimer {
+	c.duration = duration
+	return c.timer
+}
+
+type schedulerTimer struct{ events chan time.Time }
+
+func (t *schedulerTimer) C() <-chan time.Time { return t.events }
+func (*schedulerTimer) Stop() bool            { return true }
+
+type schedulerProcess struct {
+	stops   atomic.Int32
+	stopped chan struct{}
+}
+
+func (*schedulerProcess) HealthEndpoint() string { return "controlled" }
+func (*schedulerProcess) Wait() error            { panic("no process launched by coordinator witness") }
+func (p *schedulerProcess) Stop(context.Context) error {
+	if p.stops.Add(1) == 1 {
+		close(p.stopped)
+	}
+	return nil
+}

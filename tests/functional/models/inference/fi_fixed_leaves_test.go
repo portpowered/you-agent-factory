@@ -34,6 +34,10 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 		launcher, &joinedProtocolNegotiator{},
 		&joinedCompatibilityChecker{}, selection, nil)
 	edges.ModelEmbeddingBackend = nil
+	hostEffects := &fixedLeafHostEffects{recordingModelHostLauncher: launcher}
+	edges.ModelHostProcessLauncher = hostEffects
+	clock := &fixedLeafClock{}
+	edges.ModelHostClock = clock
 	commands := support.NewRecordingCommandRunner("unexpected model command")
 	edges.ModelRuntimeCommandRunner = commands
 	var invocations atomic.Int64
@@ -60,12 +64,12 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 	for _, name := range []string{"selected", "peer"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			runFixedLeafSessionRecovery(t, server.URL(), routes, name)
+			runFixedLeafSessionRecovery(t, server.URL(), routes, name, hostEffects, home)
 		})
 	}
 	t.Run("cancel while peer is accepted", func(t *testing.T) {
 		t.Parallel()
-		runFixedLeafSessionCancellation(t, server.URL(), routes)
+		runFixedLeafSessionCancellation(t, server.URL(), routes, clock)
 	})
 	t.Run("fault and retry while peer is accepted", func(t *testing.T) {
 		t.Parallel()
@@ -118,9 +122,9 @@ func fixedLeafFactoryConfig() map[string]any {
 	return config
 }
 
-func runFixedLeafSessionRecovery(t *testing.T, baseURL string, routes *fixedLeafRoutes, name string) {
+func runFixedLeafSessionRecovery(t *testing.T, baseURL string, routes *fixedLeafRoutes, name string, hostEffects *fixedLeafHostEffects, home string) {
 	t.Helper()
-	session := openFixedLeafSession(t, baseURL)
+	session := openConfiguredFixedLeafSession(t, baseURL, name, hostEffects.endpoint)
 	for index, failure := range []bool{false, true, false} {
 		text := fmt.Sprintf("%s-%d", name, index)
 		route := routes.register(text, failure)
@@ -134,6 +138,7 @@ func runFixedLeafSessionRecovery(t *testing.T, baseURL string, routes *fixedLeaf
 				t.Fatalf("selected model effect = %#v", request)
 			}
 			routes.recordScope(t, name, request.Scope.String())
+			hostEffects.assertConfiguration(t, request.Scope, name, home)
 		default:
 			for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, session) {
 				if event.Type == "MODEL_RESPONSE" || event.Type == "DISPATCH_RESPONSE" {
