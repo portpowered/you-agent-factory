@@ -79,32 +79,8 @@ func runPeerRecordingRetention(t *testing.T, mode string) {
 	server.Stop(t)
 	server.Close(t)
 	replayProcess := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil }})
-	for _, id := range []string{first, second} {
-		paths, err := filepath.Glob(filepath.Join(home, ".you-agent-factory", "recordings", "*", "*", "*", id+".json"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if mode == "off" {
-			if len(paths) != 0 {
-				t.Fatalf("unrecorded peer has artifacts")
-			}
-			continue
-		}
-		if len(paths) != 1 {
-			t.Fatalf("peer %s artifacts=%d; want one", id, len(paths))
-		}
-		path := paths[0]
-		if !strings.HasPrefix(path, filepath.Join(home, ".you-agent-factory", "recordings")+string(os.PathSeparator)) || filepath.Base(path) != id+".json" {
-			t.Fatalf("peer destination %q does not belong to selected profile and UUID %s", path, id)
-		}
-		history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: recordings.HistoricalRecordingIdentity{
-			RecordingID: recordings.RecordingID(id), Artifact: recordings.RecordingArtifactReference(path), Scope: recordings.CanonicalEventScope{FactorySessionID: id},
-		}})
-		if err != nil || len(history.Dispatches) != 1 || history.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted {
-			t.Fatalf("peer %s retained completed dispatch=(%+v, %v)", id, history, err)
-		}
-		assertPeerRecordingReplay(t, replayProcess, runner, home, dir, id, path)
-	}
+	assertRetainedPeerRecordings(t, mode, home, dir, []string{first, second}, service, replayProcess, runner)
+
 }
 
 func cancelAndDeletePeerRecording(t *testing.T, baseURL, id string) {
@@ -297,14 +273,7 @@ func assertPeerRecordingCursor(t *testing.T, baseURL, id string) {
 	if len(events) < 2 {
 		t.Fatalf("peer %s has no completed event history", id)
 	}
-	for i, event := range events {
-		if event.Context.SessionId != nil && *event.Context.SessionId != id {
-			t.Fatalf("foreign session event in %s: %+v", id, event.Context)
-		}
-		if i > 0 && event.Context.Sequence <= events[i-1].Context.Sequence {
-			t.Fatal("canonical event order regressed")
-		}
-	}
+	assertScopedPeerEventOrder(t, id, events)
 	// Startup structure frames have no session sequence. Reconnect within the
 	// scoped stream after SESSION_STARTED, whose identity is retained too.
 	firstIndex := 0
@@ -481,4 +450,47 @@ func TestPeerRecordingFailedOpeningRetry(t *testing.T) {
 	}
 	invokePeerRecordingWork(t, server.URL(), request.SessionID)
 	cancelAndDeletePeerRecording(t, server.URL(), request.SessionID)
+}
+
+func assertRetainedPeerRecordings(t *testing.T, mode, home, dir string, ids []string, service recordings.Service, replayProcess support.Process, runner *support.RecordingCommandRunner) {
+	t.Helper()
+	for _, id := range ids {
+		paths, err := filepath.Glob(filepath.Join(home, ".you-agent-factory", "recordings", "*", "*", "*", id+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode == "off" {
+			if len(paths) != 0 {
+				t.Fatalf("unrecorded peer has artifacts")
+			}
+			continue
+		}
+		if len(paths) != 1 {
+			t.Fatalf("peer %s artifacts=%d; want one", id, len(paths))
+		}
+		path := paths[0]
+		if !strings.HasPrefix(path, filepath.Join(home, ".you-agent-factory", "recordings")+string(os.PathSeparator)) || filepath.Base(path) != id+".json" {
+			t.Fatalf("peer destination %q does not belong to selected profile and UUID %s", path, id)
+		}
+		history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: recordings.HistoricalRecordingIdentity{
+			RecordingID: recordings.RecordingID(id), Artifact: recordings.RecordingArtifactReference(path), Scope: recordings.CanonicalEventScope{FactorySessionID: id},
+		}})
+		if err != nil || len(history.Dispatches) != 1 || history.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted {
+			t.Fatalf("peer %s retained completed dispatch=(%+v, %v)", id, history, err)
+		}
+		assertPeerRecordingReplay(t, replayProcess, runner, home, dir, id, path)
+	}
+}
+
+func assertScopedPeerEventOrder(t *testing.T, id string, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	for i, event := range events {
+		if event.Context.SessionId != nil && *event.Context.SessionId != id {
+			t.Fatalf("foreign session event in %s: %+v", id, event.Context)
+		}
+		if i > 0 && event.Context.Sequence <= events[i-1].Context.Sequence {
+			t.Fatal("canonical event order regressed")
+		}
+	}
+
 }

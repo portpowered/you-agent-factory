@@ -151,22 +151,8 @@ func TestPeerRecordingSelection(t *testing.T) {
 			}
 			before := selection
 			err := opening.selectPeerRecording(ctx, request, id, &selection)
-			wantError := mode == "reservation failure" || mode == "empty target" || mode == "canceled"
-			if (err != nil) != wantError || planner.calls != wantCalls {
-				t.Fatalf("error=%v, planner calls=%d; want error=%t calls=%d", err, planner.calls, wantError, wantCalls)
-			}
-			if mode == "reservation failure" && !errors.Is(err, cause) {
-				t.Fatalf("reservation cause lost: %v", err)
-			}
-			if mode == "automatic" {
-				before.Recording.RecordPath = "peer.json"
-				if planner.request.HomeDir != "selected-profile" || planner.request.CanonicalSessionID != peer || planner.request.ReportedSessionID != peer {
-					t.Fatalf("target request = %+v", planner.request)
-				}
-			}
-			if selection.Recording != before.Recording || current.CurrentBoardRecordPath == "peer.json" {
-				t.Fatalf("selection changed unrelated policy: %+v", selection)
-			}
+			assertPeerRecordingSelection(t, mode, err, cause, wantCalls, planner, selection, before, current)
+
 		})
 	}
 }
@@ -196,5 +182,26 @@ func TestPeerRecordingUsesSelectedHostHomeBeforeAmbientResolver(t *testing.T) {
 				t.Fatal("caller selection mutated")
 			}
 		})
+	}
+}
+
+func assertPeerRecordingSelection(t *testing.T, mode string, err, cause error, wantCalls int, planner *peerRecordingPlanner, selection, before factorysessions.SessionRuntimeSelection, current *runtimebinding.SessionState) {
+	t.Helper()
+	const peer = "5ca047d8-b32c-4fda-9e45-727b0fe7e3b2"
+	wantError := mode == "reservation failure" || mode == "empty target" || mode == "canceled"
+	if (err != nil) != wantError || planner.calls != wantCalls {
+		t.Fatalf("error=%v, planner calls=%d; want error=%t calls=%d", err, planner.calls, wantError, wantCalls)
+	}
+	if mode == "reservation failure" && !errors.Is(err, cause) {
+		t.Fatalf("reservation cause lost: %v", err)
+	}
+	if mode == "automatic" {
+		before.Recording.RecordPath = "peer.json"
+		if planner.request.HomeDir != "selected-profile" || planner.request.CanonicalSessionID != peer || planner.request.ReportedSessionID != peer {
+			t.Fatalf("target request = %+v", planner.request)
+		}
+	}
+	if selection.Recording != before.Recording || current.CurrentBoardRecordPath == "peer.json" {
+		t.Fatalf("selection changed unrelated policy: %+v", selection)
 	}
 }

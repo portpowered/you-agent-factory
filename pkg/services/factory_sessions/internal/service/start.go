@@ -260,17 +260,7 @@ func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.
 	var closeArtifacts func() error
 	var activation *sessionActivation
 	defer func() {
-		reservation := runtimeSelectionForStart(selected).Recording.Reservation
-		if reservation.IsZero() {
-			return
-		}
-		if err == nil {
-			r.recordingsRuntime.(recordings.LiveRecordingReservationOwner).CommitReservation(reservation)
-			return
-		}
-		if cleanupErr := r.rollbackFailedRecording(ctx, selectedID, reservation, activation, closeArtifacts); cleanupErr != nil {
-			err = errors.Join(err, fmt.Errorf("rollback Factory Session recording reservation: %w", cleanupErr))
-		}
+		err = r.completeRecordingOpening(ctx, selectedID, selected, activation, closeArtifacts, err)
 	}()
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
@@ -676,4 +666,19 @@ func recordingRequestForStart(request factorysessions.SessionStartRequest) recor
 		ResumePath: selection.Recording.ResumePath, WorkflowID: selection.Recording.WorkflowID,
 		FlushInterval: selection.Recording.FlushInterval,
 	}
+}
+
+func (r *RuntimeOpening) completeRecordingOpening(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, activation *sessionActivation, closeArtifacts func() error, err error) error {
+	reservation := runtimeSelectionForStart(selected).Recording.Reservation
+	if reservation.IsZero() {
+		return err
+	}
+	if err == nil {
+		r.recordingsRuntime.(recordings.LiveRecordingReservationOwner).CommitReservation(reservation)
+		return nil
+	}
+	if cleanupErr := r.rollbackFailedRecording(ctx, selectedID, reservation, activation, closeArtifacts); cleanupErr != nil {
+		err = errors.Join(err, fmt.Errorf("rollback Factory Session recording reservation: %w", cleanupErr))
+	}
+	return err
 }

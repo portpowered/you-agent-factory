@@ -49,24 +49,7 @@ func TestOwnedReservationRetryAndForeignCollision(t *testing.T) {
 	if _, other, err := reserver.ReserveNamedOwned(root, at, "peer", ".json"); !errors.Is(err, ErrNamedReservationExists) || !other.IsZero() {
 		t.Fatalf("collision acquired authority: %+v %v", other, err)
 	}
-	cause := errors.New("removal unavailable")
-	filesystem.removeErr = cause
-	if err := reserver.ReleaseReservation(reservation); !errors.Is(err, cause) {
-		t.Fatalf("release cause lost: %v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("failed release lost placeholder: %v", err)
-	}
-	filesystem.removeErr = nil
-	if err := reserver.ReleaseReservation(reservation); err != nil {
-		t.Fatal(err)
-	}
-	if err := reserver.ReleaseReservation(reservation); err != nil {
-		t.Fatal(err)
-	}
-	if len(filesystem.removed) != 1 {
-		t.Fatalf("release count=%d", len(filesystem.removed))
-	}
+	assertReservationReleaseRetry(t, reserver, filesystem, path, reservation)
 	retryPath, retry, err := reserver.ReserveNamedOwned(root, at, "peer", ".json")
 	if err != nil {
 		t.Fatalf("retry: %v", err)
@@ -90,4 +73,27 @@ func TestOwnedReservationRetryAndForeignCollision(t *testing.T) {
 	if err := reserver.ReleaseReservation(Reservation{}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func assertReservationReleaseRetry(t *testing.T, reserver OwnedNamedReserver, filesystem *reservationFileSystem, path string, reservation Reservation) {
+	t.Helper()
+	cause := errors.New("removal unavailable")
+	filesystem.removeErr = cause
+	if err := reserver.ReleaseReservation(reservation); !errors.Is(err, cause) {
+		t.Fatalf("release cause lost: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("failed release lost placeholder: %v", err)
+	}
+	filesystem.removeErr = nil
+	if err := reserver.ReleaseReservation(reservation); err != nil {
+		t.Fatal(err)
+	}
+	if err := reserver.ReleaseReservation(reservation); err != nil {
+		t.Fatal(err)
+	}
+	if len(filesystem.removed) != 1 {
+		t.Fatalf("release count=%d", len(filesystem.removed))
+	}
+
 }

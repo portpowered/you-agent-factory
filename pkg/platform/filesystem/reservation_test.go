@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,21 +12,7 @@ func TestRemoveReservedPreservesChangedAndReplacedFiles(t *testing.T) {
 	for _, mode := range []string{"unchanged", "written", "replaced empty", "replaced bytes", "missing"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
-			path := filepath.Join(t.TempDir(), "owned.json")
-			file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-			if err != nil {
-				t.Fatal(err)
-			}
-			identity, err := file.Stat()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !os.SameFile(identity, identity) {
-				t.Fatal("identity unavailable")
-			}
-			if err := file.Close(); err != nil {
-				t.Fatal(err)
-			}
+			path, identity := createReservedFile(t)
 			want := ""
 			switch mode {
 			case "written":
@@ -56,14 +43,41 @@ func TestRemoveReservedPreservesChangedAndReplacedFiles(t *testing.T) {
 			if err := (Local{}).RemoveReserved(path, identity); err != nil {
 				t.Fatal(err)
 			}
-			data, err := os.ReadFile(path)
-			if mode == "unchanged" || mode == "missing" {
-				if !os.IsNotExist(err) {
-					t.Fatalf("owned placeholder retained: %q %v", data, err)
-				}
-			} else if err != nil || string(data) != want {
-				t.Fatalf("foreign/published file changed: %q %v", data, err)
-			}
+			assertReservedFileResult(t, path, mode, want)
+
 		})
+	}
+}
+
+func createReservedFile(t *testing.T) (string, fs.FileInfo) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "owned.json")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := file.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(identity, identity) {
+		t.Fatal("identity unavailable")
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return path, identity
+}
+
+func assertReservedFileResult(t *testing.T, path, mode, want string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if mode == "unchanged" || mode == "missing" {
+		if !os.IsNotExist(err) {
+			t.Fatalf("owned placeholder retained: %q %v", data, err)
+		}
+	} else if err != nil || string(data) != want {
+		t.Fatalf("foreign/published file changed: %q %v", data, err)
 	}
 }

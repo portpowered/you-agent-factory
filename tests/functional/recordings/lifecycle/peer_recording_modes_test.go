@@ -169,19 +169,7 @@ func TestPeerRecordingFinalWriteFailureKeepsPeerUsable(t *testing.T) {
 		t.Fatalf("unsafe cancellation response: status=%d body=%s error=%v", response.StatusCode, data, readErr)
 	}
 	support.WaitForSessionStopped(t, baseURL, first, 15*time.Second)
-	request, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+first, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err = http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, readErr = io.ReadAll(response.Body)
-	response.Body.Close()
-	if readErr != nil || response.StatusCode < 400 || bytes.Contains(data, []byte(cause.Error())) {
-		t.Fatalf("unsafe or successful failed close: status=%d body=%s error=%v", response.StatusCode, data, readErr)
-	}
+	assertFailedPeerRecordingClose(t, baseURL, first, cause)
 	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: recordingID})
 	if err != nil || status.Status.State != recordings.RecordingFailed || len(status.Status.Failures) == 0 || !canceledRecordingRetainsDurablePrefix(status.Status, prefix.Status) {
 		t.Fatalf("failed peer claimed durability: %+v, %v", status, err)
@@ -286,4 +274,22 @@ func TestPeerRecordingPreservesForeignBoardReference(t *testing.T) {
 			t.Fatalf("peer replaced protected destination %s: %q, %v", path, got, err)
 		}
 	}
+}
+
+func assertFailedPeerRecordingClose(t *testing.T, baseURL, first string, cause error) {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+first, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil || response.StatusCode < 400 || bytes.Contains(data, []byte(cause.Error())) {
+		t.Fatalf("unsafe or successful failed close: status=%d body=%s error=%v", response.StatusCode, data, readErr)
+	}
+
 }
