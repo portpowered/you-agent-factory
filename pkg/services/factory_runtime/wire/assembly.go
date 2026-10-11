@@ -103,7 +103,6 @@ func NewAssembly(
 	instanceHost InstanceHost,
 	preparation RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 	recoverOwners recordings.WorkerCapturePreparationOperation,
@@ -113,7 +112,6 @@ func NewAssembly(
 		instanceHost,
 		preparation,
 		recordingsRuntime,
-		automationService,
 		progressFactory, completionFactory, recoverOwners)
 }
 

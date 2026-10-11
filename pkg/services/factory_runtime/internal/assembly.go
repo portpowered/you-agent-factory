@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
@@ -42,7 +41,6 @@ func NewAssembly(
 	instanceHost instancehost.Service,
 	preparation runtimebuild.ExecutionPreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	_ automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 	recoverOwners recordings.WorkerCapturePreparationOperation,

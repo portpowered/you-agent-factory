@@ -673,9 +673,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	workersMockCommandRunnerFactory := provideWorkersMockCommandRunnerFactory()
 	v190 := provideRuntimePreparation(v188, v129, factoryIDGenerator, logger, v80, v189, v29, workersMockCommandRunnerFactory)
-	root := provideAutomationsRoot(v172)
 	v191 := wire5.NewWorkerCapturePreparationOperation(v148)
-	v192, err := provideFactoryRuntimeAssembly(v185, v187, v16, v190, v141, root, v127, v191)
+	v192, err := provideFactoryRuntimeAssembly(v185, v187, v16, v190, v141, v127, v191)
 	if err != nil {
 		return nil, err
 	}

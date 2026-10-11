@@ -19,7 +19,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -53,7 +52,6 @@ func provideFactoryRuntimeAssembly(
 	instanceHost factoryruntimewire.InstanceHost,
 	preparation factoryruntimewire.RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
 	streams factorysessionwire.RuntimeAssembly,
 	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*factoryruntimewire.Assembly, error) {
@@ -62,7 +60,6 @@ func provideFactoryRuntimeAssembly(
 		instanceHost,
 		preparation,
 		recordingsRuntime,
-		automationService,
 		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory(), recoverOwners)
 }
 
