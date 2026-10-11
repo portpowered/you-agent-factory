@@ -28,6 +28,7 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 		return e.deliveryReason(ctx, entry, "REVIVE_FAILED")
 	}
 	if !recipient.Observation.State.Terminal() {
+		e.observeRecipient(ctx, entry, recipient)
 		return m, nil
 	}
 	intents, err := e.ledger.DeliveryIntents()
@@ -53,8 +54,12 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 	}
 	tx := store.Transaction{Version: store.Version, RecordID: e.newID(), Sequence: sequence + 1,
 		Kind: store.ReviveIntent, CommittedAt: e.now().UTC(), Messages: []store.Entry{}, Requests: []store.Request{}, DeliveryIntents: []store.DeliveryIntent{intent}}
-	if err := e.authority.Revalidate(ctx, caller); err != nil {
-		return agentmessages.Message{}, err
+	// Background delivery consumes previously authorized durable messages;
+	// it does not reuse the sender's execution credentials.
+	if caller != nil {
+		if err := e.authority.Revalidate(ctx, caller); err != nil {
+			return agentmessages.Message{}, err
+		}
 	}
 	if err := e.persist(ctx, tx); err != nil {
 		return agentmessages.Message{}, err
@@ -221,8 +226,11 @@ func (e *Engine) classifyAdmission(intent store.DeliveryIntent, result workerses
 type deliveryLifetime struct {
 	hosts     int
 	observers sync.WaitGroup
-	cancels   map[string]context.CancelFunc
+	cancels   map[string]*deliveryObserver
+	active    map[*deliveryObserver]struct{}
 }
+
+type deliveryObserver struct{ cancel context.CancelFunc }
 
 func (e *Engine) BindHost() func() {
 	e.mu.Lock()
@@ -231,10 +239,13 @@ func (e *Engine) BindHost() func() {
 		return func() {}
 	}
 	if e.deliveryLife == nil {
-		e.deliveryLife = &deliveryLifetime{cancels: map[string]context.CancelFunc{}}
+		e.deliveryLife = &deliveryLifetime{cancels: map[string]*deliveryObserver{}, active: map[*deliveryObserver]struct{}{}}
 	}
 	life := e.deliveryLife
 	life.hosts++
+	if life.hosts == 1 {
+		e.resumeRecipientObservers(context.Background())
+	}
 	e.mu.Unlock()
 	var once sync.Once
 	return func() { once.Do(func() { e.releaseDeliveryHost(life) }) }
@@ -245,8 +256,8 @@ func (e *Engine) releaseDeliveryHost(life *deliveryLifetime) {
 	life.hosts--
 	last := life.hosts == 0
 	if last {
-		for _, cancel := range life.cancels {
-			cancel()
+		for observer := range life.active {
+			observer.cancel()
 		}
 		e.deliveryLife = nil
 	}
@@ -267,11 +278,13 @@ func (e *Engine) observeDelivery(ctx context.Context, intent store.DeliveryInten
 	life.observers.Add(1)
 	// The admitted effect outlives the HTTP caller; the host owns its observer.
 	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	life.cancels[intent.RequestID] = cancel
+	observer := &deliveryObserver{cancel: cancel}
+	life.cancels[intent.RequestID] = observer
+	life.active[observer] = struct{}{}
 	go func(ctx context.Context) {
 		defer life.observers.Done()
 		defer cancel()
-		defer e.forgetDeliveryObserver(life, intent.RequestID)
+		defer e.forgetDeliveryObserver(life, intent.RequestID, observer)
 		topic := workersessions.Topic(intent.SuccessorWorkerSessionID)
 		sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: workersessions.DefaultObservationStreamLimit})
 		if err != nil {
@@ -282,10 +295,13 @@ func (e *Engine) observeDelivery(ctx context.Context, intent store.DeliveryInten
 	}(ctx)
 }
 
-func (e *Engine) forgetDeliveryObserver(life *deliveryLifetime, requestID string) {
+func (e *Engine) forgetDeliveryObserver(life *deliveryLifetime, requestID string, observer *deliveryObserver) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	delete(life.cancels, requestID)
+	delete(life.active, observer)
+	if life.cancels[requestID] == observer {
+		delete(life.cancels, requestID)
+	}
 }
 
 func (e *Engine) consumeDelivery(ctx context.Context, intent store.DeliveryIntent, sub events.Subscription) {
@@ -389,6 +405,9 @@ func (e *Engine) settleDelivery(ctx context.Context, intent store.DeliveryIntent
 		_, err = e.deliveryOutcome(ctx, current, entries, current.RequestID)
 		if err != nil && e.logger != nil {
 			e.logger.Warn("Agent Message revival outcome unavailable", "code", "MESSAGE_STORE_UNAVAILABLE")
+		}
+		if err == nil {
+			e.resumeRecipientObservers(ctx)
 		}
 		return
 	}

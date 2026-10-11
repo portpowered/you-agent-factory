@@ -2,6 +2,8 @@ package messaging
 
 import (
 	"encoding/json"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -163,5 +165,76 @@ func assertError(t *testing.T, f *fixture, method, path string, request any, cal
 	var result api.ErrorResponse
 	if status != expected || json.Unmarshal(data, &result) != nil || string(result.Code) != code {
 		t.Fatalf("typed refusal: %d %s", status, data)
+	}
+}
+
+func TestEndedSenderRepliesPreserveInheritedDeliveryPolicy(t *testing.T) {
+	t.Parallel()
+	for _, hold := range []bool{true, false} {
+		name := "default revive"
+		if hold {
+			name = "held until authorized continuation"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+			f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane", "lane-next", "sibling")
+			lead := f.invoke(t, "lead", nil)
+			lane := f.invoke(t, "lane", lead)
+			sibling := f.invoke(t, "sibling", lead)
+			args := []string{"lead", "--request-id", "ask", "--body", "please answer"}
+			if hold {
+				args = append(args, "--reply-hold")
+			}
+			ask := f.cliSend(t, lane, args...)
+			f.endWorker(t, "lane")
+			before := messageFactoryStreams(t, f, "lead", "lane")
+			reply := f.cliSend(t, lead, "reply", ask.MessageId, "--request-id", "answer", "--body", "original requester answer")
+			if reply.ThreadId != ask.ThreadId || reply.InReplyTo == nil || *reply.InReplyTo != ask.MessageId || reply.To.WorkerSessionId != "lane" {
+				t.Fatal("ended sender reply lost requester or thread")
+			}
+			if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+				t.Fatal("reply changed Factory Events")
+			}
+			assertError(t, f, http.MethodGet, "/messages/"+reply.MessageId, nil, sibling, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+			assertError(t, f, http.MethodGet, "/messages/"+reply.MessageId, nil, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+			if hold {
+				assertHeldReplyContinuation(t, f, revival, reply)
+			} else {
+				if reply.IfEnded != "REVIVE" {
+					t.Fatal("default reply did not inherit REVIVE")
+				}
+				head := assertReviveAdmission(t, f, revival, reply, lane)
+				page := readPage(t, f, "/messages?toMe=true", head)
+				if len(page.Messages) != 1 || page.Messages[0].MessageId != reply.MessageId {
+					t.Fatal("revived requester lost reply inbox")
+				}
+				close(revival.release)
+				f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+			}
+		})
+	}
+}
+
+func assertHeldReplyContinuation(t *testing.T, f *fixture, revival *workerGate, reply api.AgentMessage) {
+	t.Helper()
+	if reply.IfEnded != "HOLD" || reply.Status != "QUEUED" || reply.RevivedWorkerSessionId != nil || reply.Reason != nil {
+		t.Fatal("held reply revived an ended asker")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("HOLD started a provider")
+	default:
+	}
+	next := f.continueCaller(t, "lane", "lane-next")
+	var page api.AgentMessageListResponse
+	if json.Unmarshal(f.cli(t, next, "list", "--to-me", "--mark-read"), &page) != nil || len(page.Messages) != 1 || page.Messages[0].MessageId != reply.MessageId || page.Messages[0].Status != "READ" {
+		t.Fatal("fresh authorized requester continuation lost held reply")
+	}
+	f.endWorker(t, "lane-next")
+	select {
+	case <-revival.requests:
+		t.Fatal("read held reply triggered revival")
+	default:
 	}
 }

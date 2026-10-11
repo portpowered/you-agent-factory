@@ -7,6 +7,7 @@ import (
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // persist is called under the admission lock so observations preserve commit
@@ -51,6 +52,112 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 		}
 	}
 	return nil
+}
+
+// Called under the coordinator lock. Durable entries identify subscriptions;
+// retained/live Events and an authoritative head read close startup/end races.
+func (e *Engine) resumeRecipientObservers(ctx context.Context) {
+	entries, _, err := e.ledger.Entries()
+	if err != nil {
+		return
+	}
+	intents, err := e.ledger.DeliveryIntents()
+	if err != nil {
+		return
+	}
+	assigned := map[string]bool{}
+	for _, intent := range intents {
+		for _, id := range intent.MessageIDs {
+			assigned[id] = true
+		}
+	}
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if !e.eligibleRecipient(entry) || assigned[entry.Message.MessageID] || seen[entry.RecipientChainIdentity] {
+			continue
+		}
+		seen[entry.RecipientChainIdentity] = true
+		recipient, err := e.deliveryHead(ctx, entry)
+		if err == nil {
+			e.observeRecipient(ctx, entry, recipient)
+		}
+	}
+}
+
+func (e *Engine) eligibleRecipient(entry store.Entry) bool {
+	return entry.Message.Status == agentmessages.Queued && entry.Message.IfEnded == "REVIVE" && entry.Message.ExpiresAt.After(e.now().UTC())
+}
+
+// The same host lifetime owns provider confirmation and recipient-end streams.
+// Registration precedes the goroutine so concurrent sends share one observer.
+func (e *Engine) observeRecipient(ctx context.Context, entry store.Entry, recipient Identity) {
+	life := e.deliveryLife
+	key := "end:" + recipient.Observation.FactorySessionID + ":" + recipient.Observation.WorkerSessionID
+	if life == nil || e.events == nil || life.cancels[key] != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	observer := &deliveryObserver{cancel: cancel}
+	life.cancels[key] = observer
+	life.active[observer] = struct{}{}
+	life.observers.Add(1)
+	go func() {
+		defer life.observers.Done()
+		defer cancel()
+		defer e.forgetDeliveryObserver(life, key, observer)
+		topic := workersessions.Topic(recipient.Observation.WorkerSessionID)
+		sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: workersessions.DefaultObservationStreamLimit})
+		// Even unavailable/retention-gapped streams may have an authoritative
+		// ended head. No event payload alone grants continuation authority.
+		if e.deliverEndedRecipient(ctx, entry, key, observer) || err != nil {
+			return
+		}
+		for {
+			delivery := sub.Next(ctx)
+			if ctx.Err() != nil || e.deliverEndedRecipient(ctx, entry, key, observer) {
+				return
+			}
+			if delivery.Kind == events.DeliveryGap && delivery.Gap != nil && delivery.Gap.Validate() == nil && delivery.Gap.Topic == topic {
+				continue // Events resumes retained catch-up, then live delivery.
+			}
+			if delivery.Kind != events.DeliveryRecord {
+				return
+			}
+		}
+	}()
+}
+
+// Returns true once the observed head has ended. A new head is observed by
+// admission/confirmation; the durable chain reservation prevents branching.
+func (e *Engine) deliverEndedRecipient(ctx context.Context, entry store.Entry, key string, observer *deliveryObserver) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ctx.Err() != nil || e.deliveryLife == nil {
+		return true
+	}
+	recipient, err := e.deliveryHead(ctx, entry)
+	if err != nil || !recipient.Observation.State.Terminal() {
+		return false
+	}
+	// Remove only this registration before attempting delivery, so admission
+	// confirmation can observe the next head even if this goroutine is exiting.
+	if e.deliveryLife.cancels[key] == observer {
+		delete(e.deliveryLife.cancels, key)
+	}
+	entries, _, err := e.ledger.Entries()
+	if err != nil {
+		return true
+	}
+	for _, candidate := range entries {
+		if candidate.RecipientChainIdentity == entry.RecipientChainIdentity && candidate.Message.To.FactorySessionID == entry.Message.To.FactorySessionID && e.eligibleRecipient(candidate) {
+			_, err = e.deliver(ctx, nil, candidate)
+			if err != nil && e.logger != nil {
+				e.logger.Warn("Agent Message end delivery unavailable", "code", "MESSAGE_STORE_UNAVAILABLE")
+			}
+			break
+		}
+	}
+	return true
 }
 
 func observationKind(kind string, entry store.Entry) string {

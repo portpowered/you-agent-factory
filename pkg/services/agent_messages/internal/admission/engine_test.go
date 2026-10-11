@@ -199,6 +199,46 @@ func engineRequest(id, body string) agentmessages.SendRequest {
 	return agentmessages.SendRequest{RequestID: id, To: &agentmessages.Address{WorkerSessionID: "lead"}, Body: body}
 }
 
+func TestRecipientEndConsumesDurableAuthorityWithoutSenderCredentials(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	for _, body := range []string{"first", "second"} {
+		if _, err := f.engine.Send(t.Context(), engineRequest(body, body), f.caller, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entry := f.ledger.entries[0]
+	ended := f.authority.recipients["lead"]
+	ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = ended
+	f.authority.finalError = agentmessages.ErrNotPermitted // the sender has ended
+	calls := 0
+	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		calls++
+		if req.FollowUpInput != "first\n\nsecond" || req.RequestID != entry.Message.MessageID || !req.ResolveHead {
+			t.Fatal("end delivery changed durable order or request identity")
+		}
+		return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+	}
+	release := f.engine.BindHost()
+	defer release()
+	observer := &deliveryObserver{cancel: func() {}}
+	for range 2 {
+		if !f.engine.deliverEndedRecipient(t.Context(), entry, "end:factory:lead", observer) {
+			t.Fatal("authoritative terminal head did not settle end observation")
+		}
+	}
+	if calls != 1 || f.authority.finalCalls != 2 || len(f.ledger.intents) != 1 {
+		t.Fatal("replayed terminal wakeup branched or reused sender credentials")
+	}
+	for _, entry := range f.ledger.entries {
+		if entry.Message.Status != agentmessages.Queued || entry.Message.Reason != "REVIVE_PENDING" || entry.Message.RevivedWorkerSessionID != "" {
+			t.Fatal("end admission claimed unconfirmed provider delivery")
+		}
+	}
+}
+
 func TestSendRevivePublishesOnlyDurableAdmission(t *testing.T) {
 	t.Parallel()
 	for _, cell := range []struct {
@@ -340,6 +380,114 @@ func providerRecordSubscription(records []string) events.Subscription {
 type deliveryStreamAppender struct {
 	observationAppender
 	started, stopped chan struct{}
+}
+
+type recipientEndStream struct {
+	observationAppender
+	next chan struct{}
+	wake chan events.Delivery
+}
+
+func (s *recipientEndStream) Subscribe(ctx context.Context, request events.SubscribeRequest) (events.Subscription, error) {
+	return func(context.Context) events.Delivery {
+		select {
+		case s.next <- struct{}{}:
+		case <-ctx.Done():
+			return events.Delivery{Kind: events.DeliveryCanceled}
+		}
+		select {
+		case record := <-s.wake:
+			return record
+		case <-ctx.Done():
+			return events.Delivery{Kind: events.DeliveryCanceled}
+		}
+	}, nil
+}
+
+func TestRecipientObserverSurvivesRetainedGapUntilAuthoritativeEnd(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	message, err := f.engine.Send(t.Context(), engineRequest("ask", "safe input"), f.caller, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := &recipientEndStream{next: make(chan struct{}), wake: make(chan events.Delivery)}
+	f.engine.events = stream
+	admitted := make(chan workersessions.ContinueRequest, 1)
+	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		admitted <- req
+		return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+	}
+	release := f.engine.BindHost()
+	defer release()
+	awaitRecipientRead(t, stream.next)
+	topic := workersessions.Topic("lead")
+	stream.wake <- events.Delivery{Kind: events.DeliveryGap, Gap: &events.GapFacts{Topic: topic, Requested: 1, EarliestRetained: 2, Head: 3}}
+	awaitRecipientRead(t, stream.next)
+	select {
+	case <-admitted:
+		t.Fatal("a gap guessed an ended recipient")
+	default:
+	}
+	f.engine.mu.Lock()
+	ended := f.authority.recipients["lead"]
+	ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = ended
+	f.engine.mu.Unlock()
+	stream.wake <- events.Delivery{Kind: events.DeliveryClosed}
+	select {
+	case req := <-admitted:
+		if req.RequestID != message.MessageID || req.FollowUpInput != message.Body {
+			t.Fatal("gap recovery lost durable message")
+		}
+	case <-t.Context().Done():
+		t.Fatal("retained gap lost live end delivery")
+	}
+	release()
+	if len(f.ledger.intents) != 1 {
+		t.Fatal("end replay branched after retained gap")
+	}
+}
+
+func awaitRecipientRead(t *testing.T, next <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-next:
+	case <-t.Context().Done():
+		t.Fatal("recipient observer stopped before live end")
+	}
+}
+
+func TestHostReleaseCancelsAndJoinsEndDeliveryAdmission(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	if _, err := f.engine.Send(t.Context(), engineRequest("ask", "safe input"), f.caller, ""); err != nil {
+		t.Fatal(err)
+	}
+	ended := f.authority.recipients["lead"]
+	ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = ended
+	f.engine.events = &recipientEndStream{next: make(chan struct{}), wake: make(chan events.Delivery)}
+	started, stopped := make(chan struct{}), make(chan struct{})
+	f.engine.continueSession = func(ctx context.Context, _ workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		close(started)
+		<-ctx.Done()
+		close(stopped)
+		return workersessions.ContinueResult{}, ctx.Err()
+	}
+	release := f.engine.BindHost()
+	defer release()
+	awaitRecipientRead(t, started)
+	release()
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("host release did not cancel and join end admission")
+	}
+	if f.ledger.entries[0].Message.Status != agentmessages.Queued || f.ledger.entries[0].Message.Reason != "REVIVE_FAILED" {
+		t.Fatal("canceled end admission lost the queued message or guessed delivery")
+	}
 }
 
 func (s *deliveryStreamAppender) Subscribe(ctx context.Context, request events.SubscribeRequest) (events.Subscription, error) {

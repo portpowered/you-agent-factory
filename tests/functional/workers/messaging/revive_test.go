@@ -30,6 +30,7 @@ type reviveInputGate struct {
 	recordings.WorkerRecordingStore
 	entered, release chan struct{}
 	unblock          sync.Once
+	enteredOnce      sync.Once
 	reject           bool
 }
 
@@ -190,7 +191,7 @@ func (g *reviveInputGate) RecoverWorkerOwners(ctx context.Context) error {
 
 func (g *reviveInputGate) PersistWorkerControlInput(ctx context.Context, key recordings.WorkerControlOperationKey, input json.RawMessage) (string, error) {
 	if strings.HasPrefix(key.RequestID, "continue/msg-") {
-		close(g.entered)
+		g.enteredOnce.Do(func() { close(g.entered) })
 		select {
 		case <-g.release:
 		case <-ctx.Done():
@@ -416,7 +417,7 @@ func assertExpiredReviveOutcome(t *testing.T, f *fixture, lead map[string]string
 	}
 }
 
-func TestLaterSendResolvesNewestEndedHeadAndOrderedBatch(t *testing.T) {
+func TestHeadEndDeliversOrderedBatchWithoutAnotherSend(t *testing.T) {
 	t.Parallel()
 	revival := &workerGate{started: make(chan map[string]string, 2), requests: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
 	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane")
@@ -427,12 +428,12 @@ func TestLaterSendResolvesNewestEndedHeadAndOrderedBatch(t *testing.T) {
 	first := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", "first input")
 	head := assertReviveAdmission(t, f, revival, first, lead)
 	queued := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second input")
+	third := f.cliSend(t, lane, "lead", "--request-id", "third", "--body", "third input")
 	close(revival.release)
 	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
-	// Story 001 exercises delivery on a later authorized send. Automatic
-	// delivery at the head's end is the retained story 002 lifecycle witness.
-	third := f.cliSend(t, lane, "lead", "--request-id", "third", "--body", "third input")
-	batch := third
+	pending := "REVIVE_PENDING"
+	queued.Reason = &pending
+	batch := f.awaitDeliveryOutcome(t, lane, queued)
 	batch.Body = queued.Body + "\n\n" + third.Body
 	newHead := assertReviveAdmission(t, f, revival, batch, head)
 	f.waitEndedWorker(t, newHead["YOU_WORKER_SESSION_ID"])
@@ -450,6 +451,71 @@ func TestLaterSendResolvesNewestEndedHeadAndOrderedBatch(t *testing.T) {
 	case <-revival.requests:
 		t.Fatal("batch started another continuation")
 	default:
+	}
+}
+
+func TestRecipientEndDeliversOnlyUnreadReviveMessages(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{Clock: struct{ platformclock.Source }{clock}}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	read := f.cliSend(t, lane, "lead", "--request-id", "read", "--body", "already read")
+	status, raw := f.request(t, http.MethodGet, "/messages/"+read.MessageId, nil, lead)
+	var observed api.AgentMessage
+	if status != http.StatusOK || json.Unmarshal(raw, &observed) != nil || observed.Status != "READ" {
+		t.Fatal("recipient did not mark the first input read")
+	}
+	replied := f.cliSend(t, lane, "lead", "--request-id", "replied", "--body", "already answered", "--reply-hold")
+	f.cliSend(t, lead, "reply", replied.MessageId, "--request-id", "answer", "--body", "held answer")
+	expired := f.cliSend(t, lane, "lead", "--request-id", "expired", "--body", "expired input", "--expires", "1m")
+	held := f.cliSend(t, lane, "lead", "--request-id", "held", "--body", "held input", "--if-ended", "hold")
+	first := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", "first eligible")
+	second := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second eligible")
+	clock.SetTick(60)
+	page := readPage(t, f, "/messages?threadId="+expired.ThreadId, lane)
+	if len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("expiry did not exclude the old input")
+	}
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	f.endWorker(t, "lead")
+	pending := "REVIVE_PENDING"
+	first.Reason = &pending
+	final := f.awaitDeliveryOutcome(t, lane, first)
+	batch := final
+	batch.Body = first.Body + "\n\n" + second.Body
+	head := assertReviveAdmission(t, f, revival, batch, lead)
+	page = readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	assertEndDeliverySelection(t, page, head["YOU_WORKER_SESSION_ID"], read, replied, expired, held, first, second)
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("recipient-end delivery changed Factory Events")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	if replay := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second eligible"); replay.RevivedWorkerSessionId == nil || *replay.RevivedWorkerSessionId != head["YOU_WORKER_SESSION_ID"] {
+		t.Fatal("exact retry lost the shared successor")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("excluded messages or exact retry started another successor")
+	default:
+	}
+}
+
+func assertEndDeliverySelection(t *testing.T, page api.AgentMessageListResponse, head string, messages ...api.AgentMessage) {
+	t.Helper()
+	statuses := []string{"READ", "REPLIED", "EXPIRED", "QUEUED", "DELIVERED_REVIVE", "DELIVERED_REVIVE"}
+	if len(page.Messages) != len(messages) {
+		t.Fatal("end delivery invented or lost a message")
+	}
+	for i, message := range page.Messages {
+		if message.MessageId != messages[i].MessageId || string(message.Status) != statuses[i] {
+			t.Fatalf("end delivery changed selection/order at %d: %+v", i, message)
+		}
+		if i < 4 && message.RevivedWorkerSessionId != nil || i >= 4 && (message.RevivedWorkerSessionId == nil || *message.RevivedWorkerSessionId != head) {
+			t.Fatal("end delivery attached incorrect successor facts")
+		}
 	}
 }
 

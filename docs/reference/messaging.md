@@ -202,6 +202,9 @@ Provider-confirmed resumed progress and durable delivery produce `DELIVERED_REVI
 Use message read or follow to observe that outcome.
 Concurrent sends never branch the recipient chain.
 Messages sent while its newest successor is running remain queued.
+When that recipient ends, Messaging resumes its recorded Provider Session once with eligible unread `REVIVE` bodies in original send order.
+The original messages retain their IDs and share the confirmed successor.
+`HOLD`, `READ`, `REPLIED`, and `EXPIRED` messages do not trigger this delivery.
 
 Missing continuation capability leaves `QUEUED` with `REVIVE_UNSUPPORTED`.
 Provider-classified resume rejection also leaves the message queued with `REVIVE_UNSUPPORTED`; the successor ends `FAILED`.
@@ -212,7 +215,7 @@ Use `--if-ended hold` to request queued retention explicitly.
 Use `--reply-hold` to make a future reply inherit `HOLD`.
 
 `--interrupt` returns `MESSAGE_INTERRUPT_UNSUPPORTED` before any effect.
-Automatic delivery on end, restart reconciliation, and scheduled expiry are pending the remaining T6 work.
+Restart reconciliation and scheduled expiry are pending the remaining T6 work.
 Interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
 No Factory route, guard, or workstation waits on an Agent Message.
 
