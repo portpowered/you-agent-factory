@@ -51,6 +51,10 @@ type InvocationError = factoryruntimecli.InvocationError
 // WriteInvocationError renders the stable clean-invocation failure contract to
 // stderr. It returns true when err matched an invocation contract error.
 func WriteInvocationError(w io.Writer, err error, quiet bool) bool {
+	var response clidiag.ResponseCodedError
+	if errors.As(err, &response) {
+		return clidiag.WriteFailure(w, err)
+	}
 	handled := factoryruntimecli.WriteInvocationError(w, err, quiet)
 	if handled {
 		clidiag.MarkDiagnosticRendered(w)
