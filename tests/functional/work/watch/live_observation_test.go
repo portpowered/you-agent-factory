@@ -723,6 +723,19 @@ func assertHeldMixedReconnect(t *testing.T, late *liveObservation, first, second
 	late.gate.disconnect()
 	query := late.gate.next(t)
 	events = support.GetFactoryEventsForSessionAt(t, late.host.endpoint, late.session)
+	admission := assertStatelessWorkAdmission(t, events, second)
+	sequence, err := strconv.Atoi(query.Get("after_sequence"))
+	if admission == "" || query.Get("after_event_id") == "" || err != nil || sequence < admissionSequence {
+		t.Fatalf("missing admitted cohort cursor: admission=%s reconnect=%v", admission, query)
+	}
+	lines := decodeWatchLines(t, late.out.String())
+	if len(lines) != retainedTransitions || lines[len(lines)-1].WorkID != first || !lines[len(lines)-1].Terminal {
+		t.Fatalf("peer or dispatch contaminated held cohort=%+v", lines)
+	}
+}
+
+func assertStatelessWorkAdmission(t *testing.T, events []factoryapi.FactoryEvent, workID string) string {
+	t.Helper()
 	var admission string
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
@@ -734,7 +747,7 @@ func assertHeldMixedReconnect(t *testing.T, late *liveObservation, first, second
 		}
 		if payload.Works != nil {
 			for _, work := range *payload.Works {
-				if work.WorkId != nil && *work.WorkId == second {
+				if work.WorkId != nil && *work.WorkId == workID {
 					if work.State != nil {
 						t.Fatalf("expected state-less canonical admission for held Work: %+v", work)
 					}
@@ -743,12 +756,5 @@ func assertHeldMixedReconnect(t *testing.T, late *liveObservation, first, second
 			}
 		}
 	}
-	sequence, err := strconv.Atoi(query.Get("after_sequence"))
-	if admission == "" || query.Get("after_event_id") == "" || err != nil || sequence < admissionSequence {
-		t.Fatalf("missing admitted cohort cursor: admission=%s reconnect=%v", admission, query)
-	}
-	lines := decodeWatchLines(t, late.out.String())
-	if len(lines) != retainedTransitions || lines[len(lines)-1].WorkID != first || !lines[len(lines)-1].Terminal {
-		t.Fatalf("peer or dispatch contaminated held cohort=%+v", lines)
-	}
+	return admission
 }

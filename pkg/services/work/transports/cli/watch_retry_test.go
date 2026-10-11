@@ -115,15 +115,20 @@ func TestWatchMixedStatelessCohortSurvivesRetainedPrefixAndReconnect(t *testing.
 	if !result.completed || result.err != nil || !reducer.Completed() {
 		t.Fatalf("resumed mixed completion=%+v", result)
 	}
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	assertMixedCohortTerminalResult(t, output.String(), terminalB.Id)
+}
+
+func assertMixedCohortTerminalResult(t *testing.T, output, terminalEventID string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) != 2 {
-		t.Fatalf("canonical transitions duplicated/inferred: %s", output.String())
+		t.Fatalf("canonical transitions duplicated/inferred: %s", output)
 	}
 	var last watchLine
 	if err := decodeWatchLine(lines[1], &last); err != nil {
 		t.Fatal(err)
 	}
-	if last.EventID != terminalB.Id || last.WorkID != "work-b" || !last.Terminal || !strings.Contains(lines[1], `"structuredResult":{"message":"B"}`) {
+	if last.EventID != terminalEventID || last.WorkID != "work-b" || !last.Terminal || !strings.Contains(lines[1], `"structuredResult":{"message":"B"}`) {
 		t.Fatalf("actual terminal/native result=%s", lines[1])
 	}
 }
