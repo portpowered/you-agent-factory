@@ -22,6 +22,15 @@ func CommandFactory() platformprocess.CommandFactory {
 	}
 }
 
+// RejectCommandFactory observes an unexpected command creation without
+// constructing or running an executable. Refusal-only scenarios use this edge.
+func RejectCommandFactory(onCall func()) platformprocess.CommandFactory {
+	return func(string, ...string) *exec.Cmd {
+		onCall()
+		return nil
+	}
+}
+
 // StdioFactory gives each attempt independent in-memory streams and
 // selects an immutable peer route by the customer's working directory. The
 // callback must return when requests is closed. Close joins its owned peer.

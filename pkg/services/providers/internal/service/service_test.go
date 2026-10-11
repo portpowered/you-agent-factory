@@ -953,6 +953,10 @@ func (*stubExecution) Execute(
 // component fixtures whose ACP peer cannot resume a session.
 type unavailableACPContinuation struct{}
 
+func (unavailableACPContinuation) ValidatePrerequisites(ctx context.Context, _ providers.ID) error {
+	return ctx.Err()
+}
+
 func (unavailableACPContinuation) Continue(context.Context, providers.ID, providers.ExecuteRequest, providers.SessionRef) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP provider continuation is unavailable"}
 }

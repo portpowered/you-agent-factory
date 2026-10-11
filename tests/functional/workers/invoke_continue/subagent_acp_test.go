@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,7 +36,8 @@ func TestSubagentOpenCodeDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	peers := map[string]*subagentACPPeer{}
-	for _, name := range []string{"default", "model-override", "unadvertised-model"} {
+	cases := []string{"default", "model-override", "unadvertised-model", "default-http", "default-mcp", "model-override-http", "model-override-mcp", "provider-override-cli", "provider-override-http", "provider-override-mcp"}
+	for _, name := range cases {
 		dir := filepath.Join(root, name)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -75,7 +77,13 @@ func TestSubagentOpenCodeDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile = preserveSavedSubagentRoute(t, host, home, hostDir, configPath, profile)
-	for _, name := range []string{"default", "model-override", "unadvertised-model"} {
+	baseline := subagentFactorySessionIDs(t, host.baseURL)
+	t.Cleanup(func() {
+		if after := subagentFactorySessionIDs(t, host.baseURL); !slices.Equal(after, baseline) {
+			t.Error("direct START changed Factory Session membership")
+		}
+	})
+	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			assertSubagentACPDefault(t, host, home, root, name, peers, configPath, profile)
@@ -118,24 +126,25 @@ func assertSubagentACPDefault(t *testing.T, host invokeContinueStartedProcess, h
 	dir := filepath.Join(root, name)
 	peer := peers[dir]
 	model := "controlled-free-model"
-	args := []string{"you", "--server", host.baseURL, "--json", "worker-sessions", "start", "--request-id", name + "-request", "--worker-session-id", name, "--working-root", dir}
-	if name == "model-override" {
+	if strings.HasPrefix(name, "model-override") || strings.HasPrefix(name, "provider-override") {
 		model = "controlled-override"
-		args = append(args, "--model", model)
 	}
 	if name == "unadvertised-model" {
-		args = append(args, "--model", "unadvertised-model")
+		model = "unadvertised-model"
 	}
-	args = append(args, "controlled ACP prompt")
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
-	caller, detach := context.WithCancel(ctx)
-	input := support.FakeInputs(caller, args)
-	input.Input.Env, input.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
-	if err := host.process.Execute(input.Input); err != nil || !strings.Contains(input.Stdout(), `"accepted":true`) {
-		t.Fatalf("START = %v %s %s", err, input.Stdout(), input.Stderr())
+	mode := "cli"
+	if strings.HasSuffix(name, "-http") {
+		mode = "http"
 	}
-	detach()
+	if strings.HasSuffix(name, "-mcp") {
+		mode = "mcp"
+	}
+	body := executeSubagentPrompt(t, host, home, dir, mode, subagentACPDocument(name, dir, model), http.StatusAccepted)
+	if !strings.Contains(body, `"accepted":true`) || !strings.Contains(body, `"workerSessionId":"`+name+`"`) {
+		t.Fatalf("%s START = %s", mode, body)
+	}
 	if name == "unadvertised-model" {
 		assertSubagentDeadlineObservation(t, ctx, host.baseURL, name, "FAILED", "family=terminal type=permanent_bad_request")
 		if peer.prompts.Load() != 0 || peer.starts.Load() != 1 {
@@ -152,6 +161,15 @@ func assertSubagentACPDefault(t *testing.T, host invokeContinueStartedProcess, h
 		t.Fatal(ctx.Err())
 	}
 	assertSubagentDeadlineObservation(t, ctx, host.baseURL, name, "RUNNING", "")
+	status, observation := t7HTTP(t, ctx, http.MethodGet, host.baseURL+"/worker-sessions/"+name, nil)
+	var admitted struct {
+		Direct bool    `json:"direct"`
+		WorkID *string `json:"workId"`
+		Model  string  `json:"model"`
+	}
+	if status != http.StatusOK || json.Unmarshal([]byte(observation), &admitted) != nil || !admitted.Direct || admitted.WorkID != nil || admitted.Model != model {
+		t.Fatal("valid ACP START lost direct identity or requested model")
+	}
 	assertSubagentACPReplay(t, ctx, host.baseURL, name, dir, model, peer)
 	after, err := os.ReadFile(configPath)
 	if err != nil || string(after) != string(profile) {
@@ -161,10 +179,7 @@ func assertSubagentACPDefault(t *testing.T, host invokeContinueStartedProcess, h
 
 func assertSubagentACPReplay(t *testing.T, ctx context.Context, baseURL, id, dir, model string, peer *subagentACPPeer) {
 	t.Helper()
-	document := map[string]any{"requestId": id + "-request", "workerSessionId": id, "prompt": "controlled ACP prompt", "workingRoot": dir}
-	if id == "model-override" {
-		document["model"] = model
-	}
+	document := subagentACPDocument(id, dir, model)
 	var joined sync.WaitGroup
 	for range 2 {
 		joined.Add(1)
@@ -180,6 +195,38 @@ func assertSubagentACPReplay(t *testing.T, ctx context.Context, baseURL, id, dir
 	if peer.prompts.Load() != 1 || peer.starts.Load() != 1 {
 		t.Fatalf("replay launched %d ACP attempts and %d prompts", peer.starts.Load(), peer.prompts.Load())
 	}
+}
+
+func subagentACPDocument(id, dir, model string) map[string]any {
+	document := map[string]any{"requestId": id + "-request", "workerSessionId": id, "prompt": "controlled ACP prompt", "workingRoot": dir}
+	if strings.HasPrefix(id, "model-override") || strings.HasPrefix(id, "provider-override") || id == "unadvertised-model" {
+		document["model"] = model
+	}
+	if strings.HasPrefix(id, "provider-override") {
+		document["provider"] = "opencode"
+	}
+	return document
+}
+
+func subagentFactorySessionIDs(t *testing.T, baseURL string) []string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	status, body := t7HTTP(t, ctx, http.MethodGet, baseURL+"/factory-sessions", nil)
+	var listing struct {
+		Sessions []struct {
+			ID string `json:"id"`
+		} `json:"sessions"`
+	}
+	if status != http.StatusOK || json.Unmarshal([]byte(body), &listing) != nil {
+		t.Fatal("Factory Session list unavailable")
+	}
+	ids := make([]string, 0, len(listing.Sessions))
+	for _, session := range listing.Sessions {
+		ids = append(ids, session.ID)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // The selected external ACP effect advertises two opaque models and records
