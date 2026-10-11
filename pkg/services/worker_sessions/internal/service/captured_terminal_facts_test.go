@@ -20,6 +20,40 @@ type terminalSummaryReader struct {
 	item recordings.WorkerCapturedCatalogItem
 }
 
+func TestCapturedRunningHealthRequiresExactOwnerAndOpening(t *testing.T) {
+	t.Parallel()
+	for _, mismatch := range []string{"", "recording", "generation", "epoch", "factory", "attempt"} {
+		t.Run(mismatch, func(t *testing.T) {
+			t.Parallel()
+			item := completedSummaryFixture(t, false)
+			item.Terminal = nil
+			item.Health = recordings.WorkerRecordingStatusIncomplete
+			original := workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: workersessions.StateRunning, ConfirmationState: workersessions.ConfirmationStateUnconfirmed}
+			switch mismatch {
+			case "recording":
+				item.Catalog.RecordingID = "foreign"
+			case "generation":
+				item.Catalog.RecordingGenerationID = "foreign"
+			case "epoch":
+				item.Catalog.OwnerEpoch = "foreign"
+			case "factory":
+				item.Catalog.FactorySessionID = "foreign"
+			case "attempt":
+				original.AttemptID = "foreign"
+			}
+			r := &registry{logs: &LogReader{reader: &terminalSummaryReader{item: item}}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+			got := r.withCapturedTerminalObservation(t.Context(), original)
+			want := original
+			if mismatch == "" {
+				want.RecordingHealth = recordings.WorkerRecordingStatusIncomplete
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("running capture %q = %+v, want %+v", mismatch, got, want)
+			}
+		})
+	}
+}
+
 func (f *terminalSummaryReader) LookupWorkerSessionSummary(context.Context, string) (recordings.WorkerCapturedSummary, error) {
 	return recordings.WorkerCapturedSummary{Capture: f.item}, nil
 }

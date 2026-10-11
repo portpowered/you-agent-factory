@@ -15,9 +15,9 @@ func (r *registry) withArchivedWorkObservations(ctx context.Context, req workers
 		for index, row := range live {
 			identity := identityOfHistory(row)
 			indices[identity] = index
-			if !row.State.Terminal() {
-				owners[identity] = struct{}{}
-			}
+			// The owned row already projects committed terminal facts when ready.
+			// Its capture can still be a prefix after live terminal publication.
+			owners[identity] = struct{}{}
 		}
 		retained, err := r.logs.readArchivedHistory(ctx, workersessions.ListWorkerSessionObservationsRequest{
 			FactorySessionID: req.FactorySessionID,

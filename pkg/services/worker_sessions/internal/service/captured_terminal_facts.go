@@ -10,13 +10,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// Live attempts retain exact capture health, including active prefixes.
 // Durable terminal attempts use the same host capture clock as archives.
 // A live terminal may precede durable admission; retain its owned lifecycle
 // timing until the committed capture can supply the complete timing tuple.
 func (r *registry) withCapturedTerminalObservation(ctx context.Context, observation workersessions.Observation) workersessions.Observation {
-	if _, err := terminalPhase(observation.State); err != nil {
-		return observation
-	}
 	publication := r.publicationFor(r.workerAddress(observation.WorkerSessionID, observation.FactorySessionID))
 	if publication == nil {
 		return observation
@@ -37,6 +35,14 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 	if err != nil || item.Catalog.RecordingID != recordingID ||
 		item.Catalog.WorkerSessionID != observation.WorkerSessionID || item.Catalog.FactorySessionID != observation.FactorySessionID ||
 		item.Catalog.RecordingGenerationID != target.RecordingGenerationID || item.Catalog.OwnerEpoch != target.OwnerEpoch {
+		return observation
+	}
+	opening, err := historyOpening(item)
+	if err != nil || opening.AttemptID != observation.AttemptID {
+		return observation
+	}
+	observation.RecordingHealth, observation.RecordingHealthReason = item.Health, item.HealthReason
+	if !observation.State.Terminal() {
 		return observation
 	}
 	if !capturedTerminalMatchesObservation(item, observation) {

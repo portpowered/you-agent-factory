@@ -526,7 +526,7 @@ func (r *registry) projectWorkerSessionIdentity(ctx context.Context, id string, 
 	applyObservationTiming(&projected, session, metadata, r.clock)
 	projected.Failure = observedTerminalCause(session)
 	projected.TerminalCause = r.observationTerminalCause(ctx, r.workerAddress(id, factorySessionIDs...), projected.State)
-	if session.Terminal() && r.publicationFor(r.workerAddress(id, factorySessionIDs...)) != nil {
+	if r.publicationFor(r.workerAddress(id, factorySessionIDs...)) != nil {
 		projected = r.withCapturedTerminalObservation(ctx, projected)
 	}
 	return projected, nil

@@ -346,17 +346,29 @@ func TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget(t *testing.T) {
 			}
 			status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id, nil)
 			var observation struct {
-				WorkerSessionID string `json:"workerSessionId"`
-				State           string `json:"state"`
-				Failure         struct {
-					ProviderFailureKind string `json:"providerFailureKind"`
+				WorkerSessionID   string `json:"workerSessionId"`
+				State             string `json:"state"`
+				ConfirmationState string `json:"confirmationState"`
+				Failure           struct {
+					ProviderFailureKind *string `json:"providerFailureKind"`
+					Detail              string  `json:"detail"`
 				} `json:"failure"`
 			}
 			if err := json.Unmarshal([]byte(body), &observation); err != nil {
 				t.Fatal(err)
 			}
-			if status != http.StatusOK || observation.WorkerSessionID != id || observation.State != "FAILED" || observation.Failure.ProviderFailureKind != "timeout" {
+			if status != http.StatusOK || observation.WorkerSessionID != id || observation.State != "FAILED" || observation.Failure.Detail != "family=retryable type=timeout" {
 				t.Fatalf("admitted failure HTTP %d: %s", status, body)
+			}
+			// The one-attempt committed terminal records failure detail, but no
+			// provider classification. The legacy retry terminal has a different
+			// physical attempt and retains unconfirmed, live-only classification.
+			if cell.attempts == 1 {
+				if observation.ConfirmationState != "CONFIRMED" || observation.Failure.ProviderFailureKind != nil {
+					t.Fatalf("invented committed timeout classification: %s", body)
+				}
+			} else if observation.ConfirmationState != "UNCONFIRMED" || observation.Failure.ProviderFailureKind == nil || *observation.Failure.ProviderFailureKind != "timeout" {
+				t.Fatalf("lost unconfirmed retry classification: %s", body)
 			}
 			status, body = t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
 			if status != http.StatusOK || !strings.Contains(body, "T7 retained progress before timeout") {
@@ -377,9 +389,11 @@ func t7AssertRetryHistory(t *testing.T, body string, attempts int) {
 				Payload  struct {
 					Kind    string `json:"kind"`
 					Payload struct {
-						AttemptID string `json:"attemptId"`
-						Attempt   int    `json:"attempt"`
-						Status    string `json:"status"`
+						AttemptID           string  `json:"attemptId"`
+						Attempt             int     `json:"attempt"`
+						Status              string  `json:"status"`
+						FailureDetail       string  `json:"failureDetail"`
+						ProviderFailureKind *string `json:"providerFailureKind"`
 					} `json:"payload"`
 				} `json:"payload"`
 			} `json:"event"`
@@ -407,9 +421,9 @@ func t7AssertRetryHistory(t *testing.T, body string, attempts int) {
 	if len(seen) != attempts || logs.Health != "COMPLETE" || len(logs.Events) == 0 {
 		t.Fatalf("retry history budget/completeness: %s", body)
 	}
-	terminal := logs.Events[len(logs.Events)-1].Event.Payload.Payload.Status
-	if terminal != "FAILED" {
-		t.Fatalf("last captured state = %s, want FAILED", terminal)
+	terminal := logs.Events[len(logs.Events)-1].Event.Payload.Payload
+	if terminal.Status != "FAILED" || terminal.FailureDetail != "family=retryable type=timeout" || terminal.ProviderFailureKind != nil {
+		t.Fatalf("last captured timeout facts = %+v, want FAILED/detail without unrecorded provider classification", terminal)
 	}
 }
 

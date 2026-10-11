@@ -244,6 +244,43 @@ func assertPreparedWorkCatalogReads(t *testing.T, catalog *historyCatalogFake) {
 	}
 }
 
+func TestCapturedArchivedSummaryExcludesExactOwnedPendingTerminal(t *testing.T) {
+	t.Parallel()
+	item := completedSummaryFixture(t, false)
+	item.Terminal = nil
+	item.OwnerLost = false
+	item.Health = recordings.WorkerRecordingStatusIncomplete
+	catalog := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{item}}
+	reader := &LogReader{reader: catalog}
+	request := workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "factory"}
+	owners := map[historyIdentity]struct{}{{"worker", "factory", "attempt"}: {}}
+	rows, err := reader.readArchivedHistory(t.Context(), request, owners, "work")
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("owned pending terminal poisoned archive: %+v %v", rows, err)
+	}
+	// Ordinary reads also tolerate a newly admitted active capture absent
+	// from the earlier live snapshot, without asserting it has ended.
+	rows, err = reader.readArchivedHistory(t.Context(), request, nil, "work")
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("new active capture poisoned Work read: %+v %v", rows, err)
+	}
+	// Explicit history still cannot invent a terminal for that prefix.
+	_, err = reader.archivedHistory(t.Context(), request, nil)
+	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("explicit history invented terminal: %v", err)
+	}
+	catalog.historyReads = 0
+	item.HealthReason = "DAMAGED"
+	catalog.items[0] = item
+	for _, identity := range []historyIdentity{{"worker", "foreign", "attempt"}, {"worker", "factory", "foreign"}, {"foreign", "factory", "attempt"}} {
+		_, err = reader.readArchivedHistory(t.Context(), request, map[historyIdentity]struct{}{identity: {}}, "work")
+		if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+			t.Fatalf("foreign owner hid selected incomplete archive: %+v %v", identity, err)
+		}
+	}
+	assertPreparedWorkCatalogReads(t, catalog)
+}
+
 func summaryTestSnapshot(page recordings.WorkerCapturedActivityPage, snapshot recordings.WorkerRecordingSnapshot) recordings.WorkerCapturedSummary {
 	item := summaryTestItem(page)
 	for _, session := range snapshot.Sessions {
@@ -285,5 +322,44 @@ func TestCapturedArchivedSummaryRequiresMaterializedCapability(t *testing.T) {
 	reader := &LogReader{reader: activityWithoutSummary{&capturedActivityFake{}}}
 	if _, err := reader.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker"}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
 		t.Fatalf("missing capability=%v", err)
+	}
+}
+
+type changingPreparedCatalog struct {
+	historyCatalogFake
+	failures, calls int
+	failure         error
+}
+
+func (f *changingPreparedCatalog) ListPreparedWorkerSessionCaptures(ctx context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.calls++
+	if f.calls <= f.failures {
+		return recordings.WorkerCapturedCatalogPage{}, f.failure
+	}
+	return f.historyCatalogFake.ListPreparedWorkerSessionCaptures(ctx, req)
+}
+
+func TestCapturedArchivedSummaryRestartsOnlyInvalidatedMembership(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name            string
+		failures, calls int
+		failure, want   error
+	}{
+		{"new capture admitted", 1, 2, recordings.ErrInvalidWorkerRecordingRequest, nil},
+		{"bounded churn", 3, 3, recordings.ErrInvalidWorkerRecordingRequest, workersessions.ErrObservationProjectionUnavailable},
+		{"damaged archive", 1, 1, recordings.ErrWorkerRecordingReplay, workersessions.ErrObservationProjectionUnavailable},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			catalog := &changingPreparedCatalog{historyCatalogFake: historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{completedSummaryFixture(t, false)}}, failures: cell.failures, failure: cell.failure}
+			rows, err := (&LogReader{reader: catalog}).readArchivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "factory"}, nil, "work")
+			if !errors.Is(err, cell.want) || catalog.calls != cell.calls {
+				t.Fatalf("read=%+v err=%v calls=%d, want err=%v calls=%d", rows, err, catalog.calls, cell.want, cell.calls)
+			}
+			if err == nil && (len(rows) != 1 || rows[0].AttemptID != "attempt") {
+				t.Fatalf("lost exact archived attempt: %+v", rows)
+			}
+		})
 	}
 }

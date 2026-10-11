@@ -94,7 +94,8 @@ func testWorkerSessionsScopedPhysicalFacts(t *testing.T) {
 		})
 	}
 	t.Run("F-live-and-fence", testScopedPhysicalLiveAndFence)
-	t.Run("F-error", testWorkerSessionsListWorkScopedSelectedReadFailure)
+	// Selected-read faults run in the parent journey on this same reusable
+	// process. Running them twice would claim the same fixture routes twice.
 	t.Run("F-empty", testWorkerSessionsListWorkScopedEmpty)
 }
 
