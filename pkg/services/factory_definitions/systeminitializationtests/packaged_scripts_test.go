@@ -89,7 +89,9 @@ func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersiste
 		nil,
 		platformfilesystem.Local{},
 		factorydefinitioncomposition.NamedPaths().RequireDefinitionDir,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 	)
 	if err != nil {
 		panic(err)

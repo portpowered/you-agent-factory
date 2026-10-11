@@ -2,6 +2,8 @@ package persistence_test
 
 import (
 	"context"
+	"os"
+	"runtime"
 
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -37,7 +39,9 @@ var factorydefinitioncomposition = func() factorydefinitiontestcomposition.Compo
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
-	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
+	}, fileSystem, directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+		return os.CopyFS(destination, os.DirFS(source))
+	}), factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,
 		AuthoredReader:      fileSystem,
 		AuthoredWriter:      fileSystem,
