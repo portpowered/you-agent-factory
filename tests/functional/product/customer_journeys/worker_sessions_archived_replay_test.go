@@ -6,11 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/portpowered/infinite-you/pkg/root"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"io"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -18,9 +17,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -333,7 +337,7 @@ func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, re
 	return store.terminalCommitGate.PersistWorkerRecord(ctx, record)
 }
 
-func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
+func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	t.Parallel()
 	runner, gates, cases, config := committedTerminalFixture(t)
 	// Two independent sessions share one host and edge shape. Joined reopen
@@ -341,15 +345,23 @@ func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
 	cases = []committedTerminalCase{cases[8], cases[12]}
 	home := strings.TrimPrefix(config.Env[0], "HOME=")
 	config.BeforeStart = func(tb testing.TB, process support.Process, _ root.Input) {
-		startCommittedTerminalBoards(tb, process, cases, home, ".json")
+		startCommittedTerminalBoards(tb, process, cases, home, ".older.json")
 	}
 	backing := &terminalCommitGate{entered: make(chan struct{}), proceed: make(chan struct{})}
 	backing.release()
 	config.Edges.WorkerRecordingWriter = &legacyOpeningNameStore{terminalCommitGate: backing}
 	config.Edges.WorkerRecordingStoreObserver = func(store recordings.WorkerRecordingStore) { backing.WorkerRecordingStore = store }
+	// Close a real empty-board recording before admitting any Work. Later
+	// restoration consumes this immutable public recording, never a rewritten
+	// board or a fresh runtime disguised as recovery.
+	earlier := support.StartFunctionalAPIServer(t, config)
+	earlier.Close(t)
+	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".latest.json")
 	server := support.StartFunctionalAPIServer(t, config)
 	names := []string{"catalog-name", "legacy-name"}
 	before := make([]factoryapi.WorkerSessionObservation, len(cases))
+	logs := make([]factoryapi.WorkerSessionLogPage, len(cases))
+	cursors := make([]string, len(cases))
 	t.Run("committed named attempts", func(t *testing.T) {
 		for index, cell := range cases {
 			t.Run(string(cell.provider), func(t *testing.T) {
@@ -373,26 +385,21 @@ func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
 	for index := range cases {
 		assertArchivedKnownName(t, assertTerminalReadParity(t, server, before[index].WorkerSessionId), names[index])
 		assertArchivedOwnScopeReads(t, server, before[index])
+		logs[index] = assertCommittedTerminalCapture(t, server, before[index].WorkerSessionId)
+		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+before[index].WorkerSessionId+"/logs?limit=1")
+		if page.NextToken == nil {
+			t.Fatal("bounded committed page omitted continuation")
+		}
+		cursors[index] = *page.NextToken
 	}
 	server.Close(t)
-	config.BeforeStart = func(tb testing.TB, process support.Process, _ root.Input) {
-		// Open the exact original UUID with a fresh empty board, retaining all
-		// captured attempts. This is a missing-board fixture, not restore proof.
-		startCommittedTerminalBoards(tb, process, cases, home, ".empty.json")
-	}
+	config.BeforeStart = archivedResumeBoards(cases, home, ".latest.json", ".reopened.json")
+	latest := support.StartFunctionalAPIServer(t, config)
+	assertArchivedResumedBoard(t, latest, before, logs, names, cursors, true)
+	latest.Close(t)
+	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".restored.json")
 	reopened := support.StartFunctionalAPIServer(t, config)
-	for index, cell := range cases {
-		board := support.GetJSON[factoryapi.ListWorkResponse](t, reopened.URL()+"/factory-sessions/"+cell.scope+"/work")
-		if len(board.Results) != 0 {
-			t.Fatalf("expected empty board: %+v", board)
-		}
-		got := assertTerminalReadParity(t, reopened, before[index].WorkerSessionId)
-		assertArchivedKnownName(t, got, names[index])
-		assertArchivedOwnScopeReads(t, reopened, got)
-		if got.FactorySessionId == nil || *got.FactorySessionId != cell.scope || got.AttemptId != before[index].AttemptId || !reflect.DeepEqual(got.WorkId, before[index].WorkId) {
-			t.Fatalf("archived name changed original identity: %+v", got)
-		}
-	}
+	assertArchivedResumedBoard(t, reopened, before, logs, names, cursors, false)
 	reopened.Close(t)
 	// The retained original Factory need not have a reopened runtime at all.
 	// Its capture remains read-only, exact-scope authority on the same profile.
@@ -402,6 +409,87 @@ func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
 		got := assertTerminalReadParity(t, closedScopes, before[index].WorkerSessionId)
 		assertArchivedKnownName(t, got, names[index])
 		assertArchivedOwnScopeReads(t, closedScopes, got)
+	}
+}
+
+func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServer, before []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names, cursors []string, retainsWork bool) {
+	t.Helper()
+	for index, original := range before {
+		scope := support.StringPointerValue(original.FactorySessionId)
+		board := support.GetJSON[factoryapi.ListWorkResponse](t, server.URL()+"/factory-sessions/"+scope+"/work")
+		if retainsWork {
+			if len(board.Results) != 1 || support.StringPointerValue(board.Results[0].WorkId) != support.StringPointerValue(original.WorkId) {
+				t.Fatalf("latest recording lost original Work: %+v", board)
+			}
+		} else if len(board.Results) != 0 {
+			t.Fatalf("older recording unexpectedly contains later Work: %+v", board)
+		}
+		got := assertTerminalReadParity(t, server, original.WorkerSessionId)
+		assertArchivedKnownName(t, got, names[index])
+		assertArchivedOwnScopeReads(t, server, got)
+		if !committedTerminalFactsEqual(got, original) || !reflect.DeepEqual(got.FactorySessionId, original.FactorySessionId) || got.AttemptId != original.AttemptId || !reflect.DeepEqual(got.WorkId, original.WorkId) {
+			t.Fatalf("restart changed committed identity/facts: before=%+v after=%+v", original, got)
+		}
+		page := assertCommittedTerminalCapture(t, server, got.WorkerSessionId)
+		assertRestoredCapturedEvents(t, page, logs[index])
+		// Resume a cursor acknowledged before shutdown, rather than merely
+		// obtaining a new cursor after reopening the same journal.
+		continued := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+got.WorkerSessionId+"/logs?nextToken="+url.QueryEscape(cursors[index]))
+		if !reflect.DeepEqual(continued.Events, logs[index].Events[1:]) || continued.CommittedPosition != page.CommittedPosition {
+			t.Fatalf("acknowledged cursor replayed records or changed head: %+v", continued)
+		}
+	}
+	assertArchivedPeerFences(t, server, before, cursors)
+}
+
+func assertArchivedPeerFences(t *testing.T, server *support.FunctionalAPIServer, attempts []factoryapi.WorkerSessionObservation, cursors []string) {
+	t.Helper()
+	for index, attempt := range attempts {
+		peer := attempts[(index+1)%len(attempts)]
+		base := server.URL() + "/factory-sessions/" + support.StringPointerValue(peer.FactorySessionId) + "/worker-sessions"
+		for _, suffix := range []string{"?workId=" + url.QueryEscape(support.StringPointerValue(attempt.WorkId)), "/" + attempt.WorkerSessionId, "/" + attempt.WorkerSessionId + "/transcript"} {
+			response, err := http.Get(base + suffix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var failure factoryapi.ErrorResponse
+			err = json.NewDecoder(response.Body).Decode(&failure)
+			_ = response.Body.Close()
+			if err != nil || response.StatusCode != http.StatusNotFound || failure.Code == "" {
+				t.Fatalf("peer scope exposed archived identity: status=%d failure=%+v error=%v", response.StatusCode, failure, err)
+			}
+		}
+		response, err := http.Get(server.URL() + "/worker-sessions/" + peer.WorkerSessionId + "/logs?nextToken=" + url.QueryEscape(cursors[index]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var failure factoryapi.ErrorResponse
+		err = json.NewDecoder(response.Body).Decode(&failure)
+		_ = response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusBadRequest || failure.Code != "BAD_REQUEST" {
+			t.Fatalf("peer cursor error: status=%d failure=%+v error=%v", response.StatusCode, failure, err)
+		}
+	}
+}
+
+func archivedResumeBoards(cases []committedTerminalCase, home, sourceSuffix, recordSuffix string) func(testing.TB, support.Process, root.Input) {
+	return func(tb testing.TB, process support.Process, _ root.Input) {
+		tb.Helper()
+		for _, cell := range cases {
+			_, err := process.(support.ApplicationProcess).FactorySessions().Start(tb.Context(), factorysessions.SessionStartRequest{
+				SessionID: cell.scope, Mode: factorysessions.SessionOperationModeLive, FolderPath: cell.dir, ActivationOnly: true,
+				RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+					Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: home,
+					DefinitionSourcePath: filepath.Join(cell.dir, "factory.json"), ExecutionBaseDir: cell.dir, RuntimeInstanceID: uuid.NewString(),
+					Recording: factorysessions.SessionRecordingSelection{
+						ResumePath: filepath.Join(cell.dir, cell.scope+sourceSuffix), RecordPath: filepath.Join(cell.dir, cell.scope+recordSuffix),
+					},
+				},
+			})
+			if err != nil {
+				tb.Fatal(err)
+			}
+		}
 	}
 }
 
