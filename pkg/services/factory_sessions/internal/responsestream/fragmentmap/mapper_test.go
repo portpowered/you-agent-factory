@@ -215,6 +215,31 @@ func TestMapFragment_NativeToolProgressUsesObjectResultSummary(t *testing.T) {
 	}
 }
 
+func TestMapFragment_CodexMCPResponseNameCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			fragment := responsestream.Event{Kind: responsestream.EventKindProgressFragment, Type: responsestream.EventTypeProgress, Provider: provider, ExternalEventType: "tool.completed", Metadata: map[string]string{"item_id": "mcp-1", "tool_name": "mcp_tool_call:docs/lookup"}}
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{FactorySessionID: "session", RunID: "run"}, fragment)
+			if err != nil || len(events) != 1 {
+				t.Fatalf("tool response mapping: %v", err)
+			}
+			var payload responseevents.ToolPayload
+			if json.Unmarshal(events[0].Payload, &payload) != nil {
+				t.Fatal("invalid tool response")
+			}
+			want := "mcp_tool_call:docs/lookup"
+			if provider == "codex" {
+				want = "docs/lookup"
+			}
+			if payload.ToolName != want || fragment.Metadata["tool_name"] != "mcp_tool_call:docs/lookup" {
+				t.Fatal("response name compatibility changed captured native name")
+			}
+		})
+	}
+}
+
 func TestMapFragment_NativeToolDeltaUsesDeltaPayload(t *testing.T) {
 	t.Parallel()
 

@@ -628,7 +628,7 @@ func (fixture *factoryFixture) replay(t *testing.T) replayProjection {
 	replaySessionID := uuid.NewString()
 	api, port := fixture.group.registerAPIServer()
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--dir", fixture.dir, "--session", replaySessionID,
+		"you", "run", "--dir", fixture.dir, "--session", replaySessionID,
 		"--replay", fixture.recordingPath, "--no-record", "--output", "primary",
 		"--runtime-log-dir", fixture.runtimeLogDir,
 		"--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", port),

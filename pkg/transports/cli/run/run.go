@@ -517,7 +517,31 @@ func prepareRunConfig(
 	if err := validateInvocationOutputMode(cfg, invocationMode); err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
+	if err := validateHistoricalReplayOutput(cfg, invocationMode); err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
+	cfg = normalizeRunStartupOutput(cfg)
 	return cfg, invocationRequest, invocationMode, recordPath, nil
+}
+
+func validateHistoricalReplayOutput(cfg RunConfig, invocationMode bool) error {
+	if cfg.JSONOutput && strings.TrimSpace(cfg.ReplayPath) != "" && !invocationMode {
+		return &InvocationError{
+			Code:    InvocationOutputUnsupportedCode,
+			Message: "JSON output is not supported for historical replay inspection; omit --json to inspect the recorded history",
+		}
+	}
+	return nil
+}
+
+// Human presentation belongs to this invocation's config, never its shared logger.
+// Keep Output and dashboard opening intact for their existing contracts.
+func normalizeRunStartupOutput(cfg RunConfig) RunConfig {
+	if cfg.JSON || cfg.JSONOutput {
+		cfg.StartupOutput = nil
+		cfg.SuppressDashboardRendering = true
+	}
+	return cfg
 }
 
 func isImplicitCurrentBoardRun(cfg RunConfig) bool {

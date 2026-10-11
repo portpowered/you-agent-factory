@@ -15,16 +15,8 @@ func NewPackagedFactoryCatalog(
 	return factorydefinitionsinternal.NewPackagedFactoryCatalog(definitions)
 }
 
-// NewPackagedFactoryInstaller constructs packaged Factory ensure/install
-// operations from exact persistence and filesystem ports.
-func NewPackagedFactoryInstaller(
-	persistence factorydefinitions.PackagedFactoryPersistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
-	logger logging.Logger,
-) factorydefinitions.PackagedFactoryInstaller {
-	return factorydefinitionsinternal.NewPackagedFactoryInstaller(persistence, fileSystem, directoryCreator, packagedInstallationProcessProbe(fileSystem), logger)
-}
+// PackagedFactoryInstallationService exposes the completed installation owner to Wire.
+type PackagedFactoryInstallationService = distributionpackagedinstallation.Service
 
 // NewPackagedFactoryInstallationService constructs the private packaged
 // installation service for composition paths that need the concrete type.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
@@ -62,7 +63,9 @@ func TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy(t *testing.
 		},
 		platformfilesystem.Local{},
 		persistenceTestNamedPaths.RequireDefinitionDir,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 	)
 	if err != nil {
 		t.Fatalf("construct persistence: %v", err)
@@ -144,7 +147,9 @@ func TestPersistNamedFactoryReturnsResolvedTargetWithPersistenceFailure(t *testi
 		nil,
 		platformfilesystem.Local{},
 		persistenceTestNamedPaths.RequireDefinitionDir,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 	)
 	if err != nil {
 		t.Fatalf("construct persistence: %v", err)

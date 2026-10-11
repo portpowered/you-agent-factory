@@ -5,13 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,52 +38,65 @@ const (
 // it proves that in-flight work keeps the old values while the next Work item
 // receives the new values.
 func TestRunningSessionReloadsPromptOnNextDispatch(t *testing.T) {
+	t.Parallel()
+	sessionID := uuid.NewString()
 	dir := support.ScaffoldSingleStepFactory(t, "dispatch-time-prompt-hot-reload")
 	support.WriteAgentConfig(t, dir, promptReloadWorkerName, promptReloadWorkerConfig(promptReloadOldWorkerPrompt))
 	support.WriteWorkstationConfig(t, dir, promptReloadWorkstationName, promptReloadWorkstationConfig(promptReloadOldStationPrompt))
 
 	firstRelease := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(firstRelease) }) }
+	t.Cleanup(release)
 	runner := newPromptReloadCommandRunner(firstRelease)
+	peerDir := support.ScaffoldSingleStepFactory(t, "independent-prompt-peer")
+	support.WriteAgentConfig(t, peerDir, promptReloadWorkerName, promptReloadWorkerConfig("peer worker prompt"))
+	support.WriteWorkstationConfig(t, peerDir, promptReloadWorkstationName, promptReloadWorkstationConfig("peer workstation prompt"))
+	runner.peerDirectory = peerDir
+	runner.peerRequest = make(chan platformprocess.CommandRequest, 1)
+	promptFiles := &promptReloadFiles{directory: dir}
 	server := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:      server.Start,
 		ProviderCommandRunner: runner,
+		FactoryRuntimeInputs:  promptFiles,
 	})
 	support.CleanupProcess(t, process)
 
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", dir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	})
 	homeDir := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-	daemon := support.StartProcessCommand(t, process, inputs.Input)
+	daemon := startPromptReloadHost(t, process, dir, sessionID, homeDir)
 
 	baseURL := server.WaitForURL(t)
-	startedSession := showPromptReloadSession(t, process, baseURL, "")
-	submitPromptReloadWork(t, process, baseURL, "first-work")
+	startedSession := showPromptReloadSession(t, process, baseURL, sessionID)
+	peerID := startPromptReloadPeer(t, process, peerDir, homeDir)
+	firstWork := submitPromptReloadWork(t, process, baseURL, sessionID, "first-work")
 
 	firstRequest := runner.waitForFirstRequest(t)
 	support.WriteAgentConfig(t, dir, promptReloadWorkerName, promptReloadWorkerConfig(promptReloadNewWorkerPrompt))
 	support.WriteWorkstationConfig(t, dir, promptReloadWorkstationName, promptReloadWorkstationConfig(promptReloadNewStationPrompt))
-	close(firstRelease)
-	waitForPromptReloadSessionTerminal(t, process, baseURL, startedSession.Id)
+	peerWork := submitPromptReloadWork(t, process, baseURL, peerID, "peer-work")
+	peerRequest := waitForPromptReloadRequest(t, runner.peerRequest)
+	assertClaudePromptRequest(t, peerRequest, "peer worker prompt", "peer workstation prompt")
+	waitForPromptReloadSessionTerminal(t, process, baseURL, peerID, 1)
+	if firstWork.SessionID != sessionID || peerWork.SessionID != peerID {
+		t.Fatalf("accepted Work crossed sessions: selected=%#v peer=%#v", firstWork, peerWork)
+	}
+	release()
+	waitForPromptReloadSessionTerminal(t, process, baseURL, startedSession.Id, 1)
 
-	submitPromptReloadWork(t, process, baseURL, "second-work")
+	secondWork := submitPromptReloadWork(t, process, baseURL, sessionID, "second-work")
+	if secondWork.SessionID != sessionID {
+		t.Fatalf("reloaded Work lost selected session: %#v", secondWork)
+	}
 	secondRequest := runner.waitForSecondRequest(t)
-	waitForPromptReloadSessionTerminal(t, process, baseURL, startedSession.Id)
+	waitForPromptReloadSessionTerminal(t, process, baseURL, startedSession.Id, 2)
 
 	if got := len(runner.requestsSnapshot()); got != 2 {
 		t.Fatalf("provider command requests = %d, want exactly two; requests=%#v", got, runner.requestsSnapshot())
 	}
 	assertClaudePromptRequest(t, firstRequest, promptReloadOldWorkerPrompt, promptReloadOldStationPrompt)
 	assertClaudePromptRequest(t, secondRequest, promptReloadNewWorkerPrompt, promptReloadNewStationPrompt)
+	assertPromptReadFailureRetainsSnapshot(t, process, baseURL, sessionID, peerID, runner, promptFiles)
 
 	finishedSession := showPromptReloadSession(t, process, baseURL, startedSession.Id)
 	if finishedSession.Id != startedSession.Id {
@@ -87,6 +105,87 @@ func TestRunningSessionReloadsPromptOnNextDispatch(t *testing.T) {
 	if daemon.Err() != nil {
 		t.Fatalf("running Factory Session exited before the test completed: %v", daemon.Err())
 	}
+}
+
+func startPromptReloadHost(t *testing.T, process support.Process, dir, sessionID, homeDir string) *support.ProcessCommand {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--session", sessionID,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, dir)
+	return support.StartProcessCommand(t, process, inputs.Input)
+}
+
+// A dispatch-time source read error declines the reload and retains the loaded
+// prompt snapshot. This existing behavior is distinct from startup validation.
+// The fault is confined to this Session's authored paths at the filesystem edge.
+func assertPromptReadFailureRetainsSnapshot(t *testing.T, process support.Process, baseURL, sessionID, peerID string, runner *promptReloadCommandRunner, files *promptReloadFiles) {
+	t.Helper()
+	files.fail.Store(true)
+	submitPromptReloadWork(t, process, baseURL, sessionID, "failed-prompt-read")
+	request := waitForPromptReloadRequest(t, runner.laterRequest)
+	assertClaudePromptRequest(t, request, promptReloadOldWorkerPrompt, promptReloadOldStationPrompt)
+	waitForPromptReloadSessionTerminal(t, process, baseURL, sessionID, 3)
+	if files.failures.Load() < 2 {
+		t.Fatal("dispatch did not exercise both selected prompt read failures")
+	}
+	submitPromptReloadWork(t, process, baseURL, peerID, "peer-during-read-failure")
+	assertClaudePromptRequest(t, waitForPromptReloadRequest(t, runner.peerRequest), "peer worker prompt", "peer workstation prompt")
+	waitForPromptReloadSessionTerminal(t, process, baseURL, peerID, 2)
+	files.fail.Store(false)
+	submitPromptReloadWork(t, process, baseURL, sessionID, "corrected-prompt-read")
+	assertClaudePromptRequest(t, waitForPromptReloadRequest(t, runner.laterRequest), promptReloadNewWorkerPrompt, promptReloadNewStationPrompt)
+	waitForPromptReloadSessionTerminal(t, process, baseURL, sessionID, 4)
+}
+
+type promptReloadFiles struct {
+	platformfilesystem.Local
+	directory string
+	fail      atomic.Bool
+	failures  atomic.Int32
+}
+
+func (files *promptReloadFiles) ReadFile(path string) ([]byte, error) {
+	if files.fail.Load() && strings.HasPrefix(filepath.Clean(path), filepath.Clean(files.directory)+string(filepath.Separator)) && filepath.Base(path) == "AGENTS.md" {
+		files.failures.Add(1)
+		return nil, os.ErrPermission
+	}
+	return files.Local.ReadFile(path)
+}
+
+func startPromptReloadPeer(t *testing.T, process support.ApplicationProcess, dir, home string) string {
+	t.Helper()
+	sessions := process.FactorySessions().(factorysessions.Service)
+	id := uuid.NewString()
+	result, err := sessions.Start(t.Context(), factorysessions.SessionStartRequest{
+		SessionID: id, Mode: factorysessions.SessionOperationModeLive, FolderPath: dir, ActivationOnly: true,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: home,
+			DefinitionSourcePath: filepath.Join(dir, "factory.json"), ExecutionBaseDir: dir, RuntimeInstanceID: uuid.NewString(),
+		},
+	})
+	if err != nil || result.SessionID != id || result.Live == nil {
+		t.Fatalf("open explicit prompt peer: %#v, %v", result, err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:testsleep // Bound cleanup after the test context is canceled; Session close supplies the completion signal.
+		defer cancel()
+		if _, err := sessions.Control(ctx, factorysessions.SessionControlRequest{
+			SessionID: id, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose,
+		}); err != nil {
+			t.Errorf("close owned prompt peer: %v", err)
+		}
+	})
+	return id
 }
 
 func promptReloadWorkerConfig(prompt string) string {
@@ -112,7 +211,7 @@ type promptReloadSubmitResult struct {
 	WorkTypeName string  `json:"workTypeName"`
 }
 
-func submitPromptReloadWork(t testing.TB, process support.Process, serverURL, name string) promptReloadSubmitResult {
+func submitPromptReloadWork(t testing.TB, process support.Process, serverURL, sessionID, name string) promptReloadSubmitResult {
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]string{"title": name})
@@ -122,6 +221,7 @@ func submitPromptReloadWork(t testing.TB, process support.Process, serverURL, na
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you",
 		"--server", serverURL,
+		"--session", sessionID,
 		"--json",
 		"submit",
 		"--name", name,
@@ -176,7 +276,7 @@ func readPromptReloadSession(t testing.TB, process support.Process, serverURL, s
 	return session, nil
 }
 
-func waitForPromptReloadSessionTerminal(t testing.TB, process support.Process, serverURL, sessionID string) factoryapi.FactorySession {
+func waitForPromptReloadSessionTerminal(t testing.TB, process support.Process, serverURL, sessionID string, wantCompleted int) factoryapi.FactorySession {
 	t.Helper()
 
 	// The provider edge synchronizes prompt capture, but only the public session
@@ -190,7 +290,7 @@ func waitForPromptReloadSessionTerminal(t testing.TB, process support.Process, s
 	var lastSession factoryapi.FactorySession
 	for {
 		lastSession, lastErr = readPromptReloadSession(t, process, serverURL, sessionID)
-		if lastErr == nil && promptReloadSessionIsTerminal(lastSession) {
+		if lastErr == nil && promptReloadSessionIsTerminal(lastSession) && int(lastSession.Runtime.Progress.Categories.Terminal) >= wantCompleted && lastSession.Runtime.Progress.Categories.Failed == 0 {
 			return lastSession
 		}
 		select {
@@ -241,10 +341,13 @@ func argumentAfter(args []string, flag string) (string, bool) {
 }
 
 type promptReloadCommandRunner struct {
+	peerDirectory string
+	peerRequest   chan platformprocess.CommandRequest
 	mu            sync.Mutex
 	requests      []platformprocess.CommandRequest
 	firstRequest  chan platformprocess.CommandRequest
 	secondRequest chan platformprocess.CommandRequest
+	laterRequest  chan platformprocess.CommandRequest
 	firstRelease  <-chan struct{}
 }
 
@@ -252,12 +355,17 @@ func newPromptReloadCommandRunner(firstRelease <-chan struct{}) *promptReloadCom
 	return &promptReloadCommandRunner{
 		firstRequest:  make(chan platformprocess.CommandRequest, 1),
 		secondRequest: make(chan platformprocess.CommandRequest, 1),
+		laterRequest:  make(chan platformprocess.CommandRequest, 1),
 		firstRelease:  firstRelease,
 	}
 }
 
 func (runner *promptReloadCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	request = clonePromptReloadCommandRequest(request)
+	if request.WorkDir == runner.peerDirectory {
+		runner.peerRequest <- request
+		return platformprocess.CommandResult{Stdout: support.ClaudeSuccessStdout("Peer done. COMPLETE")}, nil
+	}
 	runner.mu.Lock()
 	requestIndex := len(runner.requests)
 	runner.requests = append(runner.requests, request)
@@ -273,6 +381,8 @@ func (runner *promptReloadCommandRunner) Run(ctx context.Context, request platfo
 		}
 	case 1:
 		runner.secondRequest <- request
+	default:
+		runner.laterRequest <- request
 	}
 	return platformprocess.CommandResult{Stdout: support.ClaudeSuccessStdout("Done. COMPLETE")}, nil
 }

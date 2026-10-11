@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,54 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service"
 )
+
+func TestApplyDocumentUpdateSubagentPreservesGenericDefaultsAndRejectsBeforePersist(t *testing.T) {
+	t.Parallel()
+	for _, invalid := range []bool{false, true} {
+		t.Run(fmt.Sprintf("invalid=%v", invalid), func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "config.json")
+			original := []byte("controlled original document")
+			if err := os.WriteFile(path, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var encoded operatorsettings.Config
+			service := internalservice.NewWithPreserver(testLocalFilesystem, testCreateTemp,
+				func([]byte) (operatorsettings.Config, error) {
+					return operatorsettings.Config{Defaults: operatorsettings.Defaults{
+						WorkerModelProvider: "claude", WorkerModel: "generic",
+						Subagent: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "controlled-free"},
+					}}, nil
+				},
+				func(config operatorsettings.Config) ([]byte, error) {
+					encoded = config.Clone()
+					return []byte("controlled updated document"), nil
+				},
+				nil, nil, nil)
+			model := "controlled-next"
+			if invalid {
+				model = " "
+			}
+			result, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+				Path: path, Subagent: &operatorsettings.SubagentRouteUpdate{Model: &model},
+			})
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if invalid {
+				if !errors.Is(err, operatorsettings.ErrDocumentMalformed) || encoded.Defaults.Subagent != nil || string(data) != string(original) {
+					t.Fatalf("invalid route persisted: %v, %#v", err, encoded.Defaults)
+				}
+				return
+			}
+			expected := operatorsettings.Defaults{WorkerModelProvider: "claude", WorkerModel: "generic", Subagent: &operatorsettings.SubagentRoute{Provider: "OPENCODE", Model: model}}
+			if err != nil || !result.Persisted || !reflect.DeepEqual(encoded.Defaults, expected) || string(data) != "controlled updated document" {
+				t.Fatalf("route update lost siblings or persistence: %v, %#v", err, encoded.Defaults)
+			}
+		})
+	}
+}
 
 func TestMergeDocumentProviderModelPreservesDetachedMessaging(t *testing.T) {
 	t.Parallel()

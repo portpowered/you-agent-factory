@@ -95,7 +95,7 @@ func TestTerminateForceHTTPRejectsInvalidPayloadBeforeControl(t *testing.T) {
 }
 
 func newForceHTTPHandler(service *controlHTTPServiceFake) *Handler {
-	return NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}, attributionStub{}), zap.NewNop())
+	return NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}, attributionStub{}, nil, nil, nil), zap.NewNop())
 }
 
 func TestTerminateForceHTTPPreservesTupleAndOrdinaryCompatibility(t *testing.T) {

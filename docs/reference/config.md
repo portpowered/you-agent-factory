@@ -50,6 +50,16 @@ still win over operator defaults. Use `you docs workers`
 for worker fields and `you docs javascript-workflows` for reusable child-agent
 presets.
 
+The optional `defaults.subagent` record stores a dedicated subagent provider and
+model. Both fields require non-empty strings. Optional `reasoningEffort` accepts
+`minimal`, `low`, `medium`, `high`, `xhigh`, or `max`.
+
+This record is independent of `workerModelProvider` and `workerModel`.
+`you init` preserves it when updating generic worker defaults.
+The settings tool `you.operator_settings.set_subagent_defaults` updates only
+this dedicated record. A new record requires both provider and model; partial
+updates preserve omitted fields in an existing record.
+
 The same document can set the rolling-file policy for runtime logs and metrics:
 
 ```json

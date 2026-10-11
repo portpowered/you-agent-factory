@@ -1,16 +1,109 @@
 package cli_rest_journeys_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// The injected HTTP transport supplies an already-expired server request only
+// for this caller's fault cell. It delegates to the complete production handler;
+// no response, observation role or session state is replaced.
+func c06DeadlineRequestHandler(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Test-Request-Deadline") == "expired" {
+			ctx, cancel := context.WithDeadline(r.Context(), time.Unix(0, 0))
+			defer cancel()
+			r = r.WithContext(ctx)
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func testTransporthttpserverAPIAddressedReadDeadlinePreservesPeer(t *testing.T) {
+	t.Parallel()
+	dir := scaffoldC06HTTPFactory(t, idleStatusTestFactoryConfig())
+	scenario := c06SharedHTTPServer(t).newScenario(t, "addressed-read-deadline", dir)
+	selected := scenario.openSession(t, dir)
+	peer := scenario.openSession(t, dir)
+	for _, cell := range []struct {
+		suffix  string
+		status  int
+		message string
+	}{
+		{"/status", http.StatusInternalServerError, "failed to get engine state snapshot"},
+		{"", http.StatusGatewayTimeout, "factory session request timed out"},
+	} {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, scenario.URL()+"/factory-sessions/"+selected+cell.suffix, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("X-Test-Request-Deadline", "expired")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		var failure factoryapi.ErrorResponse
+		if err := json.Unmarshal(body, &failure); err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != cell.status || failure.Code != factoryapi.ErrorResponseCodeINTERNALERROR || failure.Family != factoryapi.ErrorFamilyInternalServerError || failure.Message != cell.message {
+			t.Fatalf("expired addressed read %q = %d %s", cell.suffix, response.StatusCode, body)
+		}
+		assertStatusResponseDoesNotExposeFactoryPaths(t, body, dir)
+	}
+	for _, id := range []string{selected, peer} {
+		if got := getFactorySession(t, scenario.URL(), id); got.Id != id {
+			t.Fatalf("session after deadline = %q, want %q", got.Id, id)
+		}
+		if got := getFactorySessionStatus(t, scenario.URL(), id); got.RuntimeStatus == "" || got.FactoryState == "" {
+			t.Fatalf("session %q after deadline = %#v", id, got)
+		}
+	}
+}
+
+func testTransporthttpserverAPIStatusMissingSessionDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+	fixture := c06SharedHTTPServer(t)
+	missing := uuid.NewString()
+	response, err := http.Get(fixture.URL() + "/factory-sessions/" + missing + "/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &failure); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusNotFound || failure.Code != factoryapi.ErrorResponseCodeNOTFOUND || failure.Message != "factory session not found" {
+		t.Fatalf("missing addressed status = %d %s", response.StatusCode, body)
+	}
+	assertStatusResponseDoesNotExposeFactoryPaths(t, body, fixture.factoryDir)
+	// A missing explicit selection must not borrow the healthy current session.
+	current := support.GetJSON[factoryapi.StatusResponse](t, fixture.URL()+"/status")
+	if current.RuntimeStatus == "" || current.FactoryState == "" {
+		t.Fatalf("current session after missing addressed read = %#v", current)
+	}
+}
 
 // TestAPIStatusReportsReadyAfterStartup proves GET /status returns HTTP 200 with a
 // populated public runtime summary after the customer process starts.

@@ -67,9 +67,22 @@ func testOperatorsettingsconfigurationCLISettingsUnknownFieldsPrecedenceAndSafeF
 func checkMalformedSettingsPrerequisite(t *testing.T, fixture *sharedOperatorSettingsFixture) {
 	t.Helper()
 	t.Parallel()
+	for _, cell := range []struct{ name, document string }{
+		{"trailing document", `{"defaults":{"workerModelProvider":"codex","workerModel":"before"}} {}`},
+		{"null subagent", `{"defaults":{"workerModelProvider":"codex","workerModel":"before","subagent":null}}`},
+		{"incomplete subagent", `{"defaults":{"workerModelProvider":"codex","workerModel":"before","subagent":{"provider":"opencode"}}}`},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			checkSettingsRejectedDocumentUnchanged(t, fixture, []byte(cell.document))
+		})
+	}
+}
+
+func checkSettingsRejectedDocumentUnchanged(t *testing.T, fixture *sharedOperatorSettingsFixture, original []byte) {
+	t.Helper()
 	home := writeOperatorConfigForActivation(t, "codex", "before")
 	path := filepath.Join(home, ".you-agent-factory", "config.json")
-	original := []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"before"}} {}`)
 	if err := os.WriteFile(path, original, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +107,7 @@ func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSet
 	t.Parallel()
 	home := writeOperatorConfigForActivation(t, "codex", "before")
 	path := filepath.Join(home, ".you-agent-factory", "config.json")
-	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"workerModelProvider":"codex","workerModel":"before","futureDefault":{"enabled":true}},"futureRoot":{"secret":"preserve"},"models":{"custom":{"source":"hf://owner/repo","backend":"backend","loadPolicy":"ON_DEMAND","operations":["OMNI"],"futureModel":{"enabled":true}}},"workerPresets":[{"id":"research","modelProvider":"CODEX","model":"gpt-5","futurePreset":"kept"}]}`)
+	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"workerModelProvider":"codex","workerModel":"before","subagent":{"provider":"opencode","model":"controlled-free-model","reasoningEffort":"high"},"futureDefault":{"enabled":true}},"futureRoot":{"secret":"preserve"},"models":{"custom":{"source":"hf://owner/repo","backend":"backend","loadPolicy":"ON_DEMAND","operations":["OMNI"],"futureModel":{"enabled":true}}},"workerPresets":[{"id":"research","modelProvider":"CODEX","model":"gpt-5","futurePreset":"kept"}]}`)
 	if err := os.WriteFile(path, initial, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +127,10 @@ func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSet
 			t.Fatal(err)
 		}
 		defaults := document["defaults"].(map[string]any)
+		wantSubagent := map[string]any{"provider": "OPENCODE", "model": "controlled-free-model", "reasoningEffort": "high"}
+		if !reflect.DeepEqual(defaults["subagent"], wantSubagent) {
+			t.Fatalf("generic settings update changed the dedicated subagent route: %s", payload)
+		}
 		wantPresets := []any{map[string]any{"id": "research", "modelProvider": "CODEX", "model": "gpt-5", "futurePreset": "kept"}}
 		wantModels := map[string]any{"custom": map[string]any{"source": "hf://owner/repo", "backend": "backend", "loadPolicy": "ON_DEMAND", "operations": []any{"OMNI"}, "futureModel": map[string]any{"enabled": true}}}
 		if !reflect.DeepEqual(document["models"], wantModels) {

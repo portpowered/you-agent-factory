@@ -15,9 +15,6 @@ func Snapshot(
 	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
 	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
 ) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
-	if validateMaterializeWrites == nil || materializePortableFiles == nil {
-		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
-	}
 	targetDir = strings.TrimSpace(targetDir)
 	if targetDir == "" || snapshot == nil || !safeTarget(targetDir) {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize

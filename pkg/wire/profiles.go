@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -54,6 +55,7 @@ import (
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	workersessionmcp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/mcp"
 	workersessionwire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -393,25 +395,12 @@ func provideModelInvocationOperation(
 }
 
 func provideSystemInitializationService(
-	persistence factorydefinitions.PackagedFactoryPersistence,
-	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
-	packagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
-	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
+	installer factorydefinitions.PackagedFactoryInstaller,
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	settings operatorsettings.Service,
 	inspectPath systeminitializationwire.InspectPath,
-	logger logging.Logger,
 ) (systeminitialization.Service, error) {
-	return systeminitializationwire.NewService(
-		settings,
-		packagedCatalog,
-		factorydefinitionswire.NewPackagedFactoryInstaller(
-			persistence,
-			packagedInstallationFileSystem,
-			packagedInstallationDirectoryCreator,
-			logger,
-		),
-		inspectPath,
-	)
+	return systeminitializationwire.NewService(settings, catalog, installer, inspectPath)
 }
 
 func provideSystemInitializationOperation(
@@ -453,16 +442,8 @@ func providePackagedFactoryCatalog(
 	return factorydefinitionswire.NewPackagedFactoryCatalog(definitions)
 }
 
-func providePackagedFactoryInstallation(
-	persistence factorydefinitions.PackagedFactoryPersistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-	directoryCreator factorydefinitions.PackagedInstallationDirectoryCreator,
-	logger logging.Logger,
-) factorydefinitions.PackagedFactoryInstallationOperations {
-	installer := factorydefinitionswire.NewPackagedFactoryInstallationService(persistence, fileSystem, directoryCreator, logger)
-	return factorydefinitions.PackagedFactoryInstallationOperations{
-		Install: installer.InstallPackagedFactory,
-	}
+func providePackagedFactoryInstallation(installer *factorydefinitionswire.PackagedFactoryInstallationService) factorydefinitions.PackagedFactoryInstallationOperations {
+	return factorydefinitions.PackagedFactoryInstallationOperations{Install: installer.InstallPackagedFactory}
 }
 
 // provideDurableOpening binds the execution opener and provider identity
@@ -519,8 +500,9 @@ func provideAPIServerStarter(
 
 func provideRuntimeHostOperation(
 	starter platformhttpserver.Starter,
+	scheduler platformclock.TimerSource,
 ) factorysessionwire.RuntimeHostOperation {
-	return factorysessionwire.NewRuntimeHostService(starter)
+	return factorysessionwire.NewRuntimeHostService(starter, scheduler)
 }
 
 func provideProcessRuntimeFactory(
@@ -563,94 +545,85 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 	return runtimeapplication.NewManagedRunner
 }
 
-type mcpServerBuilder func(
-	processcontract.MCPIntent,
-	recordings.Service,
-	factorysessionwire.RequestPreparation,
-	factoryruntime.WorkflowPreviewOperation,
-	factorysessions.Service,
-) (*mcpserver.Server, error)
+// MCP selection contains invocation data only; collaborators remain injected.
+type mcpIntentKey struct{}
 
-// provideMCPServerBuilder composes owner adapters at the Wire boundary. The
-// protocol stdio package receives only the resulting inert server and caller
-// streams; it does not construct Factory Sessions, Recordings, or workflow
-// services while an opening is being selected.
-func provideMCPServerBuilder(
-	workingDirectory platformfilesystem.WorkingDirectory,
-	settings operatorsettings.Service,
-	providerService providers.Service,
-	settingsFiles operatorsettings.FileSystem,
-	homeDirectory factorysessions.HomeDirectoryResolver,
-) mcpServerBuilder {
-	return func(
-		intent processcontract.MCPIntent,
-		recordingsService recordings.Service,
-		prepare factorysessionwire.RequestPreparation,
-		workflowPreview factoryruntime.WorkflowPreviewOperation,
-		sessions factorysessions.Service,
-	) (*mcpserver.Server, error) {
-		hostClient, err := httpclient.NewClient(intent.ServerURL, httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}))
+func selectedMCPIntent(ctx context.Context) (processcontract.MCPIntent, error) {
+	intent, ok := ctx.Value(mcpIntentKey{}).(processcontract.MCPIntent)
+	if !ok {
+		return processcontract.MCPIntent{}, errors.New("MCP invocation selection is required")
+	}
+	return intent, nil
+}
+
+func provideMCPWorkerHostClient() (*httpclient.Client, error) {
+	return httpclient.NewClient("http://mcp.invalid", httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}), httpclient.WithRequestEditorFn(func(ctx context.Context, request *http.Request) error {
+		intent, err := selectedMCPIntent(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
+			return err
 		}
-		workerTools, err := workersessionwire.NewMCPAdapter(hostClient)
+		endpoint, err := url.Parse(strings.TrimRight(intent.ServerURL, "/") + request.URL.RequestURI())
 		if err != nil {
-			return nil, fmt.Errorf("construct Worker Session MCP host client: %w", err)
+			return err
 		}
-		workingRoot := strings.TrimSpace(intent.ProjectRoot)
-		if workingRoot == "" {
-			var err error
-			workingRoot, err = workingDirectory.Getwd()
-			if err != nil {
-				return nil, fmt.Errorf("resolve MCP working directory: %w", err)
-			}
+		request.URL = endpoint
+		if intent.WorkerSessionID != "" || intent.WorkerSessionToken != "" {
+			request.Header.Set("X-You-Worker-Session-Id", intent.WorkerSessionID)
+			request.Header.Set("Authorization", "Bearer "+intent.WorkerSessionToken)
 		}
-		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
-		skills, resources, err := mcpSubagentContent(settings, providerService, settingsFiles, homeDirectory)
+		return nil
+	}))
+}
+
+func provideMCPWorkerAdapter(client *httpclient.Client) (*workersessionmcp.Adapter, error) {
+	return workersessionwire.NewMCPAdapter(client)
+}
+
+func provideMCPInspection(recordings recordings.Service) factorysessionmcp.RecordingsInspection {
+	return factorysessionmcp.RecordingsInspection(recordings)
+}
+
+func provideMCPToolOperation(inspection factorysessionmcp.RecordingsInspection, prepare factorysessionwire.RequestPreparation, preview factoryruntime.WorkflowPreviewOperation, sessions factorysessions.Service, generateID factorysessions.SessionIDGenerator, resolve factorysessionmcp.ProviderIdentityResolver) factorysessionmcp.ToolOperation {
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		intent, err := selectedMCPIntent(ctx)
 		if err != nil {
 			return nil, err
 		}
-		toolOperation := factorysessionmcp.BindToolOperation(
-			inspection, prepare, workflowPreview, sessions, workingRoot,
-			factorysessions.SessionIDGenerator(uuid.NewString),
-			subagentProviderIdentityResolver(providerService),
-		)
-		runHost, err := factorysessionwire.NewMCPSubagentOperation(intent.ServerURL, &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString), subagentProviderIdentityResolver(providerService))
-		if err != nil {
-			return nil, fmt.Errorf("construct subagent MCP host operation: %w", err)
+		return factorysessionmcp.CallTool(ctx, prepare, preview, name, input, inspection, sessions, intent.ProjectRoot, generateID, resolve)
+	}
+}
+
+func provideMCPDispatch(worker *workersessionmcp.Adapter, tools factorysessionmcp.ToolOperation, generateID factorysessions.SessionIDGenerator) mcpserver.ToolOperation {
+	return func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+		if name != factorysessionmcp.ToolSubagent {
+			return tools(ctx, name, raw)
 		}
-		runSubagent := factorysessionmcp.BindSubagentOperation(runHost, intent.WorkerSessionID, intent.WorkerSessionToken)
-		return mcpserver.New(mcpserver.Options{
-			Skills:    skills,
-			Resources: resources,
-			ToolOperation: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
-				if name == factorysessionmcp.ToolSubagent {
-					return workerTools.Subagent(ctx, raw, func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
-						if failure, err := factorysessionmcp.ValidateSubagentArguments(input); failure != nil || err != nil {
-							return failure, err
-						}
-						if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
-							return nil, err
-						}
-						return runSubagent(ctx, input)
-					})
-				}
-				return toolOperation(ctx, name, raw)
-			},
+		intent, err := selectedMCPIntent(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return worker.Subagent(ctx, raw, func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+			return worker.Start(ctx, input, intent.ProjectRoot, generateID)
 		})
 	}
 }
 
-// subagentProviderIdentityResolver projects one explicit you.subagent provider
+func provideMCPServerOptions(settings operatorsettings.Service, providers providers.Service, files operatorsettings.FileSystem, home factorysessions.HomeDirectoryResolver) (mcpserver.Options, error) {
+	skills, resources, err := mcpSubagentContent(settings, providers, files, home)
+	return mcpserver.Options{Skills: skills, Resources: resources}, err
+}
+
+func provideMCPServer(operation mcpserver.ToolOperation, options mcpserver.Options) (*mcpserver.Server, error) {
+	return mcpserver.New(operation, options)
+}
+
+// provideMCPProviderIdentityResolver projects one explicit you.subagent provider
 // selection through the authoritative Providers catalog. Production composition
 // binds it before the packaged subagent Factory Session starts, so an unknown
 // identifier is a validation failure instead of a runtime provider failure. The
 // caller context is preserved so a rejected selection cannot outlive its request.
-func subagentProviderIdentityResolver(providerService providers.Service) factorysessionmcp.ProviderIdentityResolver {
+func provideMCPProviderIdentityResolver(providerService providers.Service) factorysessionmcp.ProviderIdentityResolver {
 	return func(ctx context.Context, identity string) (string, error) {
-		if providerService == nil {
-			return "", fmt.Errorf("resolve subagent provider: Providers service is required")
-		}
 		resolved, err := providerService.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: identity})
 		if err != nil {
 			return "", err
@@ -666,18 +639,12 @@ func stdioLifecyclePlan(transport lifecycle.Component) lifecycle.Plan {
 }
 
 func provideStdioHandler(
-	sessions factorysessions.Service,
-	recordingsRoot recordings.Service,
 	build initializer.LifecycleRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
-	buildServer mcpServerBuilder,
-	prepare factorysessionwire.RequestPreparation,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
+	server *mcpserver.Server,
+	workingDirectory platformfilesystem.WorkingDirectory,
 ) (processcontract.StdioHandler, error) {
-	if sessions == nil || build == nil || newRunner == nil || open == nil || buildServer == nil {
-		return nil, errors.New("MCP stdio requires Factory Sessions root, lifecycle, transport, and server")
-	}
 	return func(ctx context.Context, intent processcontract.MCPIntent) error {
 		if ctx == nil {
 			return errors.New("MCP stdio context is required")
@@ -688,10 +655,18 @@ func provideStdioHandler(
 		if intent.Stdin == nil || intent.Stdout == nil {
 			return errors.New("MCP stdio input and output are required")
 		}
-		server, err := buildServer(intent, recordingsRoot, prepare, workflowPreview, sessions)
-		if err != nil {
-			return err
+		endpoint, err := url.Parse(intent.ServerURL)
+		if err != nil || endpoint == nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+			return errors.New("construct subagent MCP host operation: subagent host and HTTP transport are required")
 		}
+		intent.ProjectRoot = strings.TrimSpace(intent.ProjectRoot)
+		if intent.ProjectRoot == "" {
+			intent.ProjectRoot, err = workingDirectory.Getwd()
+			if err != nil {
+				return fmt.Errorf("resolve MCP working directory: %w", err)
+			}
+		}
+		ctx = context.WithValue(ctx, mcpIntentKey{}, intent)
 		transport, err := open(server, intent.Stdin, intent.Stdout)
 		if err != nil {
 			return err
@@ -744,8 +719,8 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 	return factorysessionwire.NewWorkStopSummaryProjector()
 }
 
-func provideResponsePresentation() factoryvisualization.ResponsePresentation {
-	return factoryvisualizationwire.NewResponsePresentation()
+func provideResponsePresentation(scheduler platformclock.TimerSource) factoryvisualization.ResponsePresentation {
+	return factoryvisualizationwire.NewResponsePresentation(scheduler)
 }
 
 // provideProcessLogger selects the process backend once, independently of CLI output policy.

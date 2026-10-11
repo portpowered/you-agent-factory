@@ -211,7 +211,7 @@ func testRuntimeFactoryWithEffectsAndOpening(logOwner factory.RuntimeLogOwner, m
 ) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
 		testRuntimeLoggerFactory, logOwner, metricsOwner,
-		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
+		testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{},
 		testOrchestrationCompilation(), platformclock.Real{}, nil,
 		opening,
 		submit, dispatch, project, scopes,
@@ -442,6 +442,7 @@ type controlledEngineCall struct {
 type controlledEngineOpening struct{ calls []controlledEngineCall }
 
 func (opening *controlledEngineOpening) Open(
+	_ context.Context,
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	statelessService workers.Service,

@@ -5771,6 +5771,13 @@ type GlobalConfigACPSettings struct {
 
 // GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
 type GlobalConfigDefaults struct {
+	// Subagent File-only subagent route, independent of generic worker defaults.
+	Subagent *struct {
+		Model           string  `json:"model"`
+		Provider        string  `json:"provider"`
+		ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+	} `json:"subagent,omitempty"`
+
 	// WorkerModel Default worker model name.
 	WorkerModel *string `json:"workerModel,omitempty"`
 
@@ -9728,18 +9735,39 @@ type WorkerSessionResolvedExecution struct {
 	Worktree        *string `json:"worktree,omitempty"`
 }
 
-// WorkerSessionStartRequest One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload.
+// WorkerSessionStartRequest Start one direct Worker Session with a prompt or a resolved execution. The prompt form uses dedicated subagent defaults and optional route overrides. The resolved form supplies its own execution and does not use those defaults.
 type WorkerSessionStartRequest struct {
 	// Execution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
-	Execution WorkerSessionResolvedExecution `json:"execution"`
+	Execution *WorkerSessionResolvedExecution `json:"execution,omitempty"`
+	Model     *string                         `json:"model,omitempty"`
+
+	// Prompt Prompt for a direct subagent. Cannot be combined with execution or retry.
+	Prompt *string `json:"prompt,omitempty"`
+
+	// Provider Concrete provider override. A different provider requires an explicit model.
+	Provider        *string `json:"provider,omitempty"`
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 
 	// RequestId Required caller idempotency key for this asynchronous start.
 	RequestId string                         `json:"requestId"`
 	Retry     *WorkerSessionStartRetryPolicy `json:"retry,omitempty"`
 
+	// TimeoutMillis Execution duration in milliseconds. Omission sets no execution deadline.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+
 	// WorkerSessionId Stable Worker Session identity to reserve and return.
 	WorkerSessionId string `json:"workerSessionId"`
+
+	// WorkingRoot Absolute working directory for the provider execution.
+	WorkingRoot *string `json:"workingRoot,omitempty"`
+	union       json.RawMessage
 }
+
+// WorkerSessionStartRequest0 defines model for .
+type WorkerSessionStartRequest0 = interface{}
+
+// WorkerSessionStartRequest1 defines model for .
+type WorkerSessionStartRequest1 = interface{}
 
 // WorkerSessionStartResponse Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous.
 type WorkerSessionStartResponse struct {
@@ -10484,6 +10512,12 @@ type ListWorkerSessionsParamsScope string
 // ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsState string
 
+// StartWorkerSessionParams defines parameters for StartWorkerSession.
+type StartWorkerSessionParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // GetWorkerSessionObservationByWorkerSessionIdParams defines parameters for GetWorkerSessionObservationByWorkerSessionId.
 type GetWorkerSessionObservationByWorkerSessionIdParams struct {
 	// FactorySessionId Exact Factory Session owner of the retained Worker Session ID.
@@ -10526,6 +10560,9 @@ type TerminateWorkerSessionJSONBody struct {
 
 // SendAgentMessageJSONRequestBody defines body for SendAgentMessage for application/json ContentType.
 type SendAgentMessageJSONRequestBody = AgentMessageSendRequest
+
+// StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
+type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
 
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
 type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
@@ -12571,6 +12608,14 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["subagent"]; found {
+		err = json.Unmarshal(raw, &a.Subagent)
+		if err != nil {
+			return fmt.Errorf("error reading 'subagent': %w", err)
+		}
+		delete(object, "subagent")
+	}
+
 	if raw, found := object["workerModel"]; found {
 		err = json.Unmarshal(raw, &a.WorkerModel)
 		if err != nil {
@@ -12605,6 +12650,13 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 func (a GlobalConfigDefaults) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
+
+	if a.Subagent != nil {
+		object["subagent"], err = json.Marshal(a.Subagent)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'subagent': %w", err)
+		}
+	}
 
 	if a.WorkerModel != nil {
 		object["workerModel"], err = json.Marshal(a.WorkerModel)
@@ -19224,6 +19276,224 @@ func (t *WorkRequestRelation) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsWorkerSessionStartRequest0 returns the union data inside the WorkerSessionStartRequest as a WorkerSessionStartRequest0
+func (t WorkerSessionStartRequest) AsWorkerSessionStartRequest0() (WorkerSessionStartRequest0, error) {
+	var body WorkerSessionStartRequest0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkerSessionStartRequest0 overwrites any union data inside the WorkerSessionStartRequest as the provided WorkerSessionStartRequest0
+func (t *WorkerSessionStartRequest) FromWorkerSessionStartRequest0(v WorkerSessionStartRequest0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkerSessionStartRequest0 performs a merge with any union data inside the WorkerSessionStartRequest, using the provided WorkerSessionStartRequest0
+func (t *WorkerSessionStartRequest) MergeWorkerSessionStartRequest0(v WorkerSessionStartRequest0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkerSessionStartRequest1 returns the union data inside the WorkerSessionStartRequest as a WorkerSessionStartRequest1
+func (t WorkerSessionStartRequest) AsWorkerSessionStartRequest1() (WorkerSessionStartRequest1, error) {
+	var body WorkerSessionStartRequest1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkerSessionStartRequest1 overwrites any union data inside the WorkerSessionStartRequest as the provided WorkerSessionStartRequest1
+func (t *WorkerSessionStartRequest) FromWorkerSessionStartRequest1(v WorkerSessionStartRequest1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkerSessionStartRequest1 performs a merge with any union data inside the WorkerSessionStartRequest, using the provided WorkerSessionStartRequest1
+func (t *WorkerSessionStartRequest) MergeWorkerSessionStartRequest1(v WorkerSessionStartRequest1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkerSessionStartRequest) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Execution != nil {
+		object["execution"], err = json.Marshal(t.Execution)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'execution': %w", err)
+		}
+	}
+
+	if t.Model != nil {
+		object["model"], err = json.Marshal(t.Model)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'model': %w", err)
+		}
+	}
+
+	if t.Prompt != nil {
+		object["prompt"], err = json.Marshal(t.Prompt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'prompt': %w", err)
+		}
+	}
+
+	if t.Provider != nil {
+		object["provider"], err = json.Marshal(t.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'provider': %w", err)
+		}
+	}
+
+	if t.ReasoningEffort != nil {
+		object["reasoningEffort"], err = json.Marshal(t.ReasoningEffort)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reasoningEffort': %w", err)
+		}
+	}
+
+	object["requestId"], err = json.Marshal(t.RequestId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'requestId': %w", err)
+	}
+
+	if t.Retry != nil {
+		object["retry"], err = json.Marshal(t.Retry)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'retry': %w", err)
+		}
+	}
+
+	if t.TimeoutMillis != nil {
+		object["timeoutMillis"], err = json.Marshal(t.TimeoutMillis)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'timeoutMillis': %w", err)
+		}
+	}
+
+	object["workerSessionId"], err = json.Marshal(t.WorkerSessionId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'workerSessionId': %w", err)
+	}
+
+	if t.WorkingRoot != nil {
+		object["workingRoot"], err = json.Marshal(t.WorkingRoot)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workingRoot': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *WorkerSessionStartRequest) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["execution"]; found {
+		err = json.Unmarshal(raw, &t.Execution)
+		if err != nil {
+			return fmt.Errorf("error reading 'execution': %w", err)
+		}
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &t.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+	}
+
+	if raw, found := object["prompt"]; found {
+		err = json.Unmarshal(raw, &t.Prompt)
+		if err != nil {
+			return fmt.Errorf("error reading 'prompt': %w", err)
+		}
+	}
+
+	if raw, found := object["provider"]; found {
+		err = json.Unmarshal(raw, &t.Provider)
+		if err != nil {
+			return fmt.Errorf("error reading 'provider': %w", err)
+		}
+	}
+
+	if raw, found := object["reasoningEffort"]; found {
+		err = json.Unmarshal(raw, &t.ReasoningEffort)
+		if err != nil {
+			return fmt.Errorf("error reading 'reasoningEffort': %w", err)
+		}
+	}
+
+	if raw, found := object["requestId"]; found {
+		err = json.Unmarshal(raw, &t.RequestId)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestId': %w", err)
+		}
+	}
+
+	if raw, found := object["retry"]; found {
+		err = json.Unmarshal(raw, &t.Retry)
+		if err != nil {
+			return fmt.Errorf("error reading 'retry': %w", err)
+		}
+	}
+
+	if raw, found := object["timeoutMillis"]; found {
+		err = json.Unmarshal(raw, &t.TimeoutMillis)
+		if err != nil {
+			return fmt.Errorf("error reading 'timeoutMillis': %w", err)
+		}
+	}
+
+	if raw, found := object["workerSessionId"]; found {
+		err = json.Unmarshal(raw, &t.WorkerSessionId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workerSessionId': %w", err)
+		}
+	}
+
+	if raw, found := object["workingRoot"]; found {
+		err = json.Unmarshal(raw, &t.WorkingRoot)
+		if err != nil {
+			return fmt.Errorf("error reading 'workingRoot': %w", err)
+		}
+	}
+
+	return err
+}
+
 // AsFactorySessionLifecycleControlResponse returns the union data inside the FactorySessionLifecycleControlConflict as a FactorySessionLifecycleControlResponse
 func (t FactorySessionLifecycleControlConflict) AsFactorySessionLifecycleControlResponse() (FactorySessionLifecycleControlResponse, error) {
 	var body FactorySessionLifecycleControlResponse
@@ -19456,6 +19726,11 @@ type ClientInterface interface {
 	// ListWorkerSessions request
 	ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// StartWorkerSessionWithBody request with any body
+	StartWorkerSessionWithBody(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	StartWorkerSession(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetWorkerSessionObservationByWorkerSessionId request
 	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19616,6 +19891,30 @@ func (c *Client) GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (
 
 func (c *Client) ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListWorkerSessionsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StartWorkerSessionWithBody(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartWorkerSessionRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StartWorkerSession(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartWorkerSessionRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -20652,6 +20951,61 @@ func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParam
 	return req, nil
 }
 
+// NewStartWorkerSessionRequest calls the generic StartWorkerSession builder with application/json body
+func NewStartWorkerSessionRequest(server string, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartWorkerSessionRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewStartWorkerSessionRequestWithBody generates requests for StartWorkerSession with any type of body
+func NewStartWorkerSessionRequestWithBody(server string, params *StartWorkerSessionParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XYouWorkerSessionId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-You-Worker-Session-Id", runtime.ParamLocationHeader, *params.XYouWorkerSessionId)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-You-Worker-Session-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetWorkerSessionObservationByWorkerSessionIdRequest generates requests for GetWorkerSessionObservationByWorkerSessionId
 func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams) (*http.Request, error) {
 	var err error
@@ -21140,6 +21494,11 @@ type ClientWithResponsesInterface interface {
 	// ListWorkerSessionsWithResponse request
 	ListWorkerSessionsWithResponse(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*ListWorkerSessionsClientResponse, error)
 
+	// StartWorkerSessionWithBodyWithResponse request with any body
+	StartWorkerSessionWithBodyWithResponse(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error)
+
+	StartWorkerSessionWithResponse(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error)
+
 	// GetWorkerSessionObservationByWorkerSessionIdWithResponse request
 	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
 
@@ -21448,6 +21807,32 @@ func (r ListWorkerSessionsClientResponse) StatusCode() int {
 	return 0
 }
 
+type StartWorkerSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *WorkerSessionStartResponse
+	JSON400      *BadRequest
+	JSON403      *ErrorResponse
+	JSON409      *WorkerSessionStartConflict
+	JSON503      *WorkerSessionStartUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r StartWorkerSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartWorkerSessionClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetWorkerSessionObservationByWorkerSessionIdClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21735,6 +22120,23 @@ func (c *ClientWithResponses) ListWorkerSessionsWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseListWorkerSessionsClientResponse(rsp)
+}
+
+// StartWorkerSessionWithBodyWithResponse request with arbitrary body returning *StartWorkerSessionClientResponse
+func (c *ClientWithResponses) StartWorkerSessionWithBodyWithResponse(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error) {
+	rsp, err := c.StartWorkerSessionWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartWorkerSessionClientResponse(rsp)
+}
+
+func (c *ClientWithResponses) StartWorkerSessionWithResponse(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error) {
+	rsp, err := c.StartWorkerSession(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartWorkerSessionClientResponse(rsp)
 }
 
 // GetWorkerSessionObservationByWorkerSessionIdWithResponse request returning *GetWorkerSessionObservationByWorkerSessionIdClientResponse
@@ -22382,6 +22784,60 @@ func ParseListWorkerSessionsClientResponse(rsp *http.Response) (*ListWorkerSessi
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartWorkerSessionClientResponse parses an HTTP response from a StartWorkerSessionWithResponse call
+func ParseStartWorkerSessionClientResponse(rsp *http.Response) (*StartWorkerSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartWorkerSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest WorkerSessionStartResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest WorkerSessionStartConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionStartUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

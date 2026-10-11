@@ -35,6 +35,10 @@ import (
 // shared invocation lock; each invocation owns its session, profile and streams.
 func testOutputConcurrentQuietAndVerboseInvocationsKeepOwnFraming(t *testing.T) {
 	t.Parallel()
+	runConcurrentOutputPolicyCohort(t)
+}
+
+func runConcurrentOutputPolicyCohort(t *testing.T) {
 	selections := [][]string{
 		{"--quiet"}, {"--json", "--output", "primary"},
 		{"--json", "--output", "response-stream"}, {}, {"--verbose", "--debug"},

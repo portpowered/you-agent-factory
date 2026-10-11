@@ -6,6 +6,53 @@ import (
 	"testing"
 )
 
+func TestSubagentRouteMergeRequiresCompleteRecordAndDetachesDefaults(t *testing.T) {
+	t.Parallel()
+	provider, model, effort := "opencode", "controlled-free", "low"
+	var absent *SubagentRoute
+	if _, err := absent.Merge(SubagentRouteUpdate{Provider: &provider}); !errors.Is(err, ErrDocumentMalformed) {
+		t.Fatalf("incomplete new route: %v", err)
+	}
+	route, err := absent.Merge(SubagentRouteUpdate{Provider: &provider, Model: &model, ReasoningEffort: &effort})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextModel := "controlled-next"
+	updated, err := route.Merge(SubagentRouteUpdate{Model: &nextModel})
+	if err != nil || updated.Provider != route.Provider || updated.ReasoningEffort != effort || route.Model != model {
+		t.Fatalf("partial merge or original changed: %#v, %v", updated, err)
+	}
+	config := Config{Defaults: Defaults{WorkerModelProvider: "claude", WorkerModel: "generic", Subagent: route}}
+	cloned := config.Clone()
+	cloned.Defaults.Subagent.Model = "changed"
+	if config.Defaults.Subagent.Model != model || config.Defaults.WorkerModel != "generic" {
+		t.Fatal("clone aliases route or changed generic defaults")
+	}
+	document := Document{Defaults: DocumentDefaults{Subagent: route}}
+	copy := document.Clone()
+	copy.Defaults.Subagent.Provider = "codex"
+	if document.Defaults.Subagent.Provider != route.Provider {
+		t.Fatal("document clone aliases route")
+	}
+}
+
+func TestSubagentRouteRejectsEmptyAndSymbolicValues(t *testing.T) {
+	t.Parallel()
+	for _, route := range []SubagentRoute{
+		{Provider: "DEFAULT", Model: "model"}, {Provider: "codex"},
+		{Provider: "codex", Model: "model", ReasoningEffort: "invalid"},
+	} {
+		if _, err := route.Normalize(); !errors.Is(err, ErrDocumentMalformed) {
+			t.Fatalf("accepted %#v: %v", route, err)
+		}
+	}
+	route := &SubagentRoute{Provider: "codex", Model: "model"}
+	empty := " "
+	if _, err := route.Merge(SubagentRouteUpdate{ReasoningEffort: &empty}); !errors.Is(err, ErrDocumentMalformed) {
+		t.Fatalf("accepted empty effort: %v", err)
+	}
+}
+
 func TestACPAgentProfileNormalizeTrimsAndPreservesOrder(t *testing.T) {
 	t.Parallel()
 

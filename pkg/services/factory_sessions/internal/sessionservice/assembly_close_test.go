@@ -914,3 +914,77 @@ func TestCanonicalFactoryRequestsDetachExecutionOnlyCaller(t *testing.T) {
 		t.Fatal("absent caller acquired authority")
 	}
 }
+
+type transactionSidecars struct {
+	order        *[]string
+	handle       factoryruntime.RuntimeRun
+	ctx          context.Context
+	restartError error
+}
+
+func (*transactionSidecars) Preseed(context.Context, factoryruntime.RuntimeRecord) error { return nil }
+func (s *transactionSidecars) Stop(run factoryruntime.RuntimeRun) {
+	if run != s.handle {
+		panic("transaction stopped another Session")
+	}
+	*s.order = append(*s.order, "join")
+}
+func (s *transactionSidecars) Start(ctx context.Context, run factoryruntime.RuntimeRun) error {
+	if run != s.handle || ctx != s.ctx {
+		panic("transaction restored another Session or request lifetime")
+	}
+	*s.order = append(*s.order, "resume")
+	return s.restartError
+}
+func TestLayoutTransactionRestoresSourcesAfterDurableRollback(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []bool{false, true} {
+		t.Run(fmt.Sprint(failure), func(t *testing.T) {
+			t.Parallel()
+			state := newWorkResolverSessionState()
+			registerScopeControlRuntime(state, "selected", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+			registerScopeControlRuntime(state, "peer", &scopedControlRuntime{status: "RUNNING"}, zap.NewNop())
+			selected, peer := state.Resolve("selected"), state.Resolve("peer")
+			handle := runtimebinding.HandleFromSession(selected)
+			serviceCtx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			requestCtx, cancelRequest := context.WithCancel(t.Context())
+			cancelRequest()
+			order := []string{}
+			cause, restartCause := errors.New("candidate failed"), errors.New("restart failed")
+			sidecars := &transactionSidecars{order: &order, handle: handle, ctx: serviceCtx}
+			if failure {
+				sidecars.restartError = restartCause
+			}
+			owner := &SessionRuntime{owner: &Assembly{state: state}, runtimeMode: factorydefinitions.RuntimeModeService, runtimeSidecars: sidecars}
+			owner.runtimeState.SetActive(serviceCtx, selected.ID, handle)
+			runtimebinding.SessionStateFrom(selected).Owner = owner
+			gateway := NewKeyedDefinitionActivationGateway(state, state.Clock())
+			err := gateway.WithActivationLock(func() error {
+				return gateway.WithSessionSourcesStopped(requestCtx, selected.ID, func() error {
+					if !owner.layoutReplacement || !reflect.DeepEqual(order, []string{"join"}) {
+						t.Fatal("transaction ran before source join")
+					}
+					order = append(order, "persist")
+					if failure {
+						order = append(order, "rollback")
+						return cause
+					}
+					return nil
+				})
+			})
+			want := []string{"join", "persist"}
+			if failure {
+				want = append(want, "rollback", "resume")
+				if !errors.Is(err, cause) || !errors.Is(err, restartCause) {
+					t.Fatalf("joined causes = %v", err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(order, want) || owner.layoutReplacement || state.Resolve("selected") != selected || state.Resolve("peer") != peer {
+				t.Fatalf("transaction order/ownership = %v", order)
+			}
+		})
+	}
+}

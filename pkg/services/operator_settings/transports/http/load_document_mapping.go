@@ -73,6 +73,14 @@ func documentToGlobalConfig(document operatorsettings.Document) factoryapi.Globa
 			WorkerModel:         optionalStringPointer(document.Defaults.WorkerModel),
 		}
 	}
+	if document.Defaults.Subagent != nil {
+		route := document.Defaults.Subagent
+		generated.Defaults.Subagent = &struct {
+			Model           string  `json:"model"`
+			Provider        string  `json:"provider"`
+			ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+		}{Model: route.Model, Provider: route.Provider, ReasoningEffort: optionalStringPointer(route.ReasoningEffort)}
+	}
 	generated.Runtime = &factoryapi.GlobalConfigRuntime{
 		Logging: runtimeArtifactSettingsToAPI(document.Runtime.Logging),
 		Metrics: runtimeArtifactSettingsToAPI(document.Runtime.Metrics),

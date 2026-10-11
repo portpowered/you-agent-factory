@@ -24,10 +24,9 @@ const (
 // precomposed operation and this package only handles protocol values.
 type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 
-// Options configures one MCP server instance around the exact injected raw
-// tool operation used by production and protocol tests.
+// Options contains protocol registration values. The dispatch role is injected
+// separately and shared by production and protocol tests.
 type Options struct {
-	ToolOperation ToolOperation
 	ServerName    string
 	ServerVersion string
 	Resources     []ResourceRegistration
@@ -42,18 +41,18 @@ type Server struct {
 
 // New constructs an inert MCP server with the generated subagent tool registered
 // through the official Go SDK.
-func New(opts Options) (*Server, error) {
-	if opts.ToolOperation == nil {
+func New(operation ToolOperation, opts Options) (*Server, error) {
+	if operation == nil {
 		return nil, fmt.Errorf("mcp server requires a tool operation")
 	}
-	sdk, err := newSDKServer(opts)
+	sdk, err := newSDKServer(operation, opts)
 	if err != nil {
 		return nil, err
 	}
 	return &Server{sdk: sdk}, nil
 }
 
-func newSDKServer(opts Options) (*mcp.Server, error) {
+func newSDKServer(operation ToolOperation, opts Options) (*mcp.Server, error) {
 	name := strings.TrimSpace(opts.ServerName)
 	if name == "" {
 		name = defaultServerName
@@ -79,7 +78,7 @@ func newSDKServer(opts Options) (*mcp.Server, error) {
 	if err := registerResources(sdk, opts.Resources); err != nil {
 		return nil, err
 	}
-	if err := registerTools(sdk, toolCaller(opts.ToolOperation)); err != nil {
+	if err := registerTools(sdk, toolCaller(operation)); err != nil {
 		return nil, err
 	}
 	if len(opts.Skills) > 0 {
@@ -187,9 +186,6 @@ func textResult(text string, isError bool) *mcp.CallToolResult {
 
 // ServeStdio runs the already-constructed server over caller-owned streams.
 func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) error {
-	if s == nil || s.sdk == nil {
-		return fmt.Errorf("serve MCP stdio: server is required")
-	}
 	if in == nil {
 		return fmt.Errorf("serve MCP stdio: input is required")
 	}
@@ -206,9 +202,6 @@ func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) er
 // Serve runs the server over an SDK transport. It is useful for process-owned
 // transports other than stdio and for protocol-level integration tests.
 func (s *Server) Serve(ctx context.Context, transport mcp.Transport) error {
-	if s == nil || s.sdk == nil {
-		return fmt.Errorf("serve MCP: server is required")
-	}
 	if transport == nil {
 		return fmt.Errorf("serve MCP: transport is required")
 	}

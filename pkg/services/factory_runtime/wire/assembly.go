@@ -1,10 +1,11 @@
 package wire
 
 import (
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"context"
 	"io/fs"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -64,10 +65,8 @@ func NewRuntimeFactory(
 	runtimeLogs factoryruntime.RuntimeLogOwner,
 	runtimeMetrics factoryruntime.RuntimeMetricsOwner,
 	newID factoryruntime.IDGenerator,
-	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
 	inputFiles InputFileSystem,
-	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper DefinitionMapper,
@@ -82,10 +81,8 @@ func NewRuntimeFactory(
 		runtimeLogs,
 		runtimeMetrics,
 		newID,
-		workRequestIDs,
 		runtimeDirs,
 		inputFiles,
-		inputDirectoryWalker,
 		orchestrationCompilation,
 		workerAttemptScheduler,
 		definitionMapper,
@@ -102,7 +99,6 @@ func NewAssembly(
 	instanceHost InstanceHost,
 	preparation RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 	recoverOwners recordings.WorkerCapturePreparationOperation,
@@ -112,7 +108,6 @@ func NewAssembly(
 		instanceHost,
 		preparation,
 		recordingsRuntime,
-		automationService,
 		progressFactory, completionFactory, recoverOwners)
 }
 
@@ -140,9 +135,13 @@ func NewEngineOpening(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	dispatchOpening OutboxOpening,
 	enablement Enablement,
+	promptSources factorydefinitions.FileReader,
+	prompts RequestPromptRenderer,
+	templateFields RequestTemplateFieldResolver,
+	prepareSchedules InvocationSchedulePreparation,
 ) EngineOpening {
 	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping,
-		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, scheduler.SelectedEnablement(enablement))
+		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, scheduler.SelectedEnablement(enablement), promptSources, prompts, templateFields, prepareSchedules)
 }
 
 func NewBundleOpening(
@@ -152,11 +151,10 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factoryruntime.WorkerAttemptOpener,
 	requestResolver *WorkstationRequestExecutor,
-	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 ) (BundleOpening, error) {
 	opening, err := factoryruntimeinternal.NewBundleOpening(factoryruntimeinternal.SelectedRuntimeFactory(runtimeFactory).Build, workerAttemptScheduler, workerService,
-		workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
+		workerSessions, workerAttempts, requestResolver, initialFactorySnapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +163,11 @@ func NewBundleOpening(
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening
 
-func NewSidecarOpening(automation automations.Service, metricsClock platformclock.TimerSource) *SidecarOpening {
-	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock)
+type RuntimeAutomationLifecycle = factoryruntimeinternal.RuntimeAutomationLifecycle
+type InvocationSchedulePreparation = func(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error)
+
+func NewSidecarOpening(automation RuntimeAutomationLifecycle, metricsClock platformclock.TimerSource, inputFiles InputFileSystem, inputDirectoryWalker factoryruntime.InputDirectoryWalker, workRequestIDs work.RequestIDGenerator) *SidecarOpening {
+	return factoryruntimeinternal.NewSidecarOpening(automation, metricsClock, inputFiles, inputDirectoryWalker, workRequestIDs)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator

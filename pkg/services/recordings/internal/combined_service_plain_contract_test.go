@@ -1249,11 +1249,17 @@ func characterizeAbandonedRecording(t *testing.T, clock recordings.RecordingCloc
 	return owner.finishes[0]
 }
 
-func TestCombinedServiceResumeInputWithoutSource(t *testing.T) {
+func TestCombinedServiceResumeInputWithMissingArtifact(t *testing.T) {
 	t.Parallel()
-	root := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
+	loader := replayInputLoaderFunc(func(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+		if request.Path != "missing.json" {
+			t.Fatalf("selected replay path = %q, want missing.json", request.Path)
+		}
+		return recordings.LoadReplayInputResult{}, recordings.ErrMissingReplayArtifact
+	})
+	root := &combinedService{replayInputs: loader}
 	if _, err := root.LoadResumeInput(recordings.LoadResumeInputRequest{Path: "missing.json"}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
-		t.Fatalf("LoadResumeInput without a replay source = %v, want ErrMissingReplayArtifact", err)
+		t.Fatalf("LoadResumeInput with a missing replay artifact = %v, want ErrMissingReplayArtifact", err)
 	}
 }
 

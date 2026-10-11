@@ -110,6 +110,21 @@ func (handle *hostedHandleFake) RunDoneCh() <-chan struct{} { return handle.done
 
 type lifecycleFake struct{}
 
+type replacementSidecars struct {
+	stopped factory.RuntimeRun
+	started factory.RuntimeRun
+}
+
+func (*replacementSidecars) Preseed(context.Context, factory.RuntimeRecord) error { return nil }
+func (s *replacementSidecars) Stop(run factory.RuntimeRun)                        { s.stopped = run }
+func (s *replacementSidecars) Start(_ context.Context, run factory.RuntimeRun) error {
+	if s.stopped == nil {
+		return errors.New("replacement source started before previous source joined")
+	}
+	s.started = run
+	return nil
+}
+
 type canceledReadinessLifecycle struct{ lifecycleFake }
 
 type startupReadinessLifecycle struct {
@@ -540,7 +555,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		SessionID: "session-1", FactoryDir: "/old", FolderPath: "/workspace",
 		ExecutionBaseDir: "/old-execution", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "alpha"},
 		Handle: &runtimebinding.SessionState{Instance: oldInstance, Handle: oldHandle, Spec: preparedSpec, Clock: clock, Logger: oldInstance.RuntimeLogger(),
-			ReplayMetadataWarnings: warnings, ResumeRecoveryMetadata: recovery, OperatorSettingsPath: "scoped.yaml", CurrentBoardRecordPath: "selected.jsonl"},
+			ReplayMetadataWarnings: warnings, ResumeRecoveryMetadata: recovery, OperatorSettingsPath: "scoped.yaml", CurrentBoardRecordPath: "selected.jsonl", RecordingHome: "selected-profile"},
 		Default: false, Project: "project", Select: true,
 	})
 	original := sessions.Resolve("session-1")
@@ -554,6 +569,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	var retiredSessionID string
 	var retiredRecord factory.RuntimeRecord
 	var retiredAfterStop bool
+	sidecars := &replacementSidecars{}
 
 	updated, err := runtimebinding.Replace(
 		context.Background(),
@@ -561,9 +577,10 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		&runtimeState,
 		original,
 		replacement,
-		false,
+		true,
+		true,
 		lifecycleFake{},
-		nil,
+		sidecars,
 		func(handle factory.RuntimeRun) error {
 			stopped = handle
 			return nil
@@ -588,6 +605,9 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		t.Fatal("runtime retirement callback ran before the previous runtime stopped")
 	}
 	newHandle := runtimebinding.HandleFromSession(updated)
+	if sidecars.stopped != oldHandle || sidecars.started != newHandle {
+		t.Fatal("replacement sources did not join prior scope and start selected generation")
+	}
 	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
 	assertActiveReplacement(t, &runtimeState, updated, newHandle)
 	bound := runtimebinding.SessionStateFrom(updated)
@@ -595,7 +615,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	if oldLogs.Len() != 0 || currentLogs.FilterMessage("replacement session diagnostic").Len() != 1 {
 		t.Fatalf("replacement diagnostic reached wrong generation: retired=%d current=%d", oldLogs.Len(), currentLogs.Len())
 	}
-	if bound.Clock != clock || bound.OperatorSettingsPath != "scoped.yaml" || bound.CurrentBoardRecordPath != "selected.jsonl" ||
+	if bound.Clock != clock || bound.OperatorSettingsPath != "scoped.yaml" || bound.CurrentBoardRecordPath != "selected.jsonl" || bound.RecordingHome != "selected-profile" ||
 		len(bound.ReplayMetadataWarnings) != 1 || bound.ResumeRecoveryMetadata == nil || bound.ResumeRecoveryMetadata == recovery {
 		t.Fatalf("replacement lost scoped facts or failed to detach recovery metadata: %#v", bound)
 	}
@@ -606,6 +626,39 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 
 	newHandle.CancelRun()
 	<-newHandle.RunDoneCh()
+}
+
+func TestReplaceReadinessFailureRestoresSelectedSourcesAndPreservesPeer(t *testing.T) {
+	t.Parallel()
+	sessions := newRuntimeBindingState()
+	prior := newHostedHandleFake(&hostedInstanceFake{})
+	peer := newHostedHandleFake(&hostedInstanceFake{})
+	defer prior.CancelRun()
+	defer peer.CancelRun()
+	runtimebinding.Register(sessions, runtimebinding.Registration{SessionID: "selected", Handle: prior})
+	runtimebinding.Register(sessions, runtimebinding.Registration{SessionID: "peer", Handle: peer})
+	original, originalPeer := sessions.Resolve("selected"), sessions.Resolve("peer")
+	var active runtimebinding.State
+	active.SetActive(t.Context(), original.ID, prior)
+	cause := errors.New("selected replacement readiness failed")
+	var candidate factory.RuntimeRun
+	lifecycle := startupReadinessLifecycle{readiness: func(_ context.Context, run factory.RuntimeRun) error {
+		candidate = run
+		return cause
+	}}
+	sidecars := &replacementSidecars{}
+	_, err := runtimebinding.Replace(t.Context(), sessions, &active, original, &hostedInstanceFake{},
+		true, true, lifecycle, sidecars, lifecycle.Stop, nil, nil)
+	if !errors.Is(err, cause) || candidate == nil || !candidate.Completed() {
+		t.Fatalf("failed candidate cleanup/cause: run=%v error=%v", candidate, err)
+	}
+	if sessions.Resolve("selected") != original || sessions.Resolve("peer") != originalPeer ||
+		prior.Completed() || peer.Completed() || active.Active().Handle != prior {
+		t.Fatal("failed replacement changed selected or peer generation")
+	}
+	if sidecars.stopped != prior || sidecars.started != prior {
+		t.Fatal("failed replacement did not restore sources on retained generation")
+	}
 }
 
 func assertReplacementSession(
@@ -929,7 +982,7 @@ func TestOpeningMetadataRemainsDetachedAndClearsAbsentFacts(t *testing.T) {
 	resume := &recordings.ResumeRecoveryMetadata{SourceRecordingID: "source"}
 	recovery := &factorysessions.StartupRecovery{Cause: "quarantined"}
 	metadata := runtimebinding.OpeningMetadata{
-		CurrentBoardRecordPath: "selected.recording", OperatorSettingsPath: "selected.operator",
+		CurrentBoardRecordPath: "selected.recording", OperatorSettingsPath: "selected.operator", RecordingHome: "selected-profile",
 		SkippedBoardRecordings: []string{"selected.skipped"},
 		ReplayMetadataWarnings: []recordings.MetadataMismatchWarning{{Key: "selected"}},
 		ResumeRecoveryMetadata: resume, StartupRecovery: recovery,
@@ -940,13 +993,13 @@ func TestOpeningMetadataRemainsDetachedAndClearsAbsentFacts(t *testing.T) {
 	metadata.SkippedBoardRecordings[0] = "changed"
 	metadata.ReplayMetadataWarnings[0].Key = "changed"
 	resume.SourceRecordingID, recovery.Cause = "changed", "changed"
-	if selected.CurrentBoardRecordPath != "selected.recording" || selected.OperatorSettingsPath != "selected.operator" ||
+	if selected.CurrentBoardRecordPath != "selected.recording" || selected.OperatorSettingsPath != "selected.operator" || selected.RecordingHome != "selected-profile" ||
 		selected.SkippedBoardRecordings[0] != "selected.skipped" || selected.ReplayMetadataWarnings[0].Key != "selected" ||
 		selected.ResumeRecoveryMetadata.SourceRecordingID != "source" || selected.StartupRecovery.Cause != "quarantined" || peer.ResumeRecoveryMetadata != nil {
 		t.Fatal("opening metadata aliases caller or peer state")
 	}
 	opening.SetOpeningMetadata(runtimebinding.OpeningMetadata{})
-	if selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" || selected.SkippedBoardRecordings != nil ||
+	if selected.CurrentBoardRecordPath != "" || selected.OperatorSettingsPath != "" || selected.RecordingHome != "" || selected.SkippedBoardRecordings != nil ||
 		selected.ReplayMetadataWarnings != nil || selected.ResumeRecoveryMetadata != nil || selected.StartupRecovery != nil {
 		t.Fatal("absent opening metadata retained previous facts")
 	}

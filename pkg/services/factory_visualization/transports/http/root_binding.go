@@ -26,16 +26,7 @@ type RootBinding struct {
 // without constructing real activation_lifecycle, live_view_projection,
 // response_event_presentation, or service-local Wire graphs.
 func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
-	return NewHandler(Dependencies{
-		VisualizationRoot: binding.Visualization,
-	}, logger)
-}
-
-func (a *Adapter) requireVisualizationRoot() (VisualizationRoot, error) {
-	if a == nil || a.visualization == nil {
-		return nil, errors.New("Factory visualization API is unavailable")
-	}
-	return a.visualization, nil
+	return NewHandler(binding.Visualization, logger)
 }
 
 // Activate invokes the Visualization root Activate slice.
@@ -43,11 +34,7 @@ func (a *Adapter) Activate(
 	ctx context.Context,
 	req factoryvisualization.ActivateRequest,
 ) (factoryvisualization.ActivateResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.ActivateResult{}, err
-	}
-	return root.Activate(ctx, req)
+	return a.visualization.Activate(ctx, req)
 }
 
 // Join invokes the Visualization root Join slice.
@@ -55,11 +42,7 @@ func (a *Adapter) Join(
 	ctx context.Context,
 	req factoryvisualization.JoinRequest,
 ) (factoryvisualization.JoinResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.JoinResult{}, err
-	}
-	return root.Join(ctx, req)
+	return a.visualization.Join(ctx, req)
 }
 
 // StopDrain invokes the Visualization root StopDrain slice.
@@ -67,11 +50,7 @@ func (a *Adapter) StopDrain(
 	ctx context.Context,
 	req factoryvisualization.StopDrainRequest,
 ) (factoryvisualization.StopDrainResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.StopDrainResult{}, err
-	}
-	return root.StopDrain(ctx, req)
+	return a.visualization.StopDrain(ctx, req)
 }
 
 // Observe invokes the Visualization root Observe slice.
@@ -79,11 +58,7 @@ func (a *Adapter) Observe(
 	ctx context.Context,
 	req factoryvisualization.ObserveRequest,
 ) (factoryvisualization.ObserveResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.ObserveResult{}, err
-	}
-	return root.Observe(ctx, req)
+	return a.visualization.Observe(ctx, req)
 }
 
 // OpenPresentation invokes the Visualization root OpenPresentation slice.
@@ -91,11 +66,7 @@ func (a *Adapter) OpenPresentation(
 	ctx context.Context,
 	req factoryvisualization.OpenPresentationRequest,
 ) (factoryvisualization.OpenPresentationResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.OpenPresentationResult{}, err
-	}
-	return root.OpenPresentation(ctx, req)
+	return a.visualization.OpenPresentation(ctx, req)
 }
 
 // PresentProgress invokes the Visualization root PresentProgress slice.
@@ -103,11 +74,7 @@ func (a *Adapter) PresentProgress(
 	ctx context.Context,
 	req factoryvisualization.PresentProgressRequest,
 ) (factoryvisualization.PresentProgressResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.PresentProgressResult{}, err
-	}
-	return root.PresentProgress(ctx, req)
+	return a.visualization.PresentProgress(ctx, req)
 }
 
 // FinalizePresentation invokes the Visualization root FinalizePresentation slice.
@@ -115,11 +82,7 @@ func (a *Adapter) FinalizePresentation(
 	ctx context.Context,
 	req factoryvisualization.FinalizePresentationRequest,
 ) (factoryvisualization.FinalizePresentationResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.FinalizePresentationResult{}, err
-	}
-	return root.FinalizePresentation(ctx, req)
+	return a.visualization.FinalizePresentation(ctx, req)
 }
 
 // ClosePresentation invokes the Visualization root ClosePresentation slice.
@@ -127,11 +90,7 @@ func (a *Adapter) ClosePresentation(
 	ctx context.Context,
 	req factoryvisualization.ClosePresentationRequest,
 ) (factoryvisualization.ClosePresentationResult, error) {
-	root, err := a.requireVisualizationRoot()
-	if err != nil {
-		return factoryvisualization.ClosePresentationResult{}, err
-	}
-	return root.ClosePresentation(ctx, req)
+	return a.visualization.ClosePresentation(ctx, req)
 }
 
 const visualizationRequestFailedMessage = "factory visualization request failed"

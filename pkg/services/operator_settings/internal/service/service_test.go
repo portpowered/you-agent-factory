@@ -148,7 +148,8 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	}
 
 	defaultsPath := path
-	document.document = operatorsettings.Document{}
+	enabled := false
+	document.document = operatorsettings.Document{Messaging: &operatorsettings.MessagingSettings{Enabled: &enabled}}
 	defaults := []operatorsettings.ACPIntegration{integration}
 	materialized, err := root.EnsurePackagedACPIntegrations(context.Background(), defaultsPath, defaults)
 	if err != nil {
@@ -156,6 +157,14 @@ func TestRootACPConfigurationAddsDeletesAndMaterializesDefaults(t *testing.T) {
 	}
 	if len(materialized.Workers.ACP.Integrations) != 1 || materialized.Workers.ACP.Integrations[0] != integration {
 		t.Fatalf("materialized integrations = %#v, want %#v", materialized.Workers.ACP.Integrations, defaults)
+	}
+
+	if materialized.Messaging == nil || materialized.Messaging.Enabled == nil || *materialized.Messaging.Enabled {
+		t.Fatal("ACP materialization discarded authored messaging settings")
+	}
+	*materialized.Messaging.Enabled = true
+	if enabled {
+		t.Fatal("returned ACP document aliases the loaded messaging settings")
 	}
 
 	preserved, err := root.EnsurePackagedACPIntegrations(context.Background(), defaultsPath, []operatorsettings.ACPIntegration{{ID: "other", Name: "other"}})

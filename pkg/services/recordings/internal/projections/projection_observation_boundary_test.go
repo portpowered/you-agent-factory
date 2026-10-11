@@ -165,3 +165,32 @@ func TestFactoryEventsInReplayOrder_UsesDeterministicTieBreakers(t *testing.T) {
 		t.Fatal("event ID tie-breaker should classify reversed input as out of order")
 	}
 }
+
+func TestResumedReplaySelectedTickFiltersWithoutBreakingCausalOrder(t *testing.T) {
+	t.Parallel()
+	timeValue := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	event := func(sequence, tick int, state string) interfaces.FactoryEvent {
+		return canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkStateChange,
+			interfaces.FactoryEventContext{Sequence: sequence, Tick: tick, EventTime: timeValue},
+			interfaces.WorkStateChangeEventPayload{WorkID: "resumed", WorkTypeName: "task", ToState: state, ToPlaceID: "task:" + state})
+	}
+	canceled, completed := event(11, 4, "init"), event(22, 3, "complete")
+	for _, selected := range []int{3, 4} {
+		for _, input := range [][]interfaces.FactoryEvent{{canceled, completed}, {completed, canceled}} {
+			before := []interfaces.FactoryEvent{input[0].Clone(), input[1].Clone()}
+			state, err := ReconstructCanonicalFactoryWorldState(input, selected)
+			if err != nil || state.WorkItemsByID["resumed"].State != "complete" {
+				t.Fatalf("selected tick %d replay = %#v, %v", selected, state.WorkItemsByID, err)
+			}
+			if !reflect.DeepEqual(input, before) {
+				t.Fatal("replay changed input facts")
+			}
+		}
+	}
+	// Old recordings omit sequence, so their existing tick fallback remains.
+	canceled.Context.Sequence, completed.Context.Sequence = 0, 0
+	state, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{canceled, completed}, 4)
+	if err != nil || state.WorkItemsByID["resumed"].State != "init" {
+		t.Fatalf("legacy tick ordering = %#v, %v", state.WorkItemsByID, err)
+	}
+}

@@ -383,7 +383,7 @@ func ShowHumanApproval(cfg ShowHumanApprovalConfig) error {
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		if apiError, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("human approval %q not found: %s", cfg.ApprovalID, apiError.Message)
+			return clihttp.NewAPIErrorFromResponse(resp, apiError, fmt.Sprintf("human approval %q not found: %s", cfg.ApprovalID, apiError.Message), nil)
 		}
 		return fmt.Errorf("human approval %q not found", cfg.ApprovalID)
 	}
@@ -449,7 +449,7 @@ func approvalEndpoint(server, path string) (url.URL, error) {
 func humanApprovalHTTPError(operation string, response *http.Response, diagnostics io.Writer, verbose bool, endpointPath string, duration time.Duration) error {
 	clidiag.Printf(diagnostics, verbose, "human approval response endpointPath=%s status=%d durationMillis=%d", endpointPath, response.StatusCode, duration.Milliseconds())
 	if apiError, ok := clihttp.DecodeAPIError(response); ok {
-		return fmt.Errorf("%s failed (%d): %s", operation, response.StatusCode, apiError.Message)
+		return clihttp.NewAPIErrorFromResponse(response, apiError, fmt.Sprintf("%s failed (%d): %s", operation, response.StatusCode, apiError.Message), nil)
 	}
 	return fmt.Errorf("%s failed (%d)", operation, response.StatusCode)
 }

@@ -389,19 +389,20 @@
     {
       "id": "mcp.tool.you.subagent",
       "name": "you.subagent",
-      "description": "Run a bounded subagent (RUN, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. RUN uses the packaged @you/subagent Factory and operator/provider defaults; Worker actions preserve selected-host results and typed errors. Poll READ logs with nextToken and inspect capture health.",
+      "description": "Start a direct subagent (START, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. Omitted route uses dedicated defaults.subagent. RUN returns a migration error. START returns admission without waiting for completion.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
             "enum": [
+              "START",
               "RUN",
               "LIST",
               "READ",
               "CONTROL"
             ],
-            "default": "RUN"
+            "default": "START"
           }
         },
         "oneOf": [
@@ -412,7 +413,8 @@
                 "type": "string"
               },
               "prompt": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "provider": {
                 "type": "string"
@@ -421,7 +423,9 @@
                 "type": "string"
               },
               "timeoutMillis": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9223372036854
               },
               "workingRoot": {
                 "type": "string"
@@ -429,8 +433,17 @@
               "action": {
                 "type": "string",
                 "enum": [
+                  "START",
                   "RUN"
                 ]
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "workerSessionId": {
+                "type": "string",
+                "minLength": 1
               }
             },
             "required": [

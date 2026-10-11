@@ -553,6 +553,11 @@ presentation rule:
 you --json run --factory ./factory.json --output primary "Summarize the changelog"
 ```
 
+Historical inspection with `you run --replay <recording>` and no one-shot
+invocation input displays readable Work, lineage, and event history. It rejects
+`--json` with `INVOCATION_OUTPUT_UNSUPPORTED` before opening the recording and
+writes nothing to stdout. Omit `--json` to inspect that history.
+
 ### Human Factory Event stream mode (default)
 
 One-shot text invocations render the ordered canonical Factory Event lifecycle

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -22,7 +23,7 @@ func TestSubagentActionValidationBeforeEffects(t *testing.T) {
 		return nil, nil
 	})
 	run := func(context.Context, json.RawMessage) (json.RawMessage, error) {
-		t.Fatal("invalid action reached RUN/configuration")
+		t.Fatal("invalid action reached START")
 		return nil, nil
 	}
 	for _, input := range []string{
@@ -32,7 +33,7 @@ func TestSubagentActionValidationBeforeEffects(t *testing.T) {
 		`{"action":"READ"}`, `{"action":"READ","workerSessionId":null}`, `{"action":"CONTROL","workerSessionId":"w"}`,
 		`{"action":"LIST"} {}`, `{"action":"LIST","scope":"direct","scope":"factory"}`,
 	} {
-		if input == `{}` { // Omitted RUN belongs to the existing Factory decoder.
+		if input == `{}` { // Empty START is checked by the prompt decoder.
 			continue
 		}
 		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), run)
@@ -42,21 +43,21 @@ func TestSubagentActionValidationBeforeEffects(t *testing.T) {
 	}
 }
 
-func TestSubagentDefaultAndExplicitRunPreserveArguments(t *testing.T) {
+func TestSubagentDefaultAndExplicitStartPreserveArguments(t *testing.T) {
 	t.Parallel()
 	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
-		t.Fatal("RUN reached selected host")
+		t.Fatal("selector test reached selected host")
 		return nil, nil
 	})
-	for _, input := range []string{`{"prompt":"hello"}`, `{"action":"RUN","prompt":"hello"}`} {
+	for _, input := range []string{`{"prompt":"hello"}`, `{"action":"START","prompt":"hello"}`} {
 		response, err := adapter.Subagent(context.Background(), json.RawMessage(input), func(_ context.Context, raw json.RawMessage) (json.RawMessage, error) {
 			if string(raw) != `{"prompt":"hello"}` {
-				t.Fatalf("RUN arguments=%s", raw)
+				t.Fatalf("START arguments=%s", raw)
 			}
-			return json.RawMessage(`{"result":{"text":"answer"}}`), nil
+			return json.RawMessage(`{"result":{"workerSessionId":"worker","accepted":true}}`), nil
 		})
-		if err != nil || string(response) != `{"result":{"text":"answer"}}` {
-			t.Fatalf("RUN result=%s err=%v", response, err)
+		if err != nil || string(response) != `{"result":{"workerSessionId":"worker","accepted":true}}` {
+			t.Fatalf("START result=%s err=%v", response, err)
 		}
 	}
 }
@@ -649,6 +650,104 @@ func TestWorkerSessionInterruptForwardsResumeMode(t *testing.T) {
 			}
 			if value := workerCall(t, adapter, ActionControl, input+"}"); value["error"] != nil {
 				t.Fatalf("forwarding: %v", value)
+			}
+		})
+	}
+}
+
+func TestSubagentRunMigrationHasNoEffects(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) { t.Fatal("RUN reached host"); return nil, nil })
+	raw, err := adapter.Subagent(context.Background(), json.RawMessage(`{"action":"RUN","prompt":"ignored"}`), func(context.Context, json.RawMessage) (json.RawMessage, error) {
+		t.Fatal("RUN started execution")
+		return nil, nil
+	})
+	if err != nil || !strings.Contains(string(raw), "worker_session.run_removed") {
+		t.Fatalf("result=%s err=%v", raw, err)
+	}
+}
+func TestSubagentStartPromptForwarding(t *testing.T) {
+	t.Parallel()
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicit), func(t *testing.T) {
+			body := &trackedBody{Reader: strings.NewReader(`{"requestId":"request","workerSessionId":"worker","accepted":true,"state":"RUNNING","eventTopic":"worker-session.worker"}`)}
+			adapter := workerAdapter(t, func(req *http.Request) (*http.Response, error) {
+				if req.URL.Host != "selected-host:7437" || req.URL.Path != "/worker-sessions" || req.Method != "POST" {
+					t.Fatalf("request=%+v", req)
+				}
+				var input client.WorkerSessionStartRequest
+				if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+					t.Fatal(err)
+				}
+				assertStartPrompt(t, input, explicit)
+				return &http.Response{StatusCode: 202, Body: body}, nil
+			})
+			input := `{"prompt":"hello","provider":"codex","model":"model","reasoningEffort":"high"}`
+			if explicit {
+				input = `{"requestId":"request","workerSessionId":"worker","prompt":"hello","provider":"codex","model":"model","reasoningEffort":"high","timeoutMillis":15}`
+			}
+			ids := []string{"request", "worker"}
+			raw, err := adapter.Start(context.Background(), json.RawMessage(input), t.TempDir(), func() string { value := ids[0]; ids = ids[1:]; return value })
+			if err != nil || !strings.Contains(string(raw), `"accepted":true`) || !body.closed {
+				t.Fatalf("response=%s err=%v closed=%t", raw, err, body.closed)
+			}
+		})
+	}
+}
+func TestSubagentStartRejectsInvalidInputBeforeHost(t *testing.T) {
+	t.Parallel()
+	adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) { t.Fatal("invalid start reached host"); return nil, nil })
+	for _, input := range []string{`{}`, `{"prompt":null}`, `{"prompt":" "}`, `{"prompt":"hello","history":"all"}`, `{"prompt":"hello","requestId":""}`, `{"prompt":"hello","workerSessionId":null}`, `{"prompt":"hello","model":""}`, `{"prompt":"hello","workingRoot":"relative"}`, `{"prompt":"hello","timeoutMillis":0}`, `{"prompt":"hello","timeoutMillis":1.5}`, `{"prompt":"hello","timeoutMillis":9223372036855}`} {
+		raw, err := adapter.Start(context.Background(), json.RawMessage(input), "", func() string { t.Fatal("invalid start allocated identity"); return "" })
+		if err != nil || !strings.Contains(string(raw), "worker_session.invalid_request") {
+			t.Fatalf("input=%s response=%s err=%v", input, raw, err)
+		}
+	}
+}
+
+func assertStartPrompt(t *testing.T, input client.WorkerSessionStartRequest, explicit bool) {
+	t.Helper()
+	if input.Execution != nil || input.Retry != nil {
+		t.Fatal("sent resolved form")
+	}
+	if input.RequestId != "request" || input.WorkerSessionId != "worker" {
+		t.Fatal("lost identities")
+	}
+	for name, value := range map[string]*string{"prompt": input.Prompt, "provider": input.Provider, "model": input.Model, "reasoningEffort": input.ReasoningEffort, "workingRoot": input.WorkingRoot} {
+		if value == nil {
+			t.Fatalf("missing %s", name)
+		}
+	}
+	if *input.Prompt != "hello" || *input.Provider != "codex" || *input.Model != "model" || *input.ReasoningEffort != "high" {
+		t.Fatal("lost route")
+	}
+	if explicit {
+		if input.TimeoutMillis == nil || *input.TimeoutMillis != 15 {
+			t.Fatal("lost duration")
+		}
+	} else if input.TimeoutMillis != nil {
+		t.Fatal("introduced default duration")
+	}
+}
+
+func TestSubagentStartTypedRouteGuidance(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"SUBAGENT_ROUTE_INVALID", "SUBAGENT_PROVIDER_INVALID", "SUBAGENT_PROVIDER_INPUT_INVALID", "SUBAGENT_PROVIDER_AUTHENTICATION", "SUBAGENT_PROVIDER_UNAVAILABLE"} {
+		t.Run(code, func(t *testing.T) {
+			status := 400
+			if code == "SUBAGENT_PROVIDER_AUTHENTICATION" {
+				status = 403
+			}
+			if code == "SUBAGENT_PROVIDER_UNAVAILABLE" {
+				status = 503
+			}
+			body := &trackedBody{Reader: strings.NewReader(fmt.Sprintf(`{"code":%q,"message":"private upstream diagnostics"}`, code))}
+			adapter := workerAdapter(t, func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: status, Body: body}, nil
+			})
+			raw, err := adapter.Start(t.Context(), json.RawMessage(`{"requestId":"request","workerSessionId":"worker","prompt":"hello"}`), "", nil)
+			if err != nil || !body.closed || !strings.Contains(string(raw), code) || strings.Contains(string(raw), "private upstream diagnostics") {
+				t.Fatalf("response=%s err=%v", raw, err)
 			}
 		})
 	}

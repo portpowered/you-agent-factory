@@ -94,13 +94,8 @@ func startRecordedWebhookDirectory(t *testing.T, dir string, configs []map[strin
 	inputs.Env = initialWebhookEnvironment(session.profile)
 	session.command = support.StartProcessCommand(t, factoryEventsCLIProcess, inputs.Input)
 	session.url = api.WaitForURL(t)
-	enabled := 0
-	for _, config := range configs {
-		if active, _ := config["enabled"].(bool); active {
-			enabled++
-		}
-	}
-	resolver.waitForCount(t, enabled, 30*time.Second)
+	// Public application readiness must suffice for immediate Work admission;
+	// waiting for secret resolution here would mask subscription startup races.
 	return session
 }
 

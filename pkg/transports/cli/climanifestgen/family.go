@@ -89,6 +89,7 @@ var WorkersFamilyCommandIDs = []string{
 // observation on one Factory Session.
 var WorkerSessionsFamilyCommandIDs = []string{
 	"you.worker-sessions",
+	"you.worker-sessions.start",
 	"you.worker-sessions.invoke",
 	"you.worker-sessions.continue",
 	"you.worker-sessions.interrupt",

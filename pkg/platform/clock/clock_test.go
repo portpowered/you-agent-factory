@@ -132,16 +132,6 @@ func TestRealReadsCurrentWallClock(t *testing.T) {
 	}
 }
 
-func TestEnsureUsesRealClockOnlyForMissingSource(t *testing.T) {
-	fixed := platformclock.NewDeterministic(time.Unix(42, 0), time.Second)
-	if got := platformclock.Ensure(fixed); got != fixed {
-		t.Fatal("Ensure replaced the supplied clock")
-	}
-	if got := platformclock.Ensure(nil); got == nil {
-		t.Fatal("Ensure(nil) returned nil")
-	}
-}
-
 func TestDeterministicAdvancesFromLogicalTick(t *testing.T) {
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	clock := platformclock.NewDeterministic(base, 10*time.Millisecond)

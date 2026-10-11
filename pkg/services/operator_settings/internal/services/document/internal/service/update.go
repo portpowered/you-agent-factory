@@ -33,6 +33,13 @@ func (service *Service) applyDocumentUpdate(
 		return operatorsettings.ApplyDocumentUpdateResult{}, err
 	}
 
+	if request.Subagent != nil {
+		updated.Defaults.Subagent, err = updated.Defaults.Subagent.Merge(*request.Subagent)
+		if err != nil {
+			return operatorsettings.ApplyDocumentUpdateResult{}, err
+		}
+	}
+
 	if err := service.persistDocument(context.Background(), operatorsettings.PersistDocumentRequest{
 		Path:     path,
 		Document: updated,

@@ -2,6 +2,7 @@ package factorydefinition
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,18 +24,16 @@ func TestEditableFactoryRoundTripPreservesSnapshotAndVersion(t *testing.T) {
 		},
 	}
 
-	editable, err := editableFactoryFromAPI(request)
+	owner := &snapshotImportOwner{}
+	mapped, err := New(owner).Save(t.Context(), "selected-session", factoryapi.FactorySaveModeReplaceCurrent, request)
 	if err != nil {
-		t.Fatalf("editableFactoryFromAPI: %v", err)
+		t.Fatalf("Save: %v", err)
 	}
+	editable := owner.saved
 	if editable.Name != "alpha" || editable.Version == nil || editable.Version.Logical != 41 || !editable.Version.Physical.Equal(physical) {
 		t.Fatalf("editable Factory = %#v, want alpha at version 41/%s", editable, physical)
 	}
 
-	mapped, err := editableFactoryToAPI(editable)
-	if err != nil {
-		t.Fatalf("editableFactoryToAPI: %v", err)
-	}
 	if mapped.Name != request.Name || mapped.Id == nil || *mapped.Id != "runtime-alpha" {
 		t.Fatalf("mapped Factory = %#v, want original identity", mapped)
 	}
@@ -85,3 +84,39 @@ func TestEditableFactoryToAPIRequiresSnapshot(t *testing.T) {
 }
 
 func stringPointer(value string) *string { return &value }
+
+// The mapping component receives a completed snapshot import operation and
+// forwards its detached result without assembling the snapshot implementation.
+type snapshotImportOwner struct {
+	factorydefinitions.Service
+	saved     factorydefinitions.EditableFactory
+	importErr error
+}
+
+func (owner *snapshotImportOwner) PrepareFactorySnapshotImport(_ context.Context, request factorydefinitions.PrepareFactorySnapshotImportRequest) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
+	if owner.importErr != nil {
+		return factorydefinitions.PrepareFactorySnapshotImportResult{}, owner.importErr
+	}
+	var snapshot factorydefinitions.FactorySnapshot
+	if err := snapshot.UnmarshalJSON(request.Payload); err != nil {
+		return factorydefinitions.PrepareFactorySnapshotImportResult{}, err
+	}
+	return factorydefinitions.PrepareFactorySnapshotImportResult{Snapshot: &snapshot}, nil
+}
+func (owner *snapshotImportOwner) Save(_ context.Context, _ string, _ factorydefinitions.SaveMode, request factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error) {
+	owner.saved = request
+	return request, nil
+}
+func TestSavePreservesSnapshotImportCauseWithoutSaving(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, factorydefinitions.ErrInvalidFactorySnapshotPayload} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			owner := &snapshotImportOwner{importErr: cause}
+			_, err := New(owner).Save(t.Context(), "selected-session", factoryapi.FactorySaveModeReplaceCurrent, factoryapi.Factory{Name: "alpha"})
+			if !errors.Is(err, cause) || owner.saved.Snapshot != nil {
+				t.Fatalf("Save = %v, saved = %#v", err, owner.saved)
+			}
+		})
+	}
+}

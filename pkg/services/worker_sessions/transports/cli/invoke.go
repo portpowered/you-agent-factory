@@ -50,22 +50,27 @@ type InvokeConfig struct {
 	LookupEnv func(string) (string, bool)    `json:"-"`
 	Caller    *workersessions.CallerIdentity `json:"-"`
 
-	RequestID        string
-	WorkerSessionID  string
-	DispatchID       string
-	WorkstationName  string
-	WorkerType       string
-	RunnerID         string
-	Provider         string
-	Model            string
-	ReasoningEffort  string
-	SystemPrompt     string
-	UserMessage      string
-	ExecutionJSON    string
-	Prompt           []string
-	Stdin            io.Reader
-	StdinIsTTY       bool
-	Async            bool
+	RequestID       string
+	WorkerSessionID string
+	DispatchID      string
+	WorkstationName string
+	WorkerType      string
+	RunnerID        string
+	Provider        string
+	Model           string
+	ReasoningEffort string
+	SystemPrompt    string
+	UserMessage     string
+	ExecutionJSON   string
+	Prompt          []string
+	Stdin           io.Reader
+	StdinIsTTY      bool
+	Async           bool
+	// PromptStart selects the server-resolved prompt form. It always uses the
+	// selected persistent host and returns after admission.
+	PromptStart      bool
+	WorkingRoot      string
+	TimeoutMillis    *int64
 	RetryMaxAttempts int
 
 	OutputFormat string
@@ -128,6 +133,9 @@ type invokeCapture struct {
 }
 
 func invoke(config InvokeConfig) error {
+	if config.PromptStart {
+		config.Remote, config.Async = true, true
+	}
 	jsonOutput := config.JSON || strings.EqualFold(strings.TrimSpace(config.OutputFormat), "json")
 	caller, err := invokeCaller(config)
 	if err != nil {
@@ -173,6 +181,9 @@ func validateInvokeConfig(config InvokeConfig) error {
 }
 
 func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error) {
+	if config.PromptStart {
+		return normalizePromptStart(config)
+	}
 	decoded, err := readInvokeRequestWithDiagnostics(config)
 	if err != nil {
 		return normalizedInvokeRequest{}, err
@@ -205,6 +216,9 @@ func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error
 }
 
 func applyInvokeOverrides(request *factoryapi.WorkerSessionStartRequest, config InvokeConfig) error {
+	if request.Execution == nil {
+		request.Execution = &factoryapi.WorkerSessionResolvedExecution{}
+	}
 	// CLI identity and execution flags are the explicit highest-precedence
 	// source. The document itself remains detached and is never mutated by the
 	// caller after this function returns.
@@ -292,6 +306,9 @@ func applyInvokeRetryOverride(request *factoryapi.WorkerSessionStartRequest, con
 }
 
 func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest, generateID IDGenerator) error {
+	if request.Execution == nil {
+		request.Execution = &factoryapi.WorkerSessionResolvedExecution{}
+	}
 	if strings.TrimSpace(request.RequestId) == "" {
 		request.RequestId = generateID()
 	}

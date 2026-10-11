@@ -19,7 +19,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -52,7 +52,6 @@ func provideFactoryRuntimeAssembly(
 	instanceHost factoryruntimewire.InstanceHost,
 	preparation factoryruntimewire.RuntimePreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
 	streams factorysessionwire.RuntimeAssembly,
 	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*factoryruntimewire.Assembly, error) {
@@ -61,7 +60,6 @@ func provideFactoryRuntimeAssembly(
 		instanceHost,
 		preparation,
 		recordingsRuntime,
-		automationService,
 		streams.InferenceProgressPublisherFactory, streams.DispatchCompletionObserverFactory(), recoverOwners)
 }
 
@@ -152,9 +150,6 @@ func (owner runtimeLogOwner) Open(baseLogger *zap.Logger, request factoryruntime
 	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil, nil
 	}
-	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
-		return nil, errors.New("runtime log owner is not configured")
-	}
 	opened, err := owner.opener.Open(logging.RuntimeLogOpeningRequest{
 		BaseLogger: baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
 		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
@@ -218,9 +213,6 @@ func runtimeMetricsRetentionReporter(
 	baseLogger *zap.Logger,
 ) platformmetrics.RuntimeMetricsRetentionReporter {
 	return func(report platformmetrics.RuntimeMetricsRetentionReport, sweepErr error) {
-		if baseLogger == nil {
-			return
-		}
 		fields := []zap.Field{
 			zap.String("root", report.RootDirectory),
 			zap.Bool("skipped", report.Skipped),
@@ -256,18 +248,12 @@ type runtimeMetricsOwner struct {
 }
 
 func (owner runtimeMetricsOwner) Close(ctx context.Context) error {
-	if owner.opener == nil {
-		return nil
-	}
 	return owner.opener.Close(ctx)
 }
 
 func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {
 	if request.Policy == factoryruntime.RuntimeMetricsPolicyDisabled {
 		return nil, nil
-	}
-	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
-		return nil, errors.New("runtime metrics owner is not configured")
 	}
 	writer, err := owner.opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
 		SessionID: request.Scope.SessionID, RuntimeInstanceID: request.Scope.RuntimeInstanceID,
@@ -699,4 +685,11 @@ func provideRuntimePreparation(workstationLoader factorydefinitions.WorkstationL
 ) factoryruntimewire.RuntimePreparation {
 	return factoryruntimewire.NewRuntimePreparation(workstationLoader, loadFactory, newID, baseLogger,
 		providerOverride, providerCommandRunner, scriptCommandRunner, mockCommandRunnerFactory)
+}
+
+func provideRuntimeAutomationLifecycle(owner *automationswire.Owner) factoryruntimewire.RuntimeAutomationLifecycle {
+	return owner
+}
+func provideInvocationSchedulePreparation(owner *automationswire.Owner) factoryruntimewire.InvocationSchedulePreparation {
+	return owner.PrepareInvocationSchedules
 }

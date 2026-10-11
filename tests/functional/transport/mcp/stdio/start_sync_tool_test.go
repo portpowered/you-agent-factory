@@ -2,6 +2,7 @@ package stdio_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
@@ -27,7 +28,7 @@ import (
 // M01-M06: each connection selects its own working root and owns its streams
 // and profile. The immutable command edge attributes results by working root,
 // so simultaneous invocations need no mutable provider selector or long lock.
-func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
+func TestCompletedMCPConnections(t *testing.T) {
 	t.Parallel()
 	runner := &mcpRootResultRunner{}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderCommandRunner: runner})
@@ -39,6 +40,9 @@ func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
 	if !ok {
 		t.Fatal("composed process did not expose Factory Sessions")
 	}
+	t.Run("retained reads after peer close", func(t *testing.T) {
+		testCompletedMCPConnectionReads(t, process)
+	})
 	t.Run("completion and ordered events", func(t *testing.T) {
 		t.Parallel()
 		server := startComposedMemoryMCP(t, process)
@@ -114,7 +118,7 @@ func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.
 	return startComposedMemoryMCPAt(t, lifetime, process, support.ScaffoldSingleStepFactory(lifetime, "composed-mcp"), lifetime.TempDir(), "http://127.0.0.1:1")
 }
 
-func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, projectRoot, home, host string) *composedMemoryMCP {
+func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, projectRoot, home, host string, callerEnv ...string) *composedMemoryMCP {
 	t.Helper()
 	stdin, input := io.Pipe()
 	output, stdout := io.Pipe()
@@ -130,7 +134,7 @@ func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, p
 	go func() {
 		err := process.Execute(root.Input{
 			Args:             []string{"you", "--server", host, "server", "mcp", "--project-root", projectRoot},
-			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(home),
+			Env:              append(builtcliacceptance.ProcessEnvForIsolatedHome(home), callerEnv...),
 			WorkingDirectory: projectRoot, Context: ctx,
 			Stdin: stdin, Stdout: stdout, Stderr: io.Discard,
 		})
@@ -149,13 +153,13 @@ func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process,
 	workingRoot, profile := support.ScaffoldSingleStepFactory(t, "configured-subagent"), t.TempDir()
 	t.Cleanup(func() {
 		if _, invoked := localRunner.requests.Load(filepath.Clean(workingRoot)); invoked {
-			t.Error("selected-host RUN executed a local provider")
+			t.Error("selected-host START executed a local provider")
 		}
 	})
 	env := builtcliacceptance.ProcessEnvForIsolatedHome(profile)
 	source := support.InstallPackagedFactoryWithProcess(t, process, env, workingRoot, "@you/subagent")
 	support.CreateNamedFactoryAtRootWithProcess(t, process, env, workingRoot, filepath.Join(workingRoot, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
-	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: support.ScaffoldSingleStepFactory(t, "configured-host"), WorkingDirectory: workingRoot, Env: env, Edges: serviceedges.Edges{ProviderCommandRunner: runner}})
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: support.ScaffoldSingleStepFactory(t, "configured-host"), WorkingDirectory: workingRoot, Env: env, Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionResolveHomeDirectory: func() (string, error) { return profile, nil }}})
 	server := startComposedMemoryMCPAt(t, t, process, workingRoot, profile, host.URL())
 	initializeMCPClient(t, server.client)
 	configPath := filepath.Join(server.home, ".you-agent-factory", "config.json")
@@ -171,8 +175,8 @@ func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process,
 			},
 		})
 	}
-	unknown := decodeComposedEnvelope[factorysessionmcp.SubagentResult](t, call("unknown-wfc-provider"))
-	if unknown.Error == nil || unknown.Result != nil || unknown.Error.Code != "factory_session.subagent.provider_not_found" || unknown.Error.Retryable {
+	unknown := decodeComposedEnvelope[factoryapi.WorkerSessionStartResponse](t, call("unknown-wfc-provider"))
+	if unknown.Error == nil || unknown.Result != nil || unknown.Error.Code != "worker_session.invalid_request" || unknown.Error.Retryable {
 		t.Fatalf("unknown provider result = %#v", unknown)
 	}
 	if err := os.WriteFile(configPath, []byte("{"), 0o600); err != nil {
@@ -188,17 +192,71 @@ func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process,
 	if err := os.WriteFile(configPath, before, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	assertMCPHealthyProviderRecovery(t, call, runner, server.root)
+	assertMCPHealthyProviderRecovery(t, call, runner, server)
+	assertMCPSelectedHostRefusal(t, process, localRunner, runner, server, host)
 	server.closeInput(t)
 }
 
-func assertMCPHealthyProviderRecovery(t *testing.T, call func(string) mcpJSONRPCResponse, runner *mcpRootResultRunner, workingRoot string) {
+// These public START failures cross the selected host's real HTTP adapter. Both
+// provider command edges stay controlled, and the MCP connection remains usable.
+func assertMCPSelectedHostRefusal(t *testing.T, process support.Process, local, remote *mcpRootResultRunner, server *composedMemoryMCP, host *support.FunctionalAPIServer) {
 	t.Helper()
-	result := decodeComposedTool[factorysessionmcp.SubagentResult](t, call("codex"))
-	if result.SessionID == "" || result.Status != "COMPLETED" || !strings.Contains(result.Text, "completed at "+filepath.Clean(workingRoot)) {
+	token := base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("/", 32)))
+	denied := startComposedMemoryMCPAt(t, t, process, server.root, server.home, host.URL(),
+		"YOU_WORKER_SESSION_ID=unregistered-caller", "YOU_WORKER_SESSION_TOKEN="+token)
+	initializeMCPClient(t, denied.client)
+	call := func(client *stdioMCPClient) mcpJSONRPCResponse {
+		return client.call("tools/call", map[string]any{"name": "you.subagent", "arguments": map[string]any{
+			"prompt": "This refused request must not run locally", "provider": "codex", "model": "gpt-5-codex",
+		}})
+	}
+	assertFailure := func(response mcpJSONRPCResponse, code string, retryable bool) {
+		t.Helper()
+		result := decodeComposedEnvelope[factoryapi.WorkerSessionStartResponse](t, response)
+		if result.Result != nil || result.Error == nil || result.Error.Code != code || result.Error.Retryable != retryable {
+			t.Fatalf("selected host refusal result=%#v error=%+v, want %s", result.Result, result.Error, code)
+		}
+		encoded, err := json.Marshal(response)
+		if err != nil || strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "unregistered-caller") {
+			t.Fatalf("selected host refusal leaked caller credentials: %s (%v)", encoded, err)
+		}
+		for _, runner := range []*mcpRootResultRunner{local, remote} {
+			if request, invoked := runner.requests.Load(filepath.Clean(server.root)); invoked {
+				t.Fatalf("refused START dispatched a provider: %#v", request)
+			}
+		}
+	}
+	assertFailure(call(denied.client), "worker_session.permission_denied", false)
+	denied.closeInput(t)
+	host.Stop(t)
+	unavailable := call(server.client)
+	assertFailure(unavailable, "worker_session.host_unavailable", true)
+	if result := decodeComposedEnvelope[factoryapi.WorkerSessionStartResponse](t, unavailable); result.Error.Message != "Selected Worker Session host is unavailable" {
+		t.Fatalf("unavailable host message = %q", result.Error.Message)
+	}
+	// Host loss affects START; discovery on the same connection still works.
+	tools := server.client.call("tools/list", map[string]any{})
+	if tools.Error != nil || len(tools.Result["tools"].([]any)) == 0 {
+		t.Fatalf("discovery after selected host loss = %#v", tools)
+	}
+}
+
+func assertMCPHealthyProviderRecovery(t *testing.T, call func(string) mcpJSONRPCResponse, runner *mcpRootResultRunner, server *composedMemoryMCP) {
+	t.Helper()
+	gate := runner.gate(t, server.root)
+	result := decodeComposedTool[factoryapi.WorkerSessionStartResponse](t, call("codex"))
+	if result.WorkerSessionId == "" || !result.Accepted {
 		t.Fatalf("configured provider result = %#v", result)
 	}
-	request, invoked := runner.requests.LoadAndDelete(filepath.Clean(workingRoot))
+	awaitComposedSignal(t, gate.entered)
+	defer close(gate.release)
+	read := server.client.call("tools/call", map[string]any{"name": "you.subagent", "arguments": map[string]any{
+		"action": "READ", "workerSessionId": result.WorkerSessionId,
+	}})
+	if read.Error != nil || read.Result["isError"] == true || !strings.Contains(mcpToolResultText(t, read.Result), `"state":"RUNNING"`) {
+		t.Fatalf("fresh selected-host START observation = %#v", read)
+	}
+	request, invoked := runner.requests.LoadAndDelete(filepath.Clean(server.root))
 	if !invoked || request.(platformprocess.CommandRequest).Command != "codex" {
 		t.Fatalf("selected provider request = %#v", request)
 	}

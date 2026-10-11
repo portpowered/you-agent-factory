@@ -497,9 +497,6 @@ func (service *combinedService) ReplayExecution(
 	recordings.CompletionDeliveryPlanner,
 	error,
 ) {
-	if service == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Recordings runtime scope is unavailable")
-	}
 	return NewReplayExecution(
 		artifact,
 		service.replaySnapshotDecoder,
@@ -512,9 +509,6 @@ func (service *combinedService) ReplayExecution(
 func (service *combinedService) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
-	if service == nil || service.replayInputs == nil {
-		return recordings.LoadReplayInputResult{}, recordings.ErrMissingReplayArtifact
-	}
 	return service.replayInputs.LoadReplayInput(request)
 }
 
@@ -524,7 +518,7 @@ func (service *combinedService) OpenRuntime(
 	ctx context.Context,
 	request recordings.RuntimeScopeRequest,
 ) (recordings.RuntimeScopeResult, error) {
-	if err := validateRuntimeOpening(service, ctx, request); err != nil {
+	if err := validateRuntimeOpening(ctx, request); err != nil {
 		return recordings.RuntimeScopeResult{}, err
 	}
 	streamGenerationID := runtimeStreamGenerationID(request)
@@ -559,13 +553,9 @@ func (service *combinedService) OpenRuntime(
 }
 
 func validateRuntimeOpening(
-	service *combinedService,
 	ctx context.Context,
 	request recordings.RuntimeScopeRequest,
 ) error {
-	if service == nil || service.runtimeRouter == nil {
-		return fmt.Errorf("Recordings runtime scope is unavailable")
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -587,9 +577,6 @@ func (service *combinedService) openRuntimeRecordingScope(
 	routeKey string,
 	ledger recordings.RuntimeEventLedger,
 ) (recordings.RuntimeRecorder, recordings.RecordingScopeRef, error) {
-	if service.runtimeSnapshotCapture == nil {
-		return nil, recordings.RecordingScopeRef{}, fmt.Errorf("Recordings runtime snapshot capture is required")
-	}
 	recorder, err := service.newLifecycleRuntimeRecorder(request, streamGenerationID)
 	if err != nil {
 		return nil, recordings.RecordingScopeRef{}, err

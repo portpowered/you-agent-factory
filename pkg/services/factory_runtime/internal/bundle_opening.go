@@ -13,7 +13,6 @@ import (
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -95,7 +94,6 @@ type BundleOpening struct {
 	workerSessions         workersessions.Service
 	workerAttempts         factory.WorkerAttemptOpener
 	requestResolver        *runtime.WorkstationRequestExecutor
-	recordingsRuntime      recordings.RuntimeScopeService
 	initialFactorySnapshot InitialFactorySnapshotFactory
 }
 
@@ -119,7 +117,6 @@ func NewBundleOpening(
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
 	requestResolver *runtime.WorkstationRequestExecutor,
-	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*BundleOpening, error) {
 	if runtimeBuild == nil {
@@ -133,7 +130,7 @@ func NewBundleOpening(
 	}
 	return &BundleOpening{runtimeBuild: runtimeBuild, workerAttemptScheduler: workerAttemptScheduler, workerService: workerService,
 		workerSessions: workerSessions, workerAttempts: workerAttempts, requestResolver: requestResolver,
-		recordingsRuntime: recordingsRuntime, initialFactorySnapshot: initialFactorySnapshot}, nil
+		initialFactorySnapshot: initialFactorySnapshot}, nil
 }
 
 // Open applies fixed opening behavior to one runtime selection. The retained
@@ -162,7 +159,7 @@ func (opening *BundleOpening) Open(
 	dispatchCompleted func(string),
 ) (factory.RuntimeRecord, error) {
 	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
-		spec, defaultSessionID, opening.recordingsRuntime, opening.initialFactorySnapshot,
+		spec, defaultSessionID, opening.initialFactorySnapshot,
 	)
 	if err != nil {
 		return nil, err

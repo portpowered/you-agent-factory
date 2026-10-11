@@ -335,12 +335,11 @@ func (r *supervisedRuntime) waitForReadinessInterval(
 	processExit <-chan error,
 ) error {
 	timer := r.cfg.Clock.NewTimer(r.cfg.HealthCheckInterval)
+	defer timer.Stop()
 	select {
 	case waitErr := <-processExit:
-		timer.Stop()
 		return r.markFailed(loadDone, identity, hostFailureClassProcessCrash, processExitError(waitErr))
 	case <-ctx.Done():
-		timer.Stop()
 		_ = process.Stop(context.Background())
 		return r.markFailed(loadDone, identity, hostFailureClassCancelled, cancelHostError(ctx.Err()))
 	case <-timer.C():

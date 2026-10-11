@@ -101,6 +101,10 @@ func (s *Service) GetProvider(
 				descriptor.Provider = applyACPBypassCapability(descriptor.Provider, integration)
 			}
 			return descriptor, nil
+		} else if !errors.Is(err, providers.ErrUnknownProvider) {
+			// An active ACP integration cannot override a known catalog
+			// rejection. Only uncatalogued custom integrations need a descriptor.
+			return providers.GetProviderResult{}, err
 		}
 		for _, integration := range s.acp.Integrations() {
 			if integration.Name == canonical {

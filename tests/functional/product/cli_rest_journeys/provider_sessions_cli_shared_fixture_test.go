@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -26,6 +27,13 @@ import (
 )
 
 const workerSessionsCLISharedShutdownTimeout = 15 * time.Second
+
+// A Now-only source keeps captured timestamps distinct from scheduler time.
+type workerCaptureClock struct{}
+
+func (workerCaptureClock) Now() time.Time {
+	return time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+}
 
 var workerSessionsCLISharedFixtureState struct {
 	sync.Once
@@ -226,6 +234,8 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 	api := newWorkerSessionsCLIAPIServer()
 	captureReads := &workerSessionCaptureReads{faults: make(map[string]workerSessionCaptureFault), globalObservation: &api.globalObservation}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		Clock:                        workerCaptureClock{},
+		ProcessScheduler:             platformclock.Real{},
 		WorkerRecordingWriter:        captureReads,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { captureReads.WorkerRecordingStore = store },
 		APIServerStarter:             api.start,
@@ -301,6 +311,9 @@ func newWorkerSessionsCLISharedRouteRunner(
 	addSuccessRoute("worker-session-fleet-beta", "session_fixture_codex_fleet_beta")
 	addSuccessRoute("worker-session-fleet-gamma", "session_fixture_codex_fleet_gamma")
 	addSuccessRoute("worker-session-scoped-peer", "session_fixture_codex_scoped_peer")
+	for index := range 4 {
+		addSuccessRoute(fmt.Sprintf("worker-session-completed-%d", index), fmt.Sprintf("session_fixture_codex_completed_%d", index))
+	}
 	for index := range 2 {
 		addSuccessRoute(fmt.Sprintf("worker-session-correlated-scope-%d", index), fmt.Sprintf("session_fixture_codex_correlated_scope_%d", index))
 	}

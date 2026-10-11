@@ -125,6 +125,26 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
+	for _, name := range []string{"captured-codex-tools", "captured-codex-factory", "captured-codex-partial-peer"} {
+		toolRunner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})}
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, toolRunner, toolRunner, nil, nil, nil, toolRunner.Reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	for _, name := range []string{"captured-codex-live", "captured-codex-factory-live"} {
+		liveTools := newCapturedCodexToolRunner()
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, liveTools, liveTools, nil, nil, nil, liveTools.reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	denial := newCapturedCodexDenialRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-denial", denial, denial, nil, nil, nil, denial.reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	partial := newCapturedCodexPartialRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-partial", partial, partial, nil, nil, nil, partial.reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	if err := appendRequesterMCPScenarios(rootDir, &setup); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
@@ -134,7 +154,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
-	for _, name := range []string{"requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race", "recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure"} {
+	for _, name := range []string{"sam-direct-start", "requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race", "recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure"} {
 		gated := &t7GatedProviderRunner{}
 		gated.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {
@@ -444,7 +464,8 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 	ackStore := &interruptPhaseAckStore{}
 	lateStarts := &requesterLateStartBoundary{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Merge(serviceedges.Edges{
-		WorkerRecordingWriter: ackStore,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		WorkerRecordingWriter:              ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
 			ackStore.WorkerRecordingStore = store
 		},

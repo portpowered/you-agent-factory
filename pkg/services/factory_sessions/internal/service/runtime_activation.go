@@ -278,7 +278,9 @@ func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 	var lifecycle roles.LifecycleRuntime
 	var replay *recordingreplay.Scope
 	var bindRuntime func(string, factoryruntime.RuntimeBinding) error
+	attemptedOpening := false
 	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		attemptedOpening = true
 		openedLifecycle, openedReplay, _, published, selected, openErr := r.activateRuntime(activationCtx, activation)
 		if openErr != nil {
 			return published, openErr
@@ -289,7 +291,10 @@ func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 		return published, nil
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		if !attemptedOpening {
+			return nil, nil, nil, err
+		}
+		return nil, nil, activationCloser(context.WithoutCancel(ctx), r.runtimeRoot, factoryruntime.RuntimeBinding{}, activationRequest.RuntimeID), err
 	}
 	binding := result.Binding
 	if binding.IsZero() {
@@ -298,7 +303,7 @@ func (r *RuntimeOpening) openActivatedRuntimeWithInputs(
 	closeRuntime := activationCloser(context.WithoutCancel(ctx), r.runtimeRoot, binding, result.RuntimeID)
 	if !binding.IsZero() {
 		if err := r.openingBinding.PublishRuntime(bindRuntime, activationRequest.FactorySessionID, binding); err != nil {
-			return nil, nil, nil, runtimeBindingPublicationError(err, closeRuntime())
+			return nil, nil, closeRuntime, runtimeBindingPublicationError(err, closeRuntime())
 		}
 	}
 	return lifecycle, replay, closeRuntime, nil

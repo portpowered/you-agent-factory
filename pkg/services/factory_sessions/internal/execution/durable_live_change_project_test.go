@@ -347,11 +347,22 @@ func TestProcessDurableRuntimeResumeUsesInjectedScopeAndPreservesFailure(t *test
 	}
 }
 
-func TestBindWorkerScopeRequiresConstructedExecution(t *testing.T) {
+func TestBindWorkerScopeExecutesWithoutOptionalResourceAdmission(t *testing.T) {
 	t.Parallel()
-	service := &JavaScriptRuntimeService{durableRuntimeState: &durableRuntimeState{}, durableRuntimeBehavior: &durableRuntimeBehavior{}}
-	if _, err := service.BindWorkerScope("parent", nil, "runtime", "generation", nil, nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "workers Execute capability is required") {
-		t.Fatalf("BindWorkerScope error = %v, want missing fixed Workers capability", err)
+	invocation := &recordingWorkerExecution{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}}
+	service := newProcessChildRuntime(invocation)
+	release, err := service.BindWorkerScope("parent", nil, "runtime-selected", "generation-selected", nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	hooks := service.childExecutorHooks(ChildExecutorModeLive, "parent")
+	executor := hooks.NewChildExecutor("child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+	if _, err := executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "run", Preset: "worker-a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := invocation.request.Correlation; got.RuntimeID != "runtime-selected" || got.GenerationID != "generation-selected" {
+		t.Fatalf("correlation = %#v", got)
 	}
 }
 

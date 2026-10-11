@@ -15,6 +15,7 @@ import (
 type validationCatalog struct {
 	catalog.Service
 	unavailable bool
+	getErr      error
 }
 
 func (c validationCatalog) ResolveProviderID(id providers.ID) (providers.ID, error) {
@@ -25,10 +26,44 @@ func (c validationCatalog) ResolveProviderID(id providers.ID) (providers.ID, err
 }
 
 func (c validationCatalog) GetProvider(_ context.Context, req providers.GetProviderRequest) (providers.GetProviderResult, error) {
+	if c.getErr != nil {
+		return providers.GetProviderResult{}, c.getErr
+	}
 	if c.unavailable {
 		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
 	}
 	return providers.GetProviderResult{Provider: providers.Descriptor{ID: req.ID}}, nil
+}
+
+func TestACPStartPreflightPreservesCatalogRejection(t *testing.T) {
+	t.Parallel()
+	probeFailure := errors.New("controlled readiness probe failure")
+	for _, cell := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{"unavailable", providers.ErrProviderUnavailable, providers.ErrProviderUnavailable},
+		{"canceled probe", context.Canceled, context.Canceled},
+		{"failed probe", probeFailure, probeFailure},
+		{"uncatalogued custom integration", providers.ErrUnknownProvider, nil},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			native := &validationExecution{}
+			acp := &stubACPService{provider: "controlled-acp", integrations: []providers.ACPIntegration{{Name: "controlled-acp"}}}
+			svc, err := providerservice.NewWithACP(validationCatalog{getErr: cell.err}, native, acp, nil, logging.NoopLogger{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = svc.ValidateExecution(context.Background(), providers.ExecuteRequest{
+				Provider: "controlled-acp", AttemptID: "attempt", Model: "controlled-model",
+			})
+			if !errors.Is(err, cell.want) || native.calls != 0 || acp.executeCalls != 0 {
+				t.Fatalf("preflight = %v, want %v; executions native=%d ACP=%d", err, cell.want, native.calls, acp.executeCalls)
+			}
+		})
+	}
 }
 
 type validationExecution struct {

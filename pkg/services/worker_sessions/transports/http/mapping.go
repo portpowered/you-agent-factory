@@ -68,7 +68,10 @@ func WorkerSessionObservationCursorFromAPI(
 // detached Worker Sessions contract and validates the transport-owned retry
 // bound before any service-side reservation can occur.
 func WorkerSessionStartRequestFromAPI(request factoryapi.WorkerSessionStartRequest) (workersessions.StartRequest, error) {
-	execution, err := workerSessionResolvedExecutionFromAPI(request.Execution)
+	if request.Execution == nil || hasSubagentInput(request) {
+		return workersessions.StartRequest{}, workersessions.ErrInvalidExecutionRequest
+	}
+	execution, err := workerSessionResolvedExecutionFromAPI(*request.Execution)
 	if err != nil {
 		return workersessions.StartRequest{}, err
 	}
@@ -103,7 +106,7 @@ func WorkerSessionStartRequestToAPI(request workersessions.StartRequest) (factor
 	result := factoryapi.WorkerSessionStartRequest{
 		RequestId:       strings.TrimSpace(request.RequestID),
 		WorkerSessionId: strings.TrimSpace(request.ID),
-		Execution:       execution,
+		Execution:       &execution,
 	}
 	if attempts := request.Retry.MaxAttempts; attempts > 0 {
 		result.Retry = &factoryapi.WorkerSessionStartRetryPolicy{MaxAttempts: &attempts}

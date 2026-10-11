@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -31,13 +32,14 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 // Service hosts the API edge and completes the startup protocol for one
 // already-started Factory Session runtime.
 type Service struct {
-	start platformhttpserver.Starter
+	start     platformhttpserver.Starter
+	scheduler platformclock.TimerSource
 }
 
 // New constructs an inert runtime-host operation from the exact external HTTP
 // effects selected by Wire.
-func New(start platformhttpserver.Starter) *Service {
-	return &Service{start: start}
+func New(start platformhttpserver.Starter, scheduler platformclock.TimerSource) *Service {
+	return &Service{start: start, scheduler: scheduler}
 }
 
 // Run hosts the transport until cancellation or runtime completion.
@@ -178,10 +180,10 @@ func (service *Service) waitForStartupReadability(
 		return binding, nil
 	}
 
-	timer := time.NewTimer(startupReadabilityDelay)
+	timer := service.scheduler.NewTimer(startupReadabilityDelay)
 	defer timer.Stop()
 	select {
-	case <-timer.C:
+	case <-timer.C():
 		return binding, nil
 	case err := <-apiExit:
 		service.logStartupFailure(startupLogger, transportLogger, err)

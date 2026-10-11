@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -42,6 +41,7 @@ type inputFileSystem interface {
 // engineOpening opens scoped state using the already selected runtime behavior.
 type engineOpening interface {
 	Open(
+		ctx context.Context,
 		net *state.Net,
 		runtimeScheduler scheduler.Scheduler,
 		statelessService workers.Service,
@@ -79,10 +79,8 @@ type RuntimeFactory struct {
 	runtimeLogs              factory.RuntimeLogOwner
 	runtimeMetrics           factory.RuntimeMetricsOwner
 	newID                    factory.IDGenerator
-	workRequestIDs           work.RequestIDGenerator
 	runtimeDirs              factory.RuntimeDirectoryFileSystem
 	inputFiles               inputFileSystem
-	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
 	engineOpening            engineOpening
 	definitionMapper         definitionmapping.Mapping
@@ -111,10 +109,8 @@ func NewRuntimeFactory(
 	runtimeLogs factory.RuntimeLogOwner,
 	runtimeMetrics factory.RuntimeMetricsOwner,
 	newID factory.IDGenerator,
-	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles inputFileSystem,
-	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper definitionmapping.Mapping,
@@ -129,10 +125,8 @@ func NewRuntimeFactory(
 		runtimeLogs:              runtimeLogs,
 		runtimeMetrics:           runtimeMetrics,
 		newID:                    newID,
-		workRequestIDs:           workRequestIDs,
 		runtimeDirs:              runtimeDirs,
 		inputFiles:               inputFiles,
-		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
 		workerAttemptScheduler:   workerAttemptScheduler,
 		definitionMapper:         definitionMapper,
@@ -416,6 +410,7 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 		effectiveSubmissionRecorder = f.submissionRecorder
 	}
 	activeFactory, err := f.engineOpening.Open(
+		ctx,
 		net,
 		runtimeScheduler,
 		workerService,
@@ -452,11 +447,6 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 	}); ok {
 		configurable.SetMockWorkersConfig(mockWorkersConfig)
 	}
-	if configurable, ok := activeFactory.(interface {
-		SetPromptSourceReader(func(string) ([]byte, error))
-	}); ok && f.inputFiles != nil {
-		configurable.SetPromptSourceReader(f.inputFiles.ReadFile)
-	}
 	// Filesystem effects may finish after admission was canceled. Keep the
 	// unpublished engine inside this opening owner so unwind releases only its
 	// resources, without sealing worker admission for a same-identity retry.
@@ -465,9 +455,6 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 	}
 
 	bundle.Factory = activeFactory
-	bundle.InputFiles = f.inputFiles
-	bundle.InputDirectoryWalker = f.inputDirectoryWalker
-	bundle.WorkRequestIDs = f.workRequestIDs
 	return bundle, nil
 }
 

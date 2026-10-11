@@ -30,6 +30,7 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 					Defaults: operatorsettings.DocumentDefaults{
 						WorkerModelProvider: "codex",
 						WorkerModel:         "gpt-5",
+						Subagent:            &operatorsettings.SubagentRoute{Provider: "opencode", Model: "controlled-free", ReasoningEffort: "low"},
 					},
 					Runtime: operatorsettings.EmptyDocument.Runtime,
 				},
@@ -60,6 +61,10 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 		response.Document.Defaults.WorkerModel == nil || *response.Document.Defaults.WorkerModel != "gpt-5" {
 		t.Fatalf("response.Document.Defaults = %#v, want codex/gpt-5 defaults", response.Document.Defaults)
 	}
+	if route := response.Document.Defaults.Subagent; route == nil || route.Provider != "opencode" || route.Model != "controlled-free" || route.ReasoningEffort == nil || *route.ReasoningEffort != "low" {
+		t.Fatalf("dedicated route lost from response: %#v", route)
+	}
+
 	if response.Document.Runtime == nil || response.Document.Runtime.Logging == nil || *response.Document.Runtime.Logging.MaxSizeMB != operatorsettings.EmptyDocument.Runtime.Logging.MaxSizeMB {
 		t.Fatalf("runtime = %#v, want owner runtime", response.Document.Runtime)
 	}

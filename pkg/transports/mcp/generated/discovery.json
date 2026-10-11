@@ -384,7 +384,7 @@
       },
       "id": "mcp.tool.you.subagent",
       "name": "you.subagent",
-      "description": "Run a bounded subagent (RUN, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. RUN uses the packaged @you/subagent Factory and operator/provider defaults; Worker actions preserve selected-host results and typed errors. Poll READ logs with nextToken and inspect capture health.",
+      "description": "Start a direct subagent (START, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. Omitted route uses dedicated defaults.subagent. RUN returns a migration error. START returns admission without waiting for completion.",
       "inputSchema": {
         "oneOf": [
           {
@@ -392,6 +392,7 @@
             "properties": {
               "action": {
                 "enum": [
+                  "START",
                   "RUN"
                 ],
                 "type": "string"
@@ -400,6 +401,7 @@
                 "type": "string"
               },
               "prompt": {
+                "minLength": 1,
                 "type": "string"
               },
               "provider": {
@@ -408,8 +410,18 @@
               "reasoningEffort": {
                 "type": "string"
               },
+              "requestId": {
+                "minLength": 1,
+                "type": "string"
+              },
               "timeoutMillis": {
+                "maximum": 9223372036854,
+                "minimum": 1,
                 "type": "integer"
+              },
+              "workerSessionId": {
+                "minLength": 1,
+                "type": "string"
               },
               "workingRoot": {
                 "type": "string"
@@ -573,8 +585,9 @@
         ],
         "properties": {
           "action": {
-            "default": "RUN",
+            "default": "START",
             "enum": [
+              "START",
               "RUN",
               "LIST",
               "READ",

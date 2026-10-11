@@ -48,6 +48,10 @@ func DecodeWithDiagnostics(
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
 	}
 
+	if err := validateSubagentJSON(normalized); err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
+	}
+
 	var generated *factoryapi.GlobalConfig
 	if err := json.Unmarshal(normalized, &generated); err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
@@ -346,6 +350,10 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 			WorkerModel:         optionalString(generated.Defaults.WorkerModel),
 		}
 	}
+	if generated.Defaults != nil && generated.Defaults.Subagent != nil {
+		route := generated.Defaults.Subagent
+		config.Defaults.Subagent = &operatorsettings.SubagentRoute{Provider: route.Provider, Model: route.Model, ReasoningEffort: optionalString(route.ReasoningEffort)}
+	}
 	if generated.Models != nil {
 		config.Models = mapModels(*generated.Models)
 	}
@@ -554,10 +562,19 @@ func encodeDefaults(defaults operatorsettings.Defaults) *factoryapi.GlobalConfig
 	if defaults == (operatorsettings.Defaults{}) {
 		return nil
 	}
-	return &factoryapi.GlobalConfigDefaults{
+	result := &factoryapi.GlobalConfigDefaults{
 		WorkerModelProvider: optionalStringPointer(defaults.WorkerModelProvider),
 		WorkerModel:         optionalStringPointer(defaults.WorkerModel),
 	}
+	if defaults.Subagent != nil {
+		route := defaults.Subagent
+		result.Subagent = &struct {
+			Model           string  `json:"model"`
+			Provider        string  `json:"provider"`
+			ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+		}{Model: route.Model, Provider: route.Provider, ReasoningEffort: optionalStringPointer(route.ReasoningEffort)}
+	}
+	return result
 }
 
 func encodeModels(models map[string]operatorsettings.ModelConfig) *factoryapi.GlobalConfigModels {

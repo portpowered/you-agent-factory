@@ -245,7 +245,7 @@ func admitEvictionScript(t *testing.T, ctx context.Context, baseURL string, star
 	worker := "worker"
 	fleetProfileHTTP(t, ctx, http.MethodPost, baseURL+"/worker-sessions", factoryapi.WorkerSessionStartRequest{
 		RequestId: "eviction-request", WorkerSessionId: "eviction-worker",
-		Execution: factoryapi.WorkerSessionResolvedExecution{WorkstationName: "process", WorkerType: &worker,
+		Execution: &factoryapi.WorkerSessionResolvedExecution{WorkstationName: "process", WorkerType: &worker,
 			Dispatch: factoryapi.WorkerSessionResolvedDispatch{DispatchId: "eviction-dispatch", WorkstationName: "process", WorkerType: &worker}},
 	})
 	waitEvictionSignal(t, ctx, started)

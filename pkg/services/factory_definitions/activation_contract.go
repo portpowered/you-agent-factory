@@ -34,6 +34,9 @@ type DefinitionActivationGateway interface {
 	SaveNow() time.Time
 
 	WithActivationLock(fn func() error) error
+	// WithSessionSourcesStopped joins the selected sources for a layout transaction.
+	// On failure it restores sources after the callback has restored durable state.
+	WithSessionSourcesStopped(context.Context, string, func() error) error
 	RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error
 	RequireIdleBeforeNamedFactoryActivation(
 		ctx context.Context,

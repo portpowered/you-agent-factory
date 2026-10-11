@@ -30,7 +30,12 @@ func TestList_TerminalityFlagsRejectBeforeHTTP(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t), workservice.NewListRequestPreparation())(ListConfig{
+	err := NewList(testHTTPProtocol(t), listRequestPreparationFunc(func(_ context.Context, options workservice.ListOptions) (workservice.PreparedListRequest, error) {
+		if !options.Terminal || !options.NonTerminal {
+			t.Fatalf("preparation options = %#v, want both terminality flags", options)
+		}
+		return workservice.PreparedListRequest{}, &workservice.ValidationError{Message: "--terminal and --non-terminal cannot both be set"}
+	}))(ListConfig{
 		Context:     context.Background(),
 		Server:      server.URL,
 		Terminal:    true,

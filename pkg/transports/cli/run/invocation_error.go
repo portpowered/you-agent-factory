@@ -51,6 +51,10 @@ type InvocationError = factoryruntimecli.InvocationError
 // WriteInvocationError renders the stable clean-invocation failure contract to
 // stderr. It returns true when err matched an invocation contract error.
 func WriteInvocationError(w io.Writer, err error, quiet bool) bool {
+	var response clidiag.ResponseCodedError
+	if errors.As(err, &response) {
+		return clidiag.WriteFailure(w, err)
+	}
 	handled := factoryruntimecli.WriteInvocationError(w, err, quiet)
 	if handled {
 		clidiag.MarkDiagnosticRendered(w)
@@ -462,9 +466,10 @@ func (client remoteInvocationClient) InvokeFactorySession(
 		message := fmt.Sprintf("remote Factory Session invocation failed at %s (%d)", safeRemoteEndpoint(endpointURL), response.HTTP.StatusCode)
 		if apiError, ok := clihttp.DecodeAPIError(response.HTTP); ok {
 			if apiError.Code == "WORKER_SESSION_CALLER_INVALID" {
-				return factoryapi.InvocationResponse{}, factoryCallerInvalid()
+				return factoryapi.InvocationResponse{}, clihttp.NewAPIErrorFromResponse(response.HTTP, apiError, factoryCallerInvalid().Error(), factoryCallerInvalid())
 			}
 			message += ": " + apiError.Message
+			return factoryapi.InvocationResponse{}, clihttp.NewAPIErrorFromResponse(response.HTTP, apiError, message, &InvocationError{Code: RemoteDurableStartCode, Message: message})
 		}
 		return factoryapi.InvocationResponse{}, &InvocationError{Code: RemoteDurableStartCode, Message: message}
 	}
@@ -640,7 +645,7 @@ func remoteDurableResultHTTPError(
 ) (factoryapi.FactorySessionResult, error) {
 	if response.HTTP.Body != nil {
 		if apiError, ok := clihttp.DecodeAPIError(response.HTTP); ok {
-			return factoryapi.FactorySessionResult{}, &InvocationError{
+			cause := &InvocationError{
 				Code: RemoteDurableResultCode,
 				Message: fmt.Sprintf(
 					"remote durable result failed at %s (%d): %s",
@@ -649,6 +654,7 @@ func remoteDurableResultHTTPError(
 					apiError.Message,
 				),
 			}
+			return factoryapi.FactorySessionResult{}, clihttp.NewAPIErrorFromResponse(response.HTTP, apiError, cause.Error(), cause)
 		}
 	}
 	return factoryapi.FactorySessionResult{}, &InvocationError{
@@ -756,9 +762,9 @@ func remoteDurableHTTPError(
 	if response.HTTP.Body != nil {
 		if apiError, ok := clihttp.DecodeAPIError(response.HTTP); ok {
 			if apiError.Code == "WORKER_SESSION_CALLER_INVALID" {
-				return factoryapi.FactorySessionExecutionResponse{}, factoryCallerInvalid()
+				return factoryapi.FactorySessionExecutionResponse{}, clihttp.NewAPIErrorFromResponse(response.HTTP, apiError, factoryCallerInvalid().Error(), factoryCallerInvalid())
 			}
-			return factoryapi.FactorySessionExecutionResponse{}, &InvocationError{
+			cause := &InvocationError{
 				Code: RemoteDurableStartCode,
 				Message: fmt.Sprintf(
 					"remote durable start failed at %s (%d): %s",
@@ -767,6 +773,7 @@ func remoteDurableHTTPError(
 					apiError.Message,
 				),
 			}
+			return factoryapi.FactorySessionExecutionResponse{}, clihttp.NewAPIErrorFromResponse(response.HTTP, apiError, cause.Error(), cause)
 		}
 	}
 	return factoryapi.FactorySessionExecutionResponse{}, &InvocationError{

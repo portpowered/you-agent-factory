@@ -57,7 +57,11 @@ func (h *Handler) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
 	}
 	response, err := h.adapter.StartWorkerSession(r.Context(), decoded.Value, caller)
 	if err != nil {
-		h.writeMappedStartError(w, err)
+		if decoded.Value.Prompt != nil {
+			h.writeMappedSubagentStartError(w, err)
+		} else {
+			h.writeMappedStartError(w, err)
+		}
 		return
 	}
 	h.writeCompatibilityWarning(w, "start_worker_session", decoded.Diagnostics.Paths())

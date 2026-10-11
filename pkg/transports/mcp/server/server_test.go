@@ -25,7 +25,7 @@ func TestMCPToolCallRemainsOpenForLongSubagentWait(t *testing.T) {
 	if os.Getenv("YOU_MCP_LONG_DURATION_TEST") == "1" {
 		simulatedWork = 70 * time.Second
 	}
-	server, err := New(Options{ToolOperation: func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+	server, err := New(func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
 		if name != mcpfactorysession.ToolSubagent {
 			return nil, errors.New("unexpected tool")
 		}
@@ -41,7 +41,7 @@ func TestMCPToolCallRemainsOpenForLongSubagentWait(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	}})
+	}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,10 +81,10 @@ type recordedToolCall struct {
 func TestNewValidatesDirectDependencies(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New(Options{}); err == nil || !strings.Contains(err.Error(), "tool operation") {
+	if _, err := New(nil, Options{}); err == nil || !strings.Contains(err.Error(), "tool operation") {
 		t.Fatalf("New() error = %v, want missing tool operation error", err)
 	}
-	if _, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)}); err != nil {
+	if _, err := New(scriptedToolOperation(nil, nil), Options{}); err != nil {
 		t.Fatalf("New(tool operation) error = %v", err)
 	}
 }
@@ -99,15 +99,15 @@ func TestServeStdioUsesSDKProtocolAndRegistersGeneratedCatalog(t *testing.T) {
 	t.Parallel()
 
 	calls := make(chan recordedToolCall, 1)
-	server, err := New(Options{
-		ToolOperation: func(_ context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) {
-			var object map[string]any
-			if err := json.Unmarshal(arguments, &object); err != nil || object == nil {
-				return nil, errors.New("tool arguments must be an object")
-			}
-			calls <- recordedToolCall{name: name, arguments: append(json.RawMessage(nil), arguments...)}
-			return json.RawMessage(`{"result":{"scope":"all","sessions":[]}}`), nil
-		},
+	server, err := New(func(_ context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) {
+		var object map[string]any
+		if err := json.Unmarshal(arguments, &object); err != nil || object == nil {
+			return nil, errors.New("tool arguments must be an object")
+		}
+		calls <- recordedToolCall{name: name, arguments: append(json.RawMessage(nil), arguments...)}
+		return json.RawMessage(`{"result":{"scope":"all","sessions":[]}}`), nil
+	}, Options{
+
 		ServerName:    "custom-server",
 		ServerVersion: "1.2.3",
 	})
@@ -169,7 +169,7 @@ func TestServeStdioUsesSDKProtocolAndRegistersGeneratedCatalog(t *testing.T) {
 func TestServeStdioValidatesRuntimeInputsAndCancellation(t *testing.T) {
 	t.Parallel()
 
-	server, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)})
+	server, err := New(scriptedToolOperation(nil, nil), Options{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -192,7 +192,7 @@ func TestServeStdioValidatesRuntimeInputsAndCancellation(t *testing.T) {
 // docs/models/mcp CLI-manifest baselines.
 func TestSDKProtocolErrors(t *testing.T) {
 	t.Parallel()
-	server, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)})
+	server, err := New(scriptedToolOperation(nil, nil), Options{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -224,20 +224,18 @@ func TestSDKProtocolErrors(t *testing.T) {
 // Invoked by `make fnd-12-mcp-behavior-baselines`.
 func TestSDKProtocolTypedToolResponseErrors(t *testing.T) {
 	t.Parallel()
-	server, err := New(Options{
-		ToolOperation: func(_ context.Context, name string, _ json.RawMessage) (json.RawMessage, error) {
-			switch name {
-			case mcpfactorysession.ToolSubagent:
-				return json.RawMessage(`{"error":{"code":"BAD_REQUEST","message":"prompt is required","retryable":false}}`), nil
-			case mcpfactorysession.ToolGetSession:
-				return json.RawMessage(`{"error":{"code":"factory_session.session.not_found","message":"factory session not found","retryable":false,"sessionId":"dur-sess-missing-999"}}`), nil
-			case mcpfactorysession.ToolListSessions:
-				return json.RawMessage(`{"result":{"scope":"live","sessions":[]}}`), nil
-			default:
-				return nil, fmt.Errorf("unexpected tool %q", name)
-			}
-		},
-	})
+	server, err := New(func(_ context.Context, name string, _ json.RawMessage) (json.RawMessage, error) {
+		switch name {
+		case mcpfactorysession.ToolSubagent:
+			return json.RawMessage(`{"error":{"code":"BAD_REQUEST","message":"prompt is required","retryable":false}}`), nil
+		case mcpfactorysession.ToolGetSession:
+			return json.RawMessage(`{"error":{"code":"factory_session.session.not_found","message":"factory session not found","retryable":false,"sessionId":"dur-sess-missing-999"}}`), nil
+		case mcpfactorysession.ToolListSessions:
+			return json.RawMessage(`{"result":{"scope":"live","sessions":[]}}`), nil
+		default:
+			return nil, fmt.Errorf("unexpected tool %q", name)
+		}
+	}, Options{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -345,9 +343,7 @@ func TestSDKProtocolTypedErrorDetectionTightening(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			server, err := New(Options{
-				ToolOperation: scriptedToolOperation(json.RawMessage(test.payload), nil),
-			})
+			server, err := New(scriptedToolOperation(json.RawMessage(test.payload), nil), Options{})
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -475,9 +471,9 @@ func TestSkillsMethodsAndResources(t *testing.T) {
 		Frontmatter: map[string]any{"name": "operator-settings", "description": "Configure subagents"},
 		Resources:   []SkillResource{{URI: "skill://operator-settings/SKILL.md", Digest: "sha256:abc", Size: 42}},
 	}
-	server, err := New(Options{
-		ToolOperation: scriptedToolOperation(nil, nil),
-		Skills:        []SkillEntry{entry},
+	server, err := New(scriptedToolOperation(nil, nil), Options{
+
+		Skills: []SkillEntry{entry},
 		Resources: []ResourceRegistration{{
 			Resource: &mcp.Resource{URI: "you://operator/config", Name: "Operator config", MIMEType: "application/json"},
 			Read: func(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
@@ -511,8 +507,8 @@ func TestSkillsMethodsAndResources(t *testing.T) {
 
 func TestSkillsCapabilityAdvertisedFor2026Protocol(t *testing.T) {
 	t.Parallel()
-	server, err := New(Options{
-		ToolOperation: scriptedToolOperation(nil, nil),
+	server, err := New(scriptedToolOperation(nil, nil), Options{
+
 		Skills: []SkillEntry{{
 			URI: "skill://test/SKILL.md", Frontmatter: map[string]any{"name": "test", "description": "Test skill"}, Resources: "dynamic",
 		}},
@@ -551,7 +547,7 @@ func TestSkillsValidationAndPagination(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil), Skills: test.entries}); err == nil {
+			if _, err := New(scriptedToolOperation(nil, nil), Options{Skills: test.entries}); err == nil {
 				t.Fatal("New() error = nil, want invalid skill registration error")
 			}
 		})
@@ -580,16 +576,63 @@ func TestSkillsValidationAndPagination(t *testing.T) {
 	}
 }
 
-func TestServeValidatesServerAndTransport(t *testing.T) {
+func TestServeValidatesCallerTransport(t *testing.T) {
 	t.Parallel()
-	if err := (*Server)(nil).Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "server is required") {
-		t.Fatalf("Serve(nil server) error = %v", err)
-	}
-	server, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)})
+	server, err := New(scriptedToolOperation(nil, nil), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := server.Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "transport is required") {
 		t.Fatalf("Serve(nil transport) error = %v", err)
 	}
+}
+
+// One completed protocol server must retain invocation context and survive a
+// peer connection closing. Controlled dispatch proves SDK lifetime isolation.
+func TestSDKServerPreservesConcurrentInvocationContextAndPeerLifetime(t *testing.T) {
+	t.Parallel()
+	type selectionKey struct{}
+	server, err := New(func(ctx context.Context, _ string, _ json.RawMessage) (json.RawMessage, error) {
+		return json.Marshal(map[string]any{"result": ctx.Value(selectionKey{})})
+	}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connect := func(id string) (*mcp.ClientSession, func()) {
+		ctx, cancel := context.WithCancel(context.WithValue(t.Context(), selectionKey{}, id))
+		st, ct := mcp.NewInMemoryTransports()
+		done := make(chan error, 1)
+		go func() { done <- server.Serve(ctx, st) }()
+		client := mcp.NewClient(&mcp.Implementation{Name: id, Version: "test"}, nil)
+		session, err := client.Connect(ctx, ct, nil)
+		if err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		return session, func() {
+			_ = session.Close()
+			cancel()
+			select {
+			case <-done:
+			case <-t.Context().Done():
+				t.Error("connection did not join")
+			}
+		}
+	}
+	first, closeFirst := connect("first")
+	second, closeSecond := connect("second")
+	defer closeSecond()
+	assertResult := func(session *mcp.ClientSession, id string) {
+		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: map[string]any{"prompt": "selected"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.IsError || len(result.Content) != 1 || result.Content[0].(*mcp.TextContent).Text != `{"result":"`+id+`"}` {
+			t.Fatalf("selected result = %#v", result)
+		}
+	}
+	assertResult(first, "first")
+	assertResult(second, "second")
+	closeFirst()
+	assertResult(second, "second")
 }

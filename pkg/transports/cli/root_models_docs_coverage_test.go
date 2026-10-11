@@ -122,7 +122,7 @@ func TestProductionModelsInvokeCarriesInvocationCacheEnvironment(t *testing.T) {
 	const selectedCache = "selected-model-cache"
 	var received modelscli.InvokeConfig
 	var receivedCache string
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: modelsCLIServiceFunctions{
 		invokeWithModelCache: func(cfg modelscli.InvokeConfig, modelCacheDir string) error {
 			received = cfg
 			receivedCache = modelCacheDir
@@ -161,7 +161,7 @@ func TestProductionModelsInvokeCacheEnvironmentLookupFailureShortCircuitsService
 	t.Parallel()
 
 	serviceCalls := 0
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: modelsCLIServiceFunctions{
 		invoke: func(modelscli.InvokeConfig) error {
 			serviceCalls++
 			return nil
@@ -193,7 +193,7 @@ func TestProductionModelsCatalogCommandsCarrySelectedCacheEnvironment(t *testing
 
 	const selectedCache = "selected-model-cache"
 	received := map[string]string{}
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: modelsCLIServiceFunctions{
 		listWithModelCache: func(_ modelscli.ListConfig, cache string) error {
 			received["list"] = cache
 			return nil
@@ -423,7 +423,7 @@ func TestProductionDocsExecutesTopicWithVerboseDiagnostics(t *testing.T) {
 
 func TestModelsListUsesInjectedService(t *testing.T) {
 	called := false
-	root := newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	root := newTestCommandFactory(commandTestOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error {
 			called = true
 			return nil
@@ -444,7 +444,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error { listed = true; return nil },
 		inspect: func(cfg modelscli.InspectConfig) error {
 			inspected = cfg.ModelName
@@ -597,7 +597,7 @@ func executeModelsComposition(
 	args []string,
 ) (string, string, error) {
 	t.Helper()
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: service}))
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: service}))
 	factory.resolveOperatorDefaults = func(
 		_ string,
 		_ operatorconfig.Defaults,
@@ -1262,7 +1262,7 @@ func TestProductionModelsCLICharacterizationJSONBypassesOutputRequirement(t *tes
 // its success through the public command composition.
 func TestProductionModelsCLICharacterizationSuccessExit(t *testing.T) {
 	var got modelscli.InvokeConfig
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: modelsCLIServiceFunctions{
 		invoke: func(cfg modelscli.InvokeConfig) error {
 			got = cfg
 			_, err := io.WriteString(cfg.Output, "Wrote audio: speech.wav\n")
@@ -1406,7 +1406,7 @@ func newModelsCLICharacterizationRoot(
 ) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
 	service := modelscli.New(rootTestHTTPProtocol(), operation)
-	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: service}))
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(commandTestOperations{ModelsCLI: service}))
 	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
@@ -1421,7 +1421,7 @@ func newModelsCLICharacterizationRoot(
 func TestMissingCommandOperationFailsExecutionWithRequiredEdgeError(t *testing.T) {
 	t.Parallel()
 
-	root := newTestCommandFactory(CommandOperations{ModelsCLI: injectedModelsCLIService{}}).NewCommand(context.Background(),
+	root := newTestCommandFactory(commandTestOperations{ModelsCLI: injectedModelsCLIService{}}).NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,

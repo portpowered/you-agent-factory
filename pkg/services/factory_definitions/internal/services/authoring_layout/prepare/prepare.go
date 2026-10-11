@@ -20,16 +20,6 @@ func FactoryLayout(
 	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
 	encodeFactory func(*factorydefinitions.FactoryConfig) ([]byte, error),
 ) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-	switch {
-	case validator == nil:
-		return nil, fmt.Errorf("Factory Definition validator is required")
-	case decodeFactory == nil:
-		return nil, fmt.Errorf("Factory Definition decoder is required")
-	case normalizeAuthored == nil:
-		return nil, fmt.Errorf("authored Factory Definition normalizer is required")
-	case encodeFactory == nil:
-		return nil, fmt.Errorf("Factory Definition encoder is required")
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

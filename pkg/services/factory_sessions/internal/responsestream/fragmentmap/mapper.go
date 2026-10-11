@@ -128,9 +128,15 @@ func mapNativeProgressFragment(
 		if strings.TrimSpace(fragment.Payload) != "" {
 			result, _ = json.Marshal(map[string]string{"detail": fragment.Payload})
 		}
+		name := strings.TrimSpace(fragment.Metadata["tool_name"])
+		if fragmentProvider(fragment) == "codex" {
+			// Captured Worker tools include their native item type. Factory
+			// response events retain the established MCP server/tool name.
+			name = strings.TrimPrefix(name, "mcp_tool_call:")
+		}
 		payload, err = json.Marshal(responseevents.ToolPayload{
 			ToolCallID:    itemID,
-			ToolName:      strings.TrimSpace(fragment.Metadata["tool_name"]),
+			ToolName:      name,
 			Status:        parts[1],
 			ResultSummary: result,
 		})

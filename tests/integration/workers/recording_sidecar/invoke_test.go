@@ -47,7 +47,7 @@ func TestWorkerSessionInvokeHostedAsyncInspection(t *testing.T) {
 		t.Fatalf("terminal show = %s", show)
 	}
 	logs := f.cli(t, host.url, "read", "--worker-session-id", accepted.ID, "--view", "logs")
-	if !bytes.Contains(logs, []byte("t7-artifact-progress")) || !bytes.Contains(logs, []byte(`"COMPLETE"`)) || !bytes.Contains(logs, []byte(`"CANCELED"`)) {
+	if !bytes.Contains(logs, []byte(`"toolCallId":"progress"`)) || !bytes.Contains(logs, []byte(`"COMPLETE"`)) || !bytes.Contains(logs, []byte(`"CANCELED"`)) {
 		t.Fatalf("canceled captured history = %s", logs)
 	}
 	f.assertCommand(t)
@@ -197,7 +197,7 @@ func (f invokeArtifactFixture) waitForProgress(t *testing.T, server string) {
 	defer ticker.Stop()
 	for {
 		logs := f.cli(t, server, "read", "--worker-session-id", "t7-artifact-session", "--view", "logs")
-		if bytes.Contains(logs, []byte("t7-artifact-progress")) {
+		if bytes.Contains(logs, []byte(`"toolCallId":"progress"`)) {
 			return
 		}
 		select {

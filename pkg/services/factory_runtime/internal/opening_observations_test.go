@@ -32,7 +32,7 @@ func TestBundleOpeningKeepsMutationAndProgressObserversWithTheirOpening(t *testi
 	}
 	effect := &observationOpeningEffect{}
 	sessions := &observationOpeningSessions{stubWorkerSessionsService: &stubWorkerSessionsService{}}
-	opening, err := factoryinternal.NewBundleOpening(effect.Open, platformclock.Real{}, observationOpeningWorker{}, sessions, sessions, nil, &testRuntimeScopeServiceStub{}, nil)
+	opening, err := factoryinternal.NewBundleOpening(effect.Open, platformclock.Real{}, observationOpeningWorker{}, sessions, sessions, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

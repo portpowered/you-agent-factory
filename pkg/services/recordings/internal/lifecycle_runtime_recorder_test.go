@@ -23,6 +23,41 @@ import (
 
 type runtimeRecorderTestClock struct{ now time.Time }
 
+func TestCompletedLifecycleRuntimeOpeningValidatesSelectedRequest(t *testing.T) {
+	t.Parallel()
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	for _, test := range []struct {
+		name    string
+		ctx     context.Context
+		request recordings.RuntimeScopeRequest
+		want    string
+	}{
+		{"cancellation", canceled, recordings.RuntimeScopeRequest{}, context.Canceled.Error()},
+		{"topology", t.Context(), recordings.RuntimeScopeRequest{Now: time.Now}, "Recordings runtime topology is required"},
+		{"clock", t.Context(), recordings.RuntimeScopeRequest{Topology: runtimeOpeningTopology{}}, "Recordings runtime clock is required"},
+		{"valid", t.Context(), recordings.RuntimeScopeRequest{Topology: runtimeOpeningTopology{}, Now: time.Now}, ""},
+		{"background", nil, recordings.RuntimeScopeRequest{Topology: runtimeOpeningTopology{}, Now: time.Now}, ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateRuntimeOpening(test.ctx, test.request)
+			if test.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("validation = %v, want %s", err, test.want)
+			}
+			if test.name == "cancellation" && !errors.Is(err, context.Canceled) {
+				t.Fatalf("lost cancellation identity: %v", err)
+			}
+		})
+	}
+}
+
 func (clock runtimeRecorderTestClock) Now() time.Time { return clock.now }
 
 func TestLifecycleRuntimeRecorderForwardsFailuresFlushAndFinalization(t *testing.T) {

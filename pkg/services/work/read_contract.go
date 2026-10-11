@@ -617,17 +617,19 @@ func (q ListQuery) FilterSummary() string {
 
 // NewListRequestPreparation constructs the pure Work list preparation role.
 // Wire supplies this role to transport adapters; transports never select it.
-func NewListRequestPreparation() ListRequestPreparation {
-	return listRequestPreparationAdapter{}
+func NewListRequestPreparation(inner stateaccessquery.ListRequestPreparation) ListRequestPreparation {
+	return listRequestPreparationAdapter{inner: inner}
 }
 
-type listRequestPreparationAdapter struct{}
+type listRequestPreparationAdapter struct {
+	inner stateaccessquery.ListRequestPreparation
+}
 
-func (listRequestPreparationAdapter) PrepareListRequest(
+func (a listRequestPreparationAdapter) PrepareListRequest(
 	ctx context.Context,
 	options ListOptions,
 ) (PreparedListRequest, error) {
-	prepared, err := stateaccessquery.NewListRequestPreparation().PrepareListRequest(
+	prepared, err := a.inner.PrepareListRequest(
 		ctx,
 		listOptionsToQuery(options),
 	)

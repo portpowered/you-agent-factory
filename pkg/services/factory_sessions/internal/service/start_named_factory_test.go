@@ -228,7 +228,7 @@ func TestStartSessionLifecycleCleansFailedPhases(t *testing.T) {
 				return cleanupCause
 			}
 			activation, err := startSessionLifecycle(t.Context(), lifecycle, cleanup, false)
-			if activation != nil || !errors.Is(err, cause) || !errors.Is(err, cleanupCause) || !errors.Is(err, stopCause) {
+			if activation == nil || !errors.Is(err, cause) || !errors.Is(err, cleanupCause) || !errors.Is(err, stopCause) {
 				t.Fatalf("failed phase lost cause/cleanup: activation=%v error=%v", activation, err)
 			}
 			want := []string{"start"}

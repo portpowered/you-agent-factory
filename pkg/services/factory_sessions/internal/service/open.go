@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -45,6 +46,7 @@ type RuntimeOpening struct {
 	assembly                  openingAssembly
 	durable                   durableexecution.Service
 	startFlights              singleflight.Group
+	reservationCleanups       sync.Map // session ID -> retryable opening cleanup
 	factoryDefinitions        factorydefinitions.Service
 	resolveHome               factorysessions.HomeDirectoryResolver
 	runtimeRoot               FactoryRuntimeRoot
@@ -186,6 +188,9 @@ func (opening *sessionRuntimeOpening) bindSelectedState(state runtimebinding.Ope
 		SkippedBoardRecordings: opening.skippedBoardRecordings,
 		ReplayMetadataWarnings: opening.load.ReplayMetadataWarnings,
 	}
+	if opening.sessionSelection != nil {
+		metadata.RecordingHome = opening.sessionSelection.SystemConfigHome
+	}
 	if opening.resumeInput != nil {
 		resume := opening.resumeInput.RecoveryMetadata
 		resume.SuccessorRecordingID = recoveryRecordingID(opening.configured.Runtime.RuntimeInstanceID)
@@ -249,12 +254,6 @@ func (r *RuntimeOpening) prepareRuntimeOpening(
 ) (*sessionRuntimeOpening, error) {
 	if session == nil {
 		return nil, fmt.Errorf("factory session runtime selection is required")
-	}
-	if r.recordingsService == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings service is required")
-	}
-	if r.recordingsRuntime == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings runtime scope is required")
 	}
 	selection := sessionRuntimeSelection(session)
 	providedCanonicalSessionID := strings.TrimSpace(selection.CanonicalSessionID)

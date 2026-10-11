@@ -19,6 +19,7 @@ const (
 
 // HostClient is the exact generated-client boundary consumed by the adapter.
 type HostClient interface {
+	StartWorkerSession(context.Context, *client.StartWorkerSessionParams, client.StartWorkerSessionJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error)
 	ListWorkerSessions(context.Context, *client.ListWorkerSessionsParams, ...client.RequestEditorFn) (*http.Response, error)
 	GetWorkerSessionObservationByWorkerSessionId(context.Context, client.WorkerSessionID, *client.GetWorkerSessionObservationByWorkerSessionIdParams, ...client.RequestEditorFn) (*http.Response, error)
 	ReadWorkerSessionTranscriptByWorkerSessionId(context.Context, client.WorkerSessionID, ...client.RequestEditorFn) (*http.Response, error)

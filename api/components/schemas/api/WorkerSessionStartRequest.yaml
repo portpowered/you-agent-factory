@@ -3,11 +3,25 @@ additionalProperties: false
 required:
   - requestId
   - workerSessionId
-  - execution
+oneOf:
+  - required: [execution]
+    not:
+      anyOf:
+        - required: [prompt]
+        - required: [provider]
+        - required: [model]
+        - required: [reasoningEffort]
+        - required: [workingRoot]
+        - required: [timeoutMillis]
+  - required: [prompt]
+    not:
+      anyOf:
+        - required: [execution]
+        - required: [retry]
 description: >-
-  One caller-owned idempotent request for a directly resolved Worker
-  execution. Worker Sessions owns reservation, event visibility, supervision,
-  and admission; it does not select a provider or runner from this payload.
+  Start one direct Worker Session with a prompt or a resolved execution.
+  The prompt form uses dedicated subagent defaults and optional route overrides.
+  The resolved form supplies its own execution and does not use those defaults.
 properties:
   requestId:
     type: string
@@ -23,3 +37,27 @@ properties:
   retry:
     $ref: './WorkerSessionStartRetryPolicy.yaml'
     description: Bounded total attempt budget; omitted means one attempt.
+  prompt:
+    type: string
+    minLength: 1
+    description: Prompt for a direct subagent. Cannot be combined with execution or retry.
+  provider:
+    type: string
+    minLength: 1
+    description: Concrete provider override. A different provider requires an explicit model.
+  model:
+    type: string
+    minLength: 1
+  reasoningEffort:
+    type: string
+    minLength: 1
+  workingRoot:
+    type: string
+    minLength: 1
+    description: Absolute working directory for the provider execution.
+  timeoutMillis:
+    type: integer
+    format: int64
+    minimum: 1
+    maximum: 9223372036854
+    description: Execution duration in milliseconds. Omission sets no execution deadline.

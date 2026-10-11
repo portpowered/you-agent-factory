@@ -13,6 +13,93 @@ import (
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 )
 
+func TestRootResolveSubagentRoute(t *testing.T) {
+	t.Parallel()
+	text := func(value string) *string { return &value }
+	for _, tc := range []struct {
+		name      string
+		baseline  *operatorsettings.SubagentRoute
+		overrides operatorsettings.SubagentRouteUpdate
+		want      operatorsettings.SubagentRoute
+		invalid   bool
+	}{
+		{name: "missing dedicated default", invalid: true},
+		{name: "explicit route without default", overrides: operatorsettings.SubagentRouteUpdate{Provider: text("codex"), Model: text("luna"), ReasoningEffort: text("low")}, want: operatorsettings.SubagentRoute{Provider: "CODEX", Model: "luna", ReasoningEffort: "low"}},
+		{name: "model alone without default", overrides: operatorsettings.SubagentRouteUpdate{Model: text("model")}, invalid: true},
+		{name: "dedicated default", baseline: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "free/model", ReasoningEffort: "low"}, want: operatorsettings.SubagentRoute{Provider: "OPENCODE", Model: "free/model", ReasoningEffort: "low"}},
+		{name: "model and effort override", baseline: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "free/model", ReasoningEffort: "low"}, overrides: operatorsettings.SubagentRouteUpdate{Model: text(" other/model "), ReasoningEffort: text("high")}, want: operatorsettings.SubagentRoute{Provider: "OPENCODE", Model: "other/model", ReasoningEffort: "high"}},
+		{name: "same provider alias", baseline: &operatorsettings.SubagentRoute{Provider: "codex", Model: "model"}, overrides: operatorsettings.SubagentRouteUpdate{Provider: text("CODEX")}, want: operatorsettings.SubagentRoute{Provider: "CODEX", Model: "model"}},
+		{name: "provider switch requires model", baseline: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "free/model"}, overrides: operatorsettings.SubagentRouteUpdate{Provider: text("claude")}, invalid: true},
+		{name: "explicit claude", baseline: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "free/model"}, overrides: operatorsettings.SubagentRouteUpdate{Provider: text("claude"), Model: text("haiku")}, want: operatorsettings.SubagentRoute{Provider: "CLAUDE", Model: "haiku"}},
+		{name: "explicit agy", overrides: operatorsettings.SubagentRouteUpdate{Provider: text("agy"), Model: text("model")}, want: operatorsettings.SubagentRoute{Provider: "agy", Model: "model"}},
+		{name: "empty explicit model", baseline: &operatorsettings.SubagentRoute{Provider: "codex", Model: "model"}, overrides: operatorsettings.SubagentRouteUpdate{Model: text(" ")}, invalid: true},
+		{name: "symbolic provider", overrides: operatorsettings.SubagentRouteUpdate{Provider: text("DEFAULT"), Model: text("model")}, invalid: true},
+		{name: "invalid effort", overrides: operatorsettings.SubagentRouteUpdate{Provider: text("codex"), Model: text("model"), ReasoningEffort: text("unknown")}, invalid: true},
+		{name: "malformed baseline fails closed", baseline: &operatorsettings.SubagentRoute{Provider: "opencode"}, overrides: operatorsettings.SubagentRouteUpdate{Provider: text("codex"), Model: text("model")}, invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			document := &profileDocument{path: "selected-config", document: operatorsettings.Document{Defaults: operatorsettings.DocumentDefaults{WorkerModelProvider: "CLAUDE", WorkerModel: "generic-paid", Subagent: tc.baseline}}}
+			prior := document.document.Clone()
+			root := newControlledRoot(t, document, &constructionResolution{})
+			got, err := root.ResolveSubagentRoute(t.Context(), document.path, tc.overrides)
+			if tc.invalid {
+				if !errors.Is(err, operatorsettings.ErrResolutionInvalidInput) || got != (operatorsettings.SubagentRoute{}) {
+					t.Fatalf("resolve = %#v, %v", got, err)
+				}
+			} else if err != nil || got != tc.want {
+				t.Fatalf("resolve = %#v, %v; want %#v", got, err, tc.want)
+			}
+			got.Model = "mutated"
+			if document.published || !reflect.DeepEqual(document.document, prior) {
+				t.Fatal("resolution mutated or persisted operator settings")
+			}
+		})
+	}
+}
+
+func TestRootResolveSubagentRouteRejectsCanceledAndFailedLoad(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	root := newControlledRoot(t, &constructionDocument{}, &constructionResolution{})
+	if _, err := root.ResolveSubagentRoute(ctx, "selected-config", operatorsettings.SubagentRouteUpdate{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled request = %v", err)
+	}
+	//nolint:staticcheck // Verify that missing caller context is rejected before document effects.
+	if _, err := root.ResolveSubagentRoute(nil, "selected-config", operatorsettings.SubagentRouteUpdate{}); !errors.Is(err, operatorsettings.ErrResolutionInvalidInput) {
+		t.Fatalf("nil context = %v", err)
+	}
+	loadError := operatorsettings.DocumentFailure{Kind: operatorsettings.DocumentFailureKindMalformed}
+	document := &profileDocument{path: "selected-config", loadError: loadError}
+	root = newControlledRoot(t, document, &constructionResolution{})
+	if _, err := root.ResolveSubagentRoute(t.Context(), document.path, operatorsettings.SubagentRouteUpdate{}); !errors.Is(err, operatorsettings.ErrDocumentMalformed) {
+		t.Fatalf("load failure = %v", err)
+	}
+}
+
+func TestRootResolveSubagentRouteLogsOutcomeWithoutConfiguration(t *testing.T) {
+	t.Parallel()
+	spy := &spyLogger{}
+	document := &profileDocument{path: "secret-config-path", document: operatorsettings.Document{Defaults: operatorsettings.DocumentDefaults{Subagent: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "secret-model"}}}}
+	root, err := operatorservice.New(document, &constructionResolution{}, rootTestFileSystem{}, rootTestCreateTemporaryFile, rootTestConfigDecoder, rootTestConfigEncoder, rootTestIDGenerator, spy, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.ResolveSubagentRoute(t.Context(), document.path, operatorsettings.SubagentRouteUpdate{}); err != nil {
+		t.Fatal(err)
+	}
+	document.loadError = operatorsettings.DocumentFailure{Kind: operatorsettings.DocumentFailureKindMalformed, Message: "secret-authored-value"}
+	if _, err := root.ResolveSubagentRoute(t.Context(), document.path, operatorsettings.SubagentRouteUpdate{}); !errors.Is(err, operatorsettings.ErrDocumentMalformed) {
+		t.Fatalf("load error = %v", err)
+	}
+	want := []string{"operator_settings.resolve_subagent_route.started", "operator_settings.resolve_subagent_route.finished", "operator_settings.resolve_subagent_route.started", "operator_settings.resolve_subagent_route.failed"}
+	if !reflect.DeepEqual(spy.messages(), want) {
+		t.Fatalf("logs = %v, want %v", spy.messages(), want)
+	}
+	assertNoSensitiveValuesLogged(t, spy, document.path, "secret-model", "secret-authored-value")
+}
+
 func TestRootResolveACPAgentProfile_DefaultIsReadOnly(t *testing.T) {
 	t.Parallel()
 	document := &profileDocument{path: "selected-config"}

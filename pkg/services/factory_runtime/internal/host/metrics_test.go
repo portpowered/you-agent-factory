@@ -14,6 +14,8 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestEmitRuntimeMemoryMetricsRecordsOneCoherentRuntimeSnapshot(t *testing.T) {
@@ -111,7 +113,8 @@ func TestEmitRuntimeMemoryMetricsSurfacesSinkFailureAfterCompleteAttempt(t *test
 		sampleErr:     sampleErr,
 		sampleErrName: factoryruntime.RuntimeMemoryProcessCommitAvailable,
 	}
-	bundle := &factoryhost.Bundle{MetricsSink: sink}
+	core, logs := observer.New(zap.WarnLevel)
+	bundle := &factoryhost.Bundle{MetricsSink: sink, Logger: zap.New(core)}
 	err := bundle.EmitRuntimeMemoryMetrics()
 
 	if sink.sampleCalls != 7 {
@@ -122,6 +125,10 @@ func TestEmitRuntimeMemoryMetricsSurfacesSinkFailureAfterCompleteAttempt(t *test
 	}
 	if finalizeErr := factoryhost.FinalizeArtifacts(bundle, clockwork.NewFakeClock()); !errors.Is(finalizeErr, sampleErr) || !strings.Contains(finalizeErr.Error(), factoryruntime.RuntimeMemoryProcessCommitAvailable) {
 		t.Fatalf("FinalizeArtifacts error = %v, want retained sample failure", finalizeErr)
+	}
+	entries := logs.FilterMessage("runtime metrics sample emission failed").All()
+	if len(entries) != 1 || entries[0].ContextMap()["metric_name"] != factoryruntime.RuntimeMemoryProcessCommitAvailable || entries[0].ContextMap()["error"] != sampleErr.Error() {
+		t.Fatalf("metric failure diagnostics = %#v, want selected metric and sink cause", entries)
 	}
 }
 

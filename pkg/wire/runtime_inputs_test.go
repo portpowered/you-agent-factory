@@ -201,14 +201,17 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 
 	input := strings.NewReader("request")
 	output := &strings.Builder{}
-	sessions := &canonicalStdioSessionsStub{}
 	var selectedRoot string
 	var selectedHost string
 	var selectedInput, selectedOutput any
 	ran := false
 	handler, err := provideStdioHandler(
-		sessions, nil,
-		func(_ context.Context, _ lifecycle.Plan, _ runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
+		func(ctx context.Context, _ lifecycle.Plan, _ runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
+			intent, err := selectedMCPIntent(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			selectedRoot, selectedHost = intent.ProjectRoot, intent.ServerURL
 			return testStdioRunner{ran: &ran}, nil
 		},
 		lifecycle.NewRunner,
@@ -216,15 +219,7 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 			selectedInput, selectedOutput = in, out
 			return testStdioApplication{}, nil
 		},
-		func(intent processcontract.MCPIntent, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
-			selectedRoot = intent.ProjectRoot
-			selectedHost = intent.ServerURL
-			if bound != sessions {
-				t.Fatalf("MCP root = %T, want process root", bound)
-			}
-			return &mcpserver.Server{}, nil
-		},
-		nil, nil,
+		&mcpserver.Server{}, platformfilesystem.Local{},
 	)
 	if err != nil {
 		t.Fatalf("provideStdioHandler(): %v", err)
@@ -248,12 +243,17 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 	}
 }
 
-func TestStdioHandlerRequiresOwnerOperation(t *testing.T) {
+func TestStdioHandlerRejectsInvalidSelectionBeforeActivation(t *testing.T) {
 	t.Parallel()
-
-	handler, err := provideStdioHandler(nil, nil, nil, nil, nil, nil, nil, nil)
-	if err == nil || handler != nil {
-		t.Fatalf("provideStdioHandler(nil) = (%v, %v), want nil and error", handler, err)
+	handler, err := provideStdioHandler(nil, nil, nil, &mcpserver.Server{}, platformfilesystem.Local{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, endpoint := range []string{"", "file:///local", "http://user:secret@host", "http://host?query=true", "http://host#fragment"} {
+		err := handler(t.Context(), processcontract.MCPIntent{ServerURL: endpoint, ProjectRoot: "/root", Stdin: strings.NewReader(""), Stdout: io.Discard})
+		if err == nil || err.Error() != "construct subagent MCP host operation: subagent host and HTTP transport are required" {
+			t.Fatalf("invalid selection error = %v", err)
+		}
 	}
 }
 

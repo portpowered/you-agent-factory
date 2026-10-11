@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -98,6 +100,9 @@ type Adapter struct {
 	attribution  recordings.WorkerWorkAttributionReader
 	work         work.Service
 	resolver     SessionScopeResolver
+	settings     operatorsettings.Service
+	providers    providers.Service
+	resolveHome  func() (string, error)
 }
 
 // NewAdapter binds the exact roots required by the Worker Sessions list
@@ -173,6 +178,9 @@ func NewAdapterWithStartAndContinueAndInterruptAndControl(
 	observations observationService,
 	workRoot work.Service,
 	attribution recordings.WorkerWorkAttributionReader,
+	settings operatorsettings.Service,
+	providerRoot providers.Service,
+	resolveHome func() (string, error),
 	resolvers ...SessionScopeResolver,
 ) *Adapter {
 	if starter == nil || continuer == nil || interrupter == nil || controller == nil || observations == nil || workRoot == nil || attribution == nil {
@@ -181,6 +189,7 @@ func NewAdapterWithStartAndContinueAndInterruptAndControl(
 	return &Adapter{
 		starter: starter, continuer: continuer, interrupter: interrupter,
 		controller: controller, attribution: attribution, observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
+		settings: settings, providers: providerRoot, resolveHome: resolveHome,
 	}
 }
 
@@ -211,7 +220,7 @@ func (a *Adapter) StartWorkerSession(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	start, err := WorkerSessionStartRequestFromAPI(request)
+	start, err := a.startRequest(ctx, request)
 	if err != nil {
 		return factoryapi.WorkerSessionStartResponse{}, err
 	}

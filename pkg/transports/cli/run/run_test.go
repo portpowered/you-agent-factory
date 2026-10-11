@@ -35,6 +35,27 @@ import (
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
 
+func TestHistoricalReplayJSONRejectedBeforeOpening(t *testing.T) {
+	t.Parallel()
+	var stdout bytes.Buffer
+	err := validateHistoricalReplayOutput(RunConfig{
+		ReplayPath: "missing-private-recording.jsonl", JSONOutput: true,
+		DisableDefaultRecording: true, Output: &stdout,
+	}, false)
+	var diagnostic *InvocationError
+	if !errors.As(err, &diagnostic) || diagnostic.Code != InvocationOutputUnsupportedCode {
+		t.Fatalf("historical JSON admission = %v, want unsupported output", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("historical JSON stdout = %q, want empty", stdout.String())
+	}
+	for _, cfg := range []RunConfig{{ReplayPath: "history.jsonl"}, {JSONOutput: true}, {JSONOutput: true, ReplayPath: "invocation.jsonl"}} {
+		if err := validateHistoricalReplayOutput(cfg, true); err != nil {
+			t.Fatalf("supported invocation output = %v", err)
+		}
+	}
+}
+
 func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer

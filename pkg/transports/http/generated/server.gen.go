@@ -5778,6 +5778,13 @@ type GlobalConfigACPSettings struct {
 
 // GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
 type GlobalConfigDefaults struct {
+	// Subagent File-only subagent route, independent of generic worker defaults.
+	Subagent *struct {
+		Model           string  `json:"model"`
+		Provider        string  `json:"provider"`
+		ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+	} `json:"subagent,omitempty"`
+
 	// WorkerModel Default worker model name.
 	WorkerModel *string `json:"workerModel,omitempty"`
 
@@ -9735,18 +9742,39 @@ type WorkerSessionResolvedExecution struct {
 	Worktree        *string `json:"worktree,omitempty"`
 }
 
-// WorkerSessionStartRequest One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload.
+// WorkerSessionStartRequest Start one direct Worker Session with a prompt or a resolved execution. The prompt form uses dedicated subagent defaults and optional route overrides. The resolved form supplies its own execution and does not use those defaults.
 type WorkerSessionStartRequest struct {
 	// Execution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
-	Execution WorkerSessionResolvedExecution `json:"execution"`
+	Execution *WorkerSessionResolvedExecution `json:"execution,omitempty"`
+	Model     *string                         `json:"model,omitempty"`
+
+	// Prompt Prompt for a direct subagent. Cannot be combined with execution or retry.
+	Prompt *string `json:"prompt,omitempty"`
+
+	// Provider Concrete provider override. A different provider requires an explicit model.
+	Provider        *string `json:"provider,omitempty"`
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 
 	// RequestId Required caller idempotency key for this asynchronous start.
 	RequestId string                         `json:"requestId"`
 	Retry     *WorkerSessionStartRetryPolicy `json:"retry,omitempty"`
 
+	// TimeoutMillis Execution duration in milliseconds. Omission sets no execution deadline.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+
 	// WorkerSessionId Stable Worker Session identity to reserve and return.
 	WorkerSessionId string `json:"workerSessionId"`
+
+	// WorkingRoot Absolute working directory for the provider execution.
+	WorkingRoot *string `json:"workingRoot,omitempty"`
+	union       json.RawMessage
 }
+
+// WorkerSessionStartRequest0 defines model for .
+type WorkerSessionStartRequest0 = interface{}
+
+// WorkerSessionStartRequest1 defines model for .
+type WorkerSessionStartRequest1 = interface{}
 
 // WorkerSessionStartResponse Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous.
 type WorkerSessionStartResponse struct {
@@ -12854,6 +12882,14 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["subagent"]; found {
+		err = json.Unmarshal(raw, &a.Subagent)
+		if err != nil {
+			return fmt.Errorf("error reading 'subagent': %w", err)
+		}
+		delete(object, "subagent")
+	}
+
 	if raw, found := object["workerModel"]; found {
 		err = json.Unmarshal(raw, &a.WorkerModel)
 		if err != nil {
@@ -12888,6 +12924,13 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 func (a GlobalConfigDefaults) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
+
+	if a.Subagent != nil {
+		object["subagent"], err = json.Marshal(a.Subagent)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'subagent': %w", err)
+		}
+	}
 
 	if a.WorkerModel != nil {
 		object["workerModel"], err = json.Marshal(a.WorkerModel)
@@ -19501,6 +19544,224 @@ func (t *WorkRequestRelation) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Type)
 		if err != nil {
 			return fmt.Errorf("error reading 'type': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsWorkerSessionStartRequest0 returns the union data inside the WorkerSessionStartRequest as a WorkerSessionStartRequest0
+func (t WorkerSessionStartRequest) AsWorkerSessionStartRequest0() (WorkerSessionStartRequest0, error) {
+	var body WorkerSessionStartRequest0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkerSessionStartRequest0 overwrites any union data inside the WorkerSessionStartRequest as the provided WorkerSessionStartRequest0
+func (t *WorkerSessionStartRequest) FromWorkerSessionStartRequest0(v WorkerSessionStartRequest0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkerSessionStartRequest0 performs a merge with any union data inside the WorkerSessionStartRequest, using the provided WorkerSessionStartRequest0
+func (t *WorkerSessionStartRequest) MergeWorkerSessionStartRequest0(v WorkerSessionStartRequest0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkerSessionStartRequest1 returns the union data inside the WorkerSessionStartRequest as a WorkerSessionStartRequest1
+func (t WorkerSessionStartRequest) AsWorkerSessionStartRequest1() (WorkerSessionStartRequest1, error) {
+	var body WorkerSessionStartRequest1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkerSessionStartRequest1 overwrites any union data inside the WorkerSessionStartRequest as the provided WorkerSessionStartRequest1
+func (t *WorkerSessionStartRequest) FromWorkerSessionStartRequest1(v WorkerSessionStartRequest1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkerSessionStartRequest1 performs a merge with any union data inside the WorkerSessionStartRequest, using the provided WorkerSessionStartRequest1
+func (t *WorkerSessionStartRequest) MergeWorkerSessionStartRequest1(v WorkerSessionStartRequest1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkerSessionStartRequest) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Execution != nil {
+		object["execution"], err = json.Marshal(t.Execution)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'execution': %w", err)
+		}
+	}
+
+	if t.Model != nil {
+		object["model"], err = json.Marshal(t.Model)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'model': %w", err)
+		}
+	}
+
+	if t.Prompt != nil {
+		object["prompt"], err = json.Marshal(t.Prompt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'prompt': %w", err)
+		}
+	}
+
+	if t.Provider != nil {
+		object["provider"], err = json.Marshal(t.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'provider': %w", err)
+		}
+	}
+
+	if t.ReasoningEffort != nil {
+		object["reasoningEffort"], err = json.Marshal(t.ReasoningEffort)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'reasoningEffort': %w", err)
+		}
+	}
+
+	object["requestId"], err = json.Marshal(t.RequestId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'requestId': %w", err)
+	}
+
+	if t.Retry != nil {
+		object["retry"], err = json.Marshal(t.Retry)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'retry': %w", err)
+		}
+	}
+
+	if t.TimeoutMillis != nil {
+		object["timeoutMillis"], err = json.Marshal(t.TimeoutMillis)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'timeoutMillis': %w", err)
+		}
+	}
+
+	object["workerSessionId"], err = json.Marshal(t.WorkerSessionId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'workerSessionId': %w", err)
+	}
+
+	if t.WorkingRoot != nil {
+		object["workingRoot"], err = json.Marshal(t.WorkingRoot)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'workingRoot': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *WorkerSessionStartRequest) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["execution"]; found {
+		err = json.Unmarshal(raw, &t.Execution)
+		if err != nil {
+			return fmt.Errorf("error reading 'execution': %w", err)
+		}
+	}
+
+	if raw, found := object["model"]; found {
+		err = json.Unmarshal(raw, &t.Model)
+		if err != nil {
+			return fmt.Errorf("error reading 'model': %w", err)
+		}
+	}
+
+	if raw, found := object["prompt"]; found {
+		err = json.Unmarshal(raw, &t.Prompt)
+		if err != nil {
+			return fmt.Errorf("error reading 'prompt': %w", err)
+		}
+	}
+
+	if raw, found := object["provider"]; found {
+		err = json.Unmarshal(raw, &t.Provider)
+		if err != nil {
+			return fmt.Errorf("error reading 'provider': %w", err)
+		}
+	}
+
+	if raw, found := object["reasoningEffort"]; found {
+		err = json.Unmarshal(raw, &t.ReasoningEffort)
+		if err != nil {
+			return fmt.Errorf("error reading 'reasoningEffort': %w", err)
+		}
+	}
+
+	if raw, found := object["requestId"]; found {
+		err = json.Unmarshal(raw, &t.RequestId)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestId': %w", err)
+		}
+	}
+
+	if raw, found := object["retry"]; found {
+		err = json.Unmarshal(raw, &t.Retry)
+		if err != nil {
+			return fmt.Errorf("error reading 'retry': %w", err)
+		}
+	}
+
+	if raw, found := object["timeoutMillis"]; found {
+		err = json.Unmarshal(raw, &t.TimeoutMillis)
+		if err != nil {
+			return fmt.Errorf("error reading 'timeoutMillis': %w", err)
+		}
+	}
+
+	if raw, found := object["workerSessionId"]; found {
+		err = json.Unmarshal(raw, &t.WorkerSessionId)
+		if err != nil {
+			return fmt.Errorf("error reading 'workerSessionId': %w", err)
+		}
+	}
+
+	if raw, found := object["workingRoot"]; found {
+		err = json.Unmarshal(raw, &t.WorkingRoot)
+		if err != nil {
+			return fmt.Errorf("error reading 'workingRoot': %w", err)
 		}
 	}
 

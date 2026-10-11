@@ -157,7 +157,7 @@ func t7AssertSingleTerminal(t *testing.T, ctx context.Context, baseURL, id, stat
 			}
 		}
 	}
-	if status != http.StatusOK || logs.Health != "COMPLETE" || terminalCount != 1 || !strings.Contains(body, "T7 progress before detach") {
+	if status != http.StatusOK || logs.Health != "COMPLETE" || terminalCount != 1 || (!strings.Contains(body, "command_execution") || !strings.Contains(body, "t7-progress")) {
 		t.Fatalf("terminal capture = %d %s", status, body)
 	}
 }

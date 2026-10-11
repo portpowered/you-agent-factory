@@ -4,6 +4,7 @@ package directoryreplace
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,12 +14,20 @@ import (
 // filesystem. Product policy supplies the target and interprets failures.
 type Local struct {
 	operatingSystem string
+	stat            func(string) (fs.FileInfo, error)
+	mkdirAll        func(string, fs.FileMode) error
+	copyDirectory   func(source, destination string) error
 }
 
 // NewLocal binds directory replacement to the host operating system selected
 // by Wire.
-func NewLocal(operatingSystem string) Local {
-	return Local{operatingSystem: operatingSystem}
+func NewLocal(
+	operatingSystem string,
+	stat func(string) (fs.FileInfo, error),
+	mkdirAll func(string, fs.FileMode) error,
+	copyDirectory func(source, destination string) error,
+) Local {
+	return Local{operatingSystem: operatingSystem, stat: stat, mkdirAll: mkdirAll, copyDirectory: copyDirectory}
 }
 
 // Commit replaces targetDir with stagingDir and returns the previous target
@@ -28,7 +37,11 @@ func (local Local) Commit(
 	parentDir string,
 	targetDir string,
 	stagingDir string,
+	retained ...string,
 ) (backupDir string, err error) {
+	if err := local.retainDirectories(targetDir, stagingDir, retained); err != nil {
+		return "", err
+	}
 	segment := filepath.Base(targetDir)
 	backupDir, err = os.MkdirTemp(parentDir, "."+segment+".previous-")
 	if err != nil {
@@ -133,6 +146,35 @@ func clearDirectoryContents(dir string) error {
 	for _, entry := range entries {
 		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
 			return fmt.Errorf("remove existing directory entry %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+// retainDirectories copies opaque caller-selected state before atomic publication.
+// Callers must quiesce writers before invoking Commit.
+func (local Local) retainDirectories(target, staging string, retained []string) error {
+	for _, name := range retained {
+		if name == "." || !filepath.IsLocal(name) {
+			return fmt.Errorf("invalid retained directory %q", name)
+		}
+		source := filepath.Join(target, name)
+		info, err := local.stat(source)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect retained directory %q: %w", name, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("retained path %q is not a directory", name)
+		}
+		destination := filepath.Join(staging, name)
+		if err := local.mkdirAll(destination, info.Mode().Perm()); err != nil {
+			return fmt.Errorf("stage retained directory %q: %w", name, err)
+		}
+		if err := local.copyDirectory(source, destination); err != nil {
+			return fmt.Errorf("copy retained directory %q: %w", name, err)
 		}
 	}
 	return nil

@@ -50,6 +50,7 @@ const (
 
 // Defaults holds raw operator default values before precedence resolution.
 type Defaults struct {
+	Subagent            *SubagentRoute
 	WorkerModelProvider string
 	WorkerModel         string
 }
@@ -296,6 +297,10 @@ func defaultRuntimeSettings() RuntimeSettings {
 
 // Normalize trims decoded values and validates file-only worker presets.
 func (cfg Config) Normalize() (Config, error) {
+	subagent, err := cfg.Defaults.Subagent.Normalize()
+	if err != nil {
+		return Config{}, err
+	}
 	presets, err := validateWorkerPresets(cfg.WorkerPresets)
 	if err != nil {
 		return Config{}, err
@@ -320,6 +325,7 @@ func (cfg Config) Normalize() (Config, error) {
 		BackendScopeID: strings.TrimSpace(cfg.BackendScopeID),
 		PriceTable:     priceTable,
 		Defaults: Defaults{
+			Subagent:            subagent,
 			WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
 			WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
 		},
@@ -550,6 +556,7 @@ type ModelConfiguration = ModelConfig
 // effect.
 func (cfg Config) Clone() Config {
 	cloned := cfg
+	cloned.Defaults.Subagent = cfg.Defaults.Subagent.Clone()
 	cloned.Messaging = cfg.Messaging.Clone()
 	if cfg.WorkerPresets != nil {
 		cloned.WorkerPresets = make([]WorkerPreset, len(cfg.WorkerPresets))

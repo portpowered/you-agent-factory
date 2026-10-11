@@ -168,6 +168,7 @@ type OpeningState = interface {
 // OpeningMetadata contains detached observations from one completed opening.
 type OpeningMetadata struct {
 	CurrentBoardRecordPath string
+	RecordingHome          string
 	OperatorSettingsPath   string
 	SkippedBoardRecordings []string
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
@@ -194,6 +195,7 @@ type SessionState struct {
 	// ProjectionBackendScope retains the opening override as a keyed fact.
 	ProjectionBackendScope string
 	CurrentBoardRecordPath string
+	RecordingHome          string
 	StartupRecovery        *factorysessions.StartupRecovery
 	OperatorSettingsPath   string
 	SkippedBoardRecordings []string
@@ -233,6 +235,7 @@ func (s *SessionState) SetOpeningOrderlyStop(stop func(context.Context) error) {
 
 func (s *SessionState) SetOpeningMetadata(metadata OpeningMetadata) {
 	s.CurrentBoardRecordPath = metadata.CurrentBoardRecordPath
+	s.RecordingHome = metadata.RecordingHome
 	s.OperatorSettingsPath = metadata.OperatorSettingsPath
 	s.SkippedBoardRecordings = append([]string(nil), metadata.SkippedBoardRecordings...)
 	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), metadata.ReplayMetadataWarnings...)
@@ -261,6 +264,7 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	s.Logger = previous.Logger
 	s.Clock = previous.Clock
 	s.CurrentBoardRecordPath = previous.CurrentBoardRecordPath
+	s.RecordingHome = previous.RecordingHome
 	s.OperatorSettingsPath = previous.OperatorSettingsPath
 	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), previous.ReplayMetadataWarnings...)
 	if previous.ResumeRecoveryMetadata != nil {

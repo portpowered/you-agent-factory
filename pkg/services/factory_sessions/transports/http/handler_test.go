@@ -196,6 +196,9 @@ type factoryStatusProjectorRole struct {
 type factoryStatusSessionRole struct {
 	observations int
 	sessionIDs   []string
+	observeErr   error
+	recoveryErr  error
+	recovery     *factorysessions.StartupRecovery
 }
 
 func (role *factoryStatusProjectorRole) ProjectFactoryStatusFromObservation(factoryruntime.Observation) factoryruntime.FactoryStatus {
@@ -204,7 +207,7 @@ func (role *factoryStatusProjectorRole) ProjectFactoryStatusFromObservation(fact
 }
 
 func (role *factoryStatusSessionRole) StartupRecoveryForSession(context.Context, string) (*factorysessions.StartupRecovery, error) {
-	return nil, nil
+	return role.recovery, role.recoveryErr
 }
 
 func (role *factoryStatusSessionRole) ObserveForSession(
@@ -214,6 +217,9 @@ func (role *factoryStatusSessionRole) ObserveForSession(
 ) (factoryruntime.ObserveResult, error) {
 	role.observations++
 	role.sessionIDs = append(role.sessionIDs, sessionID)
+	if role.observeErr != nil {
+		return factoryruntime.ObserveResult{}, role.observeErr
+	}
 	if sessionID == "missing" {
 		return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 	}
@@ -485,4 +491,96 @@ func factoryHTTPCallerInvocationAPI(t *testing.T, variant, token string, calls *
 		}
 	}}
 	return api
+}
+
+func TestFactoryStatusAPIPreservesObservationAndRecoveryFailures(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{factoryruntime.ErrNotRunning, context.DeadlineExceeded, factorysessions.ErrSessionNotFound} {
+		for _, recoveryFailure := range []bool{false, true} {
+			sessions := &factoryStatusSessionRole{}
+			if recoveryFailure {
+				sessions.recoveryErr = cause
+			} else {
+				sessions.observeErr = cause
+			}
+			projector := &factoryStatusProjectorRole{}
+			_, err := NewFactoryStatusAPI(sessions, projector).ProjectFactoryStatus(t.Context(), "selected-session")
+			if !errors.Is(err, cause) {
+				t.Fatalf("status error = %v, want %v", err, cause)
+			}
+			if len(sessions.sessionIDs) != 1 || sessions.sessionIDs[0] != "selected-session" {
+				t.Fatalf("selected session lost: %v", sessions.sessionIDs)
+			}
+			if projector.projections != 0 {
+				t.Fatal("failed status projected a success")
+			}
+		}
+	}
+}
+
+type statusFailureRole struct {
+	cause    error
+	selected string
+}
+
+func (role *statusFailureRole) ProjectFactoryStatus(_ context.Context, sessionID string) (apisurface.FactorySessionStatus, error) {
+	role.selected = sessionID
+	return apisurface.FactorySessionStatus{}, role.cause
+}
+
+func TestObservationHandlerStatusPreservesSafeFailures(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		cause   error
+		status  int
+		code    factoryapi.ErrorResponseCode
+		message string
+	}{
+		{"missing session", apisurface.ErrFactorySessionNotFound, http.StatusNotFound, "NOT_FOUND", "factory session not found"},
+		{"observation fault", errors.New("private-observer-detail"), http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get engine state snapshot"},
+		{"deadline", context.DeadlineExceeded, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get engine state snapshot"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			role := &statusFailureRole{cause: test.cause}
+			handler := NewObservationHandler(nil, nil, role, nil, zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.GetStatusBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/selected/status", nil), "selected")
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if recorder.Code != test.status || response.Code != test.code || response.Message != test.message || response.Family != errorFamilyForStatus(test.status) || response.Targets != nil {
+				t.Fatalf("status response = %d %s", recorder.Code, recorder.Body.String())
+			}
+			if role.selected != "selected" || strings.Contains(recorder.Body.String(), "private-observer-detail") {
+				t.Fatalf("selected = %q, response = %s", role.selected, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestDurableObservationStatusRemainsUnavailable(t *testing.T) {
+	t.Parallel()
+	handler := NewDurableObservationHandler(nil, nil, zap.NewNop())
+	for _, sessionID := range []string{"", "durable-selected"} {
+		t.Run(sessionID, func(t *testing.T) {
+			t.Parallel()
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/status", nil)
+			if sessionID == "" {
+				handler.GetStatus(recorder, request)
+			} else {
+				handler.GetStatusBySessionId(recorder, request, factoryapi.SessionID(sessionID))
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			if recorder.Code != http.StatusServiceUnavailable || response.Code != "SERVICE_UNAVAILABLE" || response.Message != "factory status is unavailable" || response.Family != errorFamilyForStatus(http.StatusServiceUnavailable) || response.Targets != nil {
+				t.Fatalf("durable status response = %d %s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
 }

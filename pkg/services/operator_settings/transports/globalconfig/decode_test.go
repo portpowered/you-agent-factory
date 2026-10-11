@@ -17,6 +17,32 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
+func TestSubagentDefaultsCodecRoundTripAndValidation(t *testing.T) {
+	t.Parallel()
+	config, err := globalconfig.Decode([]byte(`{"defaults":{"workerModelProvider":"claude","workerModel":"generic","subagent":{"provider":"opencode","model":"controlled-free","reasoningEffort":"low"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := globalconfig.Encode(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roundTrip, err := globalconfig.Decode(encoded)
+	if err != nil || !reflect.DeepEqual(config, roundTrip) || config.Defaults.Subagent.Model != "controlled-free" || config.Defaults.WorkerModel != "generic" {
+		t.Fatalf("route or generic defaults lost: %#v, %v", roundTrip.Defaults, err)
+	}
+	for _, raw := range []string{
+		`null`, `{}`, `{"provider":"codex"}`, `{"provider":null,"model":"m"}`,
+		`{"provider":"codex","model":" "}`, `{"provider":"codex","model":"m","reasoningEffort":""}`,
+		`{"provider":"codex","model":"m","reasoningEffort":null}`, `{"provider":"DEFAULT","model":"m"}`,
+		`{"provider":"codex","model":"m","unknown":true}`,
+	} {
+		if _, err := globalconfig.Decode([]byte(`{"defaults":{"subagent":` + raw + `}}`)); err == nil {
+			t.Fatalf("accepted invalid route %s", raw)
+		}
+	}
+}
+
 func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *testing.T) {
 	path := writeConfig(t, `{
 		"backendScopeID": "local-11111111-1111-4111-8111-111111111111",

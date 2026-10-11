@@ -61,9 +61,6 @@ func (s *JavaScriptRuntimeService) BindWorkerScope(
 	}
 	s.invokerMu.Lock()
 	defer s.invokerMu.Unlock()
-	if s.workerExecution == nil || s.workerExecution.execute == nil {
-		return nil, errors.New("workers Execute capability is required")
-	}
 	if s.workerExecutionScopes == nil {
 		s.workerExecutionScopes = make(map[string]*childWorkerExecutionBinding)
 	}
@@ -88,9 +85,6 @@ func (s *JavaScriptRuntimeService) newChildWorkerExecutionBinding(
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter childWorkerAttemptStarter,
 ) *childWorkerExecutionBinding {
-	if execution == nil {
-		return nil
-	}
 	binding := &childWorkerExecutionBinding{
 		execute:               execution,
 		attemptStarter:        attemptStarter,

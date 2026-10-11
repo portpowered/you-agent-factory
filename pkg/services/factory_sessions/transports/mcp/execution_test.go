@@ -588,7 +588,7 @@ func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 }
 
 func TestToolOperationRejectsMissingContext(t *testing.T) {
-	operation := mcpfactorysession.BindToolOperation(
+	operation := bindTestToolOperation(
 		nil,
 		canonicalMCPRequestPreparation,
 		nil,

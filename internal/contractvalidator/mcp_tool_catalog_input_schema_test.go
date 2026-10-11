@@ -85,7 +85,7 @@ func TestMCPSubagentActionSchemaConformance(t *testing.T) {
 	catalog := readMCPContractObject(t, "../../contracts/mcp/tools.json")
 	subagent := catalog["tools"].(map[string]any)["mcp.tool.you.subagent"].(map[string]any)
 	schema := compileMCPContractSchema(t, subagent["input"].(map[string]any)["schema"].(map[string]any))
-	for _, raw := range []string{`{"prompt":"controlled"}`, `{"action":"RUN","prompt":"controlled"}`, `{"action":"LIST"}`, `{"action":"READ","workerSessionId":"w"}`, `{"action":"CONTROL","workerSessionId":"w","operation":"CANCEL"}`} {
+	for _, raw := range []string{`{"prompt":"controlled"}`, `{"action":"START","prompt":"controlled","requestId":"r","workerSessionId":"w","timeoutMillis":1000}`, `{"action":"RUN","prompt":"controlled"}`, `{"action":"LIST"}`, `{"action":"READ","workerSessionId":"w"}`, `{"action":"CONTROL","workerSessionId":"w","operation":"CANCEL"}`} {
 		var value any
 		if err := json.Unmarshal([]byte(raw), &value); err != nil {
 			t.Fatal(err)
@@ -125,7 +125,7 @@ func TestMCPSubagentResultSchemaConformance(t *testing.T) {
 	result := subagent["result"].(map[string]any)["domain"].(map[string]any)["success"].(map[string]any)
 	schema := compileMCPContractSchema(t, result["schema"].(map[string]any))
 	for _, raw := range []string{
-		`{"sessionId":"factory","status":"COMPLETED","text":"controlled"}`,
+		`{"requestId":"r","workerSessionId":"w","accepted":true,"state":"RUNNING","eventTopic":"worker-session.w"}`,
 		`{"workerSessions":[],"nextToken":null}`,
 		`{"session":{"workerSessionId":"w"},"logs":{"events":[]}}`,
 		`{"workerSessionId":"w","action":"TERMINATE","outcome":"APPLIED","state":"TERMINATED","forced":true,"dispatchId":"d"}`,

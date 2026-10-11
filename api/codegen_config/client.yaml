@@ -26,6 +26,7 @@ output-options:
     - saveEditableCurrentFactoryDefinition
     - getFactoryResponseEventsBySessionId
     - getWorkerSessionObservationByWorkerSessionId
+    - startWorkerSession
     - listWorkerSessions
     - streamWorkerSessionEventsByTopLevelWorkerSessionId
     - cancelWorkerSession

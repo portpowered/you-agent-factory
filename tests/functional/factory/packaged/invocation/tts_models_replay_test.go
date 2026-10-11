@@ -1,6 +1,7 @@
 package invocation_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -703,9 +705,16 @@ func replayManagedFactoryTTSRecording(
 	wantSuccess bool,
 ) managedFactoryTTSRecording {
 	t.Helper()
+	before, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("read TTS source before replay: %v", err)
+	}
+	// No-input replay uses human output. The published historical read below
+	// proves projected Work and history, including legacy v1 recordings whose
+	// CLI replay does not render the v2 historical inspection rows.
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--dir", factoryDir,
-		"--replay", artifactPath, "--no-record", "--output", "primary",
+		"you", "run", "--dir", factoryDir,
+		"--replay", artifactPath, "--no-record",
 	})
 	inputs.Input.Env = append(os.Environ(),
 		"HOME="+homeDir,
@@ -713,13 +722,57 @@ func replayManagedFactoryTTSRecording(
 		run.ModelCacheDirEnvironment+"="+cacheDir,
 	)
 	inputs.Input.WorkingDirectory = factoryDir
-	err := fixture.process.Execute(inputs.Input)
-	if wantSuccess && err != nil {
+	err = fixture.process.Execute(inputs.Input)
+	if err != nil {
 		t.Fatalf("root Process.Execute(replay managed TTS) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
 	events := readManagedFactoryTTSRecording(t, artifactPath)
+	assertManagedFactoryTTSHistoricalRead(t, fixture, artifactPath, events, wantSuccess)
+	after, err := os.ReadFile(artifactPath)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("TTS replay changed source: %v", err)
+	}
 	return managedFactoryTTSRecording{
 		factoryDir: factoryDir, homeDir: homeDir, cacheDir: cacheDir, artifactPath: artifactPath,
 		work: managedFactoryTTSOutputWork(t, events), events: events,
+	}
+}
+
+func assertManagedFactoryTTSHistoricalRead(t *testing.T, fixture *managedFactoryTTSFixture, path string, events []factoryapi.FactoryEvent, wantSuccess bool) {
+	t.Helper()
+	history, err := fixture.recordingReader.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording:                recordings.HistoricalRecordingIdentity{RecordingID: recordings.RecordingID(path), Artifact: recordings.RecordingArtifactReference(path)},
+		InferFactorySessionScope: true,
+	})
+	if err != nil {
+		t.Fatalf("public TTS historical read: %v", err)
+	}
+	var state factorydefinitions.FactoryWorldState
+	if err := json.Unmarshal([]byte(history.WorldState.Payload), &state); err != nil {
+		t.Fatalf("decode public TTS historical Work: %v", err)
+	}
+	want := managedFactoryTTSOutputWork(t, events).Results[0]
+	item := state.WorkItemsByID[requiredFactoryTTSWorkID(t, want)]
+	if item.ID != *want.WorkId || want.State == nil || item.State != want.State.Name ||
+		want.TraceId == nil || item.TraceID != *want.TraceId {
+		t.Fatalf("public TTS historical Work = %#v, want recorded identity/state/trace %#v", item, want)
+	}
+	if wantSuccess != (item.State == "complete") {
+		t.Fatalf("public TTS historical state = %q, success=%t", item.State, wantSuccess)
+	}
+	assertManagedFactoryTTSJSONEqual(t, item.Content, want.Content, "public historical Work content")
+	selected := state.PayloadLineage.ResolveSelectedWorkSnapshot(item.ID)
+	if selected.Snapshot == nil {
+		t.Fatal("public TTS historical selected Work snapshot missing")
+	}
+	assertManagedFactoryTTSJSONEqual(t, selected.Snapshot.WorkItem.Content, want.Content, "public historical selected content")
+	if len(history.Events) != len(events) {
+		t.Fatalf("public TTS history events = %d, want %d", len(history.Events), len(events))
+	}
+	for index, event := range events {
+		if string(history.Events[index].ID) != event.Id {
+			t.Fatalf("public TTS history event %d = %q, want %q", index, history.Events[index].ID, event.Id)
+		}
+		assertManagedFactoryTTSJSONEqual(t, json.RawMessage(history.Events[index].Payload), event.Payload, "public historical event payload")
 	}
 }

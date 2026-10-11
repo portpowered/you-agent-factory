@@ -603,7 +603,7 @@ func assertAdmittedAttributionName(t *testing.T, work any, name string) {
 func assertAttributionMarker(t *testing.T, logs any) {
 	t.Helper()
 	data, err := json.Marshal(logs)
-	if err != nil || !strings.Contains(string(data), "archived attribution marker") {
+	if err != nil || !strings.Contains(string(data), "archive-marker") || !strings.Contains(string(data), "command_execution") || !strings.Contains(string(data), "redacted") || strings.Contains(string(data), "echo archived attribution marker") {
 		t.Fatalf("captured marker missing: %v %v", logs, err)
 	}
 }

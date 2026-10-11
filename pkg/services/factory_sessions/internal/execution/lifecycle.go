@@ -157,11 +157,11 @@ func (s *JavaScriptRuntimeService) closeWithTimeout(timeout time.Duration) error
 			close(done)
 		}()
 
-		timer := time.NewTimer(timeout)
+		timer := s.syncWaits.NewTimer(timeout)
 		defer timer.Stop()
 		select {
 		case <-done:
-		case <-timer.C:
+		case <-timer.C():
 			s.closeErr = errors.Join(s.closeErr, fmt.Errorf(
 				"close durable session execution: %w",
 				ErrDurableExecutionShutdownTimeout,

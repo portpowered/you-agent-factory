@@ -13,15 +13,19 @@ import (
 	agentmessageswire "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
+	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
@@ -49,6 +53,35 @@ var apiSet = wire.NewSet(
 	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
 	provideHTTPRuntimeBindingWithMetrics,
+	provideHTTPDefinitionMapping,
+	provideHTTPDefinitionsAPI,
+	provideHTTPRecordingsAdapter,
+	provideHTTPMetricsScope,
+	provideHTTPStatusAPI,
+	provideHTTPLiveAPI,
+	provideHTTPInvocationAPI,
+	provideHTTPLifecycleHandler,
+	provideHTTPReadHandler,
+	provideHTTPAuthoringHandler,
+	provideHTTPInvocationHandler,
+	provideHTTPObservationHandler,
+	factorysessionshttp.NewHandler,
+	provideHTTPDefinitionsTopology,
+	provideHTTPDefinitionsHandler,
+	provideHTTPModelsAdapter,
+	modelshttp.NewHandler,
+	provideHTTPCostsAdapter,
+	costshttp.NewHandler,
+	provideHTTPMetricsAdapter,
+	factoryvisualizationhttp.NewMetricsHandler,
+	provideHTTPWorkerSessionScope,
+	provideHTTPWorkerSessionController,
+	provideHTTPWorkerSessionsAdapter,
+	provideHTTPWorkerSessionsHandler,
+	provideWorkerExecutionEndpointBinding,
+	provideHTTPDefaultWorkTypeResolver,
+	provideHTTPWorkAdapter,
+
 	provideHTTPWorkerPrompts,
 )
 
@@ -72,6 +105,7 @@ var servicesSet = wire.NewSet(
 	provideWorkerRecordingReader,
 	provideWorkerWorkAttributionReader,
 	provideFleetCapturedActivity,
+	provideDirectFleetObservationSource,
 	provideFleetObservationCatalog,
 	workersessionswire.NewLogReader,
 	workersessionswire.NewFleetHistory,
@@ -152,6 +186,7 @@ var servicesSet = wire.NewSet(
 	workwire.NewRequestPolicy,
 	workwire.NewRequestPreparationService,
 	work.NewSingleWorkTargetPreparation,
+	workwire.NewListRequestPolicy,
 	work.NewListRequestPreparation,
 	work.NewFactoryRequestBatchPreparation,
 	workwire.NewInvocationInputPolicy,
@@ -360,6 +395,8 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
 	provideFactoryDefinitionPackagedInstallationDirectoryCreator,
+	factorydefinitionswire.NewPackagedFactoryInstallationService,
+	wire.Bind(new(factorydefinitions.PackagedFactoryInstaller), new(*factorydefinitionswire.PackagedFactoryInstallationService)),
 	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,
@@ -400,6 +437,8 @@ var servicesSet = wire.NewSet(
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewEnablementEvaluator,
 	factoryruntimewire.NewEngineOpening,
+	provideRuntimeAutomationLifecycle,
+	provideInvocationSchedulePreparation,
 	factoryruntimewire.NewBundleOpening,
 	wire.Bind(new(factoryruntimewire.RuntimeResourceOpening), new(*factoryruntimewire.RuntimeFactory)),
 	factoryruntimewire.NewRuntimeFactory,
@@ -588,7 +627,6 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideMoveWorkOperation,
 	provideWorkVisualizationOperation,
 	provideVisualizeWorkOperation,
-	wire.Struct(new(cli.CommandOperations), "*"),
 )
 
 // BundleSet is the one canonical provider set used by the single public bundle
@@ -617,14 +655,21 @@ var BundleSet = wire.NewSet(
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
 	provideInvocationOperation,
-	provideMCPServerBuilder,
+	provideMCPWorkerHostClient,
+	provideMCPWorkerAdapter,
+	provideMCPInspection,
+	provideMCPToolOperation,
+	provideMCPDispatch,
+	provideMCPServerOptions,
+	provideMCPServer,
+	provideMCPProviderIdentityResolver,
 	provideStdioHandler,
 	provideDirectJavaScriptHostAdapter,
 	runcli.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
-	provideCLICommandFactory,
+	cli.NewCommandFactory,
 	initializerapplication.NewProcessWithRuntimeCosts,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),

@@ -283,3 +283,69 @@ func TestWorkerTokenClassificationPreservesNonsecretEnvironmentFacts(t *testing.
 		t.Fatal("classification mutated the execution environment")
 	}
 }
+
+func TestSanitizeCodexToolSummariesPreserveJSONAndPolicy(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{EnvVars: map[string]string{"API_KEY": "planted-secret"}}
+	fact := providers.ExecuteProgress{Phase: "tool.completed", Metadata: map[string]string{
+		"raw_input":  `{"command":"private command","arguments":{"query":"planted\u002dsecret","password":"private-password","safe":"visible"}}`,
+		"raw_output": `{"aggregated_output":"private-output","exit_code":0,"status":"completed","result":{"value":"planted\u002dsecret","safe":"visible"}}`,
+	}}
+	live := sanitizeCapturedProgress(fact, request)
+	terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
+	for _, got := range []providers.ExecuteProgress{live, terminal} {
+		for key, expected := range map[string]string{
+			"raw_input":  `{"arguments":{"password":"<redacted>","query":"<redacted>","safe":"visible"},"command":"<redacted>"}`,
+			"raw_output": `{"aggregated_output":"<redacted>","exit_code":0,"result":{"safe":"visible","value":"<redacted>"},"status":"completed"}`,
+		} {
+			var actual, want any
+			if json.Unmarshal([]byte(got.Metadata[key]), &actual) != nil || json.Unmarshal([]byte(expected), &want) != nil || !reflect.DeepEqual(actual, want) {
+				t.Fatal("summary lost policy-safe typed facts")
+			}
+		}
+	}
+	if fact.Metadata["raw_output"] == live.Metadata["raw_output"] {
+		t.Fatal("sanitizer aliased native metadata")
+	}
+}
+
+func TestSanitizeCodexToolSummaryBoundaries(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{EnvVars: map[string]string{"API_KEY": "planted-secret"}}
+	for _, test := range []struct {
+		name, key, value, want string
+	}{
+		{"input array", "raw_input", `["visible","planted-secret",0,null]`, `["visible","<redacted>",0,null]`},
+		{"output array", "raw_output", `["private output",0,false]`, `["<redacted>",0,false]`},
+		{"output scalar", "raw_output", `"private output"`, `"<redacted>"`},
+		{"private reasoning", "raw_input", `{"private_reasoning":"private thought","encrypted_content":"private blob"}`, `{"encrypted_content":"<redacted>","private_reasoning":"<redacted>"}`},
+		{"credential input keys", "raw_input", `{"arguments":{"planted\u002dsecret":"private value","prefix-planted-secret":1,"safe":0}}`, `{"arguments":{"safe":0}}`},
+		{"credential output key collisions", "raw_output", `{"result":{"planted-secret":"private value","prefix-planted-secret":1,"prefix-<redacted>":2,"<redacted>":3,"nested":[{"planted-secret":false,"safe":true}]},"exit_code":0,"status":"completed"}`, `{"result":{"prefix-<redacted>":2,"<redacted>":3,"nested":[{"safe":true}]},"exit_code":0,"status":"completed"}`},
+		{"malformed input", "raw_input", `{"value":"planted-secret"`, `{"value":"<redacted>"`},
+		{"malformed output", "raw_output", `{"value":"private output"`, `<redacted>`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fact := providers.ExecuteProgress{Phase: "tool.updated", Metadata: map[string]string{test.key: test.value}}
+			live := sanitizeCapturedProgress(fact, request)
+			terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
+			for _, got := range []providers.ExecuteProgress{live, terminal} {
+				var actual, expected any
+				matches := got.Metadata[test.key] == test.want
+				if json.Valid([]byte(test.want)) {
+					matches = json.Unmarshal([]byte(got.Metadata[test.key]), &actual) == nil && json.Unmarshal([]byte(test.want), &expected) == nil && reflect.DeepEqual(actual, expected)
+				}
+				if !matches {
+					t.Fatalf("tool summary boundary changed: got=%q want=%q", got.Metadata[test.key], test.want)
+				}
+			}
+		})
+	}
+	// Many small safe values exceed the terminal metadata budget without
+	// requiring a single large string to be individually truncated.
+	fact := providers.ExecuteProgress{Metadata: map[string]string{"raw_output": `[` + strings.Repeat("0,", maxDiagnosticRunes) + `0]`}}
+	terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
+	if terminal.Metadata["raw_output"] != `"<redacted>"` || !json.Valid([]byte(terminal.Metadata["raw_output"])) {
+		t.Fatal("oversized tool summary lost valid bounded redaction")
+	}
+}

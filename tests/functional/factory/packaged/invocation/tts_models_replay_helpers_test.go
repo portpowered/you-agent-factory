@@ -16,6 +16,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
@@ -26,11 +27,12 @@ import (
 // customer home, Factory copy, cache copy, recording, and backend state so
 // replay and artifact lineage remain scenario-local.
 type managedFactoryTTSFixture struct {
-	process        support.ApplicationProcess
-	backend        *packagedTTSModelsBackend
-	factorySeedDir string
-	configSeed     []byte
-	cacheSeedDir   string
+	process         support.ApplicationProcess
+	backend         *packagedTTSModelsBackend
+	recordingReader recordings.Service
+	factorySeedDir  string
+	configSeed      []byte
+	cacheSeedDir    string
 
 	launcher *packagedTTSModelHostLauncher
 
@@ -56,7 +58,9 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 		http.NotFound(writer, request)
 	}))
 	launcher := &packagedTTSModelHostLauncher{endpoint: privateFixture.Endpoint()}
+	var recordingReader recordings.Service
 	edges := serviceedges.Edges{
+		RecordingsRootObserver: func(service recordings.Service) { recordingReader = service },
 		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelResolveBackendArtifact: func(
 			context.Context,
@@ -95,6 +99,7 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 	fixture := &managedFactoryTTSFixture{
 		process:         process,
 		backend:         backend,
+		recordingReader: recordingReader,
 		factorySeedDir:  seedFactoryDir,
 		configSeed:      configSeed,
 		cacheSeedDir:    cacheSeedDir,

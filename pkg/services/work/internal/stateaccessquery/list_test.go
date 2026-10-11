@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
@@ -40,6 +41,11 @@ func TestListRequestPreparationFailsClosedWithoutLiveContext(t *testing.T) {
 	cancel()
 	if _, err := prepare.PrepareListRequest(ctx, stateaccessquery.ListOptions{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled-context error = %v, want context.Canceled", err)
+	}
+	deadline, stop := context.WithDeadline(t.Context(), time.Time{})
+	defer stop()
+	if _, err := prepare.PrepareListRequest(deadline, stateaccessquery.ListOptions{}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deadline error = %v", err)
 	}
 }
 
