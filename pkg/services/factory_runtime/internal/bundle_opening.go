@@ -102,14 +102,14 @@ type BundleOpening struct {
 // BundleOpeningSelection carries one selected owner through canonical Wire.
 // Its engine-facing operational method set stays inside Factory Runtime internals.
 type BundleOpeningSelection interface {
-	selectedBundleOpening()
+	selectedBundleOpening() any
 }
 
-func (*BundleOpening) selectedBundleOpening() {}
+func (o *BundleOpening) selectedBundleOpening() any { return o }
 
 // SelectedBundleOpening resolves the sealed construction value inside its owner.
 func SelectedBundleOpening(selection BundleOpeningSelection) *BundleOpening {
-	return selection.(*BundleOpening)
+	return selection.selectedBundleOpening().(*BundleOpening)
 }
 
 func NewBundleOpening(

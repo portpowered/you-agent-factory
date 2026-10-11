@@ -40,14 +40,14 @@ type EnablementEvaluator struct{}
 // EnablementSelection carries the selected owner across the Wire construction
 // boundary without publishing its engine-facing operational methods.
 type EnablementSelection interface {
-	selectedEnablement()
+	selectedEnablement() any
 }
 
-func (*EnablementEvaluator) selectedEnablement() {}
+func (e *EnablementEvaluator) selectedEnablement() any { return e }
 
 // SelectedEnablement resolves the sealed construction value inside its owner.
 func SelectedEnablement(selection EnablementSelection) Enablement {
-	return selection.(*EnablementEvaluator)
+	return selection.selectedEnablement().(*EnablementEvaluator)
 }
 
 // NewEnablementEvaluator constructs reusable behavior without capturing scope.

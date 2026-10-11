@@ -157,14 +157,14 @@ type EngineOpening struct {
 // EngineOpeningSelection carries one selected owner through canonical Wire.
 // Its engine-facing operational method set stays inside Factory Runtime internals.
 type EngineOpeningSelection interface {
-	selectedEngineOpening()
+	selectedEngineOpening() any
 }
 
-func (*EngineOpening) selectedEngineOpening() {}
+func (o *EngineOpening) selectedEngineOpening() any { return o }
 
 // SelectedEngineOpening resolves the sealed construction value inside its owner.
 func SelectedEngineOpening(selection EngineOpeningSelection) *EngineOpening {
-	return selection.(*EngineOpening)
+	return selection.selectedEngineOpening().(*EngineOpening)
 }
 
 func NewEngineOpening(

@@ -96,14 +96,14 @@ type RuntimeFactory struct {
 // RuntimeFactorySelection carries the existing resource-opening owner through
 // Wire without exporting the concrete host bundle returned by Build.
 type RuntimeFactorySelection interface {
-	selectedRuntimeFactory()
+	selectedRuntimeFactory() any
 }
 
-func (*RuntimeFactory) selectedRuntimeFactory() {}
+func (f *RuntimeFactory) selectedRuntimeFactory() any { return f }
 
 // SelectedRuntimeFactory resolves the sealed construction value inside its owner.
 func SelectedRuntimeFactory(selection RuntimeFactorySelection) *RuntimeFactory {
-	return selection.(*RuntimeFactory)
+	return selection.selectedRuntimeFactory().(*RuntimeFactory)
 }
 
 func NewRuntimeFactory(
