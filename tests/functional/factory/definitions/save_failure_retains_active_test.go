@@ -312,15 +312,7 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 	}
 	assertNoDefinitionStaging(t, cell.root)
 	if cell.name != "save-success" {
-		durableAfter, err := os.ReadFile(durablePath)
-		if err != nil || string(durableAfter) != string(durableBefore) {
-			t.Fatalf("rejected definition request changed durable content: %s, %v", durableAfter, err)
-		}
-		if cell.name == "save-corrupt-create" {
-			if _, err := os.Stat(filepath.Join(cell.root, "corrupt-write")); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("rejected create left a partial named Factory: %v", err)
-			}
-		}
+		assertRejectedDefinitionDurableContent(t, cell, durablePath, durableBefore)
 	}
 	after := support.GetJSON[factoryapi.Factory](t, endpoint)
 	want := "definition-before"
@@ -357,6 +349,19 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 	body, _, status = definitionsHTTPRequest(t, http.MethodPut, endpoint, payload)
 	assertDefinitionsHTTPError(t, body, status, http.StatusNotFound, "NOT_FOUND")
 	assertDefinitionInvocation(t, baseURL, peer, "definition-before")
+}
+
+func assertRejectedDefinitionDurableContent(t *testing.T, cell selectedDefinition, durablePath string, durableBefore []byte) {
+	t.Helper()
+	durableAfter, err := os.ReadFile(durablePath)
+	if err != nil || string(durableAfter) != string(durableBefore) {
+		t.Fatalf("rejected definition request changed durable content: %s, %v", durableAfter, err)
+	}
+	if cell.name == "save-corrupt-create" {
+		if _, err := os.Stat(filepath.Join(cell.root, "corrupt-write")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("rejected create left a partial named Factory: %v", err)
+		}
+	}
 }
 
 func assertNoDefinitionStaging(t *testing.T, root string) {
