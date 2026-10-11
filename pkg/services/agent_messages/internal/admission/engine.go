@@ -29,6 +29,8 @@ type Quota interface {
 // Ledger's commit atomically flushes all changes before making them readable.
 type Ledger interface {
 	Entries() ([]store.Entry, uint64, error)
+	Matching(store.Filter) ([]store.Entry, uint64, error)
+	LookupMessage(string) (store.Entry, bool, uint64, error)
 	LookupRequest(string, string) (store.Request, bool, error)
 	Commit(store.Transaction) error
 }

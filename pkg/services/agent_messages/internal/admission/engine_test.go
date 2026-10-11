@@ -81,6 +81,44 @@ func (l *engineLedger) Entries() ([]store.Entry, uint64, error) {
 	return append([]store.Entry{}, l.entries...), l.sequence, nil
 }
 
+func (l *engineLedger) Matching(filter store.Filter) ([]store.Entry, uint64, error) {
+	result := []store.Entry{}
+	for _, entry := range l.entries {
+		m := entry.Message
+		if !ledgerAudience(filter, entry) {
+			continue
+		}
+		if (filter.ToWorkerSessionID == "" || filter.ToWorkerSessionID == m.To.WorkerSessionID) &&
+			(filter.FromWorkerSessionID == "" || filter.FromWorkerSessionID == m.From.WorkerSessionID) &&
+			(filter.ThreadID == "" || filter.ThreadID == m.ThreadID) &&
+			(filter.WorkID == "" || filter.WorkID == m.Correlation.WorkID) &&
+			(filter.FactorySessionID == "" || filter.FactorySessionID == m.Correlation.FactorySessionID) {
+			result = append(result, entry)
+		}
+	}
+	return result, l.sequence, nil
+}
+
+func ledgerAudience(filter store.Filter, entry store.Entry) bool {
+	if filter.ReaderChain == "" && filter.ReaderWork == "" {
+		return true
+	}
+	recipient := (filter.ReaderChain != "" && filter.ReaderChain == entry.RecipientChainIdentity) ||
+		(filter.ReaderWork != "" && filter.ReaderWork == entry.RecipientWorkIdentity)
+	sender := (filter.ReaderChain != "" && filter.ReaderChain == entry.SenderChainIdentity) ||
+		(filter.ReaderWork != "" && filter.ReaderWork == entry.SenderWorkIdentity)
+	return recipient || (!filter.RecipientOnly && sender)
+}
+
+func (l *engineLedger) LookupMessage(id string) (store.Entry, bool, uint64, error) {
+	for _, entry := range l.entries {
+		if entry.Message.MessageID == id {
+			return entry, true, l.sequence, nil
+		}
+	}
+	return store.Entry{}, false, l.sequence, nil
+}
+
 func (l *engineLedger) LookupRequest(sender, request string) (store.Request, bool, error) {
 	r, found := l.requests[sender+":"+request]
 	return r, found, nil

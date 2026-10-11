@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"unicode/utf8"
 )
@@ -42,6 +43,8 @@ type Journal struct {
 	records  map[string]bool
 	entries  map[string]Entry
 	requests map[requestKey]Request
+	ordered  []string
+	indexes  map[indexKey][]string
 }
 
 type requestKey struct{ sender, request string }
@@ -67,6 +70,7 @@ func (j *Journal) Open() error {
 	j.entries = make(map[string]Entry)
 	j.requests = make(map[requestKey]Request)
 	j.records = make(map[string]bool)
+	j.indexes = make(map[indexKey][]string)
 	if err := j.replay(data); err != nil {
 		j.fault = ErrCorrupt
 		return j.fault
@@ -183,7 +187,16 @@ func (j *Journal) unavailable() error {
 }
 
 func (j *Journal) apply(t Transaction) {
+	// A compacted snapshot may serialize entries in any order. Build indexes
+	// once in original admission order, then append only new admissions.
+	if t.Kind == Snapshot {
+		t.Messages = append([]Entry{}, t.Messages...)
+		sort.Slice(t.Messages, func(a, b int) bool { return t.Messages[a].Sequence < t.Messages[b].Sequence })
+	}
 	for _, entry := range t.Messages {
+		if _, exists := j.entries[entry.Message.MessageID]; !exists {
+			j.index(entry)
+		}
 		j.entries[entry.Message.MessageID] = entry
 	}
 	for _, request := range t.Requests {

@@ -30,21 +30,18 @@ func (e *Engine) Get(ctx context.Context, request agentmessages.GetRequest) (age
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	entries, sequence, err := e.ledger.Entries()
+	entry, exists, sequence, err := e.ledger.LookupMessage(request.MessageID)
 	if err != nil {
 		return agentmessages.Message{}, err
 	}
-	for _, entry := range entries {
-		if entry.Message.MessageID != request.MessageID {
-			continue
-		}
-		recipient := identity.Matches(entry.RecipientChainIdentity, entry.RecipientWorkIdentity)
-		if caller != nil && !recipient && !identity.Matches(entry.SenderChainIdentity, entry.SenderWorkIdentity) {
-			return agentmessages.Message{}, agentmessages.ErrNotPermitted
-		}
-		return e.readEntry(ctx, caller, recipient, entry, sequence)
+	if !exists {
+		return agentmessages.Message{}, agentmessages.ErrMessageNotFound
 	}
-	return agentmessages.Message{}, agentmessages.ErrMessageNotFound
+	recipient := identity.Matches(entry.RecipientChainIdentity, entry.RecipientWorkIdentity)
+	if caller != nil && !recipient && !identity.Matches(entry.SenderChainIdentity, entry.SenderWorkIdentity) {
+		return agentmessages.Message{}, agentmessages.ErrNotPermitted
+	}
+	return e.readEntry(ctx, caller, recipient, entry, sequence)
 }
 
 func (e *Engine) readEntry(ctx context.Context, caller *workersessions.CallerIdentity, recipient bool, entry store.Entry, sequence uint64) (agentmessages.Message, error) {

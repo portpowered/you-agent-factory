@@ -39,7 +39,13 @@ func (e *Engine) List(ctx context.Context, request agentmessages.ListRequest) (a
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	entries, sequence, err := e.ledger.Entries()
+	filter := store.Filter{ToWorkerSessionID: request.ToWorkerSessionID,
+		FromWorkerSessionID: request.FromWorkerSessionID, ThreadID: request.ThreadID,
+		WorkID: request.Correlation.WorkID, FactorySessionID: request.Correlation.FactorySessionID}
+	if request.Caller != nil {
+		filter.ReaderChain, filter.ReaderWork, filter.RecipientOnly = identity.Chain, identity.Work, request.ToMe
+	}
+	entries, sequence, err := e.ledger.Matching(filter)
 	if err != nil {
 		return agentmessages.Page{}, err
 	}

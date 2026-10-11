@@ -2,7 +2,6 @@ package store
 
 import (
 	"reflect"
-	"sort"
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 )
@@ -230,15 +229,9 @@ func (j *Journal) Entries() ([]Entry, uint64, error) {
 		return nil, 0, j.unavailable()
 	}
 	result := make([]Entry, 0, len(j.entries))
-	for _, entry := range j.entries {
-		result = append(result, entry)
+	for _, id := range j.ordered {
+		result = append(result, j.entries[id])
 	}
-	sort.Slice(result, func(a, b int) bool {
-		if result[a].Sequence == result[b].Sequence {
-			return result[a].Message.MessageID < result[b].Message.MessageID
-		}
-		return result[a].Sequence < result[b].Sequence
-	})
 	return result, j.sequence, nil
 }
 
