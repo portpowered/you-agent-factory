@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -18,12 +19,97 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type committedTerminalRunner struct {
 	slots map[string]*functionalWorkerGate
+}
+
+// Delay only the terminal storage effect; never alter a captured record. This
+// exposes the live-ended interval before the capture can prove completion.
+type terminalCommitGate struct {
+	recordings.WorkerRecordingStore
+	entered     chan struct{}
+	proceed     chan struct{}
+	once        sync.Once
+	releaseOnce sync.Once
+}
+
+func (store *terminalCommitGate) release() {
+	store.releaseOnce.Do(func() { close(store.proceed) })
+}
+
+func (store *terminalCommitGate) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *terminalCommitGate) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}
+
+func (store *terminalCommitGate) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	var draft workers.Draft
+	if json.Unmarshal(record.Record.Payload, &draft) == nil && draft.Kind == workers.KindSession && draft.Phase == workers.PhaseCompleted {
+		store.once.Do(func() { close(store.entered) })
+		select {
+		case <-store.proceed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+}
+
+func TestWorkerSessionTerminalCommitWindow(t *testing.T) {
+	t.Parallel()
+	finish := make(chan struct{})
+	runner := newFunctionalWorkerGate(finish)
+	dir, home := support.ScaffoldSingleStepFactory(t, "terminal-commit-window"), t.TempDir()
+	config := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env: []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + home, "LOCALAPPDATA=" + home,
+			"XDG_CONFIG_HOME=" + home, "XDG_DATA_HOME=" + home, "TEMP=" + home, "TMP=" + home},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)}}
+	store := &terminalCommitGate{entered: make(chan struct{}), proceed: make(chan struct{})}
+	config.Edges.WorkerRecordingWriter = store
+	config.Edges.WorkerRecordingStoreObserver = func(backing recordings.WorkerRecordingStore) { store.WorkerRecordingStore = backing }
+	server := support.StartFunctionalAPIServer(t, config)
+	t.Cleanup(store.release)
+	const model, id = "direct-codex-COMPLETED", "commit-window-worker"
+	admitCommittedTerminal(t, server, id, model, "codex")
+	runner.waitStarted(t)
+	close(finish)
+	waitFleetCharacterizationSignal(t, store.entered, "terminal storage effect")
+	shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+id)
+	if shown.State != factoryapi.WorkerSessionObservationStateCompleted || shown.ConfirmationState != factoryapi.UNCONFIRMED {
+		t.Fatalf("pending capture claimed committed terminal: %+v", shown)
+	}
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+id+"/logs")
+	if page.Health == factoryapi.COMPLETE {
+		t.Fatalf("pending terminal claimed complete capture: %+v", page)
+	}
+	response, err := http.Get(server.URL() + "/worker-sessions?history=all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure factoryapi.ErrorResponse
+	err = json.NewDecoder(response.Body).Decode(&failure)
+	_ = response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusInternalServerError || failure.Code != "PROJECTION_UNAVAILABLE" {
+		t.Fatalf("uncommitted history status=%d error=%+v decode=%v", response.StatusCode, failure, err)
+	}
+	store.release()
+	waitCapturedTerminal(t, server.URL(), id)
+	before := assertCommittedTerminalPublicParity(t, server, id, "COMPLETED")
+	server.Close(t)
+	reopened := support.StartFunctionalAPIServer(t, config)
+	after := assertCommittedTerminalPublicParity(t, reopened, id, "COMPLETED")
+	if !committedTerminalFactsEqual(before, after) {
+		t.Fatalf("committed facts changed on reopen: before=%+v after=%+v", before, after)
+	}
 }
 
 func (r *committedTerminalRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -55,6 +141,7 @@ func TestWorkerSessionCommittedTerminalParity(t *testing.T) {
 	runner, gates, cases, config := committedTerminalFixture(t)
 	server := support.StartFunctionalAPIServer(t, config)
 	before := make([]factoryapi.WorkerSessionObservation, len(cases))
+	logs := make([]factoryapi.WorkerSessionLogPage, len(cases))
 	t.Run("terminal matrix", func(t *testing.T) {
 		for index, cell := range cases {
 			t.Run(cell.model, func(t *testing.T) {
@@ -98,6 +185,7 @@ func TestWorkerSessionCommittedTerminalParity(t *testing.T) {
 	}
 	for index, cell := range cases {
 		before[index] = assertCommittedTerminalPublicParity(t, server, before[index].WorkerSessionId, cell.state)
+		logs[index] = assertCommittedTerminalCapture(t, server, before[index].WorkerSessionId)
 		if runner.slots[cell.model].callCount() != 1 {
 			t.Fatalf("%s admitted multiple physical executions", cell.model)
 		}
@@ -109,12 +197,28 @@ func TestWorkerSessionCommittedTerminalParity(t *testing.T) {
 	reopened := support.StartFunctionalAPIServer(t, config)
 	for index, cell := range cases {
 		got := assertCommittedTerminalPublicParity(t, reopened, before[index].WorkerSessionId, cell.state)
+		page := assertCommittedTerminalCapture(t, reopened, got.WorkerSessionId)
+		if !reflect.DeepEqual(page.Events, logs[index].Events) || page.CommittedPosition != logs[index].CommittedPosition {
+			t.Fatalf("restart changed committed capture for %s", cell.model)
+		}
 		if !committedTerminalFactsEqual(got, before[index]) {
 			t.Fatalf("restart changed committed terminal facts for %s: before=%+v after=%+v", cell.model, before[index], got)
 		}
 	}
 	reopened.Close(t)
 	t.Run("opening-only and owner-lost", assertCommittedTerminalPrefixFences)
+}
+
+func assertCommittedTerminalCapture(t *testing.T, server *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	page := assertCapturedLogsCLIHTTPParity(t, server, id)
+	// A complete journal witnesses the attempt's end, including failed and
+	// operator-stopped attempts; it does not assert execution success.
+	if page.Health != factoryapi.COMPLETE || len(page.Events) == 0 || page.Events[len(page.Events)-1].Delivery != "TERMINAL_REPLAY" {
+		t.Fatalf("committed attempt has incomplete capture: %+v", page)
+	}
+	assertCapturedPages(t, server, page)
+	return page
 }
 
 func committedTerminalFixture(t *testing.T) (*committedTerminalRunner, map[string]chan struct{}, []committedTerminalCase, support.FunctionalAPIServerConfig) {
