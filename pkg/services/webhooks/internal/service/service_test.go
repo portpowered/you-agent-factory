@@ -75,8 +75,6 @@ func TestServiceDeliversCanonicalWorkEventWithSignedBody(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 	defer subscription(context.Background())
-	waitForSubscriptions(t, root, 1)
-
 	event := testWorkEvent(t)
 	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
 	got := receiveRequest(t, received)

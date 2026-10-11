@@ -2,10 +2,15 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -90,6 +95,7 @@ func (clock *exactWebhookClock) Advance(delay time.Duration) {
 type receivedRequest struct {
 	body    []byte
 	headers http.Header
+	path    string
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -152,6 +158,7 @@ type recordingRootStub struct {
 	recordings.Service
 	mu      sync.Mutex
 	streams []chan recordings.SubscriptionOutcome
+	scopes  []recordings.CanonicalEventScope
 	started chan struct{}
 }
 
@@ -160,12 +167,13 @@ func newRecordingRootStub() *recordingRootStub {
 }
 
 func (root *recordingRootStub) SubscribeFrom(
-	context.Context,
-	recordings.SubscribeRequest,
+	_ context.Context,
+	request recordings.SubscribeRequest,
 ) (recordings.SubscribeResult, error) {
 	stream := make(chan recordings.SubscriptionOutcome, 4)
 	root.mu.Lock()
 	root.streams = append(root.streams, stream)
+	root.scopes = append(root.scopes, request.Scope)
 	root.mu.Unlock()
 	root.started <- struct{}{}
 	return recordings.SubscribeResult{
@@ -183,8 +191,12 @@ func (root *recordingRootStub) SubscribeFrom(
 func (root *recordingRootStub) Publish(outcome recordings.SubscriptionOutcome) {
 	root.mu.Lock()
 	streams := append([]chan recordings.SubscriptionOutcome(nil), root.streams...)
+	scopes := append([]recordings.CanonicalEventScope(nil), root.scopes...)
 	root.mu.Unlock()
-	for _, stream := range streams {
+	for index, stream := range streams {
+		if scopes[index].FactorySessionID != "" && scopes[index].FactorySessionID != outcome.Event.Scope.FactorySessionID {
+			continue
+		}
 		stream <- outcome
 	}
 }
@@ -561,7 +573,8 @@ func TestServiceClosingOneSubscriptionLeavesPeerDelivering(t *testing.T) {
 		t.Fatal("A never entered delivery")
 	}
 	receiveRequest(t, peer)
-	joined := make(chan error, 1)
+	joined := make(chan error, 2)
+	go func() { joined <- a(context.Background()) }()
 	go func() { joined <- a(context.Background()) }()
 	select {
 	case <-canceled:
@@ -591,4 +604,351 @@ func TestServiceClosingOneSubscriptionLeavesPeerDelivering(t *testing.T) {
 	if err := a(nil); err != nil {
 		t.Fatalf("idempotent Close: %v", err)
 	}
+	select {
+	case err := <-joined:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("concurrent Close did not join")
+	}
+}
+
+type subscribeRecordingStub struct {
+	recordings.Service
+	subscribe func(context.Context, recordings.SubscribeRequest) (recordings.SubscribeResult, error)
+}
+
+func (stub subscribeRecordingStub) SubscribeFrom(ctx context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+	return stub.subscribe(ctx, request)
+}
+
+type webhookStartResult struct {
+	subscription webhooks.Subscription
+	err          error
+}
+
+func awaitWebhookSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(30 * time.Second):
+		t.Fatal("webhook lifecycle gate did not complete")
+	}
+}
+
+func awaitWebhookStart(t *testing.T, result <-chan webhookStartResult) webhookStartResult {
+	t.Helper()
+	select {
+	case value := <-result:
+		return value
+	case <-time.After(30 * time.Second):
+		t.Fatal("Start did not join")
+		return webhookStartResult{}
+	}
+}
+
+func TestServiceStartWaitsForEveryScopedSubscription(t *testing.T) {
+	t.Parallel()
+	root := newRecordingRootStub()
+	entered := make(chan recordings.SubscribeRequest, 2)
+	release := make(chan struct{})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	events := subscribeRecordingStub{subscribe: func(ctx context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+		entered <- request
+		select {
+		case <-release:
+			return root.SubscribeFrom(ctx, request)
+		case <-ctx.Done():
+			return recordings.SubscribeResult{}, ctx.Err()
+		}
+	}}
+	secrets := make(chan struct{}, 2)
+	requests := make(chan receivedRequest, 8)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		requests <- receivedRequest{body: body, headers: request.Header.Clone(), path: request.URL.Path}
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	service := New(events, server.Client(), func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
+		secrets <- struct{}{}
+		return "secret", nil
+	}, newExactWebhookClock(time.Unix(1786365000, 0)), func(string, []byte) error { t.Error("unexpected storage"); return nil }, logging.NoopLogger{})
+	if len(entered) != 0 || len(secrets) != 0 {
+		t.Fatal("construction performed effects")
+	}
+	scope := recordings.CanonicalEventScope{FactorySessionID: "selected"}
+	result := make(chan webhookStartResult, 1)
+	go func() {
+		subscription, err := service.Start(ctx, webhooks.StartRequest{
+			Definitions:   []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition("one", server.URL+"/one", nil), retryWebhookDefinition("two", server.URL+"/two", nil)},
+			RuntimeSource: testLoadedFactorySource{}, Scope: scope,
+			ActivationCursor: &recordings.CanonicalEventCursor{StreamGenerationID: "G", Sequence: 7},
+		})
+		result <- webhookStartResult{subscription, err}
+	}()
+	assertWebhookSubscribeRequests(t, entered, scope)
+	select {
+	case value := <-result:
+		t.Fatalf("Start returned before establishment: %v", value.err)
+	case <-secrets:
+		t.Fatal("secret resolution preceded establishment")
+	default:
+	}
+	release <- struct{}{}
+	waitForSubscriptions(t, root, 1)
+	select {
+	case value := <-result:
+		t.Fatalf("Start returned with another endpoint still gated: %v", value.err)
+	case <-secrets:
+		t.Fatal("partial activation resolved secrets")
+	default:
+	}
+	release <- struct{}{}
+	value := awaitWebhookStart(t, result)
+	if value.err != nil || value.subscription == nil || root.SubscriptionCount() != 2 {
+		t.Fatalf("Start = %v, subscriptions = %d", value.err, root.SubscriptionCount())
+	}
+	defer func() { _ = value.subscription(context.Background()) }()
+	assertImmediateReadyWebhookDelivery(t, root, requests, scope)
+	if err := value.subscription(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case extra := <-requests:
+		t.Fatalf("unexpected history/foreign delivery: %s", extra.body)
+	default:
+	}
+}
+
+func TestServiceSubscribeFailureReturnsOriginalCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("controlled recording cause")
+	failure := fmt.Errorf("establish scoped stream: %w", cause)
+	var owned context.Context
+	events := subscribeRecordingStub{subscribe: func(ctx context.Context, _ recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+		owned = ctx
+		return recordings.SubscribeResult{}, failure
+	}}
+	service := New(events, roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("failed scope delivered")
+		return nil, errors.New("unexpected HTTP")
+	}), func(context.Context, factorydefinitions.LoadedFactorySource, string) (string, error) {
+		t.Error("failed scope resolved secret")
+		return "secret", nil
+	}, platformclock.Real{}, func(string, []byte) error { t.Error("failed scope appended"); return nil }, logging.NoopLogger{})
+	subscription, err := service.Start(t.Context(), webhooks.StartRequest{
+		Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition("failure", "https://receiver.test", nil)}, RuntimeSource: testLoadedFactorySource{},
+	})
+	//nolint:errorlint // The Start contract requires original error identity as well as cause preservation.
+	if subscription != nil || err != failure || !errors.Is(err, cause) || !errors.Is(owned.Err(), context.Canceled) {
+		t.Fatalf("Start = %v, cause = %v, owned context = %v", err, errors.Is(err, cause), owned.Err())
+	}
+}
+
+func TestServicePartialSubscribeFailureJoinsAndLeavesUsefulPeer(t *testing.T) {
+	t.Parallel()
+	for _, cancellation := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parent-cancel=%t", cancellation), func(t *testing.T) {
+			t.Parallel()
+			runWebhookEstablishmentFailure(t, cancellation)
+		})
+	}
+}
+
+func runWebhookEstablishmentFailure(t *testing.T, cancellation bool) {
+	t.Helper()
+	root := newRecordingRootStub()
+	first, waiting, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	defer once.Do(func() { close(release) })
+	cause := errors.New("controlled establishment cause")
+	failure := fmt.Errorf("subscription failed: %w", cause)
+	var mu sync.Mutex
+	calls := 0
+	var established context.Context
+	events := subscribeRecordingStub{subscribe: func(ctx context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+		if request.Scope.FactorySessionID == "peer" {
+			return root.SubscribeFrom(ctx, request)
+		}
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+		switch call {
+		case 1:
+			established = ctx
+			close(first)
+			return root.SubscribeFrom(ctx, request)
+		case 2:
+			<-first
+			close(waiting)
+			<-ctx.Done()
+			close(canceled)
+			<-release // Start must join even a slow cancellation exit.
+			return recordings.SubscribeResult{}, ctx.Err()
+		default:
+			<-waiting
+			if cancellation {
+				<-ctx.Done()
+				return recordings.SubscribeResult{}, ctx.Err()
+			}
+			return recordings.SubscribeResult{}, failure
+		}
+	}}
+	peerRequests := make(chan receivedRequest, 8)
+	service := New(events, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/peer" {
+			t.Error("failed activation delivered")
+		}
+		body, _ := io.ReadAll(request.Body)
+		peerRequests <- receivedRequest{body: body, headers: request.Header.Clone()}
+		return &http.Response{StatusCode: 204, Body: io.NopCloser(strings.NewReader(""))}, nil
+	}), testSecretResolver, newExactWebhookClock(time.Unix(1786365000, 0)), func(string, []byte) error { t.Error("unexpected append"); return nil }, logging.NoopLogger{})
+	peer, err := service.Start(t.Context(), webhooks.StartRequest{
+		Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition("peer", "https://receiver.test/peer", nil)}, RuntimeSource: testLoadedFactorySource{}, Scope: recordings.CanonicalEventScope{FactorySessionID: "peer"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = peer(context.Background()) }()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan webhookStartResult, 1)
+	go func() {
+		subscription, err := service.Start(ctx, webhooks.StartRequest{
+			Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition("one", "https://receiver.test/failed", nil), retryWebhookDefinition("two", "https://receiver.test/failed", nil), retryWebhookDefinition("three", "https://receiver.test/failed", nil)}, RuntimeSource: testLoadedFactorySource{}, Scope: recordings.CanonicalEventScope{FactorySessionID: "failed"},
+		})
+		result <- webhookStartResult{subscription, err}
+	}()
+	awaitWebhookSignal(t, waiting)
+	if cancellation {
+		cancel()
+	}
+	awaitWebhookSignal(t, canceled)
+	if established.Err() != context.Canceled {
+		t.Fatal("established endpoint was not canceled")
+	}
+	select {
+	case value := <-result:
+		t.Fatalf("Start returned before exit gate: %v", value.err)
+	default:
+	}
+	// Even a queued event must not activate the partially established scope.
+	event := testWorkEvent(t)
+	event.Scope.FactorySessionID = "failed"
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
+	event.Scope.FactorySessionID = "peer"
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
+	got := receiveRequest(t, peerRequests)
+	assertReadyWebhookValues(t, got, event, "secret")
+	once.Do(func() { close(release) })
+	value := awaitWebhookStart(t, result)
+	want := failure
+	if cancellation {
+		want = context.Canceled
+	}
+	//nolint:errorlint // Assert the returned original error, not merely an equivalent wrapper.
+	if value.subscription != nil || value.err != want || (!cancellation && !errors.Is(value.err, cause)) {
+		t.Fatalf("Start = %v, want %v and nil subscription", value.err, want)
+	}
+	event.ID = "useful-peer-after-failed-start"
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
+	assertReadyWebhookValues(t, receiveRequest(t, peerRequests), event, "secret")
+}
+
+func assertReadyWebhookValues(t *testing.T, got receivedRequest, event recordings.CanonicalEvent, secret string) {
+	t.Helper()
+	var source factorydefinitions.FactoryEventContext
+	if err := json.Unmarshal([]byte(event.SourceContext), &source); err != nil {
+		t.Fatal(err)
+	}
+	want, err := json.Marshal(factorydefinitions.FactoryEvent{Context: source, Id: string(event.ID), Payload: json.RawMessage(event.Payload), SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1, Type: factorydefinitions.FactoryEventType(event.Kind)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got.body) != string(want) || got.headers.Get(webhooks.EventIDHeader) != string(event.ID) || got.headers.Get(webhooks.TimestampHeader) != "1786365000" {
+		t.Fatalf("delivery = %s %v, want %s, ID %s, timestamp 1786365000", got.body, got.headers, want, event.ID)
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte("1786365000."))
+	_, _ = mac.Write(want)
+	if got.headers.Get(webhooks.SignatureHeader) != "v1="+hex.EncodeToString(mac.Sum(nil)) {
+		t.Fatalf("signature = %q", got.headers.Get(webhooks.SignatureHeader))
+	}
+}
+
+func TestServiceStartDoesNotAwaitBlockedSecretResolution(t *testing.T) {
+	t.Parallel()
+	root := newRecordingRootStub()
+	entered, exited := make(chan struct{}), make(chan struct{})
+	service := New(root, roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("blocked secret delivered")
+		return nil, errors.New("unexpected HTTP")
+	}), func(ctx context.Context, _ factorydefinitions.LoadedFactorySource, _ string) (string, error) {
+		close(entered)
+		<-ctx.Done()
+		close(exited)
+		return "", ctx.Err()
+	}, platformclock.Real{}, func(string, []byte) error { t.Error("unexpected append"); return nil }, logging.NoopLogger{})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan webhookStartResult, 1)
+	go func() {
+		subscription, err := service.Start(ctx, webhooks.StartRequest{Definitions: []factorydefinitions.FactoryWebhookConfig{retryWebhookDefinition("secret", "https://receiver.test", nil)}, RuntimeSource: testLoadedFactorySource{}})
+		result <- webhookStartResult{subscription, err}
+	}()
+	awaitWebhookSignal(t, entered)
+	value := awaitWebhookStart(t, result)
+	if value.err != nil || value.subscription == nil {
+		t.Fatalf("Start = %v", value.err)
+	}
+	if err := value.subscription(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	awaitWebhookSignal(t, exited)
+}
+
+func assertWebhookSubscribeRequests(t *testing.T, entered <-chan recordings.SubscribeRequest, scope recordings.CanonicalEventScope) {
+	t.Helper()
+	for range 2 {
+		select {
+		case request := <-entered:
+			if request.Scope != scope || request.Cursor != nil {
+				t.Fatalf("initial subscribe = %#v, want selected scope and nil cursor", request)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("endpoint never attempted establishment")
+		}
+	}
+}
+
+func assertImmediateReadyWebhookDelivery(t *testing.T, root *recordingRootStub, requests <-chan receivedRequest, scope recordings.CanonicalEventScope) {
+	t.Helper()
+	// Publish without any readiness wait after Start, including retained history
+	// and a foreign scope that must never reach either endpoint.
+	event := testWorkEvent(t)
+	event.Scope = scope
+	event.SourceContext = `{"eventTime":"2026-08-10T12:29:59Z","sequence":7,"sessionId":"selected","tick":11}`
+	event.Cursor = recordings.CanonicalEventCursor{StreamGenerationID: "G", Sequence: 7}
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
+	event.Cursor.Sequence = 8
+	event.ID = "immediately-after-start"
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
+	paths := make(map[string]bool)
+	for range 2 {
+		got := receiveRequest(t, requests)
+		assertReadyWebhookValues(t, got, event, "secret")
+		paths[got.path] = true
+	}
+	if !paths["/one"] || !paths["/two"] {
+		t.Fatalf("endpoint paths = %v", paths)
+	}
+	event.Scope.FactorySessionID = "foreign"
+	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
 }

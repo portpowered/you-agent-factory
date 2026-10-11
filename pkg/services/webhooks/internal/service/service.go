@@ -63,18 +63,33 @@ func (service *Service) Start(
 	ctx, cancel := context.WithCancel(parent)
 	subscription := newSubscription(cancel, make(chan struct{}))
 	state := &activation{StartRequest: request}
+	ready := make(chan error, len(configs))
+	activate := make(chan struct{})
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(len(configs))
 	for _, config := range configs {
 		go func(config factorydefinitions.FactoryWebhookConfig) {
 			defer waitGroup.Done()
-			service.runEndpoint(ctx, state, config)
+			service.runEndpoint(ctx, state, config, ready, activate)
 		}(config)
 	}
 	go func() {
 		waitGroup.Wait()
 		close(subscription.done)
 	}()
+	for range configs {
+		select {
+		case err := <-ready:
+			if err != nil {
+				_ = subscription.Close(context.Background())
+				return nil, err
+			}
+		case <-ctx.Done():
+			_ = subscription.Close(context.Background())
+			return nil, ctx.Err()
+		}
+	}
+	close(activate)
 	return webhooks.Subscription(subscription.Close), nil
 }
 
@@ -94,6 +109,8 @@ func (service *Service) runEndpoint(
 	ctx context.Context,
 	request *activation,
 	definition factorydefinitions.FactoryWebhookConfig,
+	ready chan<- error,
+	activate <-chan struct{},
 ) {
 	subscribed, err := service.events.SubscribeFrom(ctx, recordings.SubscribeRequest{
 		// A webhook remains a live subscriber after activation. The generic
@@ -102,8 +119,18 @@ func (service *Service) runEndpoint(
 		// underlying scoped subscription remains live.
 		Scope: request.Scope,
 	})
+	// Buffered acknowledgements let every endpoint finish even when another
+	// establishment fails and Start is already joining the activation.
+	ready <- err
 	if err != nil {
 		service.logger.Error("factory webhook subscription failed", "endpoint", definition.Name, "error", err)
+		return
+	}
+	// No endpoint may resolve secrets or deliver until the whole activation
+	// has established its subscriptions successfully.
+	select {
+	case <-activate:
+	case <-ctx.Done():
 		return
 	}
 	if request.RuntimeSource == nil {
@@ -120,6 +147,17 @@ func (service *Service) runEndpoint(
 		service.logger.Error("factory webhook delivery policy failed", "endpoint", definition.Name, "error", err)
 		return
 	}
+	service.consumeEndpoint(ctx, request, definition, subscribed, secret, policy)
+}
+
+func (service *Service) consumeEndpoint(
+	ctx context.Context,
+	request *activation,
+	definition factorydefinitions.FactoryWebhookConfig,
+	subscribed recordings.SubscribeResult,
+	secret string,
+	policy factorydefinitions.FactoryWebhookEffectiveDeliveryPolicy,
+) {
 	for {
 		outcome := subscribed.Subscription.Next(ctx)
 		switch outcome.Kind {
