@@ -5773,6 +5773,13 @@ type GlobalConfigACPSettings struct {
 
 // GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
 type GlobalConfigDefaults struct {
+	// Subagent File-only subagent route, independent of generic worker defaults.
+	Subagent *struct {
+		Model           string  `json:"model"`
+		Provider        string  `json:"provider"`
+		ReasoningEffort *string `json:"reasoningEffort,omitempty"`
+	} `json:"subagent,omitempty"`
+
 	// WorkerModel Default worker model name.
 	WorkerModel *string `json:"workerModel,omitempty"`
 
@@ -12846,6 +12853,14 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["subagent"]; found {
+		err = json.Unmarshal(raw, &a.Subagent)
+		if err != nil {
+			return fmt.Errorf("error reading 'subagent': %w", err)
+		}
+		delete(object, "subagent")
+	}
+
 	if raw, found := object["workerModel"]; found {
 		err = json.Unmarshal(raw, &a.WorkerModel)
 		if err != nil {
@@ -12880,6 +12895,13 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 func (a GlobalConfigDefaults) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
+
+	if a.Subagent != nil {
+		object["subagent"], err = json.Marshal(a.Subagent)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'subagent': %w", err)
+		}
+	}
 
 	if a.WorkerModel != nil {
 		object["workerModel"], err = json.Marshal(a.WorkerModel)

@@ -7387,6 +7387,12 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+      /** @description File-only subagent route, independent of generic worker defaults. */
+      subagent?: {
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      };
     } & {
       [key: string]: unknown;
     };

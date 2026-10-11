@@ -327,13 +327,16 @@ func TestConfigureSubagentsTool_SetsDefaultProviderAndModel(t *testing.T) {
 			if request.Path != testConfigPath || request.ExpectedBackendScope != testBackendScopeID {
 				t.Fatalf("ApplyDocumentUpdate request = %#v", request)
 			}
-			if request.ProviderModel.Provider == nil || *request.ProviderModel.Provider != "opencode-acp" {
-				t.Fatalf("provider update = %#v", request.ProviderModel.Provider)
+			if request.ProviderModel.Provider != nil || request.ProviderModel.Model != nil || request.Subagent == nil {
+				t.Fatal("subagent update changed generic defaults")
 			}
-			if request.ProviderModel.Model == nil || *request.ProviderModel.Model != "model-x" {
-				t.Fatalf("model update = %#v", request.ProviderModel.Model)
+			if request.Subagent.Provider == nil || *request.Subagent.Provider != "opencode-acp" {
+				t.Fatalf("provider update = %#v", request.Subagent.Provider)
 			}
-			return operatorsettings.ApplyDocumentUpdateResult{Path: request.Path, Persisted: true, Document: operatorsettings.Document{Defaults: operatorsettings.DocumentDefaults{WorkerModelProvider: "opencode-acp", WorkerModel: "model-x"}}}, nil
+			if request.Subagent.Model == nil || *request.Subagent.Model != "model-x" {
+				t.Fatalf("model update = %#v", request.Subagent.Model)
+			}
+			return operatorsettings.ApplyDocumentUpdateResult{Path: request.Path, Persisted: true, Document: operatorsettings.Document{Defaults: operatorsettings.DocumentDefaults{WorkerModelProvider: "codex", WorkerModel: "generic", Subagent: &operatorsettings.SubagentRoute{Provider: "opencode-acp", Model: "model-x"}}}}, nil
 		},
 	}
 	raw, err := mcpoperatorsettings.ConfigureSubagentsTool(context.Background(), fake, testSubagentHome, mcpoperatorsettings.ToolSetSubagentDefaults, json.RawMessage(`{"provider":"opencode-acp","model":"model-x"}`), nil)
@@ -350,7 +353,7 @@ func TestConfigureSubagentsTool_SetsDefaultProviderAndModel(t *testing.T) {
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
-	if !loaded || !applied || result.Result.Path != testConfigPath || !result.Result.Persisted || result.Result.Document.Defaults.WorkerModel != "model-x" {
+	if !loaded || !applied || result.Result.Path != testConfigPath || !result.Result.Persisted || result.Result.Document.Defaults.Subagent == nil || result.Result.Document.Defaults.Subagent.Model != "model-x" || result.Result.Document.Defaults.WorkerModel != "generic" {
 		t.Fatalf("result = %#v; loaded=%v applied=%v", result, loaded, applied)
 	}
 }

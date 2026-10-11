@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
@@ -13,7 +14,7 @@ const (
 	ToolAddACPProvider      = "you.operator_settings.add_acp_provider"
 )
 
-// ConfigureSubagentsTool applies default provider/model values or registers a
+// ConfigureSubagentsTool applies dedicated subagent route values or registers a
 // custom stdio ACP provider through the Operator Settings root.
 func ConfigureSubagentsTool(ctx context.Context, service operatorsettings.Service, home string, name string, raw json.RawMessage, generateID operatorsettings.IDGenerator) (json.RawMessage, error) {
 	if ctx == nil || service == nil {
@@ -41,13 +42,23 @@ func setSubagentDefaults(ctx context.Context, service operatorsettings.Service, 
 	if input.Provider == nil && input.Model == nil {
 		return nil, fmt.Errorf("provider or model is required")
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, err
+	}
+	for key, value := range fields {
+		var text string
+		if (key != "provider" && key != "model") || json.Unmarshal(value, &text) != nil || strings.TrimSpace(text) == "" {
+			return nil, fmt.Errorf("%w: subagent route values must be non-empty provider/model strings", operatorsettings.ErrDocumentMalformed)
+		}
+	}
 	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
 	if err != nil {
 		return nil, err
 	}
 	updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
 		Path: path, ExpectedBackendScope: loaded.Document.BackendScopeID,
-		ProviderModel: operatorsettings.DocumentProviderModelUpdate{Provider: input.Provider, Model: input.Model},
+		Subagent: &operatorsettings.SubagentRouteUpdate{Provider: input.Provider, Model: input.Model},
 	})
 	if err != nil {
 		return nil, err

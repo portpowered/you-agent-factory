@@ -281,6 +281,7 @@ func configFromDocument(document Document) Config {
 		BackendScopeID: document.BackendScopeID,
 		Defaults: Defaults{
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
+			Subagent:            document.Defaults.Subagent.Clone(),
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
 		Messaging:  document.Messaging.Clone(),
@@ -312,6 +313,7 @@ func documentFromConfig(config Config) Document {
 		BackendScopeID: config.BackendScopeID,
 		Defaults: DocumentDefaults{
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
+			Subagent:            config.Defaults.Subagent.Clone(),
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
 		Messaging:  config.Messaging.Clone(),

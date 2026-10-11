@@ -127,12 +127,14 @@ func (settings DocumentACPSettings) Clone() DocumentACPSettings {
 
 // DocumentDefaults holds operator default values as a detached peer value.
 type DocumentDefaults struct {
+	Subagent            *SubagentRoute
 	WorkerModelProvider string
 	WorkerModel         string
 }
 
 // Clone returns a detached defaults copy.
 func (defaults DocumentDefaults) Clone() DocumentDefaults {
+	defaults.Subagent = defaults.Subagent.Clone()
 	return defaults
 }
 
@@ -243,6 +245,7 @@ type ApplyDocumentUpdateRequest struct {
 	Path                 string
 	ExpectedBackendScope string
 	ProviderModel        DocumentProviderModelUpdate
+	Subagent             *SubagentRouteUpdate
 }
 
 // Validate checks request fields whose validity does not depend on storage state.
@@ -250,7 +253,7 @@ func (request ApplyDocumentUpdateRequest) Validate() error {
 	if strings.TrimSpace(request.Path) == "" {
 		return fmt.Errorf("%w: path is required", ErrDocumentMalformed)
 	}
-	if request.ProviderModel.Provider == nil && request.ProviderModel.Model == nil {
+	if request.ProviderModel.Provider == nil && request.ProviderModel.Model == nil && request.Subagent == nil {
 		return fmt.Errorf("%w: at least one provider/model field is required", ErrDocumentMalformed)
 	}
 	return nil
