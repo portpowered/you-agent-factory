@@ -160,12 +160,13 @@ func TestBodySourcesAndLimits(t *testing.T) {
 		config SendConfig
 		want   string
 		bad    bool
+		limit  bool
 	}{
 		{name: "explicit", config: SendConfig{Body: &explicit}, want: explicit},
 		{name: "args", config: SendConfig{BodyArgs: []string{"one", "two"}}, want: "one two"},
 		{name: "stdin", config: SendConfig{Stdin: strings.NewReader("exact\n")}, want: "exact\n"},
 		{name: "UTF8 boundary", config: SendConfig{Stdin: strings.NewReader(strings.Repeat("é", 4096))}, want: strings.Repeat("é", 4096)},
-		{name: "oversized", config: SendConfig{Stdin: strings.NewReader(strings.Repeat("é", 4097))}, bad: true},
+		{name: "oversized", config: SendConfig{Stdin: strings.NewReader(strings.Repeat("é", 4097))}, limit: true},
 		{name: "invalid UTF8", config: SendConfig{BodyArgs: []string{string([]byte{0xff})}}, bad: true},
 		{name: "whitespace", config: SendConfig{BodyArgs: []string{" \n\t"}}, bad: true},
 		{name: "conflict", config: SendConfig{Body: &explicit, BodyArgs: []string{"other"}}, bad: true},
@@ -175,7 +176,11 @@ func TestBodySourcesAndLimits(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			got, err := (&Adapter{}).sendBody(test.config)
-			if test.bad {
+			if test.limit {
+				if !errors.Is(err, agentmessages.ErrLimitExceeded) || got != "" {
+					t.Fatal("oversized stdin lost typed limit refusal")
+				}
+			} else if test.bad {
 				if !errors.Is(err, agentmessages.ErrBadRequest) || got != "" {
 					t.Fatal("invalid body lost safe typed refusal")
 				}

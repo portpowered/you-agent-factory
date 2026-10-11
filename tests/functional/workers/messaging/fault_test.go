@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,7 +35,7 @@ func TestMessagingFaultsLeaveFactoryWorkHealthy(t *testing.T) {
 			if cell.journal != "" {
 				writeJournal(t, path, cell.journal)
 			}
-			f := startHostMode(t, home, dir, cell.settings, true)
+			f := startHostEffects(t, home, dir, cell.settings, healthyProviderEffects())
 			if cell.code != "" {
 				assertError(t, f, http.MethodGet, "/messages", nil, nil, http.StatusServiceUnavailable, cell.code)
 			} else {
@@ -63,8 +65,16 @@ func writeJournal(t *testing.T, path, data string) {
 	}
 }
 
+func healthyProviderEffects() serviceedges.Edges {
+	return serviceedges.Edges{ProviderCommandRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("healthy Factory independent of inbox COMPLETE"),
+	})}
+}
+
 func assertHealthyWork(t *testing.T, f *fixture) {
 	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(f.server.URL(), "~default"))
+	defer stream.Close()
 	request := map[string]any{"name": "healthy-work", "workTypeName": "task", "payload": map[string]string{"title": "healthy Factory independent of inbox"}}
 	status, body := f.request(t, http.MethodPost, "/factory-sessions/~default/work", request, nil)
 	if status != http.StatusCreated {
@@ -74,11 +84,18 @@ func assertHealthyWork(t *testing.T, f *fixture) {
 	if err := json.Unmarshal(body, &submitted); err != nil {
 		t.Fatal(err)
 	}
-	_, err := support.WaitForObservation(15*time.Second, func() (api.ListWorkResponse, error) {
-		return support.GetJSON[api.ListWorkResponse](t, f.server.URL()+"/factory-sessions/~default/work"), nil
-	}, func(page api.ListWorkResponse) bool { return support.CountWorkAtCustomerState(page, "task:done") == 1 })
-	if err != nil {
-		t.Fatalf("Factory Work did not finish after Messaging outcome: %v", err)
+	// This isolated session admits exactly one Work. Its public dispatch
+	// completion signal precedes the single terminal Work assertion.
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		event := stream.NextEvent(time.Until(deadline))
+		if event.Type == api.FactoryEventTypeDispatchResponse {
+			break
+		}
+	}
+	page := support.GetJSON[api.ListWorkResponse](t, f.server.URL()+"/factory-sessions/~default/work")
+	if support.CountWorkAtCustomerState(page, "task:done") != 1 {
+		t.Fatal("Factory Work did not finish after Messaging outcome")
 	}
 }
 
@@ -99,7 +116,7 @@ func TestMessagingSettingsPreserveCanonicalFactoryOutcome(t *testing.T) {
 		if cell.journal != "" {
 			writeJournal(t, filepath.Join(home, ".you-agent-factory", "messages", "messages.jsonl"), cell.journal)
 		}
-		f := startHostEffects(t, home, dir, cell.settings, true, effects)
+		f := startHostEffects(t, home, dir, cell.settings, serviceedges.Merge(healthyProviderEffects(), effects))
 		if cell.code != "" {
 			assertError(t, f, http.MethodGet, "/messages", nil, nil, http.StatusServiceUnavailable, cell.code)
 		} else if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {

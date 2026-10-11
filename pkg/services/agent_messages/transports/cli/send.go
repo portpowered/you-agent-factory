@@ -104,7 +104,10 @@ func (a *Adapter) sendBody(config SendConfig) (string, error) {
 	default:
 		return "", agentmessages.ErrBadRequest
 	}
-	if !utf8.ValidString(body) || len(body) > maxBodyBytes || strings.TrimSpace(body) == "" {
+	if len(body) > maxBodyBytes {
+		return "", agentmessages.ErrLimitExceeded
+	}
+	if !utf8.ValidString(body) || strings.TrimSpace(body) == "" {
 		return "", agentmessages.ErrBadRequest
 	}
 	return body, nil

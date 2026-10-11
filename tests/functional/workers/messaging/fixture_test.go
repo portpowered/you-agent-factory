@@ -61,20 +61,15 @@ type fixture struct {
 // their worker IDs, inbox threads and gates. Restart explicitly replaces it.
 func startHost(t *testing.T, home, dir string, settings string, workers ...string) *fixture {
 	t.Helper()
-	return startHostMode(t, home, dir, settings, false, workers...)
+	return startHostEffects(t, home, dir, settings, serviceedges.Edges{}, workers...)
 }
 
-func startHostMode(t *testing.T, home, dir, settings string, mock bool, workers ...string) *fixture {
+func startHostEffects(t *testing.T, home, dir, settings string, effects serviceedges.Edges, workers ...string) *fixture {
 	t.Helper()
-	return startHostEffects(t, home, dir, settings, mock, serviceedges.Edges{}, workers...)
+	return startHostTransport(t, home, dir, settings, effects, nil, workers...)
 }
 
-func startHostEffects(t *testing.T, home, dir, settings string, mock bool, effects serviceedges.Edges, workers ...string) *fixture {
-	t.Helper()
-	return startHostTransport(t, home, dir, settings, mock, effects, nil, workers...)
-}
-
-func startHostTransport(t *testing.T, home, dir, settings string, mock bool, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, workers ...string) *fixture {
+func startHostTransport(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, workers ...string) *fixture {
 	t.Helper()
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
@@ -98,13 +93,14 @@ func startHostTransport(t *testing.T, home, dir, settings string, mock bool, eff
 	if err := os.WriteFile(filepath.Join(dir, "factory.json"), definition, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	support.WriteAgentConfig(t, dir, "worker", "---\ntype: MODEL_WORKER\nmodel: functional-model\nmodelProvider: CODEX\nstopToken: COMPLETE\n---\nProcess the input task.\n")
+	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nControlled Factory input: {{ (index .Inputs 0).Payload }}\n")
 	f := &fixture{home: home, dir: dir, env: builtcliacceptance.ProcessEnvForIsolatedHome(home), runner: &commandRunner{workers: make(map[string]*workerGate)}}
 	for _, id := range workers {
 		f.runner.workers[id] = &workerGate{started: make(chan map[string]string, 1), release: make(chan struct{})}
 	}
 	f.server = support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WorkingDirectory: dir, Env: f.env,
-		UseMockWorkers:       mock,
 		Args:                 []string{"--server", "http://127.0.0.1:1"},
 		Edges:                serviceedges.Merge(serviceedges.Edges{ProviderCommandRunner: f.runner}, effects),
 		WrapAPIServerStarter: wrap,

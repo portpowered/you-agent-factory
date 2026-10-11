@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"os"
@@ -15,7 +16,9 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -142,7 +145,7 @@ func TestConcurrentRepliesCommitOneParentTransition(t *testing.T) {
 func TestRefusedMessagesPreserveQuotaAndPrivateDiagnostics(t *testing.T) {
 	t.Parallel()
 	core, logs := observer.New(zap.DebugLevel)
-	f := startHostEffects(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"sendsPerChainPerHour":1,"maxBodyBytes":64}}}`, false, serviceedges.Edges{ProcessLogger: zap.New(core)}, "lead", "lane")
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"sendsPerChainPerHour":1,"maxBodyBytes":64}}}`, serviceedges.Edges{ProcessLogger: zap.New(core)}, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	for _, cell := range []struct {
@@ -205,7 +208,7 @@ func TestInboxExpiryAndSelectedRetentionAfterReconstruction(t *testing.T) {
 	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
 	home, dir := t.TempDir(), t.TempDir()
 	settings := `{"messaging":{"retentionDays":1,"limits":{"defaultExpirySeconds":60}}}`
-	f := startHostEffects(t, home, dir, settings, false, effects, "lead", "lane")
+	f := startHostEffects(t, home, dir, settings, effects, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	old := f.cliSend(t, lane, "lead", "--request-id", "old", "--body", "old message")
@@ -226,10 +229,56 @@ func TestInboxExpiryAndSelectedRetentionAfterReconstruction(t *testing.T) {
 	recent := f.cliSend(t, lane, "lead", "--request-id", "recent", "--body", "retained message")
 	f.server.Close(t)
 	clock.SetTick(25 * 60 * 60)
-	second := startHostEffects(t, home, dir, settings, false, effects)
+	second := startHostEffects(t, home, dir, settings, effects)
 	assertError(t, second, http.MethodGet, "/messages/"+old.MessageId, nil, nil, http.StatusNotFound, "MESSAGE_NOT_FOUND")
 	page := readPage(t, second, "/messages", nil)
 	if len(page.Messages) != 1 || page.Messages[0].MessageId != recent.MessageId || page.Messages[0].BodySha256 != recent.BodySha256 || page.Messages[0].Status != "EXPIRED" {
 		t.Fatal("selected retention removed recent content or failed recovered expiry")
+	}
+}
+
+func TestOversizedBodyCLIHTTPParity(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	for _, cell := range []struct {
+		name, body string
+		stdin      bool
+	}{
+		{"explicit ASCII", strings.Repeat("x", 8193), false},
+		{"stdin ASCII", strings.Repeat("x", 8193), true},
+		{"stdin multibyte truncation", strings.Repeat("\u00e9", 4097), true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "boundary", "to": map[string]string{"workerSessionId": "lead"}, "body": cell.body}, lane, http.StatusTooManyRequests, "MESSAGE_LIMIT_EXCEEDED")
+			assertCLIBodyLimit(t, f, lane, cell.body, cell.stdin)
+		})
+	}
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+		t.Fatal("oversized bodies persisted messages")
+	}
+	message := f.cliSend(t, lane, "lead", "--request-id", "boundary", "--body", strings.Repeat("\u00e9", 4096))
+	if len(message.Body) != 8192 {
+		t.Fatal("refusals spent request identity or changed the valid byte boundary")
+	}
+}
+
+func assertCLIBodyLimit(t *testing.T, f *fixture, lane map[string]string, body string, stdin bool) {
+	t.Helper()
+	args := []string{"you", "--json", "--server", f.server.URL(), "message", "lead", "--request-id", "boundary", "--output", "json"}
+	if !stdin {
+		args = append(args, "--body", body)
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(append([]string{}, f.env...), "YOU_WORKER_SESSION_ID="+lane["YOU_WORKER_SESSION_ID"], "YOU_WORKER_SESSION_TOKEN="+lane["YOU_WORKER_SESSION_TOKEN"])
+	inputs.Input.WorkingDirectory = f.dir
+	inputs.Input.Stdin = strings.NewReader(body)
+	tty := false
+	inputs.Input.StdinIsTTY = &tty
+	err := f.server.Execute(t, inputs.Input)
+	var failure *clihttp.APIError
+	if !errors.As(err, &failure) || failure.StatusCode != http.StatusTooManyRequests || failure.Response.Code != "MESSAGE_LIMIT_EXCEEDED" {
+		t.Fatalf("CLI oversized body parity: %v %s", err, inputs.Stderr())
 	}
 }

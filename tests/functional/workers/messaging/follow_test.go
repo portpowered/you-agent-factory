@@ -65,7 +65,7 @@ func TestInboxFollowBackpressurePreservesDurablePull(t *testing.T) {
 	core, _ := observer.New(zap.InfoLevel)
 	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
 	entered, release := make(chan struct{}), make(chan struct{})
-	f := startHostTransport(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{ProcessLogger: zap.New(signal)}, heldFollowTransport(entered, release), "lead", "lane")
+	f := startHostTransport(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{ProcessLogger: zap.New(signal)}, heldFollowTransport(entered, release), "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
@@ -159,7 +159,7 @@ func TestInboxFollowRevalidatesAuthorityBeforePublication(t *testing.T) {
 	t.Parallel()
 	core, _ := observer.New(zap.InfoLevel)
 	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
-	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{ProcessLogger: zap.New(signal)}, "lead", "lane")
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{ProcessLogger: zap.New(signal)}, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
@@ -255,7 +255,7 @@ func TestInboxFollowPublishesOnlyAuthorizedRedactedContent(t *testing.T) {
 	t.Parallel()
 	core, logs := observer.New(zap.DebugLevel)
 	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
-	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{ProcessLogger: zap.New(signal)}, "lead", "lane", "lane-token", "other", "other-lane")
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{ProcessLogger: zap.New(signal)}, "lead", "lane", "lane-token", "other", "other-lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	tokenLane := f.invoke(t, "lane-token", lead)

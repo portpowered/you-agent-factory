@@ -35,7 +35,7 @@ func (c *admissionClock) Now() time.Time {
 func TestAdmissionRevalidatesCallerAfterWaiting(t *testing.T) {
 	t.Parallel()
 	clock := &admissionClock{entered: make(chan struct{}), release: make(chan struct{})}
-	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{Clock: clock}, "lead", "lane")
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{Clock: clock}, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	existing := f.send(t, map[string]any{"requestId": "existing", "to": map[string]string{"workerSessionId": "lead"}, "body": "existing inbox"}, lane)
