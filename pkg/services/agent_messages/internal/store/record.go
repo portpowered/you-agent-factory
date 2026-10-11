@@ -27,8 +27,8 @@ const (
 )
 
 var (
-	ErrUnavailable        = errors.New("MESSAGE_STORE_UNAVAILABLE")
-	ErrCorrupt            = errors.New("MESSAGE_STORE_CORRUPT")
+	ErrUnavailable        = agentmessages.ErrStoreUnavailable
+	ErrCorrupt            = agentmessages.ErrStoreCorrupt
 	ErrInvalidTransaction = errors.New("MESSAGE_STORE_INVALID_TRANSACTION")
 )
 

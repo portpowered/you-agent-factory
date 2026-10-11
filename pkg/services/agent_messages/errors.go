@@ -17,6 +17,8 @@ var (
 	ErrStreamUnavailable    = errors.New("MESSAGE_STREAM_UNAVAILABLE")
 	ErrStreamGap            = errors.New("MESSAGE_STREAM_GAP")
 	ErrStreamBackpressure   = errors.New("MESSAGE_STREAM_BACKPRESSURE")
+	ErrStoreUnavailable     = errors.New("MESSAGE_STORE_UNAVAILABLE")
+	ErrStoreCorrupt         = errors.New("MESSAGE_STORE_CORRUPT")
 )
 
 // LimitError reports the exhausted dimension without exposing request content.

@@ -18,6 +18,10 @@ const DefaultRetention = 30 * 24 * time.Hour
 func (j *Journal) Compact(now time.Time, retention time.Duration) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	return j.compact(now, retention)
+}
+
+func (j *Journal) compact(now time.Time, retention time.Duration) error {
 	if !j.opened || j.fault != nil {
 		return j.unavailable()
 	}

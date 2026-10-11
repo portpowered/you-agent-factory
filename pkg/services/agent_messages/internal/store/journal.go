@@ -10,20 +10,16 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 	"unicode/utf8"
+
+	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 )
 
 // FileSystem is the exact file effect accepted by the journal. The production
 // adapter supplies durable, truncatable descriptors; the store owns the
 // format, transaction ordering and rollback policy.
-type FileSystem interface {
-	ReadFile(string) ([]byte, error)
-	MkdirAll(string, fs.FileMode) error
-	OpenFile(string, int, fs.FileMode) (io.WriteCloser, error)
-	// ReplaceDurable atomically publishes flushed bytes. Failure preserves the
-	// existing file; implementations must never remove it before replacement.
-	ReplaceDurable(string, []byte) error
-}
+type FileSystem = agentmessages.StoreFileSystem
 
 type durableFile interface {
 	io.WriteCloser
@@ -62,6 +58,32 @@ func New(files FileSystem, path string) *Journal {
 func (j *Journal) Open() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	return j.open()
+}
+
+// Activate reconstructs and compacts before any caller can observe readiness.
+// Failure quarantines this messaging store, without touching Factory execution.
+// Composition retains that safe error for message operations rather than
+// propagating it as an application lifecycle failure. A new process can retry
+// activation on the preserved bytes after the underlying fault is resolved.
+func (j *Journal) Activate(now time.Time, retention time.Duration) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if now.IsZero() || retention < 24*time.Hour {
+		j.fault = ErrInvalidTransaction
+		return ErrInvalidTransaction
+	}
+	if err := j.open(); err != nil {
+		return err
+	}
+	if err := j.compact(now, retention); err != nil {
+		j.fault = err
+		return err
+	}
+	return nil
+}
+
+func (j *Journal) open() error {
 	if j.opened || j.fault != nil {
 		return j.fault
 	}
