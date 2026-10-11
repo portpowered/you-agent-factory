@@ -54,14 +54,6 @@ func (Real) After(duration time.Duration) <-chan time.Time {
 	return time.After(duration)
 }
 
-// Ensure returns a real clock when the supplied source is nil.
-func Ensure(source Source) Source {
-	if source == nil {
-		return Real{}
-	}
-	return source
-}
-
 // Deterministic maps logical ticks to stable timestamps.
 type Deterministic struct {
 	mu           sync.Mutex

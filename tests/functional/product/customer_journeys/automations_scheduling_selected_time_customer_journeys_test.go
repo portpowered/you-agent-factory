@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -21,7 +22,7 @@ import (
 func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
-	facts := platformclock.NewDeterministic(base.Add(time.Hour), time.Millisecond)
+	facts := &selectedTimeFactSource{Deterministic: platformclock.NewDeterministic(base.Add(time.Hour), time.Millisecond), FakeClock: clockwork.NewFakeClockAt(base.Add(time.Hour))}
 	scheduler := &selectedTimeScheduler{Deterministic: platformclock.NewDeterministic(base, time.Millisecond), registered: make(chan selectedTimeWait, 256), readiness: make(chan *selectedReadinessTimer, 256)}
 	files := &selectedTimeFiles{empty: make(map[string]int), reads: make(chan string, 16), observedReads: make(chan string, 256), walked: make(chan string, 64), admissions: make(map[string]int)}
 	dirA, routeA := newScriptCycleFactory(t)
@@ -39,7 +40,7 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 		return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 			FactoryDir: hostDir,
 			Edges: serviceedges.Edges{
-				Clock: selectedTimeFacts{facts}, ProcessScheduler: scheduler, ScriptCommandRunner: router,
+				Clock: facts.FakeClock, ProcessScheduler: scheduler, ScriptCommandRunner: router,
 				FactoryRuntimeInputs:               files,
 				FactoryRuntimeInputDirectoryWalker: files.walk,
 				SubmissionRecorder: func(record work.FactorySubmissionRecord) {
@@ -61,4 +62,17 @@ func TestAutomationsSelectedTimeControlsWorkAndJoinedShutdown(t *testing.T) {
 	assertSelectedScriptTime(t, server.URL(), facts, scheduler, dirA, dirB, routeA, routeB)
 	assertSelectedCronTime(t, server.URL(), facts, scheduler, cronRoutes)
 	assertSelectedWatcherTime(t, server.URL(), facts, scheduler, files)
+}
+
+// Full legacy timer capabilities advance with facts; the distinct process
+// scheduler still governs default eligibility and cleanup.
+type selectedTimeFactSource struct {
+	*platformclock.Deterministic
+	*clockwork.FakeClock
+}
+
+func (clock *selectedTimeFactSource) Now() time.Time { return clock.FakeClock.Now() }
+func (clock *selectedTimeFactSource) SetTick(tick int) {
+	clock.Deterministic.SetTick(tick)
+	clock.FakeClock.Advance(clock.Deterministic.Now().Sub(clock.FakeClock.Now()))
 }

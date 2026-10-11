@@ -8,7 +8,6 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
@@ -50,12 +49,18 @@ func TestAutomationsClockPreservesSelectedSchedulingAndNowOnlyCompatibility(t *t
 	timer := selected.NewTimer(time.Minute)
 	clock.Advance(time.Minute)
 	select {
-	case fired := <-timer.Chan():
-		if !fired.Equal(clock.Now()) {
-			t.Fatalf("scheduled instant = %v, want %v", fired, clock.Now())
-		}
+	case <-timer.Chan():
+		t.Fatal("fact clock fired selected scheduler timer")
 	default:
-		t.Fatal("selected clock advancement did not fire timer")
+	}
+	scheduler.SetTick(60)
+	select {
+	case fired := <-timer.Chan():
+		if !fired.Equal(scheduler.Now()) {
+			t.Fatalf("scheduled instant = %v, want %v", fired, scheduler.Now())
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected scheduler advancement did not fire timer")
 	}
 	// Facts keep their selected origin while waits use the normalized scheduler.
 	view := provideAutomationsClock(automationNowOnlyClock{}, scheduler)
@@ -64,7 +69,7 @@ func TestAutomationsClockPreservesSelectedSchedulingAndNowOnlyCompatibility(t *t
 	}
 	controlled := view.NewTimer(time.Second)
 	defer controlled.Stop()
-	scheduler.SetTick(1)
+	scheduler.SetTick(61)
 	select {
 	case instant := <-controlled.Chan():
 		if !instant.Equal(scheduler.Now()) {

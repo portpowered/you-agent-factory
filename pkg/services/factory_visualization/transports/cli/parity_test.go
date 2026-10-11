@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
@@ -399,11 +400,11 @@ func canonicalAdapterFactoryEventWithPayload(
 type drainFailingPresentation struct{}
 
 func (drainFailingPresentation) OpenBestEffortOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualizationwire.NewResponsePresentation().OpenBestEffortOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenBestEffortOutput(writer)
 }
 
 func (drainFailingPresentation) OpenLosslessOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualizationwire.NewResponsePresentation().OpenLosslessOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenLosslessOutput(writer)
 }
 
 func (drainFailingPresentation) OpenBestEffortFactoryEventStream(
@@ -415,7 +416,7 @@ func (drainFailingPresentation) OpenBestEffortFactoryEventStream(
 	CloseAndDrain() error
 } {
 	return &drainFailingFactoryEventStream{
-		inner: factoryvisualizationwire.NewResponsePresentation().OpenBestEffortFactoryEventStream(writer, encode),
+		inner: factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenBestEffortFactoryEventStream(writer, encode),
 	}
 }
 
@@ -428,7 +429,7 @@ func (drainFailingPresentation) OpenLosslessFactoryEventStream(
 	CloseAndDrain() error
 } {
 	return &drainFailingFactoryEventStream{
-		inner: factoryvisualizationwire.NewResponsePresentation().OpenLosslessFactoryEventStream(writer, encode),
+		inner: factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenLosslessFactoryEventStream(writer, encode),
 	}
 }
 

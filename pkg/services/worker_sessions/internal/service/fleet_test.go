@@ -13,10 +13,61 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+func TestProcessOwnedFleetSelectionObservesLaterRecords(t *testing.T) {
+	t.Parallel()
+	r := &registry{
+		clock:    platformclock.NewDeterministic(time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC), time.Second),
+		logger:   logging.NoopLogger{},
+		sessions: map[string]workersessions.Session{}, observations: map[string]*observation{},
+		supervisions: map[string]*supervision{},
+	}
+	source, err := NewDirectFleetObservationSource(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty, err := source.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{})
+	if err != nil || len(empty.Observations) != 0 {
+		t.Fatalf("initial list = %#v, %v", empty, err)
+	}
+	// Selection predates all records; only directly supervised attempts remain
+	// fleet members after their runtime membership disappears.
+	for _, id := range []string{"direct", "runtime", "successor"} {
+		r.sessions[id] = workersessions.Session{ID: id, State: workersessions.StateCompleted}
+		r.observations[id] = &observation{direct: id == "direct", factorySessionID: "owned", attemptID: "attempt-" + id}
+	}
+	r.supervisions["direct"], r.supervisions["successor"] = &supervision{}, &supervision{}
+	for _, cell := range []struct {
+		scope workersessions.ObservationScope
+		want  []string
+	}{
+		{workersessions.ObservationScopeAll, []string{"direct", "successor"}},
+		{workersessions.ObservationScopeDirect, []string{"direct"}},
+		{workersessions.ObservationScopeFactory, []string{"successor"}},
+	} {
+		got, err := source.ListWorkerSessionObservations(t.Context(), workersessions.ListWorkerSessionObservationsRequest{Scope: cell.scope})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertFleetObservationIDs(t, got.Observations, cell.want)
+	}
+	got, err := source.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "successor", FactorySessionID: "owned"})
+	if err != nil || got.WorkerSessionID != "successor" {
+		t.Fatalf("exact successor = %#v, %v", got, err)
+	}
+	if _, err := source.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "successor", FactorySessionID: "foreign"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("foreign address = %v", err)
+	}
+	if _, err := NewDirectFleetObservationSource(nil); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("absent owner = %v", err)
+	}
+}
 
 func TestFleetObservationServiceRejectsAbsentOrCanceledContext(t *testing.T) {
 	t.Parallel()

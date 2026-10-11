@@ -105,6 +105,7 @@ var servicesSet = wire.NewSet(
 	provideWorkerRecordingReader,
 	provideWorkerWorkAttributionReader,
 	provideFleetCapturedActivity,
+	provideDirectFleetObservationSource,
 	provideFleetObservationCatalog,
 	workersessionswire.NewLogReader,
 	workersessionswire.NewFleetHistory,

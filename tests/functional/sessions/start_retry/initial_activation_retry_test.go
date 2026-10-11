@@ -786,6 +786,10 @@ func assertInitialOpeningInvocation(t *testing.T, sessions factorysessions.Servi
 
 func initialOpeningHistory(t *testing.T, sessions factorysessions.Service, sessionID string) *factorydefinitions.FactoryEventStream {
 	t.Helper()
+	return initialOpeningHistoryAt(t, sessions, sessionID, (initialOpeningClock{}).Now())
+}
+func initialOpeningHistoryAt(t *testing.T, sessions factorysessions.Service, sessionID string, expected time.Time) *factorydefinitions.FactoryEventStream {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	stream, err := sessions.SubscribeFactoryEventsForSession(ctx, sessionID, nil)
@@ -793,9 +797,9 @@ func initialOpeningHistory(t *testing.T, sessions factorysessions.Service, sessi
 		t.Fatalf("session %s retained events = %#v, %v, want public history", sessionID, stream, err)
 	}
 	for _, event := range stream.History {
-		if !event.Context.EventTime.Equal((initialOpeningClock{}).Now()) {
+		if !event.Context.EventTime.Equal(expected) {
 			t.Fatalf("session %s event %s (%s) time = %s, want selected process time %s",
-				sessionID, event.Id, event.Type, event.Context.EventTime, (initialOpeningClock{}).Now())
+				sessionID, event.Id, event.Type, event.Context.EventTime, expected)
 		}
 	}
 	return stream

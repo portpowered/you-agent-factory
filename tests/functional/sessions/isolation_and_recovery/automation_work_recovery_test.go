@@ -33,7 +33,7 @@ func TestInvocationScheduleRecordingRecoveryContinuesSequence(t *testing.T) {
 	clock := &invocationRecoveryClock{FakeClock: clockwork.NewFakeClockAt(time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)), armed: make(chan struct{}, 8)}
 	var calls atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
-		Clock:               clock,
+		Clock:               activationClock{Clock: clock},
 		ScriptCommandRunner: invocationRecoveryRunner{calls: &calls},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			return ctx.Value(restartProbeServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
@@ -194,9 +194,10 @@ type invocationRecoveryClock struct {
 	armed chan struct{}
 }
 
-func (clock *invocationRecoveryClock) AfterFunc(duration time.Duration, callback func()) clockwork.Timer {
-	timer := clock.FakeClock.AfterFunc(duration, callback)
-	// The only hour-long callback in this fixture is the selected duration job.
+func (clock *invocationRecoveryClock) NewTimer(duration time.Duration) clockwork.Timer {
+	timer := clock.FakeClock.NewTimer(duration)
+	// The only hour-long timer in this fixture is the selected duration job.
+	// The process clock projection schedules callbacks through NewTimer.
 	if duration == time.Hour {
 		clock.armed <- struct{}{}
 	}
@@ -494,4 +495,24 @@ func automationRecoveryFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+// activationClock acknowledges host readiness polls through a controlled timer.
+// Domain time stays frozen until the scenario explicitly advances its Clock;
+// cron eligibility, retry, retention and recovery timers retain their durations.
+// This is fixture activation, not evidence for the selected startup wait itself.
+type activationClock struct{ clockwork.Clock }
+
+func (clock activationClock) NewTimer(duration time.Duration) clockwork.Timer {
+	if duration == 10*time.Millisecond {
+		activation := clockwork.NewFakeClockAt(clock.Now())
+		timer := activation.NewTimer(duration)
+		activation.Advance(duration)
+		return timer
+	}
+	return clock.Clock.NewTimer(duration)
+}
+
+func (clock activationClock) After(duration time.Duration) <-chan time.Time {
+	return clock.NewTimer(duration).Chan()
 }

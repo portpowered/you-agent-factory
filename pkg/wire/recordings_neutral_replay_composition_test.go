@@ -34,7 +34,7 @@ func TestWorkerRecordingDefaultDurableRoot(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	directory := &workerRecordingDirectoryProbe{root: root}
-	writer, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory})
+	writer, err := provideWorkerRecordingWriter(serviceedges.Edges{Clock: platformclock.Real{}, FactorySessionsWorkingDirectory: directory})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestWorkerRecordingRootFailureAndOverride(t *testing.T) {
 	t.Parallel()
 	fault := errors.New("private directory resolution fault")
 	directory := &workerRecordingDirectoryProbe{err: fault}
-	_, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory})
+	_, err := provideWorkerRecordingWriter(serviceedges.Edges{Clock: platformclock.Real{}, FactorySessionsWorkingDirectory: directory})
 	if !errors.Is(err, fault) {
 		t.Fatalf("root resolution error = %v", err)
 	}
@@ -95,7 +95,7 @@ func TestWorkerRecordingRejectsInvalidDefaultRoot(t *testing.T) {
 		t.Run(root, func(t *testing.T) {
 			t.Parallel()
 			directory := &workerRecordingDirectoryProbe{root: root}
-			writer, err := provideWorkerRecordingWriter(serviceedges.Edges{FactorySessionsWorkingDirectory: directory})
+			writer, err := provideWorkerRecordingWriter(serviceedges.Edges{Clock: platformclock.Real{}, FactorySessionsWorkingDirectory: directory})
 			if err == nil || writer != nil || !strings.Contains(err.Error(), "expected a non-empty absolute directory") {
 				t.Fatalf("invalid root %q: writer = %v, error = %v", root, writer, err)
 			}

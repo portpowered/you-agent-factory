@@ -6,7 +6,9 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -132,6 +134,8 @@ func normalizeProcessTime(
 	if scheduler == nil {
 		if timerSource, ok := clock.(platformclock.TimerSource); ok {
 			scheduler = timerSource
+		} else if fullClock, ok := clock.(clockwork.Clock); ok {
+			scheduler = processClockworkScheduler{Clock: fullClock}
 		} else {
 			scheduler = platformclock.Real{}
 		}
@@ -142,3 +146,15 @@ func normalizeProcessTime(
 func isTypedNilProcessTime(value any) bool {
 	return value != nil && isNilConstructionEffect(value)
 }
+
+// processClockworkScheduler projects existing legacy timer capabilities without
+// overriding an explicitly selected process scheduler.
+type processClockworkScheduler struct{ clockwork.Clock }
+
+func (s processClockworkScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	return processClockworkTimer{Timer: s.Clock.NewTimer(d)}
+}
+
+type processClockworkTimer struct{ clockwork.Timer }
+
+func (t processClockworkTimer) C() <-chan time.Time { return t.Chan() }

@@ -29,7 +29,7 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 	// Act
 
 	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		Clock: clock.Ensure(nil),
+		Clock: clock.Real{},
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)

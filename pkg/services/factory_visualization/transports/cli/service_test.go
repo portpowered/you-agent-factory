@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
@@ -24,7 +25,7 @@ import (
 func TestNewRequiresPresentation(t *testing.T) {
 	t.Parallel()
 
-	presentation := factoryvisualizationwire.NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation(platformclock.Real{})
 	if service := visualizationcli.New(nil, presentation); service == nil {
 		t.Fatal("New(nil, presentation) = nil, want Visualization CLI service")
 	}
@@ -42,7 +43,7 @@ func TestNewFromPresentationConstructsPresentationOnlyAdapter(t *testing.T) {
 	if service := visualizationcli.NewFromPresentation(nil); service != nil {
 		t.Fatalf("NewFromPresentation(nil) = %T, want nil", service)
 	}
-	service := visualizationcli.NewFromPresentation(factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.NewFromPresentation(factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	if service == nil {
 		t.Fatal("NewFromPresentation(presentation) = nil, want Visualization CLI service")
 	}
@@ -180,7 +181,7 @@ func TestFormatHumanWorkAccepted_UsesContentForGeneratedWorkName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	presentation := factoryvisualizationwire.NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation(platformclock.Real{})
 	service := visualizationcli.New(nil, presentation)
 	var output bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
@@ -225,7 +226,7 @@ func TestHumanFactoryEventRenderer_PresentsBatchWorkAndDispatchWorkIDs(t *testin
 	if err != nil {
 		t.Fatalf("marshal dispatch response: %v", err)
 	}
-	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	var output bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
 		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
@@ -284,7 +285,7 @@ func TestHumanFactoryEventRenderer_PresentsConcurrentWorkerLifecycle(t *testing.
 	})
 	interrupted := mustJSON(t, interfaces.DispatchInterruptedEventPayload{Reason: "operator cancelled"})
 
-	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	var output, progress bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
 		Output: &output, ProgressOutput: &progress, ProgressIsTTY: false,
@@ -386,7 +387,7 @@ func TestFormatHumanWorkAccepted_PresentsSingleItemRelationPayload(t *testing.T)
 func renderHumanWorkAcceptedEvent(t *testing.T, payload []byte) string {
 	t.Helper()
 
-	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	var output bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
 		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
@@ -405,7 +406,7 @@ func renderHumanWorkAcceptedEvent(t *testing.T, payload []byte) string {
 func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testing.T) {
 	t.Parallel()
 
-	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	var output, progress bytes.Buffer
 	ticks := make(chan time.Time, 1)
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
@@ -464,7 +465,7 @@ func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testi
 func TestHumanFactoryEventRenderer_TTYProgressRemovesOnlyTerminalWorker(t *testing.T) {
 	t.Parallel()
 
-	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	var output, progress bytes.Buffer
 	ticks := make(chan time.Time)
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
@@ -526,7 +527,7 @@ func TestHumanFactoryEventRenderer_ConcurrentMilestonesAndNarrowProgress(t *test
 	t.Parallel()
 	var terminal bytes.Buffer
 	ticks := make(chan time.Time)
-	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
 		Output: &terminal, ProgressOutput: &terminal, ProgressIsTTY: true, ProgressTicks: ticks,
 		ProgressColumns:      func() int { return 24 },
@@ -666,7 +667,7 @@ func TestFinalizePresentationSession_MapsFinalizeWithoutWriterFailure(t *testing
 }
 
 func newTestService() visualizationcli.Service {
-	return visualizationcli.New(&fakeRootPeer{}, factoryvisualizationwire.NewResponsePresentation())
+	return visualizationcli.New(&fakeRootPeer{}, factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}))
 }
 
 func intPtr(value int) *int {
@@ -844,11 +845,11 @@ type recordingResponsePresentation struct {
 }
 
 func (r *recordingResponsePresentation) OpenBestEffortOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualizationwire.NewResponsePresentation().OpenBestEffortOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenBestEffortOutput(writer)
 }
 
 func (r *recordingResponsePresentation) OpenLosslessOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualizationwire.NewResponsePresentation().OpenLosslessOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenLosslessOutput(writer)
 }
 
 func (r *recordingResponsePresentation) OpenBestEffortFactoryEventStream(
@@ -860,7 +861,7 @@ func (r *recordingResponsePresentation) OpenBestEffortFactoryEventStream(
 	CloseAndDrain() error
 } {
 	r.openedBestEffortStream = true
-	return factoryvisualizationwire.NewResponsePresentation().OpenBestEffortFactoryEventStream(writer, encode)
+	return factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenBestEffortFactoryEventStream(writer, encode)
 }
 
 func (r *recordingResponsePresentation) OpenLosslessFactoryEventStream(
@@ -872,5 +873,5 @@ func (r *recordingResponsePresentation) OpenLosslessFactoryEventStream(
 	CloseAndDrain() error
 } {
 	r.openedLosslessStream = true
-	return factoryvisualizationwire.NewResponsePresentation().OpenLosslessFactoryEventStream(writer, encode)
+	return factoryvisualizationwire.NewResponsePresentation(platformclock.Real{}).OpenLosslessFactoryEventStream(writer, encode)
 }

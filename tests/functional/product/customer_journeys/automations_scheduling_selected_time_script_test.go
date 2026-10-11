@@ -4,14 +4,13 @@ import (
 	"testing"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // F-T02/F-T03/F-T07: command completion and timer registration are barriers;
 // exact Work and resume environment are observed through public session state.
-func assertSelectedScriptTime(t *testing.T, url string, facts *platformclock.Deterministic, scheduler *selectedTimeScheduler,
+func assertSelectedScriptTime(t *testing.T, url string, facts *selectedTimeFactSource, scheduler *selectedTimeScheduler,
 	dirA, dirB string, routeA, routeB *scriptCycleRoute,
 ) {
 	t.Helper()

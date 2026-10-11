@@ -28,7 +28,7 @@ import (
 // M01-M06: each connection selects its own working root and owns its streams
 // and profile. The immutable command edge attributes results by working root,
 // so simultaneous invocations need no mutable provider selector or long lock.
-func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
+func TestCompletedMCPConnections(t *testing.T) {
 	t.Parallel()
 	runner := &mcpRootResultRunner{}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderCommandRunner: runner})
@@ -40,6 +40,9 @@ func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
 	if !ok {
 		t.Fatal("composed process did not expose Factory Sessions")
 	}
+	t.Run("retained reads after peer close", func(t *testing.T) {
+		testCompletedMCPConnectionReads(t, process)
+	})
 	t.Run("completion and ordered events", func(t *testing.T) {
 		t.Parallel()
 		server := startComposedMemoryMCP(t, process)

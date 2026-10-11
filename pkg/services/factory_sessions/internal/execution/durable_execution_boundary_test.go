@@ -5,7 +5,17 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -18,14 +28,6 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 const factoryRuntimeImportRoot = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -1014,4 +1016,8 @@ func (fixtureResponseStreams) NewEventStore(id string, clock factory.Clock) (*re
 }
 func (fixtureResponseStreams) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
 	return store.Publish(event)
+}
+
+func (harnessSyncWaitScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	return platformclock.Real{}.NewTimer(d)
 }

@@ -21,8 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -36,6 +34,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	managedbackend "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
+	"go.uber.org/zap"
 )
 
 func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
@@ -61,7 +60,7 @@ func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 func TestProvideResponsePresentationReturnsUsableInjectedService(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
-	presentationOutput := provideResponsePresentation().OpenLosslessOutput(&output)
+	presentationOutput := provideResponsePresentation(platformclock.Real{}).OpenLosslessOutput(&output)
 	if err := presentationOutput.Enqueue([]byte("factory event")); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}

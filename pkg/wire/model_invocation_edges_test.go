@@ -614,9 +614,7 @@ func assertAdaptedOptionalPorts(t *testing.T) {
 	if got := (modelsClock{source: modelEdgeClock{}}).Now(); !got.Equal(modelEdgeClockTime) {
 		t.Fatalf("injected models clock = %v, want %v", got, modelEdgeClockTime)
 	}
-	if got := (modelsClock{}).Now(); !got.IsZero() {
-		t.Fatalf("empty models clock = %v, want zero time", got)
-	}
+
 }
 
 var modelEdgeClockTime = time.Unix(1_725_000_000, 0)

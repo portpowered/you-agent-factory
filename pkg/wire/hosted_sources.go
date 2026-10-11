@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -70,11 +69,8 @@ func provideAutomationsHostedPollers(logger *zap.Logger, clock automations.Hoste
 	return automationswire.NewHostedPollers(logger, clock, client, secrets, edges.HostedLinearEndpoint, checkpoints)
 }
 
-// Explicit legacy full-clock specialization retains precedence over process defaults.
+// Default scheduling always uses the normalized process scheduler.
 func provideAutomationsClock(clock factoryruntime.Clock, scheduler platformclock.TimerSource) automationswire.Clock {
-	if legacy, ok := clock.(clockwork.Clock); ok {
-		return legacy
-	}
 	return automationswire.NewClockView(clock, scheduler)
 }
 func provideAutomationsScriptPollers(logger *zap.Logger, clock automationswire.Clock,
