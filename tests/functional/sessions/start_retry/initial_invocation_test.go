@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -153,6 +154,133 @@ func testDeniedChildRetry(t *testing.T, process support.Process, sessions factor
 
 func openingPolicySecret(scenario initialOpeningScenario) string {
 	return "private-policy-" + scenario.candidateID
+}
+
+func newTimedChildScenario(t *testing.T) initialOpeningScenario {
+	t.Helper()
+	scenario := newInitialOpeningChildScenario(t)
+	path := filepath.Join(scenario.candidateDir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	javascript := config["orchestrator"].(map[string]any)["javascript"].(map[string]any)
+	javascript["defaultPolicy"] = map[string]any{"maxAgents": 1, "concurrency": 1, "maxRetries": 0, "maxWorkerDurationMs": 1000}
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return scenario
+}
+
+// Child attempts intentionally use native context deadlines, separate from
+// selected scheduling time. Await that deadline at the command edge rather
+// than sleeping or substituting an arbitrary provider failure. The next
+// invocation uses the same opened runtime's capacity-one resource.
+func testTimedChildRetry(t *testing.T, process support.Process, sessions factorysessions.Service, scenario initialOpeningScenario, effects *initialOpeningEffects, gate *timedChildGate, serverURL string) {
+	t.Helper()
+	peer := scenario.startPeer(t, sessions)
+	startInitialOpeningSession(t, sessions, scenario.request())
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
+		"--json", "run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--output", "primary", "--no-record", "timeout child"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+	inputs.Input.WorkingDirectory = scenario.candidateDir
+	done := make(chan error, 1)
+	go func() { done <- process.Execute(inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(initialOpeningReadCeiling):
+			t.Error("selected timeout invocation did not join")
+		}
+	})
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("selected timeout command did not enter")
+	}
+	select {
+	case cause := <-gate.stopped:
+		if !errors.Is(cause, context.DeadlineExceeded) {
+			t.Fatalf("provider termination cause = %v, want deadline exceeded", cause)
+		}
+	case <-ctx.Done():
+		t.Fatal("selected command did not acknowledge its deadline")
+	}
+	select {
+	case err := <-done:
+		done <- err // Retain the joined signal for cleanup.
+		assertTimedChildFailure(t, sessions, inputs.Stdout(), inputs.Stderr(), err)
+	case <-ctx.Done():
+		t.Fatal("timeout invocation did not publish terminal outcome")
+	}
+	if calls := effects.forScenario(scenario)[filepath.Clean(scenario.candidateDir)+"|worker.codex"]; calls != 1 {
+		t.Fatalf("timeout command executions = %d, want one without retry", calls)
+	}
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
+	retry := support.FakeInputs(ctx, inputs.Input.Args)
+	retry.Input.Env, retry.Input.WorkingDirectory = inputs.Input.Env, inputs.Input.WorkingDirectory
+	retryErr := process.Execute(retry.Input)
+	var response factoryapi.InvocationResponse
+	if retryErr != nil || json.Unmarshal([]byte(retry.Stdout()), &response) != nil || response.Status != factoryapi.InvocationTerminalStatusCompleted || response.SessionId == nil || !strings.Contains(retry.Stdout(), "initial opening COMPLETE") {
+		t.Fatalf("post-timeout capacity reuse: error=%v stdout=%s stderr=%s", retryErr, retry.Stdout(), retry.Stderr())
+	}
+	assertInitialChildResponses(t, sessions, *response.SessionId)
+	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+	if calls := effects.forScenario(scenario)[filepath.Clean(scenario.candidateDir)+"|worker.codex"]; calls != 2 {
+		t.Fatalf("capacity reuse command executions = %d, want two", calls)
+	}
+}
+
+func assertTimedChildFailure(t *testing.T, sessions factorysessions.Service, stdout, stderr string, err error) {
+	t.Helper()
+	var response factoryapi.InvocationResponse
+	if json.Unmarshal([]byte(stdout), &response) != nil || err == nil || response.Status != factoryapi.InvocationTerminalStatusFailed || response.SessionId == nil {
+		t.Fatalf("timeout invocation: error=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+	dispatches, readErr := sessions.ListDispatches(t.Context(), *response.SessionId)
+	if readErr != nil || len(dispatches.Dispatches) != 1 {
+		t.Fatalf("timeout dispatches: %+v %v", dispatches, readErr)
+	}
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Status != "FAILED" || dispatch.Attempt != 1 || dispatch.FailureClassification != "timeout" || dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != "timeout" {
+		t.Fatalf("timeout classification/attempt: %+v", dispatch)
+	}
+	if response.ErrorCode == nil || response.Message == nil || !strings.Contains(*response.Message, "child execution timed out after 1s") || !strings.Contains(dispatch.FailureDetail.Message, "child execution timed out after 1s") {
+		t.Fatalf("timeout diagnostic: response=%+v detail=%+v", response, dispatch.FailureDetail)
+	}
+	read, readErr := sessions.GetSession(t.Context(), *response.SessionId)
+	if readErr != nil || read.Status != factorysessions.LifecycleStatusFailed {
+		t.Fatalf("timeout durable terminal: %+v %v", read, readErr)
+	}
+}
+
+type timedChildGate struct {
+	dir     string
+	entered chan struct{}
+	stopped chan error
+	first   atomic.Bool
+}
+
+func (gate *timedChildGate) run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if !gate.first.CompareAndSwap(false, true) {
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("initial opening COMPLETE")}, nil
+	}
+	close(gate.entered)
+	<-ctx.Done()
+	gate.stopped <- ctx.Err()
+	return platformprocess.CommandResult{}, ctx.Err()
 }
 
 // All four command invocations reach their selected provider before current

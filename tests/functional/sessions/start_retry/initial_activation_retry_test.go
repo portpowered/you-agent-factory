@@ -121,6 +121,8 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	durable := newInitialOpeningScenario(t)
 	child := newInitialOpeningChildScenario(t)
 	deniedChild := newDeniedChildScenario(t)
+	timedChild := newTimedChildScenario(t)
+	timeoutGate := &timedChildGate{dir: timedChild.candidateDir, entered: make(chan struct{}), stopped: make(chan error, 1)}
 	bindingChildren := []initialOpeningScenario{newBindingChildScenario(t), newBindingChildScenario(t)}
 	bindingGate := &bindingChildGate{entered: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{}),
 		selected: make(map[string]string), active: make(map[string]int), maximum: make(map[string]int)}
@@ -160,7 +162,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		FactoryDefinitionAuthoredReaderFileSystem:  definitionFiles,
 		FactorySessionRuntimePersistenceFileSystem: persistence,
 		ScriptCommandRunner:                        initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate, policy: policyGate},
+		ProviderCommandRunner:                      initialOpeningProviderRunner{effects: effects, selected: providerGate, canceled: canceledWorkGate, host: hostGate, binding: bindingGate, policy: policyGate, timeout: timeoutGate},
 		WorkersWorktreeGit:                         initialOpeningWorktreeGit{effects: effects},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			if request.Port == completionFailurePort {
@@ -225,6 +227,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	t.Run("policy denied child dispatches no command and corrected invocation reuses capacity", func(t *testing.T) {
 		t.Parallel()
 		testDeniedChildRetry(t, process, sessions, deniedChild, effects, api.WaitForURL(t))
+	})
+	t.Run("child deadline retains timeout cause and releases capacity for next invocation", func(t *testing.T) {
+		t.Parallel()
+		testTimedChildRetry(t, process, sessions, timedChild, effects, timeoutGate, api.WaitForURL(t))
 	})
 
 	t.Run("selected bytes survive authored changes and peer opening", func(t *testing.T) {
@@ -552,6 +558,7 @@ type initialOpeningProviderRunner struct {
 	host     *selectedProviderGate
 	binding  *bindingChildGate
 	policy   *selectedProviderGate
+	timeout  *timedChildGate
 }
 
 func (runner initialOpeningProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -559,6 +566,9 @@ func (runner initialOpeningProviderRunner) Run(ctx context.Context, request plat
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command %q with arguments %v", request.Command, request.Args)
 	}
 	runner.effects.record("worker.codex", request.WorkDir)
+	if runner.timeout != nil && runner.timeout.dir == request.WorkDir {
+		return runner.timeout.run(ctx, request)
+	}
 	if runner.policy != nil && runner.policy.paths[request.WorkDir] != "" {
 		return runner.policy.run(ctx, request)
 	}
