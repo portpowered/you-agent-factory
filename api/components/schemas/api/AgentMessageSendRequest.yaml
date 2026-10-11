@@ -22,12 +22,12 @@ properties:
     type: string
     enum: [QUEUE, INTERRUPT]
     default: QUEUE
-    description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+    description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED before any effect.
   ifEnded:
     type: string
     enum: [REVIVE, HOLD]
     default: REVIVE
-    description: T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+    description: REVIVE continues an ended eligible recipient. HOLD retains the message for authorized pull.
   replyIfEnded:
     type: string
     enum: [REVIVE, HOLD]

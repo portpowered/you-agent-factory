@@ -27,10 +27,11 @@ type batchReport struct {
 }
 
 type batchFailure struct {
-	WorkID    string `json:"workId,omitempty"`
-	WorkName  string `json:"workName"`
-	WorkState string `json:"workState"`
-	Reason    string `json:"reason"`
+	WorkID          string `json:"workId,omitempty"`
+	WorkName        string `json:"workName"`
+	WorkState       string `json:"workState"`
+	Reason          string `json:"reason"`
+	terminalFailure bool
 }
 
 func reportBatchResult(
@@ -66,14 +67,16 @@ func reportBatchResult(
 func buildBatchReport(snapshot factoryruntime.CleanInvocationSnapshot) batchReport {
 	failuresByKey := make(map[string]batchFailure)
 	for _, work := range snapshot.Work {
-		if work.StateCategory != string(factoryruntime.StateCategoryFailed) {
+		if work.DataType == string(factoryruntime.RuntimeTokenDataTypeResource) ||
+			work.StateCategory == string(factoryruntime.StateCategoryTerminal) {
 			continue
 		}
 		failure := batchFailure{
-			WorkID:    strings.TrimSpace(work.WorkID),
-			WorkName:  batchWorkName(work),
-			WorkState: batchWorkState(work),
-			Reason:    batchFailureReason(work, snapshot.DispatchHistory),
+			WorkID:          strings.TrimSpace(work.WorkID),
+			WorkName:        batchWorkName(work),
+			WorkState:       batchWorkState(work),
+			Reason:          batchFailureReason(work, snapshot.DispatchHistory),
+			terminalFailure: work.StateCategory == string(factoryruntime.StateCategoryFailed),
 		}
 		key := failure.WorkID
 		if key == "" {
@@ -127,7 +130,7 @@ func batchWorkState(work factoryruntime.CleanInvocationWork) string {
 		state = strings.ToLower(strings.TrimSpace(work.StateCategory))
 	}
 	if state == "" {
-		state = "failed"
+		state = "unknown"
 	}
 	workTypeID := strings.TrimSpace(work.WorkTypeID)
 	if workTypeID == "" {
@@ -140,6 +143,9 @@ func batchFailureReason(
 	work factoryruntime.CleanInvocationWork,
 	dispatches []factoryruntime.CleanInvocationDispatch,
 ) string {
+	if work.StateCategory != string(factoryruntime.StateCategoryFailed) {
+		return "Work is unfinished; the batch stopped before it reached a terminal state."
+	}
 	if reason := strings.TrimSpace(work.FailureReason); reason != "" {
 		return reason
 	}
@@ -196,10 +202,15 @@ func writeHumanBatchReport(output io.Writer, report batchReport) error {
 		return fmt.Errorf("write batch result: %w", err)
 	}
 	for _, failure := range report.Failures {
+		description := "remained unfinished in state"
+		if failure.terminalFailure {
+			description = "reached failed terminal state"
+		}
 		if _, err := fmt.Fprintf(
 			output,
-			"Work %q reached failed terminal state %s: %s\n",
+			"Work %q %s %s: %s\n",
 			failure.WorkName,
+			description,
 			failure.WorkState,
 			failure.Reason,
 		); err != nil {

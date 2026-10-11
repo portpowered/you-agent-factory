@@ -84,6 +84,12 @@ func (e *Engine) followIdentity(ctx context.Context, request agentmessages.ListR
 func (e *Engine) followSubscription(ctx context.Context, limit int) (events.Subscription, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	// The empty ID cannot select a message, but its constant-time lookup
+	// checks writable readiness without copying the inbox. A quarantined
+	// journal must refuse follow before exposing an idle Events subscription.
+	if _, _, _, err := e.ledger.LookupMessage(""); err != nil {
+		return nil, err
+	}
 	if e.events == nil {
 		return nil, agentmessages.ErrStreamUnavailable
 	}
@@ -130,13 +136,25 @@ func (e *Engine) followRecord(ctx context.Context, request agentmessages.ListReq
 		return nil
 	}
 	if observation.Sequence < entry.Sequence || observation.Sequence > sequence || !sameAdmittedContent(observation.Message, entry.Message) ||
-		observation.Kind != observationKind(store.Entry{Message: observation.Message}) {
+		!validObservationKind(observation) {
 		return agentmessages.ErrStreamUnavailable
 	}
 	if err := e.readAuthority(ctx, request.Caller); err != nil {
 		return err
 	}
 	return observe(observation)
+}
+
+func validObservationKind(observation agentmessages.Observation) bool {
+	if observation.Kind == string(agentmessages.DeliveredRevive) {
+		m := observation.Message
+		return m.Status != agentmessages.Queued && m.Reason == "" && m.RevivedWorkerSessionID != "" &&
+			m.To.DeliveredWorkerSessionID == m.RevivedWorkerSessionID
+	}
+	if observation.Kind == store.DeliveryUpdated {
+		return observation.Message.Status == agentmessages.Queued && observation.Message.Reason != ""
+	}
+	return observation.Kind == observationKind("", store.Entry{Message: observation.Message})
 }
 
 func decodeObservation(record events.Record) (agentmessages.Observation, error) {
@@ -155,7 +173,7 @@ func decodeObservation(record events.Record) (agentmessages.Observation, error) 
 // must never substitute different content or addresses for an admitted ID.
 func sameAdmittedContent(observed, admitted agentmessages.Message) bool {
 	switch observed.Status {
-	case agentmessages.Queued, agentmessages.Read, agentmessages.Replied, agentmessages.Expired:
+	case agentmessages.Queued, agentmessages.Read, agentmessages.DeliveredRevive, agentmessages.Replied, agentmessages.Expired:
 	default:
 		return false
 	}
@@ -163,6 +181,8 @@ func sameAdmittedContent(observed, admitted agentmessages.Message) bool {
 		return false
 	}
 	observed.Status, observed.RepliedByMessageID = admitted.Status, admitted.RepliedByMessageID
+	observed.Reason, observed.RevivedWorkerSessionID = admitted.Reason, admitted.RevivedWorkerSessionID
+	observed.To.DeliveredWorkerSessionID = admitted.To.DeliveredWorkerSessionID
 	observed.SentAt, observed.ExpiresAt = admitted.SentAt, admitted.ExpiresAt
 	return observed == admitted
 }

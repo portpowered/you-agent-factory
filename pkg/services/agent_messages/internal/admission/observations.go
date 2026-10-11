@@ -3,10 +3,12 @@ package admission
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // persist is called under the admission lock so observations preserve commit
@@ -17,6 +19,12 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 	if err := e.ledger.Commit(t); err != nil {
 		return err
 	}
+	if e.deliveryLife != nil {
+		select {
+		case e.deliveryLife.expiryWake <- struct{}{}:
+		default:
+		}
+	}
 	if e.events == nil {
 		return nil
 	}
@@ -25,7 +33,7 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 	publication := context.WithoutCancel(ctx)
 	for _, entry := range t.Messages {
 		observation := agentmessages.Observation{RecordID: t.RecordID, Sequence: t.Sequence,
-			Kind: observationKind(entry), Message: entry.Message}
+			Kind: observationKind(t.Kind, entry), Message: entry.Message}
 		payload, err := json.Marshal(observation)
 		if err == nil {
 			topic := entry.Message.To.ObservationTopic()
@@ -53,9 +61,319 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 	return nil
 }
 
-func observationKind(entry store.Entry) string {
+// Called under the coordinator lock. Durable entries identify subscriptions;
+// retained/live Events and an authoritative head read close startup/end races.
+func (e *Engine) resumeRecipientObservers(ctx context.Context) {
+	entries, _, err := e.ledger.Entries()
+	if err != nil {
+		return
+	}
+	intents, err := e.ledger.DeliveryIntents()
+	if err != nil {
+		return
+	}
+	assigned := map[string]bool{}
+	for _, intent := range intents {
+		for _, id := range intent.MessageIDs {
+			assigned[id] = true
+		}
+	}
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if !e.eligibleRecipient(entry) || assigned[entry.Message.MessageID] || seen[entry.RecipientChainIdentity] {
+			continue
+		}
+		seen[entry.RecipientChainIdentity] = true
+		recipient, err := e.deliveryHead(ctx, entry)
+		if err == nil {
+			e.observeRecipient(ctx, entry, recipient)
+		}
+	}
+}
+
+func (e *Engine) eligibleRecipient(entry store.Entry) bool {
+	return entry.Message.Status == agentmessages.Queued && entry.Message.IfEnded == "REVIVE" && entry.Message.ExpiresAt.After(e.now().UTC())
+}
+
+// The same host lifetime owns provider confirmation and recipient-end streams.
+// Registration precedes the goroutine so concurrent sends share one observer.
+func (e *Engine) observeRecipient(ctx context.Context, entry store.Entry, recipient Identity) {
+	life := e.deliveryLife
+	key := "end:" + recipient.Observation.FactorySessionID + ":" + recipient.Observation.WorkerSessionID
+	if life == nil || e.events == nil || life.cancels[key] != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	observer := &deliveryObserver{cancel: cancel}
+	life.cancels[key] = observer
+	life.active[observer] = struct{}{}
+	life.observers.Add(1)
+	go func() {
+		defer life.observers.Done()
+		defer cancel()
+		defer e.forgetDeliveryObserver(life, key, observer)
+		scope := recipient.Observation.FactorySessionID
+		if recipient.Observation.Direct {
+			scope = ""
+		}
+		topic := workersessions.Topic(recipient.Observation.WorkerSessionID, scope)
+		e.watchRecipient(ctx, entry, topic, key, observer)
+	}()
+}
+
+func (e *Engine) watchRecipient(ctx context.Context, entry store.Entry, topic events.Topic, key string, observer *deliveryObserver) {
+	sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: workersessions.DefaultObservationStreamLimit})
+	// Even unavailable/retention-gapped streams may have an authoritative
+	// ended head. No event payload alone grants continuation authority.
+	if e.deliverEndedRecipient(ctx, entry, key, observer) || err != nil {
+		return
+	}
+	for {
+		delivery := sub.Next(ctx)
+		if ctx.Err() != nil || e.deliverEndedRecipient(ctx, entry, key, observer) {
+			return
+		}
+		if delivery.Kind == events.DeliveryGap && delivery.Gap != nil && delivery.Gap.Validate() == nil && delivery.Gap.Topic == topic {
+			continue // Events resumes retained catch-up, then live delivery.
+		}
+		if delivery.Kind == events.DeliveryBackpressure {
+			// Only the authoritative head determines completion. A bounded
+			// subscription can overflow on retained or live progress; resume
+			// at the current Events head and check completion after registering
+			// so an end between the read and subscription is never lost.
+			sub, err = e.recipientLiveSubscription(ctx, topic)
+			if e.deliverEndedRecipient(ctx, entry, key, observer) || err != nil {
+				return
+			}
+			continue
+		}
+		if delivery.Kind != events.DeliveryRecord {
+			return
+		}
+	}
+}
+
+func (e *Engine) recipientLiveSubscription(ctx context.Context, topic events.Topic) (events.Subscription, error) {
+	head, err := e.events.Read(ctx, events.ReadRequest{Topic: topic, From: events.Cursor{Topic: topic}, Limit: 1})
+	if err != nil || head.Validate() != nil || head.Outcome == events.ReadOutcomeInvalidCursor {
+		return nil, agentmessages.ErrStreamUnavailable
+	}
+	position := head.Retained.Head
+	if head.Outcome == events.ReadOutcomeGap {
+		position = head.Gap.Head
+	}
+	sub, err := e.events.Subscribe(ctx, events.SubscribeRequest{Topic: topic,
+		From: events.Cursor{Topic: topic, Position: position}, Limit: workersessions.DefaultObservationStreamLimit})
+	if err != nil || sub == nil {
+		return nil, agentmessages.ErrStreamUnavailable
+	}
+	return sub, nil
+}
+
+// Returns true once the observed head has ended. A new head is observed by
+// admission/confirmation; the durable chain reservation prevents branching.
+func (e *Engine) deliverEndedRecipient(ctx context.Context, entry store.Entry, key string, observer *deliveryObserver) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ctx.Err() != nil || e.deliveryLife == nil {
+		return true
+	}
+	recipient, err := e.deliveryHead(ctx, entry)
+	if err != nil || !recipient.Observation.State.Terminal() {
+		return false
+	}
+	// Remove only this registration before attempting delivery, so admission
+	// confirmation can observe the next head even if this goroutine is exiting.
+	if e.deliveryLife.cancels[key] == observer {
+		delete(e.deliveryLife.cancels, key)
+	}
+	entries, _, err := e.ledger.Entries()
+	if err != nil {
+		return true
+	}
+	for _, candidate := range entries {
+		if candidate.RecipientChainIdentity == entry.RecipientChainIdentity && candidate.Message.To.FactorySessionID == entry.Message.To.FactorySessionID && e.eligibleRecipient(candidate) {
+			_, err = e.deliver(ctx, nil, candidate)
+			if err != nil && e.logger != nil {
+				e.logger.Warn("Agent Message end delivery unavailable", "code", "MESSAGE_STORE_UNAVAILABLE")
+			}
+			break
+		}
+	}
+	return true
+}
+
+func observationKind(kind string, entry store.Entry) string {
+	if kind == store.ReviveOutcome && entry.Message.RevivedWorkerSessionID != "" {
+		return string(agentmessages.DeliveredRevive)
+	}
+	if (kind == store.DeliveryUpdated || kind == store.ReviveOutcome) && entry.Message.Status == agentmessages.Queued {
+		return store.DeliveryUpdated
+	}
 	if entry.Message.Status == agentmessages.Queued {
 		return store.Sent
 	}
 	return string(entry.Message.Status)
+}
+
+// Recovery shares the selected host lifetime. The frozen request, source,
+// successor and input are replayed through the admitting owner; neither a
+// saved opening nor the message journal alone proves an accepted effect.
+func (e *Engine) startDeliveryRecovery(life *deliveryLifetime) {
+	intents, err := e.ledger.DeliveryIntents()
+	if err != nil {
+		return
+	}
+	pending := make([]store.DeliveryIntent, 0, len(intents))
+	for _, intent := range intents {
+		if intent.State == store.IntentPending || intent.State == store.IntentAdmitted || intent.State == store.IntentUncertain {
+			pending = append(pending, intent)
+		}
+	}
+	if len(pending) == 0 {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	observer := &deliveryObserver{cancel: cancel}
+	life.active[observer] = struct{}{}
+	life.observers.Add(1)
+	go func() {
+		defer life.observers.Done()
+		defer cancel()
+		defer e.forgetDeliveryObserver(life, "recovery", observer)
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		for _, intent := range pending {
+			if ctx.Err() != nil || e.deliveryLife != life {
+				return
+			}
+			if err := e.recoverDelivery(ctx, intent); err != nil {
+				if e.logger != nil {
+					e.logger.Warn("Agent Message recovery unavailable", "code", "MESSAGE_STORE_UNAVAILABLE")
+				}
+				return
+			}
+		}
+		e.resumeRecipientObservers(ctx)
+	}()
+}
+
+// Called under e.mu; external replay and finite observation reads release it.
+func (e *Engine) recoverDelivery(ctx context.Context, intent store.DeliveryIntent) error {
+	result, err := e.continueIntent(ctx, intent)
+	if ctx.Err() != nil {
+		return ctx.Err() // shutdown retains the last durable recovery milestone
+	}
+	next := e.classifyAdmission(intent, result, err)
+	if err != nil {
+		// An unavailable replay cannot distinguish a missing admission from
+		// owner-lost history. Keep the chain reserved rather than retrying a
+		// different effect or calling the historical failure successful.
+		next.State, next.Reason = store.IntentUncertain, "REVIVE_FAILED"
+	}
+	if next.State == store.IntentAdmitted {
+		next.AcceptedAt = e.recoveredAdmissionTime(ctx, intent)
+		if next.AcceptedAt.IsZero() {
+			next.State, next.Reason = store.IntentUncertain, "REVIVE_FAILED"
+		} else {
+			next.State, next.Reason = e.recoveredProviderOutcome(ctx, intent, result.Session)
+		}
+	}
+	if next.State == store.IntentFailed || next.State == store.IntentUncertain {
+		next.AcceptedAt = time.Time{}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	entries := make([]store.Entry, 0, len(intent.MessageIDs))
+	for _, id := range intent.MessageIDs {
+		entry, found, _, lookupErr := e.ledger.LookupMessage(id)
+		if lookupErr != nil {
+			return lookupErr
+		}
+		if !found {
+			return store.ErrCorrupt
+		}
+		entries = append(entries, entry)
+	}
+	if next.State != intent.State || next.Reason != intent.Reason {
+		if _, err := e.deliveryOutcome(ctx, next, entries, intent.RequestID); err != nil {
+			return err
+		}
+	}
+	if next.State == store.IntentAdmitted {
+		e.observeDelivery(ctx, next)
+	}
+	return nil
+}
+
+// A saved ADMITTED clock is immutable. A PENDING intent may have survived a
+// refused admission flush: only the exact successor's authoritative opening
+// can supply its original clock. Replay time never spends a new quota window.
+func (e *Engine) recoveredAdmissionTime(ctx context.Context, intent store.DeliveryIntent) time.Time {
+	if !intent.AcceptedAt.IsZero() {
+		return intent.AcceptedAt
+	}
+	e.mu.Unlock()
+	defer e.mu.Lock()
+	successor, err := e.authority.Recipient(ctx, intent.SuccessorWorkerSessionID, intent.FactorySessionID)
+	o := successor.Observation
+	if err != nil || successor.Chain != intent.RecipientChainIdentity || o.WorkerSessionID != intent.SuccessorWorkerSessionID ||
+		o.PredecessorWorkerSessionID != intent.SourceWorkerSessionID || o.StartedAt == nil || o.StartedAt.IsZero() || o.StartedAt.After(e.now().UTC()) {
+		return time.Time{}
+	}
+	return o.StartedAt.UTC()
+}
+
+func (e *Engine) recoveredProviderOutcome(ctx context.Context, intent store.DeliveryIntent, session workersessions.Session) (string, string) {
+	e.mu.Unlock()
+	defer e.mu.Lock()
+	sub, err := e.readObservations(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: intent.SuccessorWorkerSessionID, FactorySessionID: intent.FactorySessionID,
+		Limit: workersessions.DefaultObservationStreamLimit, ReplayOnly: true,
+	})
+	if err != nil {
+		return store.IntentUncertain, "REVIVE_FAILED"
+	}
+	defer sub.Close()
+	confirmed := false
+	for {
+		delivery := sub.Next(ctx)
+		if delivery.Kind == workersessions.ObservationDeliveryRecord {
+			var draft providerRecord
+			if delivery.Event.SchemaID == "workers.draft.v1" && json.Unmarshal(delivery.Event.Payload, &draft) == nil && providerProgress(draft) {
+				confirmed = true
+			}
+			continue
+		}
+		if !completeRecoveryReplay(delivery) {
+			// Active replay is deliberately incomplete until a terminal record
+			// exists. Exact admission still permits observing that same live
+			// successor; it never permits publishing delivery from this replay.
+			if activeRecoveryReplay(delivery, session) {
+				return store.IntentAdmitted, "REVIVE_PENDING"
+			}
+			return store.IntentUncertain, "REVIVE_FAILED"
+		}
+		if confirmed {
+			return store.IntentAccepted, ""
+		}
+		if !session.State.Terminal() {
+			return store.IntentAdmitted, "REVIVE_PENDING"
+		}
+		if session.State == workersessions.StateFailed && session.Result != nil && session.Result.Cause != nil && unsupportedCause(session.Result.Cause) {
+			return store.IntentFailed, "REVIVE_UNSUPPORTED"
+		}
+		return store.IntentUncertain, "REVIVE_FAILED"
+	}
+}
+
+func activeRecoveryReplay(delivery workersessions.ObservationDelivery, session workersessions.Session) bool {
+	return !session.State.Terminal() && delivery.Kind == workersessions.ObservationDeliveryReplaySummary &&
+		delivery.Err == nil && delivery.Summary != nil && delivery.Summary.Reason == "session-active"
+}
+
+func completeRecoveryReplay(delivery workersessions.ObservationDelivery) bool {
+	return delivery.Summary != nil && delivery.Summary.Complete &&
+		(delivery.Kind == workersessions.ObservationDeliveryReplaySummary || delivery.Kind == workersessions.ObservationDeliveryTerminalReplay || delivery.Kind == workersessions.ObservationDeliveryTerminal)
 }

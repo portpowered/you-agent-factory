@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -47,6 +48,13 @@ func (s *Service) authorizeProviderTarget(
 			ctx,
 			providers.ValidatePrerequisitesRequest{ID: resolved.ID},
 		); err != nil {
+			// Prerequisites can fail before the runner maps Providers failures.
+			// Preserve the established missing-executable reason on that path.
+			var failure providers.ExecuteFailure
+			if errors.As(err, &failure) && failure.Diagnostics != nil &&
+				failure.Diagnostics.Metadata["work-failure-type"] == string(workers.WorkFailureTypeMissingExecutable) {
+				return workers.NewProviderError(workers.WorkFailureTypeMissingExecutable, failure.Message, err)
+			}
 			return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
 		}
 	}

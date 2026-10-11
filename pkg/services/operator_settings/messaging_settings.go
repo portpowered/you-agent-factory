@@ -27,31 +27,33 @@ type MessagingPolicy struct {
 }
 
 type MessagingLimits struct {
-	SendsPerChainPerHour *int `json:"sendsPerChainPerHour,omitempty"`
-	MessagesPerThread    *int `json:"messagesPerThread,omitempty"`
-	MaxBodyBytes         *int `json:"maxBodyBytes,omitempty"`
-	MaxHop               *int `json:"maxHop,omitempty"`
-	DefaultExpirySeconds *int `json:"defaultExpirySeconds,omitempty"`
+	SendsPerChainPerHour   *int `json:"sendsPerChainPerHour,omitempty"`
+	RevivesPerChainPerHour *int `json:"revivesPerChainPerHour,omitempty"`
+	MessagesPerThread      *int `json:"messagesPerThread,omitempty"`
+	MaxBodyBytes           *int `json:"maxBodyBytes,omitempty"`
+	MaxHop                 *int `json:"maxHop,omitempty"`
+	DefaultExpirySeconds   *int `json:"defaultExpirySeconds,omitempty"`
 }
 
 // EffectiveMessagingSettings is the validated, detached startup configuration.
 // T5 never enables cross-scope policy; label keys are relationship selectors,
 // never authority on their own.
 type EffectiveMessagingSettings struct {
-	Enabled              bool
-	RetentionDays        int
-	ScopeLabelKeys       []string
-	SendsPerChainPerHour int
-	MessagesPerThread    int
-	MaxBodyBytes         int
-	MaxHop               int
-	DefaultExpirySeconds int
+	Enabled                bool
+	RetentionDays          int
+	ScopeLabelKeys         []string
+	SendsPerChainPerHour   int
+	RevivesPerChainPerHour int
+	MessagesPerThread      int
+	MaxBodyBytes           int
+	MaxHop                 int
+	DefaultExpirySeconds   int
 }
 
 func (settings *MessagingSettings) Effective() (EffectiveMessagingSettings, error) {
 	result := EffectiveMessagingSettings{
 		Enabled: true, RetentionDays: 30, ScopeLabelKeys: []string{"tag:project"},
-		SendsPerChainPerHour: 10, MessagesPerThread: 8, MaxBodyBytes: 8192,
+		SendsPerChainPerHour: 10, RevivesPerChainPerHour: 6, MessagesPerThread: 8, MaxBodyBytes: 8192,
 		MaxHop: 3, DefaultExpirySeconds: 86400,
 	}
 	if settings == nil {
@@ -70,6 +72,7 @@ func (settings *MessagingSettings) Effective() (EffectiveMessagingSettings, erro
 	if settings.Limits != nil {
 		limits := settings.Limits
 		result.SendsPerChainPerHour = messagingValue(limits.SendsPerChainPerHour, result.SendsPerChainPerHour)
+		result.RevivesPerChainPerHour = messagingValue(limits.RevivesPerChainPerHour, result.RevivesPerChainPerHour)
 		result.MessagesPerThread = messagingValue(limits.MessagesPerThread, result.MessagesPerThread)
 		result.MaxBodyBytes = messagingValue(limits.MaxBodyBytes, result.MaxBodyBytes)
 		result.MaxHop = messagingValue(limits.MaxHop, result.MaxHop)
@@ -102,7 +105,7 @@ func (result EffectiveMessagingSettings) valid() bool {
 	// Bound retention before the later duration conversion, including 32-bit
 	// builds. The upper bound is representability, not a new product limit.
 	return result.RetentionDays >= 1 && int64(result.RetentionDays) <= (1<<63-1)/int64(24*time.Hour) &&
-		result.SendsPerChainPerHour >= 1 && result.MessagesPerThread >= 1 &&
+		result.SendsPerChainPerHour >= 1 && result.RevivesPerChainPerHour >= 1 && result.MessagesPerThread >= 1 &&
 		result.MaxBodyBytes >= 1 && result.MaxBodyBytes <= 8192 && result.MaxHop >= 0 && result.MaxHop <= 3 &&
 		result.DefaultExpirySeconds >= 60 && result.DefaultExpirySeconds <= 604800
 }
@@ -142,6 +145,7 @@ func (settings *MessagingSettings) Clone() *MessagingSettings {
 	if settings.Limits != nil {
 		limits := *settings.Limits
 		limits.SendsPerChainPerHour = messagingPointerCopy(limits.SendsPerChainPerHour)
+		limits.RevivesPerChainPerHour = messagingPointerCopy(limits.RevivesPerChainPerHour)
 		limits.MessagesPerThread = messagingPointerCopy(limits.MessagesPerThread)
 		limits.MaxBodyBytes = messagingPointerCopy(limits.MaxBodyBytes)
 		limits.MaxHop = messagingPointerCopy(limits.MaxHop)

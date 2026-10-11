@@ -37,6 +37,7 @@ func (j *Journal) compact(now time.Time, retention time.Duration) error {
 	next := New(j.fs, j.path)
 	next.entries = make(map[string]Entry)
 	next.requests = make(map[requestKey]Request)
+	next.intents = make(map[string]DeliveryIntent)
 	next.records = make(map[string]bool)
 	next.indexes = make(map[indexKey][]string)
 	if err := next.validate(snapshot); err != nil {
@@ -51,6 +52,7 @@ func (j *Journal) compact(now time.Time, retention time.Duration) error {
 		return ErrUnavailable
 	}
 	j.entries, j.requests, j.records = next.entries, next.requests, next.records
+	j.intents = next.intents
 	j.ordered, j.indexes = next.ordered, next.indexes
 	return nil
 }
@@ -65,6 +67,9 @@ func (j *Journal) retainedSnapshot(now time.Time, retention time.Duration) Trans
 			keepThreads[m.ThreadID] = true
 		}
 	}
+	// Intent tuples and their message inputs remain self-contained. Retain all
+	// unresolved effects, and accepted facts through their rolling quota window.
+	intents := j.retainedIntents(now, keepThreads)
 	t := Transaction{Version: Version, RecordID: "snapshot-" + strconv.FormatUint(j.sequence, 10),
 		Sequence: j.sequence, Kind: Snapshot, CommittedAt: now, Messages: []Entry{}, Requests: []Request{}}
 	keepIDs := make(map[string]bool)
@@ -80,6 +85,7 @@ func (j *Journal) retainedSnapshot(now time.Time, retention time.Duration) Trans
 			t.Requests = append(t.Requests, request)
 		}
 	}
+	t.DeliveryIntents = intents
 	sort.Slice(t.Requests, func(a, b int) bool {
 		left, right := t.Requests[a], t.Requests[b]
 		if left.SenderIdentity != right.SenderIdentity {
@@ -88,4 +94,32 @@ func (j *Journal) retainedSnapshot(now time.Time, retention time.Duration) Trans
 		return left.RequestID < right.RequestID
 	})
 	return t
+}
+
+func (j *Journal) retainedIntents(now time.Time, keepThreads map[string]bool) []DeliveryIntent {
+	kept := map[string]DeliveryIntent{}
+	all := sortedIntents(j.intents)
+	// A batch joins otherwise independent threads. Close retention over those
+	// links so neither a retained outcome nor another thread loses its input.
+	for changed := true; changed; {
+		changed = false
+		for _, intent := range all {
+			if _, exists := kept[intent.RequestID]; exists {
+				continue
+			}
+			keep := intent.State == IntentPending || intent.State == IntentAdmitted || intent.State == IntentUncertain ||
+				(intent.State == IntentAccepted && intent.AcceptedAt.After(now.Add(-time.Hour)))
+			for _, id := range intent.MessageIDs {
+				keep = keep || keepThreads[j.entries[id].Message.ThreadID]
+			}
+			if !keep {
+				continue
+			}
+			kept[intent.RequestID], changed = intent, true
+			for _, id := range intent.MessageIDs {
+				keepThreads[j.entries[id].Message.ThreadID] = true
+			}
+		}
+	}
+	return sortedIntents(kept)
 }

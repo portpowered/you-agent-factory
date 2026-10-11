@@ -125,6 +125,10 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
+	malformed := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexMalformedOutput()})}
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-malformed", malformed, malformed, nil, nil, nil, malformed.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	for _, name := range []string{"captured-codex-tools", "captured-codex-factory", "captured-codex-partial-peer"} {
 		toolRunner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})}
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, toolRunner, toolRunner, nil, nil, nil, toolRunner.Reset); err != nil {
@@ -154,7 +158,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
-	for _, name := range []string{"sam-direct-start", "requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race", "recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure"} {
+	for _, name := range []string{"sam-watch-fault-eof-peer", "sam-watch-fault-source-peer", "sam-watch-fault-gap-peer", "sam-watch-fault-unknown-peer", "sam-watch-fault-unavailable-peer", "sam-watch-usage", "sam-watch-a", "sam-watch-b", "sam-watch-c", "sam-watch-retained", "sam-watch-active", "sam-watch-handoff", "sam-watch-completed", "sam-watch-failed", "sam-watch-canceled", "sam-watch-terminated", "sam-watch-detach", "sam-watch-summary", "sam-watch-fault-eof", "sam-watch-fault-source", "sam-watch-fault-gap", "sam-watch-fault-unknown", "sam-watch-fault-unavailable", "sam-direct-start", "requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race", "recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure"} {
 		gated := &t7GatedProviderRunner{}
 		gated.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {

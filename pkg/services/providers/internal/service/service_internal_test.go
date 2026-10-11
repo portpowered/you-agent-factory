@@ -99,6 +99,41 @@ func (internalDisabledACP) Resolve(providers.ID) (providers.ID, bool) { return "
 func (internalDisabledACP) Integrations() []providers.ACPIntegration  { return nil }
 func (internalDisabledACP) Close(context.Context) error               { return nil }
 
+func (internalDisabledACP) ValidatePrerequisites(ctx context.Context, _ providers.ID) error {
+	return ctx.Err()
+}
+
+type prerequisiteACPStub struct {
+	internalDisabledACP
+	calls  *int
+	result error
+}
+
+func (stub prerequisiteACPStub) Resolve(id providers.ID) (providers.ID, bool) {
+	return id, id == "custom"
+}
+func (stub prerequisiteACPStub) ValidatePrerequisites(_ context.Context, id providers.ID) error {
+	*stub.calls++
+	if id != "custom" {
+		return errors.New("wrong selected route")
+	}
+	return stub.result
+}
+
+func TestPrerequisiteValidationConsultsSelectedACPWithoutExecution(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []error{nil, providers.ErrProviderUnavailable, context.Canceled} {
+		calls := 0
+		root := &Service{catalog: internalCatalogStub{}, acp: prerequisiteACPStub{calls: &calls, result: failure}, logger: logging.NoopLogger{}}
+		if err := root.ValidatePrerequisites(t.Context(), providers.ValidatePrerequisitesRequest{ID: "custom"}); !errors.Is(err, failure) || calls != 1 {
+			t.Fatalf("ACP prerequisite: %v, calls=%d", err, calls)
+		}
+		if err := root.ValidatePrerequisites(t.Context(), providers.ValidatePrerequisitesRequest{ID: providers.IDCodex}); err != nil || calls != 1 {
+			t.Fatalf("native prerequisite used ACP: %v", err)
+		}
+	}
+}
+
 type configureACPStub struct {
 	internalDisabledACP
 	configure func(context.Context, []providers.ACPIntegration) error

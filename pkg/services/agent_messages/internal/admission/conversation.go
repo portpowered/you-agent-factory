@@ -79,7 +79,7 @@ func (e *Engine) admit(ctx context.Context, caller *workersessions.CallerIdentit
 	if err := e.commit(ctx, caller, e.transaction(sequence, now, kind, changed, alias)); err != nil {
 		return agentmessages.Message{}, err
 	}
-	return m, nil
+	return e.deliver(ctx, caller, entry)
 }
 
 func (e *Engine) newMessage(p Prepared, sender, recipient Identity, thread string, hop int, now time.Time) agentmessages.Message {
@@ -93,8 +93,5 @@ func (e *Engine) newMessage(p Prepared, sender, recipient Identity, thread strin
 		Body: p.Request.Body, BodySHA256: p.BodySHA256, BodyRedactionCount: p.BodyRedactionCount, Correlation: p.Request.Correlation,
 		Delivery: p.Request.Delivery, IfEnded: p.Request.IfEnded, ReplyIfEnded: p.Request.ReplyIfEnded,
 		Status: agentmessages.Queued, Hop: hop, SentAt: now, ExpiresAt: now.Add(time.Duration(*p.Request.ExpiresInSeconds) * time.Second)}
-	if recipient.Observation.State.Terminal() && m.IfEnded == "REVIVE" {
-		m.Reason = "REVIVE_UNSUPPORTED"
-	}
 	return m
 }

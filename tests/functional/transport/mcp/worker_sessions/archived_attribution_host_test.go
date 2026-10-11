@@ -603,9 +603,39 @@ func assertAdmittedAttributionName(t *testing.T, work any, name string) {
 func assertAttributionMarker(t *testing.T, logs any) {
 	t.Helper()
 	data, err := json.Marshal(logs)
-	if err != nil || !strings.Contains(string(data), "archive-marker") || !strings.Contains(string(data), "command_execution") || !strings.Contains(string(data), "redacted") || strings.Contains(string(data), "echo archived attribution marker") {
-		t.Fatalf("captured marker missing: %v %v", logs, err)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var page struct {
+		Events []struct {
+			Event struct {
+				Payload struct {
+					Kind    string `json:"kind"`
+					Phase   string `json:"phase"`
+					ItemID  string `json:"itemId"`
+					Payload struct {
+						ToolCallID       string `json:"toolCallId"`
+						ToolName         string `json:"toolName"`
+						Status           string `json:"status"`
+						ArgumentsSummary struct {
+							Command string `json:"command"`
+						} `json:"argumentsSummary"`
+					} `json:"payload"`
+				} `json:"payload"`
+			} `json:"event"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(data, &page); err != nil {
+		t.Fatal(err)
+	}
+	for _, frame := range page.Events {
+		draft := frame.Event.Payload
+		marker := draft.Payload
+		if draft.Kind == "TOOL" && draft.Phase == "STARTED" && draft.ItemID == "archive-marker" && marker.ToolCallID == "archive-marker" && marker.ToolName == "command_execution" && marker.Status == "in_progress" && marker.ArgumentsSummary.Command == "echo archived attribution marker" {
+			return
+		}
+	}
+	t.Fatalf("captured typed marker missing: %v", logs)
 }
 
 func assertArchivedAttributionTable(t *testing.T, ctx context.Context, host *support.FunctionalAPIServer, name string, recorded bool) {

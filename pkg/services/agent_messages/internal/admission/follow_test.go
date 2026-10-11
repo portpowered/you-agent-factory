@@ -7,9 +7,36 @@ import (
 	"testing"
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
+	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+type unavailableFollowLedger struct {
+	Ledger
+	fault error
+}
+
+func (l unavailableFollowLedger) LookupMessage(string) (store.Entry, bool, uint64, error) {
+	return store.Entry{}, false, 0, l.fault
+}
+
+func TestFollowRefusesQuarantinedStoreBeforeSubscription(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []error{agentmessages.ErrStoreCorrupt, agentmessages.ErrStoreUnavailable} {
+		f := newEngineFixture()
+		stream := newFollowStream()
+		f.engine.events = stream
+		f.engine.ledger = unavailableFollowLedger{Ledger: f.ledger, fault: fault}
+		err := f.engine.Follow(t.Context(), agentmessages.ListRequest{}, func(agentmessages.Observation) error {
+			t.Fatal("quarantined store published an observation")
+			return nil
+		})
+		if !errors.Is(err, fault) || stream.registered != nil {
+			t.Fatalf("quarantined follow: error=%v subscribed=%t", err, stream.registered != nil)
+		}
+	}
+}
 
 // The coordinator consumes a controlled Events port. Real stream attachment,
 // process reconstruction and CLI/HTTP follow belong to public functional proof.
@@ -46,6 +73,39 @@ func newFollowStream() *followStream {
 	topic := agentmessages.ObservationStream
 	return &followStream{head: events.ReadResult{Outcome: events.ReadOutcomeAtHead,
 		Next: events.Cursor{Topic: topic, Position: 4}, Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 4}}}
+}
+
+func TestFollowPreservesAdmittedContentAcrossDeliveryTransitions(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	queued, err := f.engine.Send(t.Context(), engineRequest("one", "normalized body"), f.caller, "factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delivered := queued
+	delivered.Status = agentmessages.DeliveredRevive
+	delivered.RevivedWorkerSessionID, delivered.To.DeliveredWorkerSessionID = "successor", "successor"
+	read := delivered
+	read.Status = agentmessages.Read
+	failed := queued
+	failed.Reason = "REVIVE_FAILED"
+	for _, pair := range [][2]agentmessages.Message{{queued, delivered}, {delivered, delivered}, {delivered, read}, {queued, failed}, {failed, delivered}} {
+		if !sameAdmittedContent(pair[0], pair[1]) {
+			t.Fatal("legal delivery transition invalidated an immutable observation")
+		}
+		for _, alter := range []func(*agentmessages.Message){
+			func(m *agentmessages.Message) { m.Body = "foreign body" },
+			func(m *agentmessages.Message) { m.To.WorkerSessionID = "foreign recipient" },
+			func(m *agentmessages.Message) { m.From.WorkerSessionID = "foreign sender" },
+			func(m *agentmessages.Message) { m.BodySHA256 = "foreign hash" },
+		} {
+			changed := pair[0]
+			alter(&changed)
+			if sameAdmittedContent(changed, pair[1]) {
+				t.Fatal("delivery transition bypassed immutable content validation")
+			}
+		}
+	}
 }
 
 type followAuthority struct {

@@ -72,6 +72,52 @@ func TestJournalRetentionPreservesThreadsAliasesAndOrder(t *testing.T) {
 	assertMatches(t, newTestJournal(t, testFiles{}, path), Filter{}, 11, "pending", "next")
 }
 
+func TestJournalRetentionPreservesUnresolvedDeliveryInput(t *testing.T) {
+	t.Parallel()
+	for _, admitted := range []bool{false, true} {
+		t.Run(map[bool]string{false: "reserved", true: "admitted"}[admitted], func(t *testing.T) {
+			t.Parallel()
+			assertRetentionPreservesUnresolvedDelivery(t, admitted)
+		})
+	}
+}
+
+func assertRetentionPreservesUnresolvedDelivery(t *testing.T, admitted bool) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "messages.jsonl")
+	j := newTestJournal(t, testFiles{}, path)
+	mustCommit(t, j, sentTransaction("pending", 1))
+	mustCommit(t, j, sentTransaction("unrelated", 2))
+	entries, _, _ := j.Entries()
+	intent := pendingDelivery(entries[0])
+	mustCommit(t, j, intentTransaction(3, intent))
+	sequence := uint64(4)
+	if admitted {
+		tx := admittedTransaction(sequence, intent, entries[0])
+		mustCommit(t, j, tx)
+		intent, entries[0] = tx.DeliveryIntents[0], tx.Messages[0]
+		sequence++
+	}
+	now := entries[0].Message.SentAt.Add(40 * 24 * time.Hour)
+	for i := range entries {
+		entries[i].Message.Status = agentmessages.Expired
+	}
+	expiry := transaction(sequence, Expired, entries...)
+	expiry.CommittedAt = now
+	mustCommit(t, j, expiry)
+	if err := j.Compact(now, DefaultRetention); err != nil {
+		t.Fatal(err)
+	}
+	for _, journal := range []*Journal{j, newTestJournal(t, testFiles{}, path)} {
+		assertMatches(t, journal, Filter{}, sequence, "pending")
+		got, err := journal.DeliveryIntents()
+		if err != nil || !reflect.DeepEqual(got, []DeliveryIntent{intent}) {
+			t.Fatal("compaction lost unresolved effect", err)
+		}
+		assertRequestRecovered(t, journal, sentTransaction("pending", 1).Requests[0])
+	}
+}
+
 func TestJournalRetentionFailurePreservesBytesAndIndexes(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "messages.jsonl")

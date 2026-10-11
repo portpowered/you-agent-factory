@@ -62,8 +62,7 @@ func TestCapturedSummaryRestart(t *testing.T) {
 		// Live Runtime confirmation belongs to the canonical Factory ledger;
 		// it is independent of durable Worker capture and is not a capture fact.
 		want.observation.ConfirmationState = got.observation.ConfirmationState
-		assertArchivedFailureUnknowns(t, got.observation)
-		want.observation = recordedSummaryFailure(want.observation)
+		assertSummaryRestartCompletedFacts(t, id, got.observation)
 		if !reflect.DeepEqual(want, got) {
 			t.Fatalf("%s restart changed captured facts/content: before=%+v after=%+v", id, want, got)
 		}
@@ -83,6 +82,9 @@ func assertSummaryRestartCompletedFacts(t *testing.T, id string, row api.WorkerS
 	}
 	if id == "failed" && (row.State != "FAILED" || row.Failure == nil) {
 		t.Fatalf("failure became completion: %+v", row)
+	}
+	if id == "failed" && (row.Failure.ProviderFailureKind == nil || *row.Failure.ProviderFailureKind != "unknown" || row.Failure.ProviderContinuationFailureKind != nil || row.Failure.ProviderContinuationOutcome != nil) {
+		t.Fatalf("recorded provider classification changed: %+v", row.Failure)
 	}
 }
 
@@ -116,11 +118,8 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 			if row.WorkerSessionId == id {
 				found = true
 				row.ConfirmationState = http.ConfirmationState
-				if history == "archived" {
-					assertArchivedFailureUnknowns(t, row)
-				}
-				if !reflect.DeepEqual(recordedSummaryFailure(row), recordedSummaryFailure(http)) {
-					t.Fatalf("%s row differs for %s: %s", history, id, summaryRestartDifferences(recordedSummaryFailure(row), recordedSummaryFailure(http)))
+				if !reflect.DeepEqual(row, http) {
+					t.Fatalf("%s row differs for %s: %s", history, id, summaryRestartDifferences(row, http))
 				}
 			}
 		}
@@ -172,19 +171,7 @@ func summaryRestartDifferences(before, after api.WorkerSessionObservation) strin
 	return strings.Join(differences, "; ")
 }
 
-// The terminal schema records safe failure fields, not normalized provider
-// classification. Compare durable facts while explicitly protecting unknowns.
-func recordedSummaryFailure(row api.WorkerSessionObservation) api.WorkerSessionObservation {
-	if row.Failure != nil {
-		failure := *row.Failure
-		failure.ProviderFailureKind = nil
-		failure.ProviderContinuationFailureKind = nil
-		failure.ProviderContinuationOutcome = nil
-		row.Failure = &failure
-	}
-	return row
-}
-
+// Operator-stop captures without provider classification must retain unknowns.
 func assertArchivedFailureUnknowns(t *testing.T, row api.WorkerSessionObservation) {
 	t.Helper()
 	if row.Failure != nil && (row.Failure.ProviderFailureKind != nil || row.Failure.ProviderContinuationFailureKind != nil || row.Failure.ProviderContinuationOutcome != nil) {
@@ -268,6 +255,7 @@ func invokeControlledRestartWorker(t *testing.T, host invokeContinueStartedProce
 
 func assertControlledRestartFacts(t *testing.T, action string, row api.WorkerSessionObservation) {
 	t.Helper()
+	assertArchivedFailureUnknowns(t, row)
 	state, cause, terminal := "CANCELED", "OPERATOR_CANCELED", "OPERATOR_CANCEL"
 	if action == "terminate" {
 		state, cause, terminal = "TERMINATED", "OPERATOR_TERMINATED", "OPERATOR_TERMINATE"

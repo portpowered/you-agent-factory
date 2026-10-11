@@ -54,6 +54,8 @@ func TestInvalidMessagingIsIsolatedAndPreservedDuringUnrelatedEdit(t *testing.T)
 		`{"policy":{"scopeLabelKeys":null}}`, `{"policy":{"allowCrossScope":true}}`,
 		`{"limits":{"maxBodyBytes":8193}}`, `{"limits":{"maxHop":-1}}`,
 		`{"limits":{"maxHop":4}}`, `{"limits":{"sendsPerChainPerHour":0}}`,
+		`{"limits":{"revivesPerChainPerHour":0}}`, `{"limits":{"revivesPerChainPerHour":-1}}`,
+		`{"limits":{"revivesPerChainPerHour":null}}`, `{"limits":{"revivesPerChainPerHour":"invalid"}}`,
 		`{"limits":{"messagesPerThread":0}}`, `{"limits":{"defaultExpirySeconds":59}}`,
 		`{"limits":{"defaultExpirySeconds":604801}}`, `{"retentionDays":0}`,
 		`{"retentionDays":9223372036854775807}`, `{"policy":{"scopeLabelKeys":[""]}}`,
@@ -101,7 +103,7 @@ func TestInvalidMessagingIsIsolatedAndPreservedDuringUnrelatedEdit(t *testing.T)
 
 func TestMessagingConfigurationCloneDetachesAllMutableValues(t *testing.T) {
 	t.Parallel()
-	config, err := Decode([]byte(`{"messaging":{"enabled":false,"retentionDays":4,"policy":{"scopeLabelKeys":["tag:project"],"allowCrossScope":false},"limits":{"sendsPerChainPerHour":2,"messagesPerThread":3,"maxBodyBytes":40,"maxHop":0,"defaultExpirySeconds":60}}}`))
+	config, err := Decode([]byte(`{"messaging":{"enabled":false,"retentionDays":4,"policy":{"scopeLabelKeys":["tag:project"],"allowCrossScope":false},"limits":{"sendsPerChainPerHour":2,"revivesPerChainPerHour":1,"messagesPerThread":3,"maxBodyBytes":40,"maxHop":0,"defaultExpirySeconds":60}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,12 +113,13 @@ func TestMessagingConfigurationCloneDetachesAllMutableValues(t *testing.T) {
 	(*cloned.Messaging.Policy.ScopeLabelKeys)[0] = "other"
 	*cloned.Messaging.Policy.AllowCrossScope = true
 	*cloned.Messaging.Limits.SendsPerChainPerHour = 4
+	*cloned.Messaging.Limits.RevivesPerChainPerHour = 3
 	*cloned.Messaging.Limits.MessagesPerThread = 4
 	*cloned.Messaging.Limits.MaxBodyBytes = 50
 	*cloned.Messaging.Limits.MaxHop = 1
 	*cloned.Messaging.Limits.DefaultExpirySeconds = 90
 	effective, err := config.Messaging.Effective()
-	if err != nil || effective.Enabled || effective.RetentionDays != 4 || effective.ScopeLabelKeys[0] != "tag:project" || effective.SendsPerChainPerHour != 2 || effective.MessagesPerThread != 3 || effective.MaxBodyBytes != 40 || effective.MaxHop != 0 || effective.DefaultExpirySeconds != 60 {
+	if err != nil || effective.Enabled || effective.RetentionDays != 4 || effective.ScopeLabelKeys[0] != "tag:project" || effective.SendsPerChainPerHour != 2 || effective.RevivesPerChainPerHour != 1 || effective.MessagesPerThread != 3 || effective.MaxBodyBytes != 40 || effective.MaxHop != 0 || effective.DefaultExpirySeconds != 60 {
 		t.Fatalf("clone mutated source: %+v, %v", effective, err)
 	}
 	invalid, err := Decode([]byte(`{"messaging":"bad"}`))
@@ -127,5 +130,38 @@ func TestMessagingConfigurationCloneDetachesAllMutableValues(t *testing.T) {
 	copy.Messaging.InvalidJSON[1] = 'x'
 	if bytes.Equal(copy.Messaging.InvalidJSON, invalid.Messaging.InvalidJSON) {
 		t.Fatal("invalid JSON aliases")
+	}
+}
+
+func TestReviveConfigurationRoundTripPreservesSelectedLimit(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name, document string
+		limit          int
+	}{
+		{"default", `{}`, 6},
+		{"empty limits", `{"messaging":{"limits":{}}}`, 6},
+		{"one", `{"messaging":{"limits":{"revivesPerChainPerHour":1}}}`, 1},
+		{"above default", `{"messaging":{"limits":{"revivesPerChainPerHour":9}}}`, 9},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			config, diagnostics, err := DecodeWithDiagnostics([]byte(cell.document))
+			if err != nil || len(diagnostics.IgnoredJSONPaths) != 0 {
+				t.Fatalf("decode: %v, diagnostics: %v", err, diagnostics)
+			}
+			encoded, err := Encode(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			recovered, err := Decode(encoded)
+			if err != nil || !reflect.DeepEqual(config.Messaging, recovered.Messaging) {
+				t.Fatalf("round trip changed authored limit: %v", err)
+			}
+			effective, err := recovered.Messaging.Effective()
+			if err != nil || effective.RevivesPerChainPerHour != cell.limit {
+				t.Fatalf("effective revive limit: %+v, %v", effective, err)
+			}
+		})
 	}
 }

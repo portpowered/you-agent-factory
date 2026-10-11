@@ -5,6 +5,7 @@ package wire
 
 import (
 	"crypto/sha256"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"path/filepath"
 	"strings"
 	"time"
@@ -21,16 +22,19 @@ import (
 // Construction aliases keep private components behind the owning Wire boundary.
 // Peers consume agentmessages.Service, not these assembly capabilities.
 type (
-	Journal           = store.Journal
-	Startup           = store.Startup
-	Authority         = admission.Authority
-	InputValidator    = admission.InputValidator
-	Quota             = admission.Quota
-	Ledger            = admission.Ledger
-	EventAppender     = admission.EventAppender
-	ObservationReader = admission.ObservationReader
-	Engine            = admission.Engine
-	ConfiguredService = admission.Configured
+	Journal                 = store.Journal
+	Startup                 = store.Startup
+	Authority               = admission.Authority
+	InputValidator          = admission.InputValidator
+	Quota                   = admission.Quota
+	Ledger                  = admission.Ledger
+	EventAppender           = admission.EventAppender
+	ObservationReader       = admission.ObservationReader
+	Engine                  = admission.Engine
+	ContinueOperation       = admission.ContinueOperation
+	SessionReader           = admission.SessionReader
+	ObservationStreamReader = admission.ObservationStreamReader
+	ConfiguredService       = admission.Configured
 )
 
 func NewJournal(files agentmessages.StoreFileSystem, path string) (*Journal, error) {
@@ -64,12 +68,12 @@ func NewQuota(sendsPerHour, threadMessages, maxHop int) (Quota, error) {
 	return admission.Limits{SendsPerHour: sendsPerHour, ThreadMessages: threadMessages, HopLimit: &maxHop}, nil
 }
 
-func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger) (*Engine, error) {
-	if authority == nil || validator == nil || quota == nil || ledger == nil || now == nil ||
-		newID == nil || len(cursorKey) < sha256.Size || stream == nil || logger == nil {
+func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, scheduler platformclock.TimerSource, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation, readSession SessionReader, readObservations ObservationStreamReader) (*Engine, error) {
+	if authority == nil || validator == nil || quota == nil || ledger == nil || now == nil || scheduler == nil ||
+		newID == nil || len(cursorKey) < sha256.Size || stream == nil || logger == nil || continueSession == nil || readSession == nil || readObservations == nil {
 		return nil, agentmessages.ErrBadRequest
 	}
-	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, newID, cursorKey, stream, logger), nil
+	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, scheduler, newID, cursorKey, stream, logger, continueSession, readSession, readObservations), nil
 }
 
 // NewConfiguredService supplies selected-profile lifecycle over the same Engine
