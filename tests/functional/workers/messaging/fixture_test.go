@@ -128,10 +128,18 @@ func (gate *workerGate) completedOutput(observe platformprocess.OutputChunkObser
 
 type fixture struct {
 	server    *support.FunctionalAPIServer
+	endpoint  string
 	home, dir string
 	env       []string
 	runner    *commandRunner
 	outcomes  *deliveryOutcomeSignal
+}
+
+func (f *fixture) baseURL() string {
+	if f.endpoint != "" {
+		return f.endpoint
+	}
+	return f.server.URL()
 }
 
 // One immutable profile requires one graph; leaves share its host and own
@@ -259,7 +267,7 @@ func (f *fixture) request(t *testing.T, method, path string, body any, caller ma
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), method, f.server.URL()+path, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(t.Context(), method, f.baseURL()+path, bytes.NewReader(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +303,7 @@ func (f *fixture) send(t *testing.T, request map[string]any, caller map[string]s
 
 func (f *fixture) cli(t *testing.T, caller map[string]string, args ...string) []byte {
 	t.Helper()
-	argv := append([]string{"you", "--json", "--server", f.server.URL(), "message"}, args...)
+	argv := append([]string{"you", "--json", "--server", f.baseURL(), "message"}, args...)
 	argv = append(argv, "--output", "json")
 	inputs := support.FakeInputs(t.Context(), argv)
 	inputs.Input.Env, inputs.Input.WorkingDirectory = append([]string{}, f.env...), f.dir

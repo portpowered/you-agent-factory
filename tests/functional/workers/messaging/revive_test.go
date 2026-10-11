@@ -992,7 +992,7 @@ func (f *fixture) waitEndedWorker(t *testing.T, id string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.server.URL()+"/worker-sessions/"+id+"/events", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.baseURL()+"/worker-sessions/"+id+"/events", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

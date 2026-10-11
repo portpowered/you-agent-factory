@@ -20,6 +20,7 @@ import (
 
 type recoveryCell struct {
 	name, state                                       string
+	summaryReason                                     string
 	progress, complete, active, malformed, writeFault bool
 	replayError                                       error
 }
@@ -89,6 +90,10 @@ func TestRecoveryRequiresExactAdmissionAndProviderProgress(t *testing.T) {
 		{name: "completed confirmed", state: store.IntentAccepted, progress: true, complete: true},
 		{name: "active confirmed", state: store.IntentAccepted, progress: true, complete: true, active: true},
 		{name: "active pending", state: store.IntentAdmitted, complete: true, active: true},
+		{name: "active snapshot pending", state: store.IntentAdmitted, active: true, summaryReason: "session-active"},
+		{name: "active snapshot with progress stays pending", state: store.IntentAdmitted, active: true, progress: true, summaryReason: "session-active"},
+		{name: "terminal cannot use active snapshot", state: store.IntentUncertain, summaryReason: "session-active"},
+		{name: "active incomplete capture", state: store.IntentUncertain, active: true, summaryReason: "capture-INCOMPLETE"},
 		{name: "completed without progress", state: store.IntentUncertain, complete: true},
 		{name: "incomplete replay", state: store.IntentUncertain},
 		{name: "progress in incomplete replay", state: store.IntentUncertain, progress: true},
@@ -159,7 +164,7 @@ func configureRecoveryReplay(t *testing.T, f *engineFixture, intent store.Delive
 				progress = false
 				return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{SchemaID: "workers.draft.v1", Payload: json.RawMessage(`{"kind":"RUN","phase":"STARTED","provenance":{"provider":"codex","delivery":"NATIVE_STREAM","nativeEventType":"turn.started"}}`)}}
 			}
-			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: cell.complete}}
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryReplaySummary, Summary: &workersessions.ReplaySummary{Complete: cell.complete, Reason: cell.summaryReason}}
 		}}, nil
 	}
 	return calls

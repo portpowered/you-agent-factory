@@ -18,10 +18,191 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+// Serve sequential customer host invocations on one root Process. Stopping a
+// host releases Messaging observers without closing process-owned Workers.
+type deliveryHostRebind struct{ bound chan string }
+
+func (g *deliveryHostRebind) wrap(next platformhttpserver.Starter) platformhttpserver.Starter {
+	first := true
+	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		onBound := request.OnBound
+		request.OnBound = func(binding platformhttpserver.Binding) {
+			onBound(binding)
+			g.bound <- fmt.Sprintf("http://%s:%d", binding.Host, binding.Port)
+		}
+		if first {
+			first = false
+			return next(ctx, request)
+		}
+		return support.NewProcessAPIServer().Start(ctx, request)
+	}
+}
+
+func TestActiveRecoveryRebindPreservesPendingUntilProviderProgress(t *testing.T) {
+	t.Parallel()
+	progress := make(chan struct{})
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	host := &deliveryHostRebind{bound: make(chan string, 1)}
+	core, _ := observer.New(zap.InfoLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}, workerRegistrations: make(chan string, 32)}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{ProcessLogger: zap.New(signal)}, host.wrap, revival, "lead", "lane")
+	f.endpoint = <-host.bound
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	delete(before, "~default") // Host lifecycle changes its own default Session.
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 16), make(chan error, 1)
+	go streamFramesAt(ctx, f.endpoint, "/messages?follow=true", lane, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("active recovery follow did not register")
+	}
+	request := map[string]any{"requestId": "provider-confirmation", "to": map[string]string{"workerSessionId": "lead"}, "body": "normalized continuation input"}
+	message := f.sendRaw(t, request, lane)
+	assertPendingProviderResponse(t, message)
+	assertPendingProviderFrames(t, ctx, message, frames, finished)
+	successor := <-revival.started
+	command := <-revival.requests
+	if string(command.Stdin) != message.Body || !strings.Contains(strings.Join(command.Args, " "), "resume controlled-thread") {
+		t.Fatal("active recovery changed the recorded resume input")
+	}
+	awaitActiveRecoveryObserver(t, ctx, signal, successor["YOU_WORKER_SESSION_ID"])
+	cancel()
+	<-finished
+	f.endWorker(t, "lane")
+	f.server.Stop(t)
+	ctx, cancel = context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	repeatActiveRecoveryHosts(t, ctx, f, host, signal, revival, successor, lane, request, message)
+	stop := restartActiveDeliveryHost(t, f, host)
+	defer stop()
+	ctx, cancel = context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	frames, finished = make(chan []byte, 16), make(chan error, 1)
+	go streamFramesAt(ctx, f.endpoint, "/messages?follow=true&maxResults=64", nil, frames, finished)
+	// Register the public follow before releasing provider progress.
+	// Operator observation remains read-only after the original caller ends.
+	awaitActiveRecoveryObserver(t, ctx, signal, successor["YOU_WORKER_SESSION_ID"])
+	awaitActiveRecoveryObserver(t, ctx, signal, "")
+	close(progress)
+	final := f.awaitDeliveryOutcome(t, nil, message)
+	assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, "")
+	assertActiveRecoveryRead(t, f, lane, request, final)
+	after := messageFactoryStreams(t, f, "lead", "lane")
+	delete(after, "~default")
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("active recovery changed canonical Factory Events")
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("active recovery follow did not join")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	stop()
+	f.server.Close(t)
+	assertRestartedDelivery(t, f, revival, message, final, successor["YOU_WORKER_SESSION_ID"], false)
+}
+
+func repeatActiveRecoveryHosts(t *testing.T, ctx context.Context, f *fixture, host *deliveryHostRebind, signal *subscriptionSignal,
+	revival *workerGate, successor, lane map[string]string, request map[string]any, message api.AgentMessage) {
+	t.Helper()
+	for range 2 {
+		stop := restartActiveDeliveryHost(t, f, host)
+		awaitActiveRecoveryObserver(t, ctx, signal, successor["YOU_WORKER_SESSION_ID"])
+		assertActiveRecoveryRead(t, f, lane, request, message)
+		select {
+		case <-revival.requests:
+			t.Fatal("active recovery branched another provider command")
+		default:
+		}
+		stop()
+	}
+}
+
+func restartActiveDeliveryHost(t *testing.T, f *fixture, host *deliveryHostRebind) func() {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--continuously", "--with-server", "--quiet", "--dir", f.dir, "--no-record", "--listen", "127.0.0.1:1"})
+	inputs.Input.Env, inputs.Input.WorkingDirectory = f.env, f.dir
+	done := make(chan error, 1)
+	go func() { done <- f.server.Execute(t, inputs.Input) }()
+	select {
+	case f.endpoint = <-host.bound:
+	case err := <-done:
+		t.Fatalf("replacement host failed: %v %s", err, inputs.Stderr())
+	case <-time.After(15 * time.Second):
+		t.Fatal("replacement host did not bind")
+	}
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(15 * time.Second):
+				t.Fatal("replacement host did not join")
+			}
+		})
+	}
+	t.Cleanup(stop)
+	return stop
+}
+
+func awaitActiveRecoveryObserver(t *testing.T, ctx context.Context, signal *subscriptionSignal, successor string) {
+	t.Helper()
+	for {
+		select {
+		case topic := <-signal.workerRegistrations:
+			if topic == "worker-session/"+successor+"/events" || (successor == "" && topic == "agent-messages/events") {
+				return
+			}
+		case <-ctx.Done():
+			t.Fatal("active successor observer did not register")
+		}
+	}
+}
+
+func assertActiveRecoveryRead(t *testing.T, f *fixture, lane map[string]string, request map[string]any, message api.AgentMessage) {
+	t.Helper()
+	results := make(chan outcomeSendResponse, 2)
+	for range 2 {
+		go func() {
+			status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+			results <- outcomeSendResponse{status, body}
+		}()
+	}
+	for range 2 {
+		var result outcomeSendResponse
+		select {
+		case result = <-results:
+		case <-time.After(15 * time.Second):
+			t.Fatal("active recovery retry did not complete")
+		}
+		var response api.ErrorResponse
+		if result.status != http.StatusForbidden || json.Unmarshal(result.body, &response) != nil || response.Code != "MESSAGE_NOT_PERMITTED" {
+			t.Fatalf("released host caller retained authority: %d %s", result.status, result.body)
+		}
+	}
+	page := readPage(t, f, "/messages?threadId="+message.ThreadId, nil)
+	var cli api.AgentMessageListResponse
+	if json.Unmarshal(f.cli(t, nil, "list", "--thread", message.ThreadId), &cli) != nil || len(page.Messages) != 1 ||
+		!reflect.DeepEqual(page.Messages[0], message) || !reflect.DeepEqual(cli.Messages, page.Messages) {
+		t.Fatal("rebound host lost original pending delivery or CLI/HTTP read parity")
+	}
+}
 
 // A blocked alias flush lets the real recipient subscription fill its live
 // buffer. Gates act only on injected filesystem/provider edges, not Events.
@@ -236,15 +417,16 @@ func assertBackpressureFrames(t *testing.T, ctx context.Context, frames <-chan [
 // behavioral assertion. Assertions consume only the customer HTTP stream.
 type subscriptionSignal struct {
 	zapcore.Core
-	ready             chan struct{}
-	once              *sync.Once
-	backpressureTopic string
-	registered        chan string
+	ready               chan struct{}
+	once                *sync.Once
+	backpressureTopic   string
+	registered          chan string
+	workerRegistrations chan string
 }
 
 func (c *subscriptionSignal) With(fields []zapcore.Field) zapcore.Core {
 	return &subscriptionSignal{Core: c.Core.With(fields), ready: c.ready, once: c.once, backpressureTopic: c.backpressureTopic,
-		registered: c.registered}
+		registered: c.registered, workerRegistrations: c.workerRegistrations}
 }
 func (c *subscriptionSignal) Check(entry zapcore.Entry, checked *zapcore.CheckedEntry) *zapcore.CheckedEntry {
 	if c.Enabled(entry.Level) {
@@ -268,6 +450,12 @@ func (c *subscriptionSignal) Write(entry zapcore.Entry, fields []zapcore.Field) 
 	if c.registered != nil && entry.Message == "events subscribe outcome" && values.Fields["topic"] == c.backpressureTopic && fmt.Sprint(values.Fields["limit"]) == "64" {
 		select {
 		case c.registered <- fmt.Sprint(values.Fields["from"]):
+		default:
+		}
+	}
+	if c.workerRegistrations != nil && entry.Message == "events subscribe outcome" && values.Fields["outcome"] == "accepted" && fmt.Sprint(values.Fields["limit"]) == "64" {
+		select {
+		case c.workerRegistrations <- fmt.Sprint(values.Fields["topic"]):
 		default:
 		}
 	}

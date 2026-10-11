@@ -45,7 +45,7 @@ func TestAuthorizedInboxReplyAndReconstruction(t *testing.T) {
 
 func messageFactoryStreams(t *testing.T, f *fixture, workers ...string) map[string][]api.FactoryEvent {
 	t.Helper()
-	result := map[string][]api.FactoryEvent{"~default": f.server.GetFactoryEvents(t)}
+	result := map[string][]api.FactoryEvent{"~default": support.GetFactoryEventsAt(t, f.baseURL())}
 	for _, worker := range workers {
 		status, body := f.request(t, http.MethodGet, "/worker-sessions/"+worker, nil, nil)
 		var observation api.WorkerSessionObservation
@@ -53,7 +53,7 @@ func messageFactoryStreams(t *testing.T, f *fixture, workers ...string) map[stri
 			t.Fatal("missing canonical Factory Session for running worker")
 		}
 		session := *observation.FactorySessionId
-		result[session] = support.GetFactoryEventsForSessionAt(t, f.server.URL(), session)
+		result[session] = support.GetFactoryEventsForSessionAt(t, f.baseURL(), session)
 	}
 	return result
 }

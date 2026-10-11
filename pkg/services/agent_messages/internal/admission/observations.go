@@ -347,6 +347,12 @@ func (e *Engine) recoveredProviderOutcome(ctx context.Context, intent store.Deli
 			continue
 		}
 		if !completeRecoveryReplay(delivery) {
+			// Active replay is deliberately incomplete until a terminal record
+			// exists. Exact admission still permits observing that same live
+			// successor; it never permits publishing delivery from this replay.
+			if activeRecoveryReplay(delivery, session) {
+				return store.IntentAdmitted, "REVIVE_PENDING"
+			}
 			return store.IntentUncertain, "REVIVE_FAILED"
 		}
 		if confirmed {
@@ -360,6 +366,11 @@ func (e *Engine) recoveredProviderOutcome(ctx context.Context, intent store.Deli
 		}
 		return store.IntentUncertain, "REVIVE_FAILED"
 	}
+}
+
+func activeRecoveryReplay(delivery workersessions.ObservationDelivery, session workersessions.Session) bool {
+	return !session.State.Terminal() && delivery.Kind == workersessions.ObservationDeliveryReplaySummary &&
+		delivery.Err == nil && delivery.Summary != nil && delivery.Summary.Reason == "session-active"
 }
 
 func completeRecoveryReplay(delivery workersessions.ObservationDelivery) bool {
