@@ -761,18 +761,23 @@ func TestServicePartialSubscribeFailureJoinsAndLeavesUsefulPeer(t *testing.T) {
 	}
 }
 
-func runWebhookEstablishmentFailure(t *testing.T, cancellation bool) {
-	t.Helper()
-	root := newRecordingRootStub()
-	first, waiting, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
-	var once sync.Once
-	defer once.Do(func() { close(release) })
-	cause := errors.New("controlled establishment cause")
-	failure := fmt.Errorf("subscription failed: %w", cause)
+// establishmentRecordingDouble owns the subscription gates for one failed
+// activation; peer subscriptions continue through the shared recording stub.
+type establishmentRecordingDouble struct {
+	subscribeRecordingStub
+	waiting, canceled, release chan struct{}
+	established                context.Context
+	releaseOnce                sync.Once
+}
+
+func newEstablishmentRecordingDouble(root *recordingRootStub, cancellation bool, failure error) *establishmentRecordingDouble {
+	events := &establishmentRecordingDouble{
+		waiting: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{}),
+	}
+	first := make(chan struct{})
 	var mu sync.Mutex
 	calls := 0
-	var established context.Context
-	events := subscribeRecordingStub{subscribe: func(ctx context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
+	events.subscribe = func(ctx context.Context, request recordings.SubscribeRequest) (recordings.SubscribeResult, error) {
 		if request.Scope.FactorySessionID == "peer" {
 			return root.SubscribeFrom(ctx, request)
 		}
@@ -782,25 +787,39 @@ func runWebhookEstablishmentFailure(t *testing.T, cancellation bool) {
 		mu.Unlock()
 		switch call {
 		case 1:
-			established = ctx
+			events.established = ctx
 			close(first)
 			return root.SubscribeFrom(ctx, request)
 		case 2:
 			<-first
-			close(waiting)
+			close(events.waiting)
 			<-ctx.Done()
-			close(canceled)
-			<-release // Start must join even a slow cancellation exit.
+			close(events.canceled)
+			<-events.release // Start must join even a slow cancellation exit.
 			return recordings.SubscribeResult{}, ctx.Err()
 		default:
-			<-waiting
+			<-events.waiting
 			if cancellation {
 				<-ctx.Done()
 				return recordings.SubscribeResult{}, ctx.Err()
 			}
 			return recordings.SubscribeResult{}, failure
 		}
-	}}
+	}
+	return events
+}
+
+func (events *establishmentRecordingDouble) releaseExit() {
+	events.releaseOnce.Do(func() { close(events.release) })
+}
+
+func runWebhookEstablishmentFailure(t *testing.T, cancellation bool) {
+	t.Helper()
+	root := newRecordingRootStub()
+	cause := errors.New("controlled establishment cause")
+	failure := fmt.Errorf("subscription failed: %w", cause)
+	events := newEstablishmentRecordingDouble(root, cancellation, failure)
+	defer events.releaseExit()
 	peerRequests := make(chan receivedRequest, 8)
 	service := New(events, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Path != "/peer" {
@@ -826,12 +845,12 @@ func runWebhookEstablishmentFailure(t *testing.T, cancellation bool) {
 		})
 		result <- webhookStartResult{subscription, err}
 	}()
-	awaitWebhookSignal(t, waiting)
+	awaitWebhookSignal(t, events.waiting)
 	if cancellation {
 		cancel()
 	}
-	awaitWebhookSignal(t, canceled)
-	if established.Err() != context.Canceled {
+	awaitWebhookSignal(t, events.canceled)
+	if events.established.Err() != context.Canceled {
 		t.Fatal("established endpoint was not canceled")
 	}
 	select {
@@ -847,7 +866,7 @@ func runWebhookEstablishmentFailure(t *testing.T, cancellation bool) {
 	root.Publish(recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: event})
 	got := receiveRequest(t, peerRequests)
 	assertReadyWebhookValues(t, got, event, "secret")
-	once.Do(func() { close(release) })
+	events.releaseExit()
 	value := awaitWebhookStart(t, result)
 	want := failure
 	if cancellation {
