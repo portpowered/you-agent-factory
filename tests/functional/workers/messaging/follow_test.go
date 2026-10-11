@@ -3,6 +3,8 @@ package messaging
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -109,8 +111,12 @@ func nextFrame(t *testing.T, ctx context.Context, frames <-chan []byte, finished
 }
 
 func streamFrames(ctx context.Context, server string, caller map[string]string, frames chan<- []byte, finished chan<- error) {
+	streamFramesAt(ctx, server, "/messages?follow=true&toMe=true&fromWorkerSessionId=lane", caller, frames, finished)
+}
+
+func streamFramesAt(ctx context.Context, server, path string, caller map[string]string, frames chan<- []byte, finished chan<- error) {
 	defer close(finished)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/messages?follow=true&toMe=true&fromWorkerSessionId=lane", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+path, nil)
 	if err != nil {
 		finished <- err
 		return
@@ -135,4 +141,88 @@ func streamFrames(ctx context.Context, server string, caller map[string]string, 
 		}
 	}
 	finished <- scanner.Err()
+}
+
+func TestInboxFollowPublishesOnlyAuthorizedRedactedContent(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.DebugLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), "", false, serviceedges.Edges{ProcessLogger: zap.New(signal)}, "lead", "lane", "lane-token", "other", "other-lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	tokenLane := f.invoke(t, "lane-token", lead)
+	other := f.invoke(t, "other", nil)
+	otherLane := f.invoke(t, "other-lane", other)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 8), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true&toMe=true", lead, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("follow did not register")
+	case <-finished:
+		t.Fatal("follow ended before registration")
+	}
+	foreign := f.send(t, map[string]any{"requestId": "foreign", "to": map[string]string{"workerSessionId": "other"}, "body": "unrelated private inbox"}, otherLane)
+	secret := "declared-stream-secret"
+	message := f.send(t, map[string]any{"requestId": "private", "to": map[string]string{"workerSessionId": "lead"}, "body": secret, "bodySecret": true}, lane)
+	assertRedactedFrame(t, nextFrame(t, ctx, frames, finished), message.MessageId, "SENT", foreign.MessageId, secret, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"])
+	status, _ := f.request(t, http.MethodGet, "/messages/"+message.MessageId, nil, lead)
+	if status != http.StatusOK {
+		t.Fatal("recipient could not read streamed message")
+	}
+	assertRedactedFrame(t, nextFrame(t, ctx, frames, finished), message.MessageId, "READ", foreign.MessageId, secret, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"])
+	replySecret := "private-stream-reply"
+	reply := f.send(t, map[string]any{"requestId": "private-reply", "inReplyTo": message.MessageId, "body": replySecret, "bodySecret": true}, lead)
+	assertRedactedFrame(t, nextFrame(t, ctx, frames, finished), message.MessageId, "REPLIED", foreign.MessageId, secret, replySecret, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"])
+	var inbox api.AgentMessageListResponse
+	if json.Unmarshal(f.cli(t, lane, "list", "--to-me"), &inbox) != nil || len(inbox.Messages) != 1 || inbox.Messages[0].MessageId != reply.MessageId || inbox.Messages[0].BodyRedactionCount == 0 || strings.Contains(inbox.Messages[0].Body, replySecret) {
+		t.Fatal("reply inbox exposed declared content or lost reply identity")
+	}
+	// Credential-bearing text is redacted even without bodySecret.
+	credential := "caller credential " + tokenLane["YOU_WORKER_SESSION_TOKEN"]
+	second := f.send(t, map[string]any{"requestId": "credential", "to": map[string]string{"workerSessionId": "lead"}, "body": credential}, tokenLane)
+	assertRedactedFrame(t, nextFrame(t, ctx, frames, finished), second.MessageId, "SENT", foreign.MessageId, secret, credential, tokenLane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"])
+	cancel()
+	select {
+	case <-finished:
+	case <-t.Context().Done():
+		t.Fatal("follow did not join")
+	}
+	f.server.Close(t)
+	assertPrivateStreamDiagnostics(t, logs, secret, replySecret, lane["YOU_WORKER_SESSION_TOKEN"], tokenLane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"])
+	assertPrivateArtifacts(t, f.home, []string{secret, replySecret, lane["YOU_WORKER_SESSION_TOKEN"], tokenLane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"]})
+}
+
+func assertPrivateStreamDiagnostics(t *testing.T, logs *observer.ObservedLogs, private ...string) {
+	t.Helper()
+	for _, entry := range logs.All() {
+		encoded, err := json.Marshal(entry.ContextMap())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range private {
+			if strings.Contains(entry.Message+string(encoded), value) {
+				t.Fatal("stream diagnostics exposed private content")
+			}
+		}
+	}
+}
+
+func assertRedactedFrame(t *testing.T, frame []byte, id, kind string, private ...string) {
+	t.Helper()
+	var observation api.AgentMessageObservation
+	if json.Unmarshal(frame, &observation) != nil || observation.Message.MessageId != id || string(observation.Kind) != kind {
+		t.Fatal("follow published an unrelated record or wrong transition")
+	}
+	hash := sha256.Sum256([]byte(observation.Message.Body))
+	if observation.Message.BodyRedactionCount == 0 || observation.Message.BodySha256 != hex.EncodeToString(hash[:]) {
+		t.Fatal("follow published content before privacy normalization")
+	}
+	for _, value := range private {
+		if strings.Contains(string(frame), value) {
+			t.Fatal("follow exposed private content or unrelated identity")
+		}
+	}
 }

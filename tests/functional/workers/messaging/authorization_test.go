@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -50,6 +51,55 @@ func TestInvalidCallerNeverFallsBackToOperator(t *testing.T) {
 	}
 	// The genuine lead's descendant permission survives the denied requests.
 	f.cliSend(t, lead, "lane", "--request-id", "descendant", "--body", "lead to own worker")
+}
+
+func TestEndedRecipientKeepsQueueIntentWithoutExecution(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	status, _ := f.request(t, http.MethodPost, "/worker-sessions/lead/cancel", map[string]any{}, nil)
+	if status != http.StatusOK {
+		t.Fatal("recipient cancellation failed")
+	}
+	status, before := f.request(t, http.MethodGet, "/worker-sessions/lead", nil, nil)
+	var ended api.WorkerSessionObservation
+	if status != http.StatusOK || json.Unmarshal(before, &ended) != nil || ended.State != "CANCELED" || ended.SuccessorWorkerSessionId != nil {
+		t.Fatal("recipient did not end without a successor")
+	}
+	for _, cell := range []struct{ policy, body string }{{"HOLD", "hold for later pull"}, {"", "default revive intent"}} {
+		request := map[string]any{"requestId": cell.body, "to": map[string]string{"workerSessionId": "lead"}, "body": cell.body}
+		if cell.policy != "" {
+			request["ifEnded"] = cell.policy
+		}
+		message := f.send(t, request, lane)
+		assertEndedQueueIntent(t, message, cell.policy)
+	}
+	assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "interrupt", "to": map[string]string{"workerSessionId": "lead"}, "body": "unsupported interrupt", "delivery": "INTERRUPT"}, lane, http.StatusBadRequest, "MESSAGE_INTERRUPT_UNSUPPORTED")
+	assertError(t, f, http.MethodGet, "/messages?toMe=true", nil, lead, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	if page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil); len(page.Messages) != 2 {
+		t.Fatal("refused interrupt changed the ended recipient inbox")
+	}
+	status, after := f.request(t, http.MethodGet, "/worker-sessions/lead", nil, nil)
+	if status != http.StatusOK || !bytes.Equal(before, after) {
+		t.Fatal("queued messaging changed the terminal Worker Session")
+	}
+}
+
+func assertEndedQueueIntent(t *testing.T, message api.AgentMessage, policy string) {
+	t.Helper()
+	if policy == "" {
+		policy = "REVIVE"
+	}
+	if message.Status != "QUEUED" || string(message.IfEnded) != policy || message.RevivedWorkerSessionId != nil || message.To.DeliveredWorkerSessionId != nil {
+		t.Fatal("ended recipient message changed queue intent or claimed execution")
+	}
+	if policy == "REVIVE" && (message.Reason == nil || *message.Reason != "REVIVE_UNSUPPORTED") {
+		t.Fatal("default revive intent omitted its T5 limitation")
+	}
+	if policy == "HOLD" && message.Reason != nil {
+		t.Fatal("hold incorrectly claimed unsupported revival")
+	}
 }
 
 func readPage(t *testing.T, f *fixture, path string, caller map[string]string) api.AgentMessageListResponse {
