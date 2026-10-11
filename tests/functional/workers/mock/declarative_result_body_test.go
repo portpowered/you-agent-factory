@@ -115,6 +115,121 @@ func TestFactoryFinalCapture(t *testing.T) {
 			})
 		}
 	}
+	for _, shape := range []string{"equal-messages", "same-item-snapshots"} {
+		for _, origin := range []string{"direct", "factory"} {
+			t.Run("codex/"+origin+"/"+shape, func(t *testing.T) {
+				t.Parallel()
+				runNativeMessageProjection(t, host, routes, origin, shape)
+			})
+		}
+	}
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider+"/direct/accepted-private-content", func(t *testing.T) {
+			t.Parallel()
+			dir, environment := declaredResultFactory(t), finalCaptureEnvironment(t)
+			body := "PRIVATE accepted declared-credential"
+			stdout := support.CodexSuccessStdout(body)
+			if provider == "claude" {
+				stdout = claudeNativeFinalFixture(t, body)
+			}
+			routes.setFor(dir, testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout}))
+			t.Cleanup(func() { routes.setFor(dir, nil) })
+			id := invokeNativeFinalDirect(t, host, dir, provider, environment)
+			assertNativeFinalCapture(t, host, id, provider, "PRIVATE accepted <redacted>", environment)
+		})
+	}
+}
+
+// Equal text is not a duplicate identity. Conversely, successive snapshots of
+// one item remain in logs while the transcript projects its final content once.
+func runNativeMessageProjection(t *testing.T, host *support.FunctionalAPIServer, routes *sharedWorkersMockCommandRunner, origin, shape string) {
+	t.Helper()
+	dir, environment := declaredResultFactory(t), finalCaptureEnvironment(t)
+	body := `{"decision":"ACCEPTED","output":"PRIVATE_NATIVE_FINAL"}`
+	stdout := "{\"type\":\"thread.started\",\"thread_id\":\"private-projection-thread\"}\n{\"type\":\"turn.started\"}\n"
+	texts, types, ids := []string{body, body}, []string{"item.completed", "item.completed"}, []string{"message-one", "message-two"}
+	if shape == "same-item-snapshots" {
+		texts = []string{"PRIVATE draft", "PRIVATE updated", body}
+		types, ids = []string{"item.started", "item.updated", "item.completed"}, []string{"message-one", "message-one", "message-one"}
+	}
+	for index, text := range texts {
+		record, err := json.Marshal(map[string]any{"type": types[index], "item": map[string]string{"id": ids[index], "type": "agent_message", "text": text}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdout += string(record) + "\n"
+	}
+	stdout += "{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n"
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte(stdout)})
+	routes.setFor(dir, runner)
+	t.Cleanup(func() { routes.setFor(dir, nil) })
+	id := ""
+	if origin == "direct" {
+		id = invokeNativeFinalDirect(t, host, dir, "codex", environment)
+	} else {
+		id = invokeNativeFinalFactory(t, host, dir, "codex", environment)
+	}
+	facts, err := support.WaitForObservation(30*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
+		return support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+id), nil
+	}, func(o factoryapi.WorkerSessionObservation) bool { return o.EndedAt != nil })
+	if err != nil || facts.State != "COMPLETED" {
+		t.Fatalf("physical outcome: %+v %v", facts, err)
+	}
+	page := assertRejectedCapturePages(t, host, id, environment)
+	assertNativeMessageProjection(t, page, ids, types, texts)
+	transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, host.URL()+"/worker-sessions/"+id+"/transcript")
+	want := 2
+	if shape == "same-item-snapshots" {
+		want = 1
+	}
+	if transcript.State != "COMPLETED" || len(transcript.Entries) != want {
+		t.Fatalf("genuine messages/snapshot projection: %+v want %d entries", transcript, want)
+	}
+	for _, entry := range transcript.Entries {
+		if entry.Text == nil || *entry.Text != body || entry.Type != "assistant_message" {
+			t.Fatalf("final transcript content: %+v", entry)
+		}
+	}
+	if len(runner.Requests()) != 1 {
+		t.Fatalf("provider calls=%d, want one physical turn", len(runner.Requests()))
+	}
+}
+
+func assertNativeMessageProjection(t *testing.T, page factoryapi.WorkerSessionLogPage, ids, types, texts []string) {
+	t.Helper()
+	index := 0
+	for _, event := range page.Events {
+		encoded, err := json.Marshal(event.Event.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var draft workers.Draft
+		if err := json.Unmarshal(encoded, &draft); err != nil {
+			t.Fatal(err)
+		}
+		if draft.Kind != workers.KindMessage {
+			continue
+		}
+		nativeType := strings.Replace(types[min(index, len(types)-1)], "item.", "message.", 1)
+		if nativeType == "message.updated" {
+			nativeType = "message.delta"
+		}
+		if index >= len(ids) || draft.ItemID != ids[index] || draft.Provenance.NativeEventType != nativeType || draft.Provenance.Delivery != workers.DeliveryNativeStream {
+			t.Fatalf("native message identity/source order at %d: %+v", index, draft)
+		}
+		if draft.Phase == workers.PhaseDelta {
+			var payload workers.MessageDeltaPayload
+			if err := json.Unmarshal(draft.Payload, &payload); err != nil || payload.TextDelta != texts[index] {
+				t.Fatalf("native delta content: %+v %v", payload, err)
+			}
+		} else {
+			assertCompletedEnvelope(t, draft, texts[index])
+		}
+		index++
+	}
+	if index != len(ids) {
+		t.Fatalf("native messages=%d, want %d; capture=%+v", index, len(ids), page)
+	}
 }
 
 func claudeNativeFinalFixture(t *testing.T, body string) []byte {
@@ -153,6 +268,9 @@ func invokeNativeFinalDirect(t *testing.T, host *support.FunctionalAPIServer, di
 	}
 	id := uuid.NewString()
 	document["workerSessionId"], document["requestId"] = id, id+"-request"
+	dispatch := document["execution"].(map[string]any)["dispatch"].(map[string]any)
+	dispatch["dispatchId"] = id + "-attempt"
+	dispatch["execution"].(map[string]any)["requestId"] = id + "-request"
 	data, err = json.Marshal(document)
 	if err != nil {
 		t.Fatal(err)
