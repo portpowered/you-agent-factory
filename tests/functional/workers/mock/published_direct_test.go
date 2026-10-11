@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,7 +33,18 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 	t.Parallel()
 	dir := publishedDirectMockFactory(t)
 	mockPath := filepath.Join(dir, "mock-workers.json")
-	if err := os.WriteFile(mockPath, []byte(`{"unmatchedDispatchPolicy":"accept","mockWorkers":[]}`), 0o600); err != nil {
+	mockConfig := map[string]any{"unmatchedDispatchPolicy": "accept", "mockWorkers": []map[string]any{
+		{"workstationName": "usage-cross", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 17, "outputTokens": 5, "cachedInputTokens": 0, "reasoningOutputTokens": 0}},
+		{"workstationName": "usage-match", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 17, "outputTokens": 5, "cachedInputTokens": 0, "reasoningOutputTokens": 0}},
+		{"workstationName": "usage-zero", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 0, "outputTokens": 5}},
+		{"workstationName": "usage-omitted", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "outputTokens": 5}},
+		{"workstationName": "usage-none", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}},
+	}}
+	mockBytes, err := json.Marshal(mockConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mockPath, mockBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	denied := &directExampleDeniedRunner{}
@@ -65,10 +77,95 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	t.Run("MockUsage", func(t *testing.T) {
+		for _, name := range []string{"cross", "match", "zero", "omitted", "none"} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				publishedDirectUsage(t, server, dir, environment, name)
+			})
+		}
+	})
+	t.Run("MockUsagePeerCursor", func(t *testing.T) {
+		assertMockUsagePeerCursor(t, server, dir, environment, "usage-cross", "usage-match")
+	})
 	publishedDirectMockCommands(t, server, dir, path, environment)
 	if denied.calls.Load() != 0 || nativeCalls.Load() != 0 {
 		t.Fatalf("mock example attempted native effects: commands=%d subprocess/ACP=%d", denied.calls.Load(), nativeCalls.Load())
 	}
+}
+
+func publishedDirectUsage(t *testing.T, server *support.FunctionalAPIServer, dir string, environment []string, name string) {
+	t.Helper()
+	execute := func(args ...string) string {
+		inputs := support.FakeInputs(t.Context(), append([]string{"you", "--server", server.URL(), "--json"}, args...))
+		inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+		if err := server.Execute(t, inputs.Input); err != nil {
+			t.Fatalf("%v: %v stderr=%s", args, err, inputs.Stderr())
+		}
+		return inputs.Stdout()
+	}
+	id := "usage-" + name
+	provider, model := "claude", "claude-sonnet-4-6"
+	if name == "match" {
+		provider, model = "codex", "gpt-5-codex"
+	}
+	document := publishedDirectExecutionDocument(t)
+	document["workerSessionId"], document["requestId"] = id, id+"-request"
+	execution := document["execution"].(map[string]any)
+	execution["workingDirectory"], execution["workstationName"] = dir, id
+	execution["runnerId"], execution["executorProvider"], execution["modelProvider"], execution["model"] = provider, provider, provider, model
+	execution["dispatch"] = map[string]any{"dispatchId": id + "-attempt", "workstationName": id}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, id+".json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	execute("--remote", "worker-sessions", "invoke", "--execution", path, "--async")
+	logs, err := support.WaitForObservation(30*time.Second, func() (string, error) {
+		return execute("worker-sessions", "read", "--worker-session-id", id, "--view", "logs"), nil
+	}, func(body string) bool { return strings.Contains(body, `"health":"COMPLETE"`) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(execute("worker-sessions", "show", "--worker-session-id", id)), &summary); err != nil || summary.Provider == nil || *summary.Provider != provider || summary.Model == nil || *summary.Model != model || summary.FactorySessionId != nil {
+		t.Fatalf("direct execution identity: %+v %v", summary, err)
+	}
+	assertMockUsageReadParity(t, server, dir, environment, summary, logs)
+	assertPublishedDirectUsageCounters(t, summary, logs, name, provider)
+}
+
+func assertPublishedDirectUsageCounters(t *testing.T, summary factoryapi.WorkerSessionObservation, logs, name, provider string) {
+	t.Helper()
+	if name == "none" {
+		if summary.TokenUsage != nil || strings.Contains(logs, `"kind":"USAGE"`) || !strings.Contains(logs, "MOCK_USAGE_DIRECT_OK") {
+			t.Fatalf("no declaration fabricated usage: %s", logs)
+		}
+		return
+	}
+	if summary.TokenUsage == nil {
+		t.Fatalf("declared usage missing: %s", logs)
+	}
+	total := 22
+	if name == "zero" || name == "omitted" {
+		total = 5
+		if summary.TokenUsage.CachedInputTokens != nil || summary.TokenUsage.ReasoningOutputTokens != nil || (summary.TokenUsage.InputTokens == nil) != (name == "omitted") {
+			t.Fatalf("omitted/zero classes changed: %+v", summary.TokenUsage)
+		}
+		if name == "zero" {
+			assertMockUsageObservationToken(t, summary.TokenUsage.InputTokens, 0, "input")
+		}
+	} else {
+		assertMockUsageObservationToken(t, summary.TokenUsage.InputTokens, 17, "input")
+		assertMockUsageObservationToken(t, summary.TokenUsage.CachedInputTokens, 0, "cached")
+		assertMockUsageObservationToken(t, summary.TokenUsage.ReasoningOutputTokens, 0, "reasoning")
+	}
+	assertMockUsageObservationToken(t, summary.TokenUsage.OutputTokens, 5, "output")
+	assertMockUsageObservationToken(t, summary.TokenUsage.TotalTokens, total, "total")
+	assertCapturedMockUsage(t, logs, provider, "gpt-5-codex", "MOCK_USAGE_DIRECT_OK", int64(total))
 }
 
 func publishedDirectMockCommands(t *testing.T, server *support.FunctionalAPIServer, dir, path string, environment []string) {

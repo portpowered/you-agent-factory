@@ -37,7 +37,7 @@ func applyCapturedUsageFacts(observation *workersessions.Observation, draft work
 		observation.TokenUsage = usage
 	}
 	var payload workers.UsagePayload
-	if json.Unmarshal(draft.Payload, &payload) == nil && payload.Model != "" {
+	if json.Unmarshal(draft.Payload, &payload) == nil && payload.Origin != "SYNTHETIC" && payload.Model != "" {
 		observation.Model = &payload.Model
 	}
 }
