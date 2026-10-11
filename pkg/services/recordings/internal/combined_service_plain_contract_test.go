@@ -91,7 +91,7 @@ func TestCombinedServiceProjectionPlainSlicesSuccessAndTypedFailures(t *testing.
 	t.Parallel()
 	projection := &plainReplayProjection{}
 	root := NewCombinedService(nil, projection, nil, nil, nil, nil, unavailableHistoricalOwner{},
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false)
 	assertProjectionQuery(t, root, projection)
 }
 
@@ -1107,7 +1107,7 @@ func TestNewReplayClockAndExecutionNilArtifact(t *testing.T) {
 func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 	t.Parallel()
 
-	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	_, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
 	var historicalErr *recordings.HistoricalRecordingQueryError
 	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
@@ -1122,7 +1122,7 @@ func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 func TestCombinedServiceReadHelpersRejectMalformedReplayCursor(t *testing.T) {
 	t.Parallel()
 
-	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-1"},
 		Cursor: recordings.CanonicalEventCursor{Sequence: -1},
@@ -1167,11 +1167,11 @@ func TestCombinedServiceReadHelpersValidateEventScopeCursor(t *testing.T) {
 func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 	t.Parallel()
 	want := time.Date(2026, 8, 26, 12, 0, 0, 0, time.FixedZone("test", 2*60*60))
-	zero := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	zero := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	if got := zero.recordingFinishedAt(); !got.IsZero() {
 		t.Fatalf("finished time from zero clock = %v, want zero", got)
 	}
-	explicit := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{at: want}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	explicit := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{at: want}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	if got := explicit.recordingFinishedAt(); !got.Equal(want.UTC()) || got.Location() != time.UTC {
 		t.Fatalf("finished time = %v, want UTC %v", got, want.UTC())
 	}
@@ -1223,7 +1223,7 @@ func characterizeAbandonedRecording(t *testing.T, clock recordings.RecordingCloc
 	t.Cleanup(cancel)
 	owner := &abandonedScopeLifecycle{cancel: cancel, finishErr: finishErr}
 	root := NewCombinedService(nil, nil, owner, nil, nil, nil, nil, clock,
-		logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	request := recordings.BeginRecordingScopeRequest{
 		Enabled:       true,
 		Scope:         recordings.CanonicalEventScope{FactorySessionID: t.Name()},
@@ -1251,7 +1251,7 @@ func characterizeAbandonedRecording(t *testing.T, clock recordings.RecordingCloc
 
 func TestCombinedServiceResumeInputWithoutSource(t *testing.T) {
 	t.Parallel()
-	root := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	root := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	if _, err := root.LoadResumeInput(recordings.LoadResumeInputRequest{Path: "missing.json"}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("LoadResumeInput without a replay source = %v, want ErrMissingReplayArtifact", err)
 	}
@@ -1516,7 +1516,7 @@ func TestCombinedServiceForwardsCompletedOwnerFailures(t *testing.T) {
 	replayErr := errors.New("injected replay plan failure")
 	service := NewCombinedService(nil, nil, injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
 		injectedReplayOwner{err: replayErr}, injectedCanonicalOwner{err: canonicalErr}, unavailableHistoricalOwner{},
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false)
 	_, err := service.Append(recordings.AppendRecordedEventRequest{})
 	if !errors.Is(err, canonicalErr) {
 		t.Fatalf("Append error = %v, want injected canonical cause", err)

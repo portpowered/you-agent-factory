@@ -36,6 +36,7 @@ func BuildProcess(
 		return nil, fmt.Errorf("build application process: %w", err)
 	}
 	edges.Clock, edges.ProcessScheduler = clock, scheduler
+	edges.RecordingTargetClaim = wire.NormalizeRecordingTargetClaim(edges.RecordingTargetClaim)
 	applicationProcess, err := wire.InjectBundle(ctx, serviceedges.Merge(
 		serviceedges.Edges{ModelInvocationGRPCDialer: platformgrpc.NetworkDialer{}},
 		edges,

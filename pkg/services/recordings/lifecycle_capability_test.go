@@ -1,7 +1,9 @@
 package recordings_test
 
 import (
+	"context"
 	"errors"
+	"io"
 	"reflect"
 	"testing"
 	"time"
@@ -23,7 +25,7 @@ type lifecycleAdapterOwner struct {
 }
 
 func lifecycleAdapter(owner *lifecycleAdapterOwner) recordings.RecordingLifecycle {
-	return recordingswire.NewService(nil, nil, owner, nil, nil, nil, nil, platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(recordings.RecordingLifecycle)
+	return recordingswire.NewService(nil, nil, owner, nil, nil, nil, nil, platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(recordings.RecordingLifecycle)
 }
 
 func (owner *lifecycleAdapterOwner) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
@@ -244,4 +246,8 @@ func TestRecordingLifecycle_NarrowFakeConsumption(t *testing.T) {
 	if result.Status.State != recordings.LifecycleStateFinalized {
 		t.Fatalf("Finish() State = %q, want FINALIZED", result.Status.State)
 	}
+}
+
+func unavailableTargetClaim(context.Context, string, string) (io.Closer, error) {
+	return nil, recordings.ErrRecordingBindingConflict
 }
