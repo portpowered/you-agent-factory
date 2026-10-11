@@ -682,7 +682,7 @@ func TestRecoveryRetainsOriginalReviveWindow(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			t.Parallel()
 			clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
-			first, revival, pending, successor := interruptedWindowFixture(t, clock, state)
+			first, revival, pending, successor := interruptedWindowFixture(t, clock, state, nil)
 			clock.SetTick(1800)
 			effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
 			second := startHostRunner(t, first.home, first.dir, "", effects, nil, revival, "lane-next")
@@ -706,11 +706,11 @@ func TestRecoveryRetainsOriginalReviveWindow(t *testing.T) {
 	}
 }
 
-func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, state string) (*fixture, *workerGate, api.AgentMessage, string) {
+func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, state string, result *platformprocess.CommandResult) (*fixture, *workerGate, api.AgentMessage, string) {
 	t.Helper()
 	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, state: state}
 	progress := make(chan struct{})
-	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress, result: result}
 	core, _ := observer.New(zap.InfoLevel)
 	failure := &outcomeFailureSignal{Core: core, failed: make(chan struct{}), once: &sync.Once{}}
 	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}, AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(failure)}
@@ -719,25 +719,28 @@ func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, 
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	f.endWorker(t, "lead")
-	result := make(chan outcomeSendResponse, 1)
+	responseChannel := make(chan outcomeSendResponse, 1)
 	go func() {
 		status, body := f.request(t, http.MethodPost, "/messages", map[string]any{"requestId": "window", "to": map[string]string{"workerSessionId": "lead"}, "body": "recover original clock"}, lane)
-		result <- outcomeSendResponse{status, body}
+		responseChannel <- outcomeSendResponse{status, body}
 	}()
 	successor := <-revival.started
 	<-revival.requests
 	close(progress)
+	if result != nil {
+		close(revival.release)
+	}
 	select {
 	case <-gate.entered:
 	case <-time.After(15 * time.Second):
 		t.Fatal("window fixture did not reach refused milestone")
 	}
 	gate.unblock.Do(func() { close(gate.release) })
-	response := <-result
-	if state == "ADMITTED" && response.status != http.StatusServiceUnavailable || state == "ACCEPTED" && response.status != http.StatusAccepted {
+	response := <-responseChannel
+	if state == "ADMITTED" && response.status != http.StatusServiceUnavailable || state != "ADMITTED" && response.status != http.StatusAccepted {
 		t.Fatal("wrong interrupted milestone response", response.status)
 	}
-	if state == "ACCEPTED" {
+	if state != "ADMITTED" {
 		select {
 		case <-failure.failed:
 		case <-time.After(15 * time.Second):
@@ -748,7 +751,9 @@ func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, 
 	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
 		t.Fatal("interrupted milestone guessed delivery")
 	}
-	close(revival.release)
+	if result == nil {
+		close(revival.release)
+	}
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
 	f.endWorker(t, "lane")
 	f.server.Close(t)
@@ -782,4 +787,104 @@ func assertRepeatedWindowRecovery(t *testing.T, first *fixture, revival *workerG
 		t.Fatal("recovery/window release changed Factory Events")
 	}
 	f.endWorker(t, "lane-next-two")
+}
+
+// The failed milestone is refused at the external filesystem boundary. Recovery
+// must classify the original public terminal evidence, not invent delivery or
+// replace the successor. Unclassified terminal failure must keep its chain safely reserved.
+func TestRecoveryRetainsUnclassifiedFailureAndReservesChain(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct{ name, stderr, reason string }{
+		{"execution failure", "controlled execution failure\n", "REVIVE_FAILED"},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+			result := &platformprocess.CommandResult{ExitCode: 1, Stderr: []byte(cell.stderr)}
+			first, failed, pending, successor := interruptedWindowFixture(t, clock, "FAILED", result)
+			revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+			second := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival, "lane-next")
+			recovered := second.awaitDeliveryOutcome(t, nil, pending)
+			if recovered.Reason == nil || *recovered.Reason != cell.reason {
+				_, raw := second.request(t, http.MethodGet, "/worker-sessions/"+successor, nil, nil)
+				t.Fatalf("recovery reason %v; successor %s", recovered.Reason, raw)
+			}
+			assertRejectedProviderOutcome(t, second, recovered, map[string]string{"YOU_WORKER_SESSION_ID": successor}, cell.reason)
+			assertRecoveredFailureIdentity(t, pending, recovered)
+			second.server.Close(t)
+			third := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival, "lane-next")
+			if page := readPage(t, third, "/messages?threadId="+recovered.ThreadId, nil); len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], recovered) {
+				t.Fatal("repeated recovery changed the original failure")
+			}
+			lane := third.continueCaller(t, "lane", "lane-next")
+			request := map[string]any{"requestId": "window", "to": map[string]string{"workerSessionId": "lead"}, "body": pending.Body}
+			assertProviderRetry(t, third, request, lane, recovered)
+			assertConcurrentReplay(t, third, request, lane, recovered.MessageId)
+			assertNoRecoveryCommand(t, failed, revival)
+			before := third.server.GetFactoryEvents(t)
+			allowed := third.cliSend(t, lane, "lead", "--request-id", "after-failure", "--body", "successful retry after failed admission")
+			if allowed.Status != "QUEUED" || allowed.Reason == nil || *allowed.Reason != "REVIVE_FAILED" || allowed.RevivedWorkerSessionId != nil {
+				t.Fatal("uncertain failure allowed a replacement effect")
+			}
+			assertNoRecoveryCommand(t, failed, revival)
+			if after := third.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+				t.Fatal("failure recovery or later revival changed Factory Events")
+			}
+			third.endWorker(t, "lane-next")
+		})
+	}
+}
+
+func assertRecoveredFailureIdentity(t *testing.T, pending, recovered api.AgentMessage) {
+	t.Helper()
+	pending.Reason = recovered.Reason
+	if !reflect.DeepEqual(pending, recovered) {
+		t.Fatal("failed recovery changed message identity, content or delivery facts")
+	}
+}
+
+func assertNoRecoveryCommand(t *testing.T, gates ...*workerGate) {
+	t.Helper()
+	for _, gate := range gates {
+		select {
+		case <-gate.requests:
+			t.Fatal("recovery or exact retry replaced the original provider attempt")
+		default:
+		}
+	}
+}
+
+func TestRecoveryOutcomeFlushFailureRetainsOriginalEffect(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	first, revival, pending, successor := interruptedWindowFixture(t, clock, "ACCEPTED", nil)
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, state: "ACCEPTED"}
+	close(gate.release)
+	core, _ := observer.New(zap.InfoLevel)
+	failure := &outcomeFailureSignal{Core: core, failed: make(chan struct{}), once: &sync.Once{}}
+	second := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(failure)}, nil, revival)
+	select {
+	case <-failure.failed:
+	case <-time.After(15 * time.Second):
+		t.Fatal("recovery outcome refusal did not finish")
+	}
+	page := readPage(t, second, "/messages?threadId="+pending.ThreadId, nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], pending) {
+		t.Fatal("refused recovery flush changed durable pending message")
+	}
+	assertNoRecoveryCommand(t, revival)
+	second.server.Close(t)
+	third := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival, "lane-next")
+	recovered := third.awaitDeliveryOutcome(t, nil, pending)
+	if recovered.Status != "DELIVERED_REVIVE" || recovered.RevivedWorkerSessionId == nil || *recovered.RevivedWorkerSessionId != successor {
+		t.Fatal("restored recovery did not settle the exact original effect")
+	}
+	lane := third.continueCaller(t, "lane", "lane-next")
+	request := map[string]any{"requestId": "window", "to": map[string]string{"workerSessionId": "lead"}, "body": pending.Body}
+	assertProviderRetry(t, third, request, lane, recovered)
+	assertConcurrentReplay(t, third, request, lane, recovered.MessageId)
+	assertNoRecoveryCommand(t, revival)
+	third.endWorker(t, "lane-next")
+	third.server.Close(t)
+	assertRestartedDelivery(t, third, revival, pending, recovered, successor, false)
 }

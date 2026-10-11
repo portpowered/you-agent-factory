@@ -121,7 +121,7 @@ func (c *outcomeFailureSignal) Check(entry zapcore.Entry, checked *zapcore.Check
 }
 
 func (c *outcomeFailureSignal) Write(entry zapcore.Entry, fields []zapcore.Field) error {
-	if entry.Message == "Agent Message revival outcome unavailable" {
+	if entry.Message == "Agent Message revival outcome unavailable" || entry.Message == "Agent Message recovery unavailable" {
 		c.once.Do(func() { close(c.failed) })
 	}
 	return c.Core.Write(entry, fields)
