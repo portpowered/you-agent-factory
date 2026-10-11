@@ -435,6 +435,7 @@ func documentConfig(document operatorsettings.Document) operatorsettings.Config 
 			Subagent:            document.Defaults.Subagent.Clone(),
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		Messaging:  document.Messaging.Clone(),
 		PriceTable: document.PriceTable.Clone(),
 		Models:     cloneModelConfigs(document.Models),
 		Runtime: operatorsettings.RuntimeSettings{
@@ -496,6 +497,7 @@ func normalizedDocument(config operatorsettings.Config) (operatorsettings.Docume
 			Subagent:            normalized.Defaults.Subagent.Clone(),
 			WorkerModel:         normalized.Defaults.WorkerModel,
 		},
+		Messaging:  normalized.Messaging.Clone(),
 		PriceTable: normalized.PriceTable.Clone(),
 		Models:     cloneModelConfigs(normalized.Models),
 		Runtime: operatorsettings.DocumentRuntimeSettings{

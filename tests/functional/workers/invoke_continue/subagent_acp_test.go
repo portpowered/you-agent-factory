@@ -70,7 +70,7 @@ func TestSubagentOpenCodeDefault(t *testing.T) {
 		}
 	})
 	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
-	profile := []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"generic-model","futureDefault":"retained","subagent":{"provider":"opencode","model":"controlled-free-model"}},"futureRoot":{"owner":"retained"}}`)
+	profile := []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"generic-model","futureDefault":"retained","subagent":{"provider":"opencode","model":"controlled-free-model"}},"futureRoot":{"owner":"retained"},"messaging":{"enabled":false,"retentionDays":7,"limits":{"maxHop":0}}}`)
 	if err := os.WriteFile(configPath, profile, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func preserveSavedSubagentRoute(t *testing.T, host invokeContinueStartedProcess,
 	defaults := saved["defaults"].(map[string]any)
 	wantRoute := map[string]any{"provider": "OPENCODE", "model": "controlled-free-model"}
 	if !reflect.DeepEqual(defaults["subagent"], wantRoute) || defaults["workerModelProvider"] != "claude" || defaults["workerModel"] != "updated-generic-model" ||
-		defaults["futureDefault"] != original["defaults"].(map[string]any)["futureDefault"] || !reflect.DeepEqual(saved["futureRoot"], original["futureRoot"]) {
+		defaults["futureDefault"] != original["defaults"].(map[string]any)["futureDefault"] || !reflect.DeepEqual(saved["futureRoot"], original["futureRoot"]) || !reflect.DeepEqual(saved["messaging"], original["messaging"]) {
 		t.Fatalf("settings update did not preserve the dedicated route and siblings: %s", after)
 	}
 	return after
