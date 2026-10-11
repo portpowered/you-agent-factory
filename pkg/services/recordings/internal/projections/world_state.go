@@ -63,7 +63,9 @@ func reconstructCanonicalFactoryWorldState(
 
 	for _, event := range ordered {
 		if event.Context.Tick > selectedTick {
-			break
+			// Resumption can reset ticks. Selection filters eligibility without
+			// stopping the causally ordered history at an earlier higher tick.
+			continue
 		}
 		if err := reducer.apply(event); err != nil {
 			return interfaces.FactoryWorldState{}, err
@@ -86,11 +88,13 @@ func factoryEventsInReplayOrder(events []interfaces.FactoryEvent) bool {
 }
 
 func factoryEventBefore(left, right interfaces.FactoryEvent) bool {
-	if left.Context.Tick != right.Context.Tick {
-		return left.Context.Tick < right.Context.Tick
-	}
+	// Canonical sequence orders recorded facts across resumed generations.
+	// Legacy events with no sequence retain tick/time/ID ordering.
 	if left.Context.Sequence != right.Context.Sequence {
 		return left.Context.Sequence < right.Context.Sequence
+	}
+	if left.Context.Tick != right.Context.Tick {
+		return left.Context.Tick < right.Context.Tick
 	}
 	if !left.Context.EventTime.Equal(right.Context.EventTime) {
 		return left.Context.EventTime.Before(right.Context.EventTime)

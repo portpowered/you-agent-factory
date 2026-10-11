@@ -36,6 +36,56 @@ func TestReconstructFactoryWorldState_BuildsCanonicalWorkPayloadLineage(t *testi
 	assertNewDownstreamOutputSnapshot(t, lineage.ResolveOutputWorkSnapshot("dispatch-1", "work-2"))
 }
 
+func TestResumedDispatchPayloadLineagePreservesCanceledAndAcceptedPrefixes(t *testing.T) {
+	t.Parallel()
+	t0 := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	initial := projectionWorkItem("work-1", "Draft", "trace-1", "task:init", "submitted")
+	completed := projectionWorkItem("work-1", "Draft", "trace-1", "task:complete", "accepted")
+	canceled := lineageDispatchResponseEvent(t, t0, 4, "original", "canceled", "t-review", []string{"trace-1"}, []string{"work-1"}, initial)
+	payload, err := canceled.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload.Outcome = factoryapi.WorkOutcomeCanceled
+	if err := canceled.Payload.FromDispatchResponseEventPayload(payload); err != nil {
+		t.Fatal(err)
+	}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		lineageWorkRequestEvent(t, t0, 1, "submitted", "request", []string{"trace-1"}, []string{"work-1"}, initial),
+		lineageWorkstationRequestEvent(2, t0, "original", "t-review", "Review", "work-1", initial),
+		canceled,
+		lineageWorkstationRequestEvent(2, t0.Add(5*time.Second), "retry", "t-review", "Review", "work-1", initial),
+		lineageDispatchResponseEvent(t, t0.Add(5*time.Second), 3, "retry", "accepted", "t-review", []string{"trace-1"}, []string{"work-1"}, completed),
+	}
+	for index := range events {
+		events[index].Context.Sequence = index
+	}
+	events[3].Context.Sequence = 11
+	events[4].Context.Sequence = 14
+	events[5].Context.Sequence = 21
+	for _, cell := range []struct {
+		end         int
+		state, text string
+	}{{4, "init", "submitted"}, {6, "complete", "accepted"}} {
+		state, err := ReconstructFactoryWorldState(events[:cell.end], 4)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item := state.WorkItemsByID["work-1"]
+		if item.State != cell.state || item.Content[0].Text != cell.text {
+			t.Fatalf("prefix %d Work = %#v", cell.end, item)
+		}
+		selected := state.PayloadLineage.ResolveSelectedWorkSnapshot("work-1")
+		if selected.Snapshot == nil || selected.Snapshot.WorkItem.Content[0].Text != cell.text {
+			t.Fatalf("prefix %d selected = %#v", cell.end, selected)
+		}
+		if cell.end == 4 && len(state.TerminalWorkByID) != 0 {
+			t.Fatal("canceled prefix fabricated completion")
+		}
+	}
+}
+
 func TestReconstructFactoryWorldState_ResolvesDownstreamOutputForLaterSelectionAndChainedConsumption(t *testing.T) {
 	events := downstreamLineageProjectionEvents(t, time.Date(2026, 5, 1, 11, 0, 0, 0, time.UTC))
 
