@@ -86,3 +86,51 @@ func assertPrivateArtifacts(t *testing.T, root string, private []string) {
 		t.Fatal(err)
 	}
 }
+
+func TestConcurrentRepliesCommitOneParentTransition(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	parent := f.cliSend(t, lane, "lead", "--request-id", "parent", "--body", "concurrent reply parent")
+	type outcome struct {
+		status int
+		bytes  []byte
+	}
+	results := make(chan outcome, 2)
+	start := make(chan struct{})
+	for _, id := range []string{"reply-a", "reply-b"} {
+		go func() {
+			<-start
+			status, bytes := f.request(t, http.MethodPost, "/messages", map[string]any{"requestId": id, "inReplyTo": parent.MessageId, "body": id}, lead)
+			results <- outcome{status, bytes}
+		}()
+	}
+	close(start)
+	winner := ""
+	for range 2 {
+		result := <-results
+		switch result.status {
+		case http.StatusAccepted:
+			var reply api.AgentMessageSendResponse
+			if json.Unmarshal(result.bytes, &reply) != nil || winner != "" || reply.Message.ThreadId != parent.ThreadId {
+				t.Fatal("concurrent replies admitted multiple or malformed winners")
+			}
+			winner = reply.Message.MessageId
+		case http.StatusBadRequest:
+			var failure api.ErrorResponse
+			if json.Unmarshal(result.bytes, &failure) != nil || failure.Code != "MESSAGE_INVALID_REQUEST" {
+				t.Fatalf("reply loser was not typed: %s", result.bytes)
+			}
+		default:
+			t.Fatalf("unexpected concurrent reply outcome: %d %s", result.status, result.bytes)
+		}
+	}
+	if winner == "" {
+		t.Fatal("no reply was admitted")
+	}
+	assertRepliedParent(t, f, parent.MessageId, winner)
+	if page := readPage(t, f, "/messages?threadId="+parent.ThreadId, nil); len(page.Messages) != 2 {
+		t.Fatal("concurrent reply left an orphan or duplicate thread row")
+	}
+}
