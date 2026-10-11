@@ -144,6 +144,9 @@ func interruptContinuationAssociation(req workersessions.ContinueRequest, execut
 // The interrupt owner already synced input and joined the exact source. Reuse
 // continuation admission/lineage without re-reading mutable source input.
 func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.ContinueResult, error) {
+	if err := r.resolveDirectCapacity(r.serverOwnedContext()); err != nil {
+		return workersessions.ContinueResult{}, err
+	}
 	req := workersessions.ContinueRequest{FactorySessionID: plan.request.FactorySessionID, RequestID: interruptContinuationRequestID(plan.request.RequestID),
 		SourceWorkerSessionID: plan.request.SourceWorkerSessionID, SuccessorWorkerSessionID: plan.request.SuccessorWorkerSessionID,
 		FollowUpInput: plan.request.ReplacementMessage}
@@ -174,6 +177,10 @@ func (r *registry) admitInterruptSuccessor(plan interruptPlan) (workersessions.C
 	}
 	if r.continueReplays == nil {
 		r.continueReplays = make(map[string]*continueReplay)
+	}
+	if err := r.chargeDirectLocked(req.SuccessorWorkerSessionID); err != nil {
+		r.mu.Unlock()
+		return workersessions.ContinueResult{}, err
 	}
 	replay := r.storeContinuationReservationLocked(req, continueTuple{sourceID: address, successorID: req.SuccessorWorkerSessionID, input: req.FollowUpInput}, snapshot, execution)
 	replay.plan.interrupt = true

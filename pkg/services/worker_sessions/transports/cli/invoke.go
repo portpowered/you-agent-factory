@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	capacityresponse "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/internal/capacity"
 	"io"
 	"net/http"
 	"net/url"
@@ -850,6 +851,12 @@ func remoteInvokeStreamTransportError(config InvokeConfig, err error) error {
 }
 
 func remoteInvokeHTTPError(response *http.Response, status int) error {
+	if status == http.StatusTooManyRequests {
+		if capacity, valid := capacityresponse.Decode(response.Body); valid {
+			return newCLIError(capacityresponse.Code, capacity.Error(), nil)
+		}
+		return newCLIError("WORKER_SESSION_ADMISSION_FAILED", "Selected host returned an invalid capacity refusal", nil)
+	}
 	if apiError, ok := clihttp.DecodeAPIError(response); ok {
 		code := strings.TrimSpace(string(apiError.Code))
 		switch code {
@@ -880,6 +887,10 @@ func remoteInvokeStreamHTTPError(response *http.Response, status int) error {
 }
 
 func mapInvokeServiceError(err error, _ bool) error {
+	var capacity workersessions.DirectCapacityFailure
+	if errors.As(err, &capacity) {
+		return newCLIError(capacityresponse.Code, capacity.Error(), err)
+	}
 	if errors.Is(err, context.Canceled) {
 		return newCLIError("WORKER_SESSION_INVOKE_INTERRUPTED", "Worker Session invocation was interrupted", context.Canceled)
 	}

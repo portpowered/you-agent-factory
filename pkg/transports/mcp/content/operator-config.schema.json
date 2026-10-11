@@ -344,6 +344,13 @@
       "additionalProperties": true,
       "description": "Operator defaults that participate independently in file, environment, and flag precedence.",
       "properties": {
+        "directSessionCapacity": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1,
+          "default": 16,
+          "description": "File-only maximum concurrent direct Worker Session attempts on this host. Omission resolves to 16."
+        },
         "workerModelProvider": {
           "type": "string",
           "description": "Default worker model provider, including supported aliases and symbolic DEFAULT resolution."

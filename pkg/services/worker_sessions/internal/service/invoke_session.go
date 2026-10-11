@@ -539,6 +539,7 @@ func (r *registry) driveInvocation(ctx context.Context, req workersessions.Invok
 
 func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersessions.InvokeSessionRequest, supervision *supervision) (workersessions.InvokeSessionResult, error) {
 	defer supervision.signalDriverDone()
+	defer r.releaseDirect(req.ID)
 	supervision.mu.Lock()
 	supervision.retryBudget = req.Retry.Attempts()
 	supervision.mu.Unlock()

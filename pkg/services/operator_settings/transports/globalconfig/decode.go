@@ -48,6 +48,9 @@ func DecodeWithDiagnostics(
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
 	}
 
+	if err := validateDirectCapacityJSON(normalized); err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
+	}
 	if err := validateSubagentJSON(normalized); err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
 	}
@@ -350,6 +353,9 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 			WorkerModel:         optionalString(generated.Defaults.WorkerModel),
 		}
 	}
+	if generated.Defaults != nil {
+		config.Defaults.DirectSessionCapacity = generated.Defaults.DirectSessionCapacity
+	}
 	if generated.Defaults != nil && generated.Defaults.Subagent != nil {
 		route := generated.Defaults.Subagent
 		config.Defaults.Subagent = &operatorsettings.SubagentRoute{Provider: route.Provider, Model: route.Model, ReasoningEffort: optionalString(route.ReasoningEffort)}
@@ -563,8 +569,9 @@ func encodeDefaults(defaults operatorsettings.Defaults) *factoryapi.GlobalConfig
 		return nil
 	}
 	result := &factoryapi.GlobalConfigDefaults{
-		WorkerModelProvider: optionalStringPointer(defaults.WorkerModelProvider),
-		WorkerModel:         optionalStringPointer(defaults.WorkerModel),
+		DirectSessionCapacity: defaults.CloneCapacity(),
+		WorkerModelProvider:   optionalStringPointer(defaults.WorkerModelProvider),
+		WorkerModel:           optionalStringPointer(defaults.WorkerModel),
 	}
 	if defaults.Subagent != nil {
 		route := defaults.Subagent

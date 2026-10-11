@@ -174,6 +174,15 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 }
 
 func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
+	var capacity workersessions.DirectCapacityFailure
+	if errors.As(err, &capacity) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		response := factoryapi.WorkerSessionStartCapacityResponse{Message: "Selected host direct capacity is full. Retry after an attempt ends.", Family: "CONFLICT", Code: "WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED"}
+		response.Details.Host, response.Details.Capacity = capacity.PublicHost(), capacity.Capacity
+		_ = json.NewEncoder(w).Encode(response)
+		return
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
@@ -182,6 +191,8 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, "Worker Session caller credentials are invalid", string(factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID))
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return
+	case errors.Is(err, operatorsettings.ErrDocumentMalformed), errors.Is(err, operatorsettings.ErrDocumentNotFound):
+		writeError(w, http.StatusBadRequest, "repair the selected host operator configuration and restart the host", "BAD_REQUEST")
 	case errors.Is(err, workersessions.ErrInvalidStartRequestID),
 		errors.Is(err, workersessions.ErrInvalidSessionID),
 		errors.Is(err, workersessions.ErrInvalidExecutionRequest),

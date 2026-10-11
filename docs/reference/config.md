@@ -234,3 +234,29 @@ Use `you docs authoring-factories` for the authoring sequence and
   field detail
 - `you docs resources`, `you docs templates`, and `you docs sessions` for
   capacity, prompts, and live Factory Session operations
+
+## Direct Worker Session capacity
+
+Set `defaults.directSessionCapacity` in the selected host's
+`~/.you-agent-factory/config.json`:
+
+```json
+{"defaults":{"directSessionCapacity":16}}
+```
+
+Use a positive integer. Omission selects 16; null, zero, negative values,
+fractions, strings, and values outside int64 are invalid. This file-only setting
+has no environment, CLI, per-call, or MCP-tool override. Existing subagent route
+and other settings remain independent.
+
+The host freezes the saved bound when it first admits a direct request.
+Restart the selected host after editing this value. Running attempts retain
+capacity after their callers disconnect. A slot becomes available after the
+attempt's execution and publication join, including failure or cancellation.
+Retained history consumes no capacity. Factory worker resources remain separate.
+
+A full host refuses new START requests with HTTP 429 and
+`WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED`. Retry after an attempt ends.
+The host does not queue, retry, or select another provider or host.
+Removing the key restores 16 on restart. Rolling back to an older binary
+removes this direct admission limit.

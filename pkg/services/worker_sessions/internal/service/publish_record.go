@@ -342,6 +342,12 @@ func (r *registry) startReservedWithEffects(
 	req workersessions.StartRequest, executor workers.Service,
 	clock platformclock.Source, scheduler platformclock.TimerSource,
 ) (workersessions.StartResult, error) {
+	driverOwned := false
+	defer func() {
+		if !driverOwned {
+			r.releaseDirect(req.ID)
+		}
+	}()
 	runtimeID := strings.TrimSpace(req.Execution.Execution.RuntimeID)
 	if runtimeID != "" {
 		if !r.beginRuntimeOpening(runtimeID) {
@@ -376,6 +382,7 @@ func (r *registry) startReservedWithEffects(
 		Execution: req.Execution,
 		Retry:     req.Retry,
 	}
+	driverOwned = true
 	go func() {
 		r.driveRegisteredInvocation(serverCtx, invokeReq, prepared.supervision)
 	}()

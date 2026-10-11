@@ -246,6 +246,13 @@ func (r *registry) reserveContinuation(
 	if req.ResolveHead {
 		req = head
 	}
+	ctx := context.Background()
+	if len(callers) > 0 && callers[0] != nil {
+		ctx = context.WithoutCancel(callers[0])
+	}
+	if err := r.resolveDirectCapacity(ctx); err != nil {
+		return nil, false, err
+	}
 	return r.reserveResolvedContinuation(req, addressed, tuple, callers...)
 }
 
@@ -328,6 +335,9 @@ func (r *registry) reserveAvailableContinuationLocked(
 		return nil, false, workersessions.ErrContinuationExecutionUnavailable
 	}
 	if _, err := r.buildContinuationExecutionLocked(req, current); err != nil {
+		return nil, false, err
+	}
+	if err := r.chargeDirectLocked(req.SuccessorWorkerSessionID); err != nil {
 		return nil, false, err
 	}
 	replay := r.storeContinuationReservationLocked(req, tuple, snapshot, continuation)
@@ -592,6 +602,12 @@ func continuationDispatchID(sourceDispatchID, successorID string) string {
 }
 
 func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueResult, error) {
+	driverOwned := false
+	defer func() {
+		if !driverOwned {
+			r.releaseDirect(plan.request.SuccessorWorkerSessionID)
+		}
+	}()
 	if err := r.persistContinuationInput(plan); err != nil {
 		r.releaseContinuationReservation(plan)
 		return r.continuationResult(plan), continuationNotAccepted(err)
@@ -638,6 +654,7 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 			Session:                  prepared.session,
 		}, continuationNotAccepted(prepared.failure)
 	}
+	driverOwned = true
 	go r.driveRegisteredInvocation(serverCtx, invoke, prepared.supervision)
 	select {
 	case <-prepared.supervision.admitted:

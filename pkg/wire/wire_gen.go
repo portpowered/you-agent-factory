@@ -654,7 +654,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	v184 := provideWorkerHistorySnapshotBudget()
-	workersessionsService, err := provideWorkerSessionsService(edges2, workersService, eventsService, loggingLogger, source, timerSource, v179, v181, v182, v183, v184, service, providersessionsService)
+	workersessionsService, err := provideWorkerSessionsService(edges2, workersService, eventsService, loggingLogger, source, timerSource, v179, v181, v182, v183, v184, service, providersessionsService, operatorsettingsService, homeDirectoryResolver)
 	if err != nil {
 		return nil, err
 	}

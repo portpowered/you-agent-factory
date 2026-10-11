@@ -573,6 +573,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           $ref: '#/components/responses/WorkerSessionStartConflict'
+        '429':
+          $ref: '#/components/responses/WorkerSessionStartCapacity'
         '503':
           $ref: '#/components/responses/WorkerSessionStartUnavailable'
   /worker-sessions/{worker_session_id}:
@@ -3224,6 +3226,19 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    WorkerSessionStartCapacity:
+      description: Selected host direct capacity is full. Retry after an attempt ends.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/WorkerSessionStartCapacityResponse'
+          example:
+            message: Selected host direct capacity is full. Retry after an attempt ends.
+            family: CONFLICT
+            code: WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED
+            details:
+              host: http://127.0.0.1:17437
+              capacity: 2
     WorkerSessionStartUnavailable:
       description: The Worker Session could not cross its event-readiness or Workers-admission barrier.
       content:
@@ -4187,6 +4202,39 @@ components:
           minimum: 1
           maximum: 9223372036854
           description: Execution duration in milliseconds. Omission sets no execution deadline.
+    WorkerSessionStartCapacityResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+        - family
+        - code
+        - details
+      properties:
+        message:
+          type: string
+        family:
+          type: string
+          enum:
+            - CONFLICT
+        code:
+          type: string
+          enum:
+            - WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED
+        details:
+          type: object
+          additionalProperties: false
+          required:
+            - host
+            - capacity
+          properties:
+            host:
+              type: string
+              minLength: 1
+            capacity:
+              type: integer
+              format: int64
+              minimum: 1
     WorkerSessionStartResponse:
       type: object
       additionalProperties: false
@@ -15710,6 +15758,12 @@ components:
       additionalProperties: true
       description: Operator defaults that participate independently in file, environment, and flag precedence.
       properties:
+        directSessionCapacity:
+          type: integer
+          format: int64
+          minimum: 1
+          default: 16
+          description: File-only maximum concurrent direct Worker Session attempts on this host. Omission resolves to 16.
         workerModelProvider:
           type: string
           description: Default worker model provider, including supported aliases and symbolic DEFAULT resolution.

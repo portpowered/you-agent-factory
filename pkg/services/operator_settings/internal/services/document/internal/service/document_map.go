@@ -10,9 +10,10 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 	document := operatorsettings.Document{
 		BackendScopeID: strings.TrimSpace(config.BackendScopeID),
 		Defaults: operatorsettings.DocumentDefaults{
-			WorkerModelProvider: config.Defaults.WorkerModelProvider,
-			Subagent:            config.Defaults.Subagent.Clone(),
-			WorkerModel:         config.Defaults.WorkerModel,
+			WorkerModelProvider:   config.Defaults.WorkerModelProvider,
+			Subagent:              config.Defaults.Subagent.Clone(),
+			DirectSessionCapacity: config.Defaults.CloneCapacity(),
+			WorkerModel:           config.Defaults.WorkerModel,
 		},
 		Messaging:  config.Messaging.Clone(),
 		PriceTable: config.PriceTable.Clone(),
@@ -58,9 +59,10 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 	config := operatorsettings.Config{
 		BackendScopeID: document.BackendScopeID,
 		Defaults: operatorsettings.Defaults{
-			WorkerModelProvider: document.Defaults.WorkerModelProvider,
-			Subagent:            document.Defaults.Subagent.Clone(),
-			WorkerModel:         document.Defaults.WorkerModel,
+			WorkerModelProvider:   document.Defaults.WorkerModelProvider,
+			Subagent:              document.Defaults.Subagent.Clone(),
+			DirectSessionCapacity: document.Defaults.CloneCapacity(),
+			WorkerModel:           document.Defaults.WorkerModel,
 		},
 		Messaging:  document.Messaging.Clone(),
 		PriceTable: document.PriceTable.Clone(),

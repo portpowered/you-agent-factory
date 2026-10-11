@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	capacityresponse "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/internal/capacity"
 	"io"
 	"net/http"
 	"slices"
@@ -47,6 +48,16 @@ func responseFailure(response *http.Response, err error, id string) *toolError {
 		failure.Code = "worker_session.internal_error"
 	}
 	failure.Message = "Selected host rejected the Worker Session request"
+	if response.StatusCode == http.StatusTooManyRequests {
+		if capacity, valid := capacityresponse.Decode(response.Body); valid {
+			failure.Code = "worker_session.capacity_exceeded"
+			failure.Message = "Selected host direct Worker Session capacity is full. Retry after an attempt ends."
+			failure.Retryable = true
+			failure.Details["upstreamCode"] = capacityresponse.Code
+			failure.Details["host"], failure.Details["capacity"] = capacity.Host, capacity.Capacity
+		}
+		return failure
+	}
 	readSafeFailureDetails(response, failure, id)
 	setStartFailureGuidance(failure)
 	// A lost capture is permanently unavailable, even though the HTTP contract

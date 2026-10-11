@@ -1720,6 +1720,18 @@ export interface components {
        */
       timeoutMillis?: number;
     } & (unknown | unknown);
+    WorkerSessionStartCapacityResponse: {
+      message: string;
+      /** @enum {string} */
+      family: WorkerSessionStartCapacityResponseFamily;
+      /** @enum {string} */
+      code: WorkerSessionStartCapacityResponseCode;
+      details: {
+        host: string;
+        /** Format: int64 */
+        capacity: number;
+      };
+    };
     /** @description Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous. */
     WorkerSessionStartResponse: {
       /** @description Caller idempotency key echoed for correlation. */
@@ -7390,6 +7402,12 @@ export interface components {
     };
     /** @description Operator defaults that participate independently in file, environment, and flag precedence. */
     GlobalConfigDefaults: {
+      /**
+       * Format: int64
+       * @description File-only maximum concurrent direct Worker Session attempts on this host. Omission resolves to 16.
+       * @default 16
+       */
+      directSessionCapacity: number;
       /** @description Default worker model provider, including supported aliases and symbolic DEFAULT resolution. */
       workerModelProvider?: string;
       /** @description Default worker model name. */
@@ -8277,6 +8295,26 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description Selected host direct capacity is full. Retry after an attempt ends. */
+    WorkerSessionStartCapacity: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        /**
+         * @example {
+         *       "message": "Selected host direct capacity is full. Retry after an attempt ends.",
+         *       "family": "CONFLICT",
+         *       "code": "WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED",
+         *       "details": {
+         *         "host": "http://127.0.0.1:17437",
+         *         "capacity": 2
+         *       }
+         *     }
+         */
+        "application/json": components["schemas"]["WorkerSessionStartCapacityResponse"];
+      };
+    };
     /** @description The Worker Session could not cross its event-readiness or Workers-admission barrier. */
     WorkerSessionStartUnavailable: {
       headers: {
@@ -8815,6 +8853,7 @@ export interface operations {
         };
       };
       409: components["responses"]["WorkerSessionStartConflict"];
+      429: components["responses"]["WorkerSessionStartCapacity"];
       503: components["responses"]["WorkerSessionStartUnavailable"];
     };
   };
@@ -11131,6 +11170,17 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const WorkerSessionStartCapacityResponseFamily = {
+  CONFLICT: "CONFLICT",
+} as const;
+export type WorkerSessionStartCapacityResponseFamily =
+  (typeof WorkerSessionStartCapacityResponseFamily)[keyof typeof WorkerSessionStartCapacityResponseFamily];
+export const WorkerSessionStartCapacityResponseCode = {
+  WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED:
+    "WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED",
+} as const;
+export type WorkerSessionStartCapacityResponseCode =
+  (typeof WorkerSessionStartCapacityResponseCode)[keyof typeof WorkerSessionStartCapacityResponseCode];
 export const WorkerSessionStartResponseState = {
   WorkerSessionStartResponseStateReserved: "RESERVED",
   WorkerSessionStartResponseStateStarting: "STARTING",

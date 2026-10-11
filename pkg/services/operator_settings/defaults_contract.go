@@ -50,9 +50,10 @@ const (
 
 // Defaults holds raw operator default values before precedence resolution.
 type Defaults struct {
-	Subagent            *SubagentRoute
-	WorkerModelProvider string
-	WorkerModel         string
+	DirectSessionCapacity *int64
+	Subagent              *SubagentRoute
+	WorkerModelProvider   string
+	WorkerModel           string
 }
 
 // WorkerPreset is a reusable, file-only child-worker configuration.
@@ -297,6 +298,9 @@ func defaultRuntimeSettings() RuntimeSettings {
 
 // Normalize trims decoded values and validates file-only worker presets.
 func (cfg Config) Normalize() (Config, error) {
+	if _, err := cfg.Defaults.ResolveDirectSessionCapacity(); err != nil {
+		return Config{}, err
+	}
 	subagent, err := cfg.Defaults.Subagent.Normalize()
 	if err != nil {
 		return Config{}, err
@@ -325,9 +329,10 @@ func (cfg Config) Normalize() (Config, error) {
 		BackendScopeID: strings.TrimSpace(cfg.BackendScopeID),
 		PriceTable:     priceTable,
 		Defaults: Defaults{
-			Subagent:            subagent,
-			WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
-			WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
+			Subagent:              subagent,
+			DirectSessionCapacity: cloneCapacity(cfg.Defaults.DirectSessionCapacity),
+			WorkerModelProvider:   strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
+			WorkerModel:           strings.TrimSpace(cfg.Defaults.WorkerModel),
 		},
 		Runtime:       runtime,
 		Messaging:     cfg.Messaging.Clone(),

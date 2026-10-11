@@ -679,6 +679,9 @@ func (r *registry) runInterruptExecution(plan interruptPlan, operation *recordin
 		return result, newInterruptError(workersessions.InterruptPhaseSourceCancellation, result, cause)
 	}
 	<-plan.supervision.done
+	if plan.supervision.driverDone != nil {
+		<-plan.supervision.driverDone
+	}
 	source := r.interruptResultSnapshot(plan.request, workersessions.InterruptPhaseSourceCancellation, false, plan.sourceAddressOrID()).Source
 	if source.State != workersessions.StateCanceled {
 		cause := fmt.Errorf("%w: authoritative source state is %s", workersessions.ErrInterruptSourceCancellationFailed, source.State)

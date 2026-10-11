@@ -17,7 +17,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -127,12 +129,24 @@ func provideWorkerSessionsService(
 	snapshots *workersessionswire.HistorySnapshotBudget,
 	providerService providers.Service,
 	inspection providersessions.Service,
+	settings operatorsettings.Service,
+	home factorysessions.HomeDirectoryResolver,
 ) (workersessions.Service, error) {
 	tokenEntropy := edges.WorkerSessionTokenEntropy
 	if tokenEntropy == nil {
 		tokenEntropy = rand.Reader
 	}
-	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, logs, operations, restart, snapshots, providerService, inspection, tokenEntropy)
+	return workersessionswire.NewService(execution, eventsService, logger, clock, scheduler, recorder, logs, operations, restart, snapshots, providerService, inspection, tokenEntropy, func(ctx context.Context) (int64, error) {
+		homeDirectory, err := home()
+		if err != nil {
+			return 0, operatorsettings.ErrDocumentMalformed
+		}
+		loaded, err := settings.LoadDocument(operatorsettings.LoadDocumentRequest{Path: settings.DefaultConfigPath(homeDirectory)})
+		if err != nil {
+			return 0, err
+		}
+		return loaded.Document.Defaults.ResolveDirectSessionCapacity()
+	})
 }
 
 func provideWorkerAttemptOpener(service workersessions.Service) (factoryruntime.WorkerAttemptOpener, error) {
