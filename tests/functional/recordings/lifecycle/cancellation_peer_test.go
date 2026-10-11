@@ -411,19 +411,7 @@ func runSelectedClaimLifetime(t *testing.T, index int, mode string, process supp
 	pattern := filepath.Join(t.TempDir(), "__factory_session_id__.json")
 	path := strings.ReplaceAll(pattern, "__factory_session_id__", id)
 	peerPath := strings.ReplaceAll(pattern, "__factory_session_id__", peerID)
-	selected := &ownershipRoute{cause: errors.New("PRIVATE_CLAIM_CAUSE")}
-	if mode == "acquisition-failure" {
-		selected.acquireErr = selected.cause
-	}
-	if mode == "release-failure" {
-		selected.releaseErr = selected.cause
-	}
-	if mode == "busy" {
-		if err := os.WriteFile(path, []byte("existing external owner"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		selected.held = true
-	}
+	selected := selectedClaimRoute(t, path, mode)
 	t.Cleanup(func() { claims.mu.Lock(); selected.releaseErr = nil; claims.mu.Unlock() })
 	peer := &ownershipRoute{}
 	claims.mu.Lock()
@@ -467,6 +455,24 @@ func runSelectedClaimLifetime(t *testing.T, index int, mode string, process supp
 	if mode == "success" {
 		assertLaterClaimAndDisabledRecording(t, process, claims, selected, pattern, id)
 	}
+}
+
+func selectedClaimRoute(t *testing.T, path, mode string) *ownershipRoute {
+	t.Helper()
+	selected := &ownershipRoute{cause: errors.New("PRIVATE_CLAIM_CAUSE")}
+	if mode == "acquisition-failure" {
+		selected.acquireErr = selected.cause
+	}
+	if mode == "release-failure" {
+		selected.releaseErr = selected.cause
+	}
+	if mode == "busy" {
+		if err := os.WriteFile(path, []byte("existing external owner"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		selected.held = true
+	}
+	return selected
 }
 
 func assertLaterClaimAndDisabledRecording(t *testing.T, process support.Process, claims *ownershipClaims, selected *ownershipRoute, pattern, id string) {
