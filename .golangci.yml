@@ -52,6 +52,22 @@ linters:
           msg: functional scenarios must use the customer process boundary
     depguard:
       rules:
+        messaging-independent-execution:
+          list-mode: lax
+          files: ["**/pkg/services/agent_messages/*.go", "**/pkg/services/agent_messages/**/*.go"]
+          deny:
+            - pkg: github.com/portpowered/infinite-you/pkg/services/factory_runtime$
+              desc: Messaging consumes Worker Sessions identity and Events without Factory execution coupling
+            - pkg: github.com/portpowered/infinite-you/pkg/services/factory_runtime/
+              desc: Messaging consumes public service contracts, never Runtime implementation
+            - pkg: github.com/portpowered/infinite-you/pkg/services/factory_sessions$
+              desc: Messaging owns an independent durable inbox, never Factory Session execution
+            - pkg: github.com/portpowered/infinite-you/pkg/services/factory_sessions/
+              desc: Messaging owns an independent durable inbox, never Factory Session implementation
+            - pkg: github.com/portpowered/infinite-you/pkg/services/workers$
+              desc: Messaging consumes Worker Sessions identity, never Worker execution policy
+            - pkg: github.com/portpowered/infinite-you/pkg/services/workers/
+              desc: Messaging consumes public service contracts, never Workers implementation
         functional-no-os-exec:
           list-mode: lax
           files: ["**/tests/functional/**/*.go", "!**/tests/functional/internal/support/**", "!**/testdata/**"]

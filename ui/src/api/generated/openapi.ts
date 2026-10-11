@@ -11181,76 +11181,101 @@ export const ErrorResponseCode = {
   // Workers could not admit the Worker Session interrupt replacement.
   WORKER_SESSION_INTERRUPT_ADMISSION_FAILED:
     "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED",
-  // Lifecycle control requestId was already applied with different control inputs.
+  // The Worker Session control request is invalid.
   WORKER_SESSION_CONTROL_INVALID: "WORKER_SESSION_CONTROL_INVALID",
-  // Requested resource capacity is below the number of units currently in use.
+  // The Worker Session control conflicts with current lifecycle or request state.
   WORKER_SESSION_CONTROL_CONFLICT: "WORKER_SESSION_CONTROL_CONFLICT",
-  // The caller's expected Factory revision is no longer current.
+  // The Worker Session control could not be completed.
   WORKER_SESSION_CONTROL_FAILED: "WORKER_SESSION_CONTROL_FAILED",
-  // The Factory Session lifecycle does not admit the requested change.
+  // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
-  // A live change was admitted but its runtime application failed.
+  // Requested resource capacity is below the number of units currently in use.
   RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
-  // The Factory Response Event reconnect cursor is invalid.
+  // The caller's expected Factory revision is no longer current.
   REVISION_CONFLICT: "REVISION_CONFLICT",
-  // A Factory Response Event filter is invalid.
+  // The Factory Session lifecycle does not admit the requested change.
   LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
-  // The explicitly selected Factory Session for response events does not exist.
+  // A live change was admitted but its runtime application failed.
   ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
-  // The retained Factory Response Event stream is no longer available.
+  // The Factory Response Event reconnect cursor is invalid.
   INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
-  // The requested Provider Session provider is not loadable by this API.
+  // A Factory Response Event filter is invalid.
   INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
-  // The requested Provider Session identifier kind is not loadable by this API.
+  // The explicitly selected Factory Session for response events does not exist.
   RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
-  // The correlated Worker Session projection is temporarily unavailable.
+  // The retained Factory Response Event stream is no longer available.
   RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
-  // The durable Worker Session recording contains corrupt history.
+  // The requested Provider Session provider is not loadable by this API.
   PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
-  // The durable Worker Session recording could not be read.
+  // The requested Provider Session identifier kind is not loadable by this API.
   SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
-  // The canonical Worker Session event stream is temporarily unavailable.
+  // The correlated Worker Session projection is temporarily unavailable.
   PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
-  // The requested Worker Session has not reached a terminal state.
+  // The durable Worker Session recording contains corrupt history.
   WORKER_SESSION_RECORDING_CORRUPT: "WORKER_SESSION_RECORDING_CORRUPT",
-  // The finished Worker Session has no normalized transcript available.
+  // The durable Worker Session recording could not be read.
   WORKER_SESSION_RECORDING_UNAVAILABLE: "WORKER_SESSION_RECORDING_UNAVAILABLE",
-  // Provider Sessions could not project the normalized Worker Session transcript.
+  // The canonical Worker Session event stream is temporarily unavailable.
   WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
-  // The metrics request could not be interpreted by the canonical metrics route.
+  // The requested Worker Session has not reached a terminal state.
   WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
-  // The requested live Factory Session identity was not discoverable.
+  // The finished Worker Session has no normalized transcript available.
   WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
-  // The live Factory Session was discoverable, but no retained metrics scope was available.
+  // Provider Sessions could not project the normalized Worker Session transcript.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
-  // The selected managed model cache revision does not exist.
+  // The metrics request could not be interpreted by the canonical metrics route.
   METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
-  // The selected managed model cache revision is held by an active model host or invocation.
+  // The requested live Factory Session identity was not discoverable.
   METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
-  // Managed model cache references could not be proven safe for reclamation.
+  // The live Factory Session was discoverable, but no retained metrics scope was available.
   METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
-  // The requested resource does not exist.
+  // The selected managed model cache revision does not exist.
   MODEL_CACHE_NOT_FOUND: "MODEL_CACHE_NOT_FOUND",
-  // The server failed while handling an otherwise valid request.
+  // The selected managed model cache revision is held by an active model host or invocation.
   MODEL_CACHE_IN_USE: "MODEL_CACHE_IN_USE",
-  // The metrics costs request contained invalid configuration or selection input.
+  // Managed model cache references could not be proven safe for reclamation.
   MODEL_CACHE_REFERENCE_UNCERTAIN: "MODEL_CACHE_REFERENCE_UNCERTAIN",
-  // The metrics costs request was canceled before the report completed.
+  // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
-  // The metrics costs query failed while reading or valuing runtime usage.
+  // The server failed while handling an otherwise valid request.
   INTERNAL_ERROR: "INTERNAL_ERROR",
-  // The metrics costs query exceeded its server-side completion bound.
+  // The metrics costs request contained invalid configuration or selection input.
   COSTS_INVALID_REQUEST: "COSTS_INVALID_REQUEST",
-  // The shutdown control request came from a non-loopback peer.
+  // The metrics costs request was canceled before the report completed.
   COSTS_QUERY_CANCELED: "COSTS_QUERY_CANCELED",
-  // The invocation-local shutdown control is unavailable.
+  // The metrics costs query failed while reading or valuing runtime usage.
   COSTS_QUERY_FAILED: "COSTS_QUERY_FAILED",
+  // The metrics costs query exceeded its server-side completion bound.
   COSTS_QUERY_TIMEOUT: "COSTS_QUERY_TIMEOUT",
+  // The shutdown control request came from a non-loopback peer.
   SHUTDOWN_CONTROL_REJECTED: "SHUTDOWN_CONTROL_REJECTED",
+  // The invocation-local shutdown control is unavailable.
   SHUTDOWN_CONTROL_UNAVAILABLE: "SHUTDOWN_CONTROL_UNAVAILABLE",
+  // The message input or reference is invalid.
+  MESSAGE_INVALID_REQUEST: "MESSAGE_INVALID_REQUEST",
+  // The caller may not perform this messaging operation.
+  MESSAGE_NOT_PERMITTED: "MESSAGE_NOT_PERMITTED",
+  // The addressed Worker Session does not exist.
+  MESSAGE_RECIPIENT_NOT_FOUND: "MESSAGE_RECIPIENT_NOT_FOUND",
+  // The addressed message does not exist.
+  MESSAGE_NOT_FOUND: "MESSAGE_NOT_FOUND",
+  // The sender request key has different privacy-normalized inputs.
+  MESSAGE_REQUEST_CONFLICT: "MESSAGE_REQUEST_CONFLICT",
+  // T5 cannot interrupt a Worker Session.
+  MESSAGE_INTERRUPT_UNSUPPORTED: "MESSAGE_INTERRUPT_UNSUPPORTED",
+  // A configured message volume or thread limit was exceeded.
+  MESSAGE_LIMIT_EXCEEDED: "MESSAGE_LIMIT_EXCEEDED",
+  // The page cursor is malformed or belongs to a different authorized query.
+  MESSAGE_CURSOR_INVALID: "MESSAGE_CURSOR_INVALID",
+  // Messaging is disabled.
+  MESSAGING_DISABLED: "MESSAGING_DISABLED",
+  // The message store could not durably commit the operation.
+  MESSAGE_STORE_UNAVAILABLE: "MESSAGE_STORE_UNAVAILABLE",
+  // The message store contains invalid committed data.
+  MESSAGE_STORE_CORRUPT: "MESSAGE_STORE_CORRUPT",
 } as const;
 export type ErrorResponseCode =
   (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];

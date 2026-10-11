@@ -6085,6 +6085,17 @@ components:
             - COSTS_QUERY_TIMEOUT
             - SHUTDOWN_CONTROL_REJECTED
             - SHUTDOWN_CONTROL_UNAVAILABLE
+            - MESSAGE_INVALID_REQUEST
+            - MESSAGE_NOT_PERMITTED
+            - MESSAGE_RECIPIENT_NOT_FOUND
+            - MESSAGE_NOT_FOUND
+            - MESSAGE_REQUEST_CONFLICT
+            - MESSAGE_INTERRUPT_UNSUPPORTED
+            - MESSAGE_LIMIT_EXCEEDED
+            - MESSAGE_CURSOR_INVALID
+            - MESSAGING_DISABLED
+            - MESSAGE_STORE_UNAVAILABLE
+            - MESSAGE_STORE_CORRUPT
           x-enum-descriptions:
             - A Work Request conflicts with an already reserved explicit Work ID.
             - Request payload or parameter validation failed.
@@ -6119,6 +6130,9 @@ components:
             - Worker Sessions could not cancel the exact source dispatch for an interrupt.
             - Worker Sessions canceled the source but could not admit the replacement successor.
             - Workers could not admit the Worker Session interrupt replacement.
+            - The Worker Session control request is invalid.
+            - The Worker Session control conflicts with current lifecycle or request state.
+            - The Worker Session control could not be completed.
             - Lifecycle control requestId was already applied with different control inputs.
             - Requested resource capacity is below the number of units currently in use.
             - The caller's expected Factory revision is no longer current.
@@ -6151,6 +6165,17 @@ components:
             - The metrics costs query exceeded its server-side completion bound.
             - The shutdown control request came from a non-loopback peer.
             - The invocation-local shutdown control is unavailable.
+            - The message input or reference is invalid.
+            - The caller may not perform this messaging operation.
+            - The addressed Worker Session does not exist.
+            - The addressed message does not exist.
+            - The sender request key has different privacy-normalized inputs.
+            - T5 cannot interrupt a Worker Session.
+            - A configured message volume or thread limit was exceeded.
+            - The page cursor is malformed or belongs to a different authorized query.
+            - Messaging is disabled.
+            - The message store could not durably commit the operation.
+            - The message store contains invalid committed data.
         targets:
           type: array
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
