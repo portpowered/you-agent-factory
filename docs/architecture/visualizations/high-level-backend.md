@@ -5,11 +5,11 @@ flowchart TB
   subgraph input["Inputs"]
     s_services_automations["automations<br/>9177 LOC · 7 subservices"]
     s_services_chat_sessions["chat sessions<br/>4923 LOC · 0 subservices"]
-    s_services_webhooks["webhooks<br/>718 LOC · 0 subservices"]
-    s_services_work["work<br/>19880 LOC · 5 subservices"]
+    s_services_webhooks["webhooks<br/>755 LOC · 0 subservices"]
+    s_services_work["work<br/>19865 LOC · 5 subservices"]
   end
   subgraph configuration["Configuration"]
-    s_services_factory_definitions["factory definitions<br/>35086 LOC · 8 subservices"]
+    s_services_factory_definitions["factory definitions<br/>34944 LOC · 8 subservices"]
     s_services_operator_settings["operator settings<br/>7623 LOC · 2 subservices"]
   end
   subgraph coordination["Factory coordination"]
@@ -131,7 +131,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`costs`](services/costs.md) | — |
 | [`edges`](services/edges.md) | — |
 | [`events`](services/events.md) | — |
-| [`factory_definitions`](services/factory_definitions.md) | (subservice) authoring layout (2147 LOC)<br/>(subservice) catalog (1371 LOC)<br/>(subservice) compilation (1788 LOC)<br/>(subservice) distribution (2828 LOC)<br/>(subservice) invocation policy (2884 LOC)<br/>(subservice) runtime snapshot (419 LOC)<br/>(subservice) snapshots portability (2345 LOC)<br/>(subservice) validation (6008 LOC) |
+| [`factory_definitions`](services/factory_definitions.md) | (subservice) authoring layout (2044 LOC)<br/>(subservice) catalog (1371 LOC)<br/>(subservice) compilation (1788 LOC)<br/>(subservice) distribution (2828 LOC)<br/>(subservice) invocation policy (2884 LOC)<br/>(subservice) runtime snapshot (419 LOC)<br/>(subservice) snapshots portability (2298 LOC)<br/>(subservice) validation (6008 LOC) |
 | [`factory_runtime`](services/factory_runtime.md) | (subservice) checkpoint recovery (982 LOC)<br/>(subservice) dispatch planning (857 LOC)<br/>(subservice) instance host (714 LOC)<br/>(subservice) orchestration (35362 LOC) |
 | [`factory_sessions`](services/factory_sessions.md) | (subservice) durable execution (94 LOC)<br/>(subservice) identity (142 LOC)<br/>(subservice) response stream (402 LOC) |
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (439 LOC)<br/>(subservice) live view projection (502 LOC)<br/>(subservice) response event presentation (329 LOC) |
