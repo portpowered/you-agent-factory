@@ -131,6 +131,81 @@ func acceptedTransaction(sequence uint64, intent DeliveryIntent, entries ...Entr
 	return tx
 }
 
+func admittedTransaction(sequence uint64, intent DeliveryIntent, entries ...Entry) Transaction {
+	tx := transaction(sequence, ReviveOutcome, append([]Entry{}, entries...)...)
+	intent.State, intent.AcceptedAt, intent.Reason = IntentAdmitted, tx.CommittedAt, "REVIVE_PENDING"
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	for i := range tx.Messages {
+		tx.Messages[i].Message.Reason = intent.Reason
+	}
+	return tx
+}
+
+func TestJournalAdmittedReviveAwaitsProviderOutcomeAcrossReopen(t *testing.T) {
+	t.Parallel()
+	for _, confirmed := range []bool{true, false} {
+		t.Run(fmt.Sprint(confirmed), func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(3, intent))
+			admitted := admittedTransaction(4, intent, entries...)
+			mustCommit(t, j, admitted)
+			j = newTestJournal(t, testFiles{}, path)
+			assertDeliverySnapshot(t, j, admitted)
+			intent = admitted.DeliveryIntents[0]
+			mustCommit(t, j, sentTransaction("third", 5))
+			if err := j.Commit(intentTransaction(6, pendingDelivery(message("third", 5)))); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("unconfirmed admitted chain allowed a second effect", err)
+			}
+			outcome := providerOutcomeTransaction(6, intent, confirmed, admitted.Messages...)
+			mustCommit(t, j, outcome)
+			assertDeliverySnapshot(t, newTestJournal(t, testFiles{}, path), outcome)
+			if err := j.Commit(providerOutcomeTransaction(7, intent, !confirmed, outcome.Messages...)); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("settled provider outcome was changed", err)
+			}
+		})
+	}
+}
+
+func providerOutcomeTransaction(sequence uint64, intent DeliveryIntent, confirmed bool, entries ...Entry) Transaction {
+	tx := transaction(sequence, ReviveOutcome, append([]Entry{}, entries...)...)
+	intent.State, intent.Reason = IntentAccepted, ""
+	if !confirmed {
+		intent.State, intent.Reason, intent.AcceptedAt = IntentFailed, "REVIVE_UNSUPPORTED", time.Time{}
+	}
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	for i := range tx.Messages {
+		m := &tx.Messages[i].Message
+		m.Reason = intent.Reason
+		if confirmed {
+			if m.Status == agentmessages.Queued {
+				m.Status = agentmessages.DeliveredRevive
+			}
+			m.RevivedWorkerSessionID, m.To.DeliveredWorkerSessionID = intent.SuccessorWorkerSessionID, intent.SuccessorWorkerSessionID
+		}
+	}
+	return tx
+}
+
+func assertDeliverySnapshot(t *testing.T, j *Journal, tx Transaction) {
+	t.Helper()
+	intents, err := j.DeliveryIntents()
+	if err != nil || !reflect.DeepEqual(intents, tx.DeliveryIntents) {
+		t.Fatal("delivery milestone was not durable", err)
+	}
+	for _, want := range tx.Messages {
+		got, found, _, err := j.LookupMessage(want.Message.MessageID)
+		if err != nil || !found || got != want {
+			t.Fatal("message published a different delivery milestone", err)
+		}
+	}
+}
+
 func TestJournalReviveIntentAndAtomicOutcomeSurviveReopen(t *testing.T) {
 	t.Parallel()
 	for _, fault := range []string{"none", "short", "sync"} {

@@ -49,6 +49,30 @@ func TestReviveLimitCountsOnlyAcceptedAdmissionsAndReleasesAtHour(t *testing.T) 
 	}
 }
 
+func TestAdmittedUnconfirmedReviveKeepsChainReserved(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	ended := f.authority.recipients["lead"]
+	ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = ended
+	f.ledger.intents = map[string]store.DeliveryIntent{"pending-provider": {
+		RequestID: "pending-provider", RecipientChainIdentity: ended.Chain,
+		State: store.IntentAdmitted, AcceptedAt: f.now, Reason: "REVIVE_PENDING",
+	}}
+	calls := 0
+	f.engine.continueSession = func(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		calls++
+		return workersessions.ContinueResult{}, nil
+	}
+	got, err := f.engine.Send(t.Context(), engineRequest("later", "later question"), f.caller, "")
+	if err != nil || got.Status != agentmessages.Queued || calls != 0 {
+		t.Fatal("pending provider confirmation allowed another continuation", err)
+	}
+	if len(f.ledger.entries) != 1 || len(f.ledger.transactions) != 1 {
+		t.Fatal("pending confirmation lost the later queued ask or invented an effect")
+	}
+}
+
 func assertSixRevivesAndRetries(t *testing.T, f *engineFixture, calls *int) {
 	t.Helper()
 	for i := range 6 {

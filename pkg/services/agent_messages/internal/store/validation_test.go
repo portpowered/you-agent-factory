@@ -131,6 +131,82 @@ func TestJournalReviveOutcomeCannotChangeTupleOrGuessSuccess(t *testing.T) {
 	}
 }
 
+func TestJournalAdmittedReviveRejectsPrematureDeliveryAndChangedAdmission(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*Transaction){
+		"changed admission time": func(tx *Transaction) { tx.DeliveryIntents[0].AcceptedAt = tx.CommittedAt.Add(-time.Second) },
+		"changed successor":      func(tx *Transaction) { tx.DeliveryIntents[0].SuccessorWorkerSessionID = "other" },
+		"lost pending reason":    func(tx *Transaction) { tx.Messages[0].Message.Reason = "" },
+		"pending outcome":        func(tx *Transaction) { tx.DeliveryIntents[0].State = IntentPending },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(2, intent))
+			admitted := admittedTransaction(3, intent, entries...)
+			premature := admittedTransaction(3, intent, entries...)
+			premature.Messages[0].Message.Status = agentmessages.DeliveredRevive
+			premature.Messages[0].Message.RevivedWorkerSessionID = intent.SuccessorWorkerSessionID
+			premature.Messages[0].Message.To.DeliveredWorkerSessionID = intent.SuccessorWorkerSessionID
+			if err := j.Commit(premature); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("admission published delivered facts without confirmation", err)
+			}
+			mustCommit(t, j, admitted)
+			outcome := providerOutcomeTransaction(4, admitted.DeliveryIntents[0], true, admitted.Messages...)
+			if name == "lost pending reason" {
+				outcome = admittedTransaction(4, intent, entries...)
+			}
+			mutate(&outcome)
+			before := readBytes(t, path)
+			if err := j.Commit(outcome); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("invalid provider outcome accepted", err)
+			}
+			if string(readBytes(t, path)) != string(before) {
+				t.Fatal("rejected confirmation changed durable bytes")
+			}
+			assertDeliverySnapshot(t, newTestJournal(t, testFiles{}, path), admitted)
+		})
+	}
+}
+
+func TestJournalProviderOutcomeFlushFailurePreservesAdmittedRevive(t *testing.T) {
+	t.Parallel()
+	for _, confirmed := range []bool{true, false} {
+		t.Run(map[bool]string{true: "confirmed", false: "unsupported"}[confirmed], func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			files := &testFiles{}
+			j := newTestJournal(t, files, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(2, intent))
+			admitted := admittedTransaction(3, intent, entries...)
+			mustCommit(t, j, admitted)
+			files.open = func(path string, flags int, mode fs.FileMode) (io.WriteCloser, error) {
+				file, err := os.OpenFile(path, flags, mode)
+				if err != nil {
+					return nil, err
+				}
+				return &faultFile{File: file, fault: "sync"}, nil
+			}
+			outcome := providerOutcomeTransaction(4, admitted.DeliveryIntents[0], confirmed, admitted.Messages...)
+			if err := j.Commit(outcome); !errors.Is(err, ErrUnavailable) {
+				t.Fatal("refused provider outcome flush was not typed", err)
+			}
+			assertDeliverySnapshot(t, j, admitted)
+			assertDeliverySnapshot(t, newTestJournal(t, testFiles{}, path), admitted)
+			files.open = nil
+			mustCommit(t, j, outcome)
+			assertDeliverySnapshot(t, newTestJournal(t, testFiles{}, path), outcome)
+		})
+	}
+}
+
 func TestJournalRollbackUncertaintyStopsFurtherWrites(t *testing.T) {
 	t.Parallel()
 	for _, fault := range []string{"rollback-sync", "rollback-truncate"} {

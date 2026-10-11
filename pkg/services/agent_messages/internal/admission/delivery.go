@@ -95,7 +95,7 @@ func (e *Engine) reviveGate(chain string, intents []store.DeliveryIntent) (strin
 		if intent.RecipientChainIdentity != chain {
 			continue
 		}
-		if intent.State == store.IntentPending {
+		if intent.State == store.IntentPending || intent.State == store.IntentAdmitted {
 			return "", true
 		}
 		if intent.State == store.IntentUncertain {

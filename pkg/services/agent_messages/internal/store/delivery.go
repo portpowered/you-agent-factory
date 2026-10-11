@@ -12,7 +12,11 @@ import (
 )
 
 const (
-	IntentPending   = "PENDING"
+	IntentPending = "PENDING"
+	// Admitted reserves the chain while provider confirmation is outstanding.
+	// AcceptedAt retains admission time for deterministic volume accounting;
+	// no delivered message or successor fact is published at this milestone.
+	IntentAdmitted  = "ADMITTED"
 	IntentAccepted  = "ACCEPTED"
 	IntentFailed    = "FAILED"
 	IntentUncertain = "UNCERTAIN"
@@ -41,7 +45,7 @@ func (i DeliveryIntent) clone() DeliveryIntent {
 }
 
 func validReason(reason string) bool {
-	return reason == "" || reason == "REVIVE_UNSUPPORTED" || reason == "REVIVE_FAILED" || reason == "REVIVE_LIMIT"
+	return reason == "" || reason == "REVIVE_PENDING" || reason == "REVIVE_UNSUPPORTED" || reason == "REVIVE_FAILED" || reason == "REVIVE_LIMIT"
 }
 
 // DeliveryIntents returns detached, deterministic recovery and quota facts.
@@ -92,6 +96,14 @@ func (j *Journal) validateIntents(t Transaction, changed map[string]Entry) error
 func validateSnapshotDeliveries(t Transaction, changed map[string]Entry) error {
 	delivered := map[string]string{}
 	for _, intent := range t.DeliveryIntents {
+		if intent.State == IntentAdmitted {
+			for _, id := range intent.MessageIDs {
+				m := changed[id].Message
+				if m.Reason != "REVIVE_PENDING" || m.Status == agentmessages.DeliveredRevive || m.RevivedWorkerSessionID != "" {
+					return ErrInvalidTransaction
+				}
+			}
+		}
 		if intent.State != IntentAccepted {
 			continue
 		}
@@ -119,6 +131,8 @@ func (i DeliveryIntent) valid() bool {
 		return i.AcceptedAt.IsZero() && i.Reason == ""
 	case IntentAccepted:
 		return !i.AcceptedAt.IsZero() && i.Reason == ""
+	case IntentAdmitted:
+		return !i.AcceptedAt.IsZero() && i.Reason == "REVIVE_PENDING"
 	case IntentFailed, IntentUncertain:
 		return i.AcceptedAt.IsZero() && (i.Reason == "REVIVE_FAILED" || i.Reason == "REVIVE_UNSUPPORTED")
 	}
@@ -144,7 +158,7 @@ func (j *Journal) validateIntentChange(t Transaction, intent DeliveryIntent, cha
 	if t.Kind == ReviveIntent {
 		return j.validateNewIntent(t, intent, changed, exists)
 	}
-	if !exists || (prior.State != IntentPending && prior.State != IntentUncertain) || intent.State == IntentPending {
+	if !exists || !validIntentTransition(prior, intent) {
 		return ErrInvalidTransaction
 	}
 	expected := prior
@@ -155,6 +169,26 @@ func (j *Journal) validateIntentChange(t Transaction, intent DeliveryIntent, cha
 	return j.validateIntentOutcome(intent, changed)
 }
 
+// Legacy PENDING -> ACCEPTED outcomes remain readable. New delivery consumers
+// can persist ADMITTED before confirming provider progress without changing
+// the frozen effect tuple or its original admission timestamp.
+func validIntentTransition(prior, next DeliveryIntent) bool {
+	if next.State == IntentPending {
+		return false
+	}
+	switch prior.State {
+	case IntentPending, IntentUncertain:
+		return true
+	case IntentAdmitted:
+		if next.State == IntentAccepted {
+			return next.AcceptedAt.Equal(prior.AcceptedAt)
+		}
+		return next.State == IntentFailed || next.State == IntentUncertain
+	default:
+		return false
+	}
+}
+
 func (j *Journal) validateNewIntent(t Transaction, intent DeliveryIntent, changed map[string]Entry, exists bool) error {
 	if exists || intent.State != IntentPending || len(changed) != 0 {
 		return ErrInvalidTransaction
@@ -162,7 +196,7 @@ func (j *Journal) validateNewIntent(t Transaction, intent DeliveryIntent, change
 	assigned := map[string]bool{}
 	for _, other := range j.intents {
 		if other.RecipientChainIdentity == intent.RecipientChainIdentity &&
-			(other.State == IntentPending || other.State == IntentUncertain) {
+			(other.State == IntentPending || other.State == IntentAdmitted || other.State == IntentUncertain) {
 			return ErrInvalidTransaction
 		}
 		for _, id := range other.MessageIDs {

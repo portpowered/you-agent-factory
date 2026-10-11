@@ -107,7 +107,7 @@ func (j *Journal) retainedIntents(now time.Time, keepThreads map[string]bool) []
 			if _, exists := kept[intent.RequestID]; exists {
 				continue
 			}
-			keep := intent.State == IntentPending || intent.State == IntentUncertain ||
+			keep := intent.State == IntentPending || intent.State == IntentAdmitted || intent.State == IntentUncertain ||
 				(intent.State == IntentAccepted && intent.AcceptedAt.After(now.Add(-time.Hour)))
 			for _, id := range intent.MessageIDs {
 				keep = keep || keepThreads[j.entries[id].Message.ThreadID]
