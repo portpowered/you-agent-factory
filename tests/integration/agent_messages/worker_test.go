@@ -83,9 +83,8 @@ func (f *artifactFixture) workerCredentials(t *testing.T, id string) map[string]
 	}
 }
 
-// This proves the continuation prerequisite and fresh execution credentials.
-// Durable inbox pull with the new caller remains a separate unproved edge.
-func (f *artifactFixture) continueCallerAfterRestart(t *testing.T, server string, previous map[string]string) {
+// Continuation creates fresh authority while preserving the captured chain.
+func (f *artifactFixture) continueCallerAfterRestart(t *testing.T, server string, previous map[string]string) map[string]string {
 	t.Helper()
 	request := map[string]string{"requestId": "restart-continue", "successorWorkerSessionId": "lane-next", "followUpInput": "controlled next input"}
 	status, body := f.http(t, server, http.MethodPost, "/worker-sessions/lane/continue", request, nil)
@@ -104,7 +103,7 @@ func (f *artifactFixture) continueCallerAfterRestart(t *testing.T, server string
 		observation.PredecessorWorkerSessionId == nil || *observation.PredecessorWorkerSessionId != "lane" {
 		t.Fatal("restart continuation lost running state or predecessor identity")
 	}
-	f.releaseCaller(t, server, "lane-next")
+	return next
 }
 
 func (f *artifactFixture) releaseCaller(t *testing.T, server, id string) {

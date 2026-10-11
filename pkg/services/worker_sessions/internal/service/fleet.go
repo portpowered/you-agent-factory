@@ -103,7 +103,27 @@ func (s *FleetObservationService) GetObservationByWorkerSessionID(
 		}
 		return selected, nil
 	}
-	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	return s.capturedObservationByWorkerSessionID(ctx, req)
+}
+
+// Archived predecessors have no live registry owner. Use the same activated
+// captured identity reader as fleet history and continuation, without restoring
+// execution authority or reading a recording on this ordinary request.
+func (s *FleetObservationService) capturedObservationByWorkerSessionID(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	if s.history == nil || s.history.continuation == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	}
+	observation, err := s.history.continuation.GetCapturedObservation(ctx, req)
+	if _, validationErr := fleetAddressCandidates(req, observation, err); validationErr != nil {
+		return workersessions.Observation{}, validationErr
+	}
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	return observation.Clone(), nil
 }
 
 // A failed source cannot be ignored merely because another source matched.

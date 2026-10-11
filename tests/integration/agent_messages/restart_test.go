@@ -43,6 +43,27 @@ func TestPrebuiltAuthorizedInboxSurvivesHostRestart(t *testing.T) {
 	if status != http.StatusForbidden || json.Unmarshal(body, &failure) != nil || failure.Code != "MESSAGE_NOT_PERMITTED" {
 		t.Fatal("host reconstruction retained old execution authority")
 	}
-	f.continueCallerAfterRestart(t, second.url, lane)
+	next := f.continueCallerAfterRestart(t, second.url, lane)
+	f.assertRecoveredSuccessorInbox(t, second.url, next, lane, sent, reply)
+	f.releaseCaller(t, second.url, "lane-next")
 	second.stop(t, f)
+}
+
+func (f *artifactFixture) assertRecoveredSuccessorInbox(t *testing.T, server string, next, previous map[string]string, sent, reply api.AgentMessageSendResponse) {
+	t.Helper()
+	status, body := f.http(t, server, http.MethodGet, "/messages?toMe=true", nil, next)
+	var page api.AgentMessageListResponse
+	if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Messages) != 1 ||
+		!reflect.DeepEqual(page.Messages[0], reply.Message) {
+		t.Fatalf("fresh successor did not recover the original inbox: status=%d", status)
+	}
+	var replay api.AgentMessageSendResponse
+	f.message(t, server, next, &replay, "lead", "--request-id", "send", "--body", "compiled coordination")
+	if replay.Message.MessageId != sent.Message.MessageId || replay.Message.Status != "REPLIED" {
+		t.Fatal("fresh successor did not recover the original request alias")
+	}
+	status, _ = f.http(t, server, http.MethodGet, "/messages?toMe=true", nil, previous)
+	if status != http.StatusForbidden {
+		t.Fatal("stale predecessor token gained inbox authority after continuation")
+	}
 }
