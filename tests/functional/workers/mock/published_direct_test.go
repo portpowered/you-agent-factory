@@ -135,6 +135,11 @@ func publishedDirectUsage(t *testing.T, server *support.FunctionalAPIServer, dir
 		t.Fatalf("direct execution identity: %+v %v", summary, err)
 	}
 	assertMockUsageReadParity(t, server, dir, environment, summary, logs)
+	assertPublishedDirectUsageCounters(t, summary, logs, name, provider)
+}
+
+func assertPublishedDirectUsageCounters(t *testing.T, summary factoryapi.WorkerSessionObservation, logs, name, provider string) {
+	t.Helper()
 	if name == "none" {
 		if summary.TokenUsage != nil || strings.Contains(logs, `"kind":"USAGE"`) || !strings.Contains(logs, "MOCK_USAGE_DIRECT_OK") {
 			t.Fatalf("no declaration fabricated usage: %s", logs)

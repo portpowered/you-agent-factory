@@ -224,17 +224,22 @@ func testMockUsageCapture(t *testing.T, fixture *sharedWorkersMockFixture) {
 			body := executeMockUsageCLI(t, fixture, dir, "--json", "--server", fixture.server.URL(), "worker-sessions", "read", "--worker-session-id", id, "--view", "logs")
 			assertCapturedMockUsage(t, body, provider, "gpt-5-codex", "MOCK_USAGE_FACTORY_OK", 22)
 			assertMockUsageReadParity(t, fixture.server, dir, nil, observation, body)
-			for _, scoped := range []bool{false, true} {
-				args := []string{"--json", "--server", fixture.server.URL(), "worker-sessions", "show", "--worker-session-id", id}
-				if scoped {
-					args = append(args, "--session", session.id)
-				}
-				var summary factoryapi.WorkerSessionObservation
-				if err := json.Unmarshal([]byte(executeMockUsageCLI(t, fixture, dir, args...)), &summary); err != nil || summary.Model == nil || *summary.Model != model || summary.TokenUsage == nil || *summary.TokenUsage.TotalTokens != 22 {
-					t.Fatalf("CLI summary disagrees with HTTP list: %+v %v", summary, err)
-				}
-			}
+			assertMockUsageFactorySummaries(t, fixture, dir, id, session.id, model)
 		})
+	}
+}
+
+func assertMockUsageFactorySummaries(t *testing.T, fixture *sharedWorkersMockFixture, dir, id, sessionID, model string) {
+	t.Helper()
+	for _, scoped := range []bool{false, true} {
+		args := []string{"--json", "--server", fixture.server.URL(), "worker-sessions", "show", "--worker-session-id", id}
+		if scoped {
+			args = append(args, "--session", sessionID)
+		}
+		var summary factoryapi.WorkerSessionObservation
+		if err := json.Unmarshal([]byte(executeMockUsageCLI(t, fixture, dir, args...)), &summary); err != nil || summary.Model == nil || *summary.Model != model || summary.TokenUsage == nil || *summary.TokenUsage.TotalTokens != 22 {
+			t.Fatalf("CLI summary disagrees with HTTP list: %+v %v", summary, err)
+		}
 	}
 }
 
@@ -250,60 +255,7 @@ func assertMockUsageReadParity(t *testing.T, server *support.FunctionalAPIServer
 	var events []factoryapi.WorkerSessionEvent
 	token := ""
 	for {
-		args := map[string]any{"action": "READ", "workerSessionId": observation.WorkerSessionId, "view": "logs", "limit": 1}
-		query := url.Values{"limit": {"1"}}
-		cliArgs := []string{"you", "--json", "--server", server.URL(), "worker-sessions", "read", "--worker-session-id", observation.WorkerSessionId, "--view", "logs", "--limit", "1"}
-		path := "/worker-sessions/" + url.PathEscape(observation.WorkerSessionId) + "/logs"
-		if token != "" {
-			args["nextToken"] = token
-			query.Set("nextToken", token)
-			cliArgs = append(cliArgs, "--next-token", token)
-		}
-		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
-		if err != nil || result.IsError || len(result.Content) != 1 {
-			t.Fatalf("MCP usage read: %+v %v", result, err)
-		}
-		var envelope struct {
-			Result struct {
-				Session factoryapi.WorkerSessionObservation `json:"session"`
-				Logs    factoryapi.WorkerSessionLogPage     `json:"logs"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(envelope.Result.Session.TokenUsage, observation.TokenUsage) || !reflect.DeepEqual(envelope.Result.Session.Model, observation.Model) || !reflect.DeepEqual(envelope.Result.Session.Provider, observation.Provider) {
-			t.Fatalf("MCP changed execution/usage facts: %+v", envelope.Result.Session)
-		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL()+path+"?"+query.Encode(), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var httpPage factoryapi.WorkerSessionLogPage
-		err = json.NewDecoder(response.Body).Decode(&httpPage)
-		_ = response.Body.Close()
-		if err != nil || response.StatusCode != http.StatusOK {
-			t.Fatalf("HTTP usage logs: %d %v", response.StatusCode, err)
-		}
-		input := support.FakeInputs(ctx, cliArgs)
-		input.Input.WorkingDirectory = dir
-		if env != nil {
-			input.Input.Env = env
-		}
-		if err := server.Execute(t, input.Input); err != nil {
-			t.Fatalf("CLI usage logs: %v %s", err, input.Stderr())
-		}
-		var cliPage factoryapi.WorkerSessionLogPage
-		if err := json.Unmarshal([]byte(input.Stdout()), &cliPage); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(httpPage, cliPage) || !reflect.DeepEqual(httpPage, envelope.Result.Logs) {
-			t.Fatalf("paged CLI/HTTP/MCP usage differs: %+v %+v %+v", cliPage, httpPage, envelope.Result.Logs)
-		}
+		httpPage := readMockUsageParityPage(t, server, connection, ctx, dir, env, observation, token)
 		events = append(events, httpPage.Events...)
 		if httpPage.NextToken == nil || *httpPage.NextToken == "" {
 			break
@@ -316,6 +268,71 @@ func assertMockUsageReadParity(t *testing.T, server *support.FunctionalAPIServer
 	if !reflect.DeepEqual(events, whole.Events) {
 		t.Fatalf("cursor replay changed ordered committed records: %+v %+v", events, whole.Events)
 	}
+}
+
+func readMockUsageParityPage(t *testing.T, server *support.FunctionalAPIServer, connection *mcp.ClientSession, ctx context.Context, dir string, env []string, observation factoryapi.WorkerSessionObservation, token string) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	args := map[string]any{"action": "READ", "workerSessionId": observation.WorkerSessionId, "view": "logs", "limit": 1}
+	query := url.Values{"limit": {"1"}}
+	cliArgs := []string{"you", "--json", "--server", server.URL(), "worker-sessions", "read", "--worker-session-id", observation.WorkerSessionId, "--view", "logs", "--limit", "1"}
+	path := "/worker-sessions/" + url.PathEscape(observation.WorkerSessionId) + "/logs"
+	if token != "" {
+		args["nextToken"] = token
+		query.Set("nextToken", token)
+		cliArgs = append(cliArgs, "--next-token", token)
+	}
+	result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("MCP usage read: %+v %v", result, err)
+	}
+	var envelope struct {
+		Result struct {
+			Session factoryapi.WorkerSessionObservation `json:"session"`
+			Logs    factoryapi.WorkerSessionLogPage     `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(envelope.Result.Session.TokenUsage, observation.TokenUsage) || !reflect.DeepEqual(envelope.Result.Session.Model, observation.Model) || !reflect.DeepEqual(envelope.Result.Session.Provider, observation.Provider) {
+		t.Fatalf("MCP changed execution/usage facts: %+v", envelope.Result.Session)
+	}
+	httpPage, cliPage := readMockUsageTransportPages(t, server, ctx, dir, env, path+"?"+query.Encode(), cliArgs)
+	if !reflect.DeepEqual(httpPage, cliPage) || !reflect.DeepEqual(httpPage, envelope.Result.Logs) {
+		t.Fatalf("paged CLI/HTTP/MCP usage differs: %+v %+v %+v", cliPage, httpPage, envelope.Result.Logs)
+	}
+	return httpPage
+}
+
+func readMockUsageTransportPages(t *testing.T, server *support.FunctionalAPIServer, ctx context.Context, dir string, env []string, path string, cliArgs []string) (factoryapi.WorkerSessionLogPage, factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL()+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var httpPage factoryapi.WorkerSessionLogPage
+	err = json.NewDecoder(response.Body).Decode(&httpPage)
+	_ = response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("HTTP usage logs: %d %v", response.StatusCode, err)
+	}
+	input := support.FakeInputs(ctx, cliArgs)
+	input.Input.WorkingDirectory = dir
+	if env != nil {
+		input.Input.Env = env
+	}
+	if err := server.Execute(t, input.Input); err != nil {
+		t.Fatalf("CLI usage logs: %v %s", err, input.Stderr())
+	}
+	var cliPage factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(input.Stdout()), &cliPage); err != nil {
+		t.Fatal(err)
+	}
+	return httpPage, cliPage
 }
 
 func mockUsageMCP(t *testing.T, server *support.FunctionalAPIServer, dir string, env []string) (*mcp.ClientSession, context.Context) {
@@ -395,6 +412,11 @@ func assertMockUsagePeerCursor(t *testing.T, server *support.FunctionalAPIServer
 	if err := json.Unmarshal(encoded, &failure); err != nil || failure.Error.Code != "worker_session.invalid_request" {
 		t.Fatalf("foreign cursor MCP error: %+v %v", failure, err)
 	}
+	assertMockUsagePeerCursorTransports(t, server, ctx, dir, env, peer, token)
+}
+
+func assertMockUsagePeerCursorTransports(t *testing.T, server *support.FunctionalAPIServer, ctx context.Context, dir string, env []string, peer, token string) {
+	t.Helper()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL()+"/worker-sessions/"+url.PathEscape(peer)+"/logs?nextToken="+url.QueryEscape(token), nil)
 	if err != nil {
 		t.Fatal(err)

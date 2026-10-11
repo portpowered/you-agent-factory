@@ -229,6 +229,27 @@ func readMockUsageRestartSnapshot(t *testing.T, ctx context.Context, binary, pro
 }
 
 func assertMockUsageRestartFacts(t *testing.T, row api.WorkerSessionObservation, logs api.WorkerSessionLogPage) {
+	name, provider := mockUsageRestartExecutionIdentity(t, row)
+	marker := "MOCK_USAGE_DIRECT_" + name
+	if !row.Direct {
+		marker = "MOCK_USAGE_FACTORY_" + name
+	}
+	body, _ := json.Marshal(logs.Events)
+	if !strings.Contains(string(body), marker) {
+		t.Fatalf("configured entry did not execute: %s", body)
+	}
+	if name == "none" {
+		if row.TokenUsage != nil || strings.Contains(string(body), `"kind":"USAGE"`) {
+			t.Fatal("undeclared usage invented")
+		}
+		return
+	}
+	assertMockUsageRestartCounters(t, row, logs, name)
+	assertMockUsageRestartCommittedOrder(t, row, logs, provider)
+}
+
+func mockUsageRestartExecutionIdentity(t *testing.T, row api.WorkerSessionObservation) (string, string) {
+	t.Helper()
 	id := row.WorkerSessionId
 	name := strings.TrimPrefix(id, "direct-")
 	if !row.Direct {
@@ -246,34 +267,11 @@ func assertMockUsageRestartFacts(t *testing.T, row api.WorkerSessionObservation,
 	if row.Provider == nil || *row.Provider != provider || row.Model == nil || *row.Model != model || row.AttemptId == "" || row.State != "COMPLETED" {
 		t.Fatalf("execution identity changed: %+v", row)
 	}
-	marker := "MOCK_USAGE_DIRECT_" + name
-	if !row.Direct {
-		marker = "MOCK_USAGE_FACTORY_" + name
-	}
-	body, _ := json.Marshal(logs.Events)
-	if !strings.Contains(string(body), marker) {
-		t.Fatalf("configured entry did not execute: %s", body)
-	}
-	want := map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(17), "outputTokens": float64(5), "cachedInputTokens": float64(0), "reasoningOutputTokens": float64(0), "totalTokens": float64(22)}
-	if name == "zero" {
-		want = map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(0), "outputTokens": float64(5), "totalTokens": float64(5)}
-	}
-	if name == "omitted" {
-		want = map[string]any{"origin": "SYNTHETIC", "outputTokens": float64(5), "totalTokens": float64(5)}
-	}
-	if name == "none" {
-		if row.TokenUsage != nil || strings.Contains(string(body), `"kind":"USAGE"`) {
-			t.Fatal("undeclared usage invented")
-		}
-		return
-	}
-	encoded, _ := json.Marshal(row.TokenUsage)
-	var fact map[string]any
-	if err := json.Unmarshal(encoded, &fact); err != nil || !reflect.DeepEqual(want, fact) {
-		t.Fatalf("summary counters changed: %s %v", encoded, err)
-	}
-	want["model"] = "gpt-5-codex"
-	assertRecordingIntegrityCapturedCounters(t, logs, want)
+	return name, provider
+}
+
+func assertMockUsageRestartCommittedOrder(t *testing.T, row api.WorkerSessionObservation, logs api.WorkerSessionLogPage, provider string) {
+	t.Helper()
 	for index, event := range logs.Events {
 		if event.Event.Position != int64(index+1) || event.Event.SourceEventId == "" || event.Event.CapturedAt == nil {
 			t.Fatal("committed order/source/time absent")
@@ -287,6 +285,24 @@ func assertMockUsageRestartFacts(t *testing.T, row api.WorkerSessionObservation,
 			t.Fatal("usage attached to wrong execution/attempt")
 		}
 	}
+}
+
+func assertMockUsageRestartCounters(t *testing.T, row api.WorkerSessionObservation, logs api.WorkerSessionLogPage, name string) {
+	t.Helper()
+	want := map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(17), "outputTokens": float64(5), "cachedInputTokens": float64(0), "reasoningOutputTokens": float64(0), "totalTokens": float64(22)}
+	if name == "zero" {
+		want = map[string]any{"origin": "SYNTHETIC", "inputTokens": float64(0), "outputTokens": float64(5), "totalTokens": float64(5)}
+	}
+	if name == "omitted" {
+		want = map[string]any{"origin": "SYNTHETIC", "outputTokens": float64(5), "totalTokens": float64(5)}
+	}
+	encoded, _ := json.Marshal(row.TokenUsage)
+	var fact map[string]any
+	if err := json.Unmarshal(encoded, &fact); err != nil || !reflect.DeepEqual(want, fact) {
+		t.Fatalf("summary counters changed: %s %v", encoded, err)
+	}
+	want["model"] = "gpt-5-codex"
+	assertRecordingIntegrityCapturedCounters(t, logs, want)
 }
 
 func mockUsageRestartPage(t *testing.T, f invokeArtifactFixture, server string, shown api.WorkerSessionObservation, token string) api.WorkerSessionLogPage {
