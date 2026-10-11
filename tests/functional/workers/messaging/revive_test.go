@@ -681,7 +681,8 @@ func TestDeniedEndedRecipientSendHasNoDeliveryEffect(t *testing.T) {
 func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
 	t.Parallel()
 	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
-	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane")
+	core, logs := observer.New(zap.InfoLevel)
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{ProcessLogger: zap.New(core)}, nil, revival, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	f.endWorker(t, "lead")
@@ -690,7 +691,7 @@ func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
 	if message.Body == raw || strings.Contains(message.Body, lane["YOU_WORKER_SESSION_TOKEN"]) || message.BodyRedactionCount != 1 {
 		t.Fatal("execution token reached public delivery body")
 	}
-	assertReviveAdmission(t, f, revival, message, lead)
+	successor := assertReviveAdmission(t, f, revival, message, lead)
 	journal, err := os.ReadFile(filepath.Join(f.home, ".you-agent-factory", "messages", "messages.jsonl"))
 	if err != nil {
 		t.Fatal(err)
@@ -701,6 +702,61 @@ func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
 	alias := f.cliSend(t, lane, "lead", "--request-id", "redacted-alias", "--body", raw)
 	if alias.MessageId != message.MessageId {
 		t.Fatal("normalized private body lost dedup")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	f.server.Close(t)
+	private := []string{raw, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"], successor["YOU_WORKER_SESSION_TOKEN"]}
+	assertPrivateArtifacts(t, f.home, private)
+	assertPrivateArtifacts(t, f.dir, private)
+	assertPrivateStreamDiagnostics(t, logs, private...)
+}
+
+// Separate selected profiles are necessary here: identical Worker Session IDs
+// on two active hosts must never share execution authority or delivery state.
+func TestRevivalIsolatedAcrossHostsWithIdenticalWorkerIDs(t *testing.T) {
+	t.Parallel()
+	var hosts []*fixture
+	var callers, leads []map[string]string
+	for range 2 {
+		revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+		f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane")
+		lead := f.invoke(t, "lead", nil)
+		callers = append(callers, f.invoke(t, "lane", lead))
+		leads, hosts = append(leads, lead), append(hosts, f)
+		f.endWorker(t, "lead")
+	}
+	request := map[string]any{"requestId": "same-host-key", "to": map[string]string{"workerSessionId": "lead"}, "body": "host-owned ask"}
+	var messages []api.AgentMessage
+	for i, f := range hosts {
+		assertError(t, f, http.MethodPost, "/messages", request, callers[1-i], http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+		if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+			t.Fatal("foreign-host credential persisted a message")
+		}
+		select {
+		case <-f.runner.revival.requests:
+			t.Fatal("foreign-host credential started revival")
+		default:
+		}
+		message := f.cliSend(t, callers[i], "lead", "--request-id", "same-host-key", "--body", "host-owned ask")
+		successor := assertReviveAdmission(t, f, f.runner.revival, message, leads[i])
+		assertProviderRetry(t, f, request, callers[i], message)
+		page := readPage(t, f, "/messages?toMe=true", successor)
+		if len(page.Messages) != 1 || page.Messages[0].MessageId != message.MessageId {
+			t.Fatal("host successor lost its own inbox")
+		}
+		messages = append(messages, message)
+		close(f.runner.revival.release)
+		f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	}
+	if messages[0].MessageId == messages[1].MessageId || *messages[0].RevivedWorkerSessionId == *messages[1].RevivedWorkerSessionId {
+		t.Fatal("independent hosts shared message or successor identity")
+	}
+	for i, f := range hosts {
+		assertError(t, f, http.MethodGet, "/messages/"+messages[1-i].MessageId, nil, callers[i], http.StatusNotFound, "MESSAGE_NOT_FOUND")
+		if page := readPage(t, f, "/messages", nil); len(page.Messages) != 1 || page.Messages[0].MessageId != messages[i].MessageId {
+			t.Fatal("host inbox contains foreign delivery state")
+		}
 	}
 }
 
@@ -733,7 +789,8 @@ func TestFactoryOriginRecipientRevivesWithoutAnotherWorkResult(t *testing.T) {
 	t.Parallel()
 	factory := &workerGate{started: make(chan map[string]string, 1), release: make(chan struct{})}
 	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
-	f := startHostDelivery(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, factory, "lane")
+	core, logs := observer.New(zap.InfoLevel)
+	f := startHostDelivery(t, t.TempDir(), t.TempDir(), "", edges.Edges{ProcessLogger: zap.New(core)}, nil, revival, factory, "lane")
 	session := support.OpenFactorySessionAt(t, f.server.URL(), f.dir).Session.Id
 	support.SubmitSessionWorkAt(t, f.server.URL(), session, api.SubmitWorkRequest{WorkTypeName: "task", Payload: "Factory-origin lead"})
 	var lead map[string]string
@@ -763,6 +820,11 @@ func TestFactoryOriginRecipientRevivesWithoutAnotherWorkResult(t *testing.T) {
 	if after := messageFactoryStreams(t, f, id, "lane"); !reflect.DeepEqual(before, after) {
 		t.Fatal("Factory-origin revival changed canonical Factory Events")
 	}
+	f.server.Close(t)
+	private := []string{"declared private delivery", lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"], successor["YOU_WORKER_SESSION_TOKEN"]}
+	assertPrivateArtifacts(t, f.home, private)
+	assertPrivateArtifacts(t, f.dir, private)
+	assertPrivateStreamDiagnostics(t, logs, private...)
 }
 
 func assertReviveAdmission(t *testing.T, f *fixture, revival *workerGate, message api.AgentMessage, lead map[string]string) map[string]string {
