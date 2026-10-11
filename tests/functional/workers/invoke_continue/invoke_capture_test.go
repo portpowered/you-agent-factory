@@ -230,7 +230,7 @@ func assertRequesterPrivacyTool(t *testing.T, body string) {
 			continue
 		}
 		var result map[string]any
-		if payload.ToolName != "command_execution" || json.Unmarshal(payload.ResultSummary, &result) != nil || result["aggregated_output"] != "<redacted>" || result["exit_code"] != float64(0) {
+		if payload.ToolName != "command_execution" || json.Unmarshal(payload.ResultSummary, &result) != nil || result["aggregated_output"] != "public credential progress <redacted>" || result["exit_code"] != float64(0) {
 			t.Fatal("credential tool lost typed redacted facts")
 		}
 		return
