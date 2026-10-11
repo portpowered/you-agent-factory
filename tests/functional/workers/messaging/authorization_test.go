@@ -4,11 +4,125 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestLegacyRecipientAmbiguityRequiresExplicitOwner(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	f.invoke(t, "lane", lead)
+	status, data := f.request(t, http.MethodGet, "/worker-sessions/lane", nil, nil)
+	var live api.WorkerSessionObservation
+	if status != http.StatusOK || json.Unmarshal(data, &live) != nil || live.FactorySessionId == nil {
+		t.Fatal("missing live owner identity")
+	}
+	peer := uuid.NewString()
+	f.replayPeer(t, "lane", peer)
+	request := map[string]any{"requestId": "resolve-recipient", "to": map[string]string{"workerSessionId": "lane"}, "body": "explicit owned recipient"}
+	status, data = f.request(t, http.MethodPost, "/messages", request, lead)
+	var refused api.ErrorResponse
+	if status != http.StatusConflict || json.Unmarshal(data, &refused) != nil || refused.Code != "WORKER_SESSION_AMBIGUOUS" {
+		t.Fatalf("legacy recipient ambiguity: %d %s", status, data)
+	}
+	assertRecipientCandidates(t, data, *live.FactorySessionId, peer)
+	assertCLIAmbiguousRecipient(t, f, lead, *live.FactorySessionId, peer)
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+		t.Fatal("ambiguous recipient created a message")
+	}
+	status, data = f.request(t, http.MethodPost, "/messages?factorySessionId="+*live.FactorySessionId, request, lead)
+	var result api.AgentMessageSendResponse
+	if status != http.StatusAccepted || json.Unmarshal(data, &result) != nil || result.Message.To.FactorySessionId == nil || *result.Message.To.FactorySessionId != *live.FactorySessionId {
+		t.Fatalf("scoped owned recipient: %d %s", status, data)
+	}
+	if replay := f.cliSend(t, lead, "lane", "--session", *live.FactorySessionId, "--request-id", "resolve-recipient", "--body", "explicit owned recipient"); replay.MessageId != result.Message.MessageId {
+		t.Fatal("CLI explicit recipient scope did not replay the HTTP record")
+	}
+	assertError(t, f, http.MethodPost, "/messages?factorySessionId="+peer, map[string]any{"requestId": "peer", "to": map[string]string{"workerSessionId": "lane"}, "body": "foreign historical peer"}, lead, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 1 {
+		t.Fatal("explicit scope widened permission or duplicated the record")
+	}
+}
+
+func assertCLIAmbiguousRecipient(t *testing.T, f *fixture, lead map[string]string, live, peer string) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", f.server.URL(), "message", "lane", "--request-id", "resolve-recipient", "--body", "explicit owned recipient", "--output", "json"})
+	inputs.Input.Env = append(append([]string{}, f.env...), "YOU_WORKER_SESSION_ID=lead", "YOU_WORKER_SESSION_TOKEN="+lead["YOU_WORKER_SESSION_TOKEN"])
+	inputs.Input.WorkingDirectory = f.dir
+	if err := f.server.Execute(t, inputs.Input); err == nil {
+		t.Fatal("CLI admitted an ambiguous recipient")
+	}
+	if inputs.Stdout() != "" {
+		t.Fatal("CLI refusal emitted a success response")
+	}
+	assertRecipientCandidates(t, []byte(inputs.Stderr()), live, peer)
+}
+
+func assertRecipientCandidates(t *testing.T, data []byte, live, peer string) {
+	t.Helper()
+	var result struct {
+		Code    string `json:"code"`
+		Details struct {
+			Candidates []api.WorkerSessionAddressCandidate `json:"candidates"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(data, &result) != nil || result.Code != "WORKER_SESSION_AMBIGUOUS" || len(result.Details.Candidates) != 2 {
+		t.Fatalf("missing typed ambiguity candidates: %s", data)
+	}
+	owners := map[string]string{}
+	for _, candidate := range result.Details.Candidates {
+		if candidate.WorkerSessionId != "lane" {
+			t.Fatal("ambiguity candidate has a foreign identity")
+		}
+		owners[candidate.FactorySessionId] = string(candidate.State)
+	}
+	if owners[live] != "RUNNING" || owners[peer] != "COMPLETED" {
+		t.Fatal("ambiguity candidates lost exact owner or state")
+	}
+}
+
+func TestProjectNamesAndSiblingLabelsGrantNoMessageAuthority(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"sendsPerChainPerHour":1}}}`, "lead", "lane", "sibling", "foreign-lead", "foreign-lane")
+	lead := f.invokeProject(t, "lead", "owned-project", nil)
+	lane := f.invokeProject(t, "lane", "owned-project", lead)
+	sibling := f.invokeProject(t, "sibling", "owned-project", lead)
+	foreignLead := f.invokeProject(t, "foreign-lead", "foreign-project", nil)
+	foreign := f.invokeProject(t, "foreign-lane", "foreign-project", foreignLead)
+	_, laneDetail := f.request(t, http.MethodGet, "/worker-sessions/lane", nil, nil)
+	_, siblingDetail := f.request(t, http.MethodGet, "/worker-sessions/sibling", nil, nil)
+	var laneObservation, siblingObservation api.WorkerSessionObservation
+	if json.Unmarshal(laneDetail, &laneObservation) != nil || json.Unmarshal(siblingDetail, &siblingObservation) != nil ||
+		laneObservation.Labels == nil || len(*laneObservation.Labels) == 0 || !reflect.DeepEqual(laneObservation.Labels, siblingObservation.Labels) {
+		t.Fatal("fixture must expose genuine siblings with identical server-held labels")
+	}
+	for _, target := range []string{"sibling", "foreign-lane", "foreign-lead"} {
+		assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "retry-owned", "to": map[string]string{"workerSessionId": target}, "body": "denied across relationship"}, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	}
+	assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "foreign", "to": map[string]string{"workerSessionId": "lane"}, "body": "foreign refusal"}, foreign, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+		t.Fatal("denied relationship stored a message")
+	}
+	// Reusing the denied request key at the one-send limit proves that neither
+	// aliases nor successful-send quota were spent by the denials.
+	message := f.cliSend(t, lane, "lead", "--request-id", "retry-owned", "--body", "permitted requester")
+	assertError(t, f, http.MethodGet, "/messages/"+message.MessageId, nil, sibling, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	assertError(t, f, http.MethodGet, "/messages/"+message.MessageId, nil, foreign, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	for _, caller := range []map[string]string{sibling, foreign} {
+		if page := readPage(t, f, "/messages?toMe=true&markRead=true", caller); len(page.Messages) != 0 {
+			t.Fatal("unrelated label/project granted inbox authority")
+		}
+	}
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("unrelated readers changed recipient state")
+	}
+}
 
 func TestInvalidCallerNeverFallsBackToOperator(t *testing.T) {
 	t.Parallel()

@@ -3,6 +3,7 @@ package messaging
 import (
 	"encoding/json"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 	"net/http"
 	"os"
@@ -19,12 +20,16 @@ func TestAuthorizedInboxReplyAndReconstruction(t *testing.T) {
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	sibling := f.invoke(t, "sibling", lead)
+	eventsBefore := messageFactoryStreams(t, f, "lead", "lane", "sibling")
 	request := map[string]any{"requestId": "lane-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "coordinate inbox"}
 	message := f.cliSend(t, lane, "lead", "--request-id", "lane-send", "--body", "coordinate inbox")
 	assertQueuedReplay(t, f, message, request, lane)
 	assertDeniedReadersAndSenders(t, f, message.MessageId, lane, sibling)
 	before := assertPullAndReply(t, f, message, lead)
 	assertMessagePrivacy(t, f, message, lead, lane)
+	if eventsAfter := messageFactoryStreams(t, f, "lead", "lane", "sibling"); !reflect.DeepEqual(eventsBefore, eventsAfter) {
+		t.Fatal("send/replay/denial/read/reply changed canonical Factory Events")
+	}
 	f.server.Close(t)
 	second := startHost(t, home, dir, "")
 	status, body := second.request(t, http.MethodGet, "/messages/"+message.MessageId, nil, nil)
@@ -33,6 +38,21 @@ func TestAuthorizedInboxReplyAndReconstruction(t *testing.T) {
 	}
 	assertError(t, second, http.MethodPost, "/messages", request, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
 	functionalevidence.Covers(t, "cli/you.message", "cli/you.message.list", "cli/you.message.reply", "rest/sendAgentMessage", "rest/listAgentMessages", "rest/getAgentMessage")
+}
+
+func messageFactoryStreams(t *testing.T, f *fixture, workers ...string) map[string][]api.FactoryEvent {
+	t.Helper()
+	result := map[string][]api.FactoryEvent{"~default": f.server.GetFactoryEvents(t)}
+	for _, worker := range workers {
+		status, body := f.request(t, http.MethodGet, "/worker-sessions/"+worker, nil, nil)
+		var observation api.WorkerSessionObservation
+		if status != http.StatusOK || json.Unmarshal(body, &observation) != nil || observation.FactorySessionId == nil {
+			t.Fatal("missing canonical Factory Session for running worker")
+		}
+		session := *observation.FactorySessionId
+		result[session] = support.GetFactoryEventsForSessionAt(t, f.server.URL(), session)
+	}
+	return result
 }
 
 func assertQueuedReplay(t *testing.T, f *fixture, message api.AgentMessage, request map[string]any, lane map[string]string) {

@@ -3,13 +3,17 @@ package messaging
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -76,6 +80,70 @@ func assertHealthyWork(t *testing.T, f *fixture) {
 	if err != nil {
 		t.Fatalf("Factory Work did not finish after Messaging outcome: %v", err)
 	}
+}
+
+func TestMessagingSettingsPreserveCanonicalFactoryOutcome(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	var baseline []string
+	for _, cell := range []struct{ name, settings, journal, code string }{
+		{"disabled", `{"messaging":{"enabled":false}}`, "", "MESSAGING_DISABLED"},
+		{"enabled", `{"messaging":{"enabled":true}}`, "", ""},
+		{"corrupt", "", "preserved corrupt bytes\n", "MESSAGE_STORE_CORRUPT"},
+		{"malformed", `{"messaging":{"limits":{"maxBodyBytes":0}}}`, "", "MESSAGE_STORE_UNAVAILABLE"},
+	} {
+		clock := platformclock.NewDeterministic(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
+		// Control timestamps while keeping production lifecycle timers real.
+		effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+		home := t.TempDir()
+		if cell.journal != "" {
+			writeJournal(t, filepath.Join(home, ".you-agent-factory", "messages", "messages.jsonl"), cell.journal)
+		}
+		f := startHostEffects(t, home, dir, cell.settings, true, effects)
+		if cell.code != "" {
+			assertError(t, f, http.MethodGet, "/messages", nil, nil, http.StatusServiceUnavailable, cell.code)
+		} else if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+			t.Fatal("isolated inbox is not empty")
+		}
+		assertHealthyWork(t, f)
+		events := comparableFactoryEvents(t, f.server.GetFactoryEvents(t))
+		f.server.Close(t)
+		if baseline == nil {
+			baseline = events
+		} else if !reflect.DeepEqual(baseline, events) {
+			t.Fatalf("messaging %s changed canonical Factory events:\ndisabled: %s\nactual: %s", cell.name, baseline, events)
+		}
+	}
+}
+
+func comparableFactoryEvents(t *testing.T, events []api.FactoryEvent) []string {
+	t.Helper()
+	// Replace only identities taken from canonical context, everywhere they
+	// occur. Relationships, event order, ticks and all payload fields survive.
+	identities := make(map[string]string)
+	for _, event := range events {
+		for _, identity := range []*string{event.Context.RequestId, event.Context.DispatchId} {
+			if identity != nil {
+				if _, exists := identities[*identity]; !exists {
+					identities[*identity] = fmt.Sprintf("identity-%d", len(identities))
+				}
+			}
+		}
+	}
+	result := make([]string, 0, len(events))
+	for _, event := range events {
+		event.Id = ""
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		value := string(encoded)
+		for identity, replacement := range identities {
+			value = strings.ReplaceAll(value, identity, replacement)
+		}
+		result = append(result, value)
+	}
+	return result
 }
 
 func TestFailedReplyWritePreservesParentAndRetryAuthority(t *testing.T) {

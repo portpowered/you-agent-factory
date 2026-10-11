@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -108,11 +110,16 @@ func startHostEffects(t *testing.T, home, dir, settings string, mock bool, effec
 
 func (f *fixture) invoke(t *testing.T, id string, caller map[string]string) map[string]string {
 	t.Helper()
+	return f.invokeProject(t, id, "", caller)
+}
+
+func (f *fixture) invokeProject(t *testing.T, id, project string, caller map[string]string) map[string]string {
+	t.Helper()
 	session := support.OpenFactorySessionAt(t, f.server.URL(), f.dir).Session.Id
 	request := map[string]any{"requestId": id + "-invoke", "workerSessionId": id, "execution": map[string]any{
 		"workstationName": "direct", "workingDirectory": f.dir, "factorySessionId": session,
-		"workerType": "direct-worker", "runnerId": "codex", "executorProvider": "codex", "modelProvider": "codex", "model": "functional-model", "userMessage": "controlled input",
-		"dispatch": map[string]any{"dispatchId": id + "-attempt", "workstationName": "direct", "workerType": "direct-worker"},
+		"workerType": "direct-worker", "runnerId": "codex", "executorProvider": "codex", "modelProvider": "codex", "model": "functional-model", "userMessage": "controlled input", "projectId": project,
+		"dispatch": map[string]any{"dispatchId": id + "-attempt", "workstationName": "direct", "workerType": "direct-worker", "projectId": project},
 	}}
 	status, body := f.request(t, http.MethodPost, "/worker-sessions", request, caller)
 	if status != http.StatusAccepted {
@@ -192,4 +199,92 @@ func (f *fixture) cliSend(t *testing.T, caller map[string]string, args ...string
 		t.Fatal(err)
 	}
 	return result.Message
+}
+
+// Hydrate a legacy equal-ID observation through the same public replay path
+// used by AM-T2, without registry mutation or another root graph.
+func (f *fixture) replayPeer(t *testing.T, worker, session string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(f.dir, "factory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := definitions.NewFactorySnapshot(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	types := []definitions.FactoryEventType{definitions.FactoryEventTypeRunRequest, definitions.FactoryEventTypeWorkRequest,
+		definitions.FactoryEventTypeDispatchRequest, definitions.FactoryEventTypeDispatchWorkerSessionAssoc,
+		definitions.FactoryEventTypeDispatchResponse, definitions.FactoryEventTypeRunResponse}
+	payloads := []any{definitions.RunRequestEventPayload{Factory: snapshot, RecordedAt: base},
+		map[string]any{"source": "external-submit", "type": "FACTORY_REQUEST_BATCH", "works": []any{map[string]any{
+			"name": "legacy", "workId": "legacy-work", "requestId": "legacy-request", "workTypeId": "task", "state": map[string]string{"name": "init", "type": "INITIAL"}, "traceId": "legacy-trace"}}},
+		map[string]any{"transitionId": "process", "inputs": []any{map[string]string{"workId": "legacy-work"}}},
+		definitions.DispatchWorkerSessionAssociationEventPayload{WorkerSessionID: worker},
+		map[string]any{"transitionId": "process", "outcome": "ACCEPTED", "output": "COMPLETE"},
+		map[string]any{"state": "COMPLETED"}}
+	var events []definitions.FactoryEvent
+	for i, kind := range types {
+		payload, err := json.Marshal(payloads[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		event := definitions.FactoryEvent{Id: fmt.Sprintf("legacy-event-%d", i), Type: kind,
+			SchemaVersion: definitions.FactoryEventSchemaVersionV1, Payload: payload,
+			Context: definitions.FactoryEventContext{SessionID: &session, Sequence: i, Tick: i, EventTime: base.Add(time.Duration(i) * time.Second)}}
+		if i >= 1 && i <= 4 {
+			works := []string{"legacy-work"}
+			event.Context.WorkIDs = &works
+		}
+		if i >= 2 && i <= 4 {
+			dispatch := "legacy-dispatch"
+			event.Context.DispatchID = &dispatch
+		}
+		events = append(events, event)
+	}
+	data, err = json.Marshal(definitions.ReplayArtifact{SchemaVersion: definitions.ReplayV1SourceFormat, RecordedAt: base, Events: events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.startReplayPeer(t, worker, session, dir, path)
+}
+
+func (f *fixture) startReplayPeer(t *testing.T, worker, session, dir, path string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--session", session, "--dir", dir, "--replay", path, "--no-record", "--quiet", "--continuously"})
+	inputs.Input.Env, inputs.Input.WorkingDirectory = f.env, dir
+	done := make(chan error, 1)
+	go func() { done <- f.server.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(15 * time.Second):
+			t.Error("legacy replay did not stop")
+		}
+	})
+	_, err := support.WaitForObservation(15*time.Second, func() (int, error) {
+		select {
+		case err := <-done:
+			done <- err
+			return 0, fmt.Errorf("replay exited: %v %s", err, inputs.Stderr())
+		default:
+		}
+		status, _ := f.request(t, http.MethodGet, "/worker-sessions/"+worker, nil, nil)
+		return status, nil
+	}, func(status int) bool { return status == http.StatusConflict })
+	if err != nil {
+		t.Fatalf("legacy replay did not expose its equal-ID peer: %v", err)
+	}
 }
