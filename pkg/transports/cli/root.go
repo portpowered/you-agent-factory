@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	agentmessagescli "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/cli"
+
 	"golang.org/x/term"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -169,6 +171,7 @@ type CommandOperations struct {
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
 	ListWorkerSessions                ListWorkerSessionsOperation
+	MessagesCLI                       *agentmessagescli.Adapter
 	ShowWorkerSession                 ShowWorkerSessionsOperation
 	ReadWorkerSession                 ReadWorkerSessionOperation
 	StreamWorkerSession               StreamWorkerSessionOperation
@@ -250,6 +253,7 @@ type CommandFactory struct {
 	MoveWork                   func(workcli.MoveConfig) error
 	VisualizeWork              func(workcli.VisualizeConfig) error
 	ListWorkerSessions         workersessionscli.ListOperation
+	MessagesCLI                *agentmessagescli.Adapter
 	ShowWorkerSession          workersessionscli.ShowOperation
 	ReadWorkerSession          workersessionscli.ReadOperation
 	StreamWorkerSession        workersessionscli.StreamOperation
@@ -328,6 +332,7 @@ func NewCommandFactory(operations CommandOperations, sessionHandlers commandregi
 		MoveWork:                          operations.MoveWork,
 		VisualizeWork:                     operations.VisualizeWork,
 		ListWorkerSessions:                operations.ListWorkerSessions,
+		MessagesCLI:                       operations.MessagesCLI,
 		ShowWorkerSession:                 operations.ShowWorkerSession,
 		ReadWorkerSession:                 operations.ReadWorkerSession,
 		StreamWorkerSession:               operations.StreamWorkerSession,

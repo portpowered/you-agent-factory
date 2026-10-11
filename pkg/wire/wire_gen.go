@@ -764,11 +764,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v205 := provideWorkVisualizationOperation()
 	visualizeWorkOperation := provideVisualizeWorkOperation(v205)
 	v206 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol, source)
-	v207 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
+	cliAdapter := provideMessagesCLI(wireStandardCLIHTTPProtocol, wireStreamingCLIHTTPProtocol)
+	v207 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	v208 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireStreamingCLIHTTPProtocol)
 	v209 := provideStreamWorkerSessionOperation(wireStreamingCLIHTTPProtocol)
 	wireLocalWorkerSessionsBoundary, err := provideLocalWorkerSessionsBoundary(workersessionsService)
@@ -920,6 +921,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		MoveWork:                          moveWorkOperation,
 		VisualizeWork:                     visualizeWorkOperation,
 		ListWorkerSessions:                v206,
+		MessagesCLI:                       cliAdapter,
 		ShowWorkerSession:                 v207,
 		ReadWorkerSession:                 v208,
 		StreamWorkerSession:               v209,
@@ -1318,6 +1320,7 @@ var cliCommandOperationsSet = wire13.NewSet(
 	provideSubmitWorkOperation,
 	provideSubmitBatchOperation,
 	provideListWorkerSessionsOperation,
+	provideMessagesCLI,
 	provideShowWorkerSessionOperation,
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,

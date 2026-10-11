@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	agentmessagescli "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/cli"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
@@ -18,6 +19,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 )
+
+func productionMessagesCommand(options CommandFactory) *cobra.Command {
+	command, err := options.MessagesCLI.Command(agentmessagescli.Config{LookupEnv: options.lookupEnv})
+	if err != nil {
+		panic(fmt.Sprintf("build Agent Message commands: %v", err))
+	}
+	return command
+}
 
 func productionWorkersCommand(options CommandFactory) *cobra.Command {
 	manifest, err := generated.WorkersFamilyManifest()

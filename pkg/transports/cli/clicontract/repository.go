@@ -231,6 +231,7 @@ func loadGeneratedManifests() ([]climanifest.Manifest, []climanifest.Manifest, e
 		generated.WorkFamilyManifest, generated.FactoryConfigInitFamilyManifest,
 		generated.WorkersFamilyManifest,
 		generated.WorkerSessionsFamilyManifest,
+		generated.MessagesFamilyManifest,
 		generated.ModelsDocsFamilyManifest, generated.ProvidersFamilyManifest,
 		generated.MetricsFamilyManifest,
 		generated.RunSubmitFamilyManifest,

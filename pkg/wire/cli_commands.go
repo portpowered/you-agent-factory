@@ -17,6 +17,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
+	agentmessagescli "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/cli"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
@@ -58,6 +59,10 @@ const (
 	standardCLIHTTPTimeout = 10 * time.Second
 	extendedCLIHTTPTimeout = 15 * time.Second
 )
+
+func provideMessagesCLI(transport standardCLIHTTPProtocol, streaming streamingCLIHTTPProtocol) *agentmessagescli.Adapter {
+	return agentmessagescli.NewAdapter(transport.Protocol, streaming.Protocol, uuid.NewString)
+}
 
 type standardCLIHTTPProtocol struct {
 	clihttp.Protocol
