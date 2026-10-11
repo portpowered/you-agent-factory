@@ -3805,11 +3805,11 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Run a bounded subagent (RUN, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. RUN uses the packaged @you/subagent Factory and operator/provider defaults; Worker actions preserve selected-host results and typed errors. Poll READ logs with nextToken and inspect capture health.",
+            "canonicalEnglish": "Start a direct subagent (START, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. Omitted route uses dedicated defaults.subagent. RUN returns a migration error. START returns admission without waiting for completion.",
             "id": "mcp.tool.you.subagent.description"
           },
           "title": {
-            "canonicalEnglish": "Run subagent",
+            "canonicalEnglish": "Start subagent",
             "id": "mcp.tool.you.subagent.title"
           }
         },
@@ -3836,7 +3836,7 @@
             "documentation": {
               "documentation": {
                 "description": {
-                  "canonicalEnglish": "Model name; omitted values use operator defaults.",
+                  "canonicalEnglish": "Concrete model; omitted values use dedicated defaults.subagent.",
                   "id": "mcp.arg.you.subagent.model.description"
                 },
                 "title": {
@@ -3892,7 +3892,7 @@
             "documentation": {
               "documentation": {
                 "description": {
-                  "canonicalEnglish": "Model provider; omitted values use operator defaults.",
+                  "canonicalEnglish": "Concrete provider; omitted values use dedicated defaults.subagent.",
                   "id": "mcp.arg.you.subagent.provider.description"
                 },
                 "title": {
@@ -3948,7 +3948,7 @@
             "documentation": {
               "documentation": {
                 "description": {
-                  "canonicalEnglish": "Optional maximum wait time in milliseconds.",
+                  "canonicalEnglish": "Optional execution deadline in milliseconds; omitted execution has no deadline.",
                   "id": "mcp.arg.you.subagent.timeout_millis.description"
                 },
                 "title": {
@@ -4004,9 +4004,10 @@
             "id": "mcp.arg.you.subagent.action",
             "name": "action",
             "required": false,
-            "default": "RUN",
+            "default": "START",
             "constraints": {
               "enum": [
+                "START",
                 "RUN",
                 "LIST",
                 "READ",
@@ -4141,27 +4142,22 @@
           }
         },
         "schema": {
-          "type": "object",
-          "properties": {
-            "action": {
-              "type": "string",
-              "enum": [
-                "RUN",
-                "LIST",
-                "READ",
-                "CONTROL"
-              ],
-              "default": "RUN"
-            }
-          },
           "oneOf": [
             {
               "additionalProperties": false,
               "properties": {
+                "action": {
+                  "enum": [
+                    "START",
+                    "RUN"
+                  ],
+                  "type": "string"
+                },
                 "model": {
                   "type": "string"
                 },
                 "prompt": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "provider": {
@@ -4170,17 +4166,21 @@
                 "reasoningEffort": {
                   "type": "string"
                 },
+                "requestId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "timeoutMillis": {
+                  "maximum": 9223372036854,
+                  "minimum": 1,
                   "type": "integer"
+                },
+                "workerSessionId": {
+                  "minLength": 1,
+                  "type": "string"
                 },
                 "workingRoot": {
                   "type": "string"
-                },
-                "action": {
-                  "type": "string",
-                  "enum": [
-                    "RUN"
-                  ]
                 }
               },
               "required": [
@@ -4191,6 +4191,21 @@
             {
               "additionalProperties": false,
               "properties": {
+                "action": {
+                  "enum": [
+                    "LIST"
+                  ],
+                  "type": "string"
+                },
+                "history": {
+                  "default": "all",
+                  "enum": [
+                    "active",
+                    "all",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
                 "limit": {
                   "minimum": 1,
                   "type": "integer"
@@ -4222,36 +4237,31 @@
                     "type": "string"
                   },
                   "type": "array"
-                },
-                "history": {
-                  "type": "string",
-                  "enum": [
-                    "active",
-                    "all",
-                    "archived"
-                  ],
-                  "default": "all"
-                },
-                "action": {
-                  "type": "string",
-                  "enum": [
-                    "LIST"
-                  ]
                 }
               },
-              "type": "object",
               "required": [
                 "action"
-              ]
+              ],
+              "type": "object"
             },
             {
               "additionalProperties": false,
               "properties": {
+                "action": {
+                  "enum": [
+                    "READ"
+                  ],
+                  "type": "string"
+                },
                 "limit": {
                   "default": 100,
                   "maximum": 1000,
                   "minimum": 1,
                   "type": "integer"
+                },
+                "nextToken": {
+                  "minLength": 1,
+                  "type": "string"
                 },
                 "view": {
                   "default": "summary",
@@ -4266,16 +4276,6 @@
                 "workerSessionId": {
                   "minLength": 1,
                   "type": "string"
-                },
-                "nextToken": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "action": {
-                  "type": "string",
-                  "enum": [
-                    "READ"
-                  ]
                 }
               },
               "required": [
@@ -4287,6 +4287,16 @@
             {
               "additionalProperties": false,
               "properties": {
+                "action": {
+                  "enum": [
+                    "CONTROL"
+                  ],
+                  "type": "string"
+                },
+                "expectedAttemptId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
                 "operation": {
                   "enum": [
                     "CANCEL",
@@ -4304,6 +4314,14 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "resumeMode": {
+                  "default": "provider",
+                  "enum": [
+                    "provider",
+                    "recorded"
+                  ],
+                  "type": "string"
+                },
                 "successorWorkerSessionId": {
                   "minLength": 1,
                   "type": "string"
@@ -4311,24 +4329,6 @@
                 "workerSessionId": {
                   "minLength": 1,
                   "type": "string"
-                },
-                "expectedAttemptId": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "resumeMode": {
-                  "type": "string",
-                  "enum": [
-                    "provider",
-                    "recorded"
-                  ],
-                  "default": "provider"
-                },
-                "action": {
-                  "type": "string",
-                  "enum": [
-                    "CONTROL"
-                  ]
                 }
               },
               "required": [
@@ -4339,6 +4339,20 @@
               "type": "object"
             }
           ],
+          "properties": {
+            "action": {
+              "default": "START",
+              "enum": [
+                "START",
+                "RUN",
+                "LIST",
+                "READ",
+                "CONTROL"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object",
           "$schema": "https://json-schema.org/draft/2020-12/schema"
         }
       },
@@ -4403,34 +4417,44 @@
             "examples": [
               {
                 "result": {
-                  "sessionId": "session-1",
-                  "status": "COMPLETED",
-                  "text": "Summary text"
+                  "requestId": "start-example",
+                  "workerSessionId": "worker-example",
+                  "accepted": true,
+                  "state": "RUNNING",
+                  "eventTopic": "worker-session.worker-example"
                 }
               }
             ],
             "schema": {
               "oneOf": [
                 {
-                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
                   "additionalProperties": false,
+                  "description": "START admission result; execution remains server-owned.",
                   "properties": {
-                    "sessionId": {
+                    "requestId": {
                       "type": "string"
                     },
-                    "status": {
+                    "workerSessionId": {
                       "type": "string"
                     },
-                    "text": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "eventTopic": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "sessionId",
-                    "status"
-                  ],
-                  "type": "object",
-                  "description": "RUN result. The live Factory Session is closed before return."
+                    "requestId",
+                    "workerSessionId",
+                    "accepted",
+                    "state",
+                    "eventTopic"
+                  ]
                 },
                 {
                   "type": "object",
@@ -4551,7 +4575,7 @@
           {
             "content": [
               {
-                "text": "{\"result\":{\"sessionId\":\"session-1\",\"status\":\"COMPLETED\",\"text\":\"Summary text\"}}",
+                "text": "{\"result\":{\"requestId\":\"start-example\",\"workerSessionId\":\"worker-example\",\"accepted\":true,\"state\":\"RUNNING\",\"eventTopic\":\"worker-session.worker-example\"}}",
                 "type": "text"
               }
             ],

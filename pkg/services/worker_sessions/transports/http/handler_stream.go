@@ -177,24 +177,6 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
-	if errors.Is(err, operatorsettings.ErrResolutionInvalidInput) || errors.Is(err, operatorsettings.ErrDocumentMalformed) || errors.Is(err, operatorsettings.ErrDocumentNotFound) {
-		writeError(w, http.StatusBadRequest, "configure a valid defaults.subagent route or supply a concrete provider and model", "SUBAGENT_ROUTE_INVALID")
-		return
-	}
-	if errors.Is(err, providers.ErrUnknownProvider) || errors.Is(err, providers.ErrInvalidID) {
-		writeError(w, http.StatusBadRequest, "select an available concrete subagent provider", "SUBAGENT_PROVIDER_INVALID")
-		return
-	}
-	if errors.Is(err, providers.ErrProviderUnavailable) {
-		writeError(w, http.StatusServiceUnavailable, "the selected subagent provider is unavailable; check its configuration and prerequisites", "PROVIDER_UNAVAILABLE")
-		return
-	}
-	var providerFailure providers.ExecuteFailure
-	if errors.As(err, &providerFailure) {
-		status, code, message := subagentProviderFailureResponse(providerFailure.Kind)
-		writeError(w, status, message, code)
-		return
-	}
 	switch {
 	case errors.Is(err, workersessions.ErrCallerInvalid):
 		writeError(w, http.StatusForbidden, "Worker Session caller credentials are invalid", string(factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID))
@@ -220,6 +202,28 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to start Worker Session", "INTERNAL_ERROR")
 	}
+}
+
+func (h *Handler) writeMappedSubagentStartError(w http.ResponseWriter, err error) {
+	if errors.Is(err, operatorsettings.ErrResolutionInvalidInput) || errors.Is(err, operatorsettings.ErrDocumentMalformed) || errors.Is(err, operatorsettings.ErrDocumentNotFound) {
+		writeError(w, http.StatusBadRequest, "configure a valid defaults.subagent route or supply a concrete provider and model", "SUBAGENT_ROUTE_INVALID")
+		return
+	}
+	if errors.Is(err, providers.ErrUnknownProvider) || errors.Is(err, providers.ErrInvalidID) {
+		writeError(w, http.StatusBadRequest, "select an available concrete subagent provider", "SUBAGENT_PROVIDER_INVALID")
+		return
+	}
+	if errors.Is(err, providers.ErrProviderUnavailable) {
+		writeError(w, http.StatusServiceUnavailable, "the selected subagent provider is unavailable; check its configuration and prerequisites", "PROVIDER_UNAVAILABLE")
+		return
+	}
+	var providerFailure providers.ExecuteFailure
+	if errors.As(err, &providerFailure) {
+		status, code, message := subagentProviderFailureResponse(providerFailure.Kind)
+		writeError(w, status, message, code)
+		return
+	}
+	h.writeMappedStartError(w, err)
 }
 
 func subagentProviderFailureResponse(kind providers.ExecuteFailureKind) (int, string, string) {

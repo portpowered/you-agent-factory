@@ -158,7 +158,7 @@ func TestSubagentStartRouteFailuresHaveActionableTypedResponses(t *testing.T) {
 		t.Run(test.code, func(t *testing.T) {
 			t.Parallel()
 			response := httptest.NewRecorder()
-			(&Handler{}).writeMappedStartError(response, test.err)
+			(&Handler{}).writeMappedSubagentStartError(response, test.err)
 			var body factoryapi.ErrorResponse
 			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)

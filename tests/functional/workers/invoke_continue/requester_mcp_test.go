@@ -170,6 +170,9 @@ func runRequesterPreparationOwnerLoss(t *testing.T, fixture *invokeContinuePacka
 	if child.providerRunner.CallCount() != 0 || runner.CallCount() != 1 {
 		t.Fatal("preparation owner loss launched a child or changed the source attempt")
 	}
+	if mode == "mcp" && gate.sessionID != "" {
+		t.Fatal("direct MCP START created a per-start Factory Session")
+	}
 	assertRequesterPreparedChild(t, fixture, child, ctx, gate, parentID, token)
 }
 
@@ -186,6 +189,9 @@ func assertRequesterPreparedChild(t *testing.T, fixture *invokeContinuePackageFi
 	var observation api.WorkerSessionObservation
 	decodeDirectWorkerSessionResult(t, show.Stdout(), &observation)
 	assertRequesterTokenAbsent(t, token, show.Stdout()+show.Stderr())
+	if gate.sessionID == "" && !observation.Direct {
+		t.Fatal("refused direct START was retained as a Factory worker")
+	}
 	if observation.State != api.WorkerSessionObservationStateFailed || observation.Requester == nil || observation.Requester.WorkerSessionId != parentID {
 		t.Fatal("refused child lost terminal outcome or its detached prepared requester")
 	}
@@ -195,12 +201,6 @@ func requesterPreparationOperation(t *testing.T, fixture *invokeContinuePackageF
 	t.Helper()
 	if mode == "mcp" {
 		response := executeRequesterMCP(t, fixture, child, ctx, parentID, token, true)
-		if response.Error != nil && response.Error.SessionID != "" {
-			status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+response.Error.SessionID, nil)
-			if status != http.StatusNotFound {
-				t.Fatal("owner loss returned before exact MCP child retirement")
-			}
-		}
 		encoded, err := json.Marshal(response)
 		return fmt.Sprint(err) + string(encoded)
 	}
@@ -220,7 +220,7 @@ func requesterPreparationOperation(t *testing.T, fixture *invokeContinuePackageF
 	return requesterPreparationInvoke(fixture, child, ctx, mode, path, parentID, token)
 }
 
-// This protects typed caller refusal, terminal dispatch completion and exact child cleanup.
+// This protects typed caller refusal and the retained preparation failure.
 func assertRequesterRuntimePreparationFailure(t *testing.T, mode, result, token string) {
 	t.Helper()
 	assertRequesterTokenAbsent(t, token, result)
@@ -235,8 +235,8 @@ func assertRequesterRuntimePreparationFailure(t *testing.T, mode, result, token 
 	if !strings.HasPrefix(result, "<nil>") || json.Unmarshal([]byte(result[5:]), &response) != nil || response.Error == nil || response.Result != nil {
 		t.Fatal("MCP preparation loss did not return a terminal error")
 	}
-	if response.Error.Code != "WORKER_SESSION_CALLER_INVALID" || response.Error.Retryable || response.Error.Details["sessionClosed"] != true {
-		t.Fatalf("MCP preparation loss did not complete/retire its child: %#v", response.Error)
+	if response.Error.Code != "worker_session.permission_denied" || response.Error.Retryable || response.Error.Details["upstreamCode"] != "WORKER_SESSION_CALLER_INVALID" || response.Error.Details["status"] != float64(http.StatusForbidden) || response.Error.SessionID != "" {
+		t.Fatalf("MCP START preparation loss did not retain its typed refusal: %#v", response.Error)
 	}
 }
 
