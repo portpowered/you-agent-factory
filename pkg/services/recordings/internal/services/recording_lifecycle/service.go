@@ -3,7 +3,10 @@
 // parent-private subservice contract.
 package recordinglifecycle
 
-import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+import (
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+)
 
 // Snapshot is a detached private handoff to sibling Recordings capabilities.
 // Replay and artifact export may read finalized facts without owning lifecycle
@@ -17,6 +20,7 @@ type Snapshot struct {
 // Service owns target selection, binding, and mutable recording lifecycle
 // state behind the Recordings root.
 type Service interface {
+	ReleaseReservation(runtimeartifact.Reservation) error
 	PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error)
 	StartRecording(recordings.StartRecordingRequest) (recordings.StartRecordingResult, error)
 	BindRecording(recordings.BindRecordingRequest) (recordings.BindRecordingResult, error)

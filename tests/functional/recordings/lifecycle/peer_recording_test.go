@@ -421,3 +421,41 @@ func invokePeerRecordingWork(t *testing.T, baseURL, id string) {
 		t.Fatalf("peer completed Work=%+v", listed)
 	}
 }
+func TestPeerRecordingFailedOpeningRetry(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	dir := support.ScaffoldFactory(t, recordingsLifecycleActivationFactoryConfig())
+	broken := support.ScaffoldFactory(t, recordingsLifecycleActivationFactoryConfig())
+	configPath := filepath.Join(broken, "factory.json")
+	valid, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var sessions support.FactorySessionStarter
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, Args: []string{"--no-record=false"}, WaitForServiceModeRuntime: true,
+		Env:   append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		Edges: serviceedges.Edges{ProviderCommandRunner: support.NewStaticSuccessCommandRunner("retry COMPLETE"), FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil }},
+		BeforeStart: func(_ testing.TB, process support.Process, _ root.Input) {
+			sessions = process.(support.ApplicationProcess).FactorySessions()
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	request := factorysessions.SessionStartRequest{SessionID: "5ca047d8-b32c-4fda-9e45-727b0fe7e3b2", Mode: factorysessions.SessionOperationModeLive, ActivationOnly: true, FolderPath: broken, RuntimeSelection: &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService}}
+	if result, err := sessions.Start(t.Context(), request); err == nil || result.SessionID != "" {
+		t.Fatalf("broken opening result=%+v error=%v", result, err)
+	} else {
+		t.Logf("initial selected opening failure: %v", err)
+	}
+	if err := os.WriteFile(configPath, valid, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sessions.Start(t.Context(), request); err != nil {
+		t.Fatalf("corrected same-identity retry: %v", err)
+	}
+	invokePeerRecordingWork(t, server.URL(), request.SessionID)
+	cancelAndDeletePeerRecording(t, server.URL(), request.SessionID)
+}

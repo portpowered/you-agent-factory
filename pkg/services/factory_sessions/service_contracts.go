@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -625,6 +626,8 @@ type SessionWorkerSelection struct {
 
 // SessionRecordingSelection carries recording selections for one session.
 type SessionRecordingSelection struct {
+	// Reservation is opening-only rollback authority, never persisted.
+	Reservation runtimeartifact.Reservation `json:"-"`
 	// ImplicitCurrentBoard selects the repository board for a local default
 	// continuous server, without changing explicit or batch recording behavior.
 	ImplicitCurrentBoard bool

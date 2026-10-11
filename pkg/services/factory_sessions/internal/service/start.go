@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"path/filepath"
 	"strings"
 
@@ -235,10 +236,16 @@ func inheritCurrentMockWorkers(request factorysessions.SessionStartRequest, curr
 	return request
 }
 
-func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (result factorysessions.SessionStartResult, err error) {
 	selectedID, err := r.sessionIDForStart(request)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
+	}
+	if pending, ok := r.reservationCleanups.Load(selectedID); ok {
+		if err := pending.(*runtimeOpeningCleanup).Close(); err != nil {
+			return factorysessions.SessionStartResult{}, fmt.Errorf("retry failed Factory Session opening cleanup: %w", err)
+		}
+		r.reservationCleanups.CompareAndDelete(selectedID, pending)
 	}
 	if request.InitNewFactory {
 		factoryDir, err := r.assembly.PrepareNewFactoryScaffold(request.FolderPath)
@@ -250,6 +257,17 @@ func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.
 		request.RuntimeSelection = &selection
 	}
 	selected, err := r.prepareLiveStartRequest(ctx, request, selectedID)
+	var closeArtifacts func() error
+	var activation *sessionActivation
+	defer func() {
+		reservation := runtimeSelectionForStart(selected).Recording.Reservation
+		if err == nil || reservation.IsZero() {
+			return
+		}
+		if cleanupErr := r.rollbackFailedRecording(ctx, selectedID, reservation, activation, closeArtifacts); cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("rollback Factory Session recording reservation: %w", cleanupErr))
+		}
+	}()
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
@@ -272,7 +290,7 @@ func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.
 		return factorysessions.SessionStartResult{}, err
 	}
 	r.setStartedSessionTarget(selectedID, selected)
-	activation, err := startSessionLifecycle(ctx, lifecycle, closeArtifacts, sessionRuntimeSelection(&selected).Host.Port > 0)
+	activation, err = startSessionLifecycle(ctx, lifecycle, closeArtifacts, sessionRuntimeSelection(&selected).Host.Port > 0)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
@@ -280,7 +298,7 @@ func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	result := liveStartResult(session)
+	result = liveStartResult(session)
 	result.StartupRecovery = runtimebinding.SessionStateFrom(session).StartupRecovery
 	if request.InitNewFactory {
 		result.Live.InitializedNewFactory = true
@@ -319,15 +337,11 @@ func (r *RuntimeOpening) setStartedSessionTarget(selectedID string, selected fac
 func (r *RuntimeOpening) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
 	session := r.assembly.Resolve(selectedID)
 	if session == nil {
-		_ = activation.Close(ctx)
-		_ = activation.lifecycle.StopLifecycle(ctx)
-		return nil, fmt.Errorf("start Factory Session: activated session %q is unavailable", selectedID)
+		return nil, errors.Join(fmt.Errorf("start Factory Session: activated session %q is unavailable", selectedID), activation.Abort(context.WithoutCancel(ctx)))
 	}
 	bound := runtimebinding.SessionStateFrom(session)
 	if bound == nil {
-		_ = activation.Close(ctx)
-		_ = activation.lifecycle.StopLifecycle(ctx)
-		return nil, fmt.Errorf("start Factory Session: session runtime state is unavailable")
+		return nil, errors.Join(fmt.Errorf("start Factory Session: session runtime state is unavailable"), activation.Abort(context.WithoutCancel(ctx)))
 	}
 	bindStartedSessionState(bound, activation, requestID, previousControl)
 	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
@@ -360,6 +374,7 @@ func (r *RuntimeOpening) prepareLiveStartRequest(ctx context.Context, request fa
 	if request.RuntimeSelection != nil {
 		runtimeSelection = *request.RuntimeSelection
 	}
+	runtimeSelection.Recording.Reservation = runtimeartifact.Reservation{}
 	if request.ActivationOnly && selectedID != factorysessions.DefaultSessionID && strings.TrimSpace(runtimeSelection.SystemConfigHome) == "" {
 		if current := runtimebinding.SessionStateFrom(r.assembly.Resolve(factorysessions.DefaultSessionID)); current != nil {
 			runtimeSelection.SystemConfigHome = current.RecordingHome
@@ -381,8 +396,9 @@ func (r *RuntimeOpening) prepareLiveStartRequest(ctx context.Context, request fa
 		return factorysessions.SessionStartRequest{}, resolveErr
 	}
 	selected.FolderPath = selectedFolder
+	selected.RuntimeSelection = &runtimeSelection
 	if err := r.selectPeerRecording(ctx, request, selectedID, &runtimeSelection); err != nil {
-		return factorysessions.SessionStartRequest{}, err
+		return selected, err
 	}
 	if strings.TrimSpace(runtimeSelection.ExecutionBaseDir) == "" {
 		runtimeSelection.ExecutionBaseDir = strings.TrimSpace(selected.FolderPath)
@@ -414,9 +430,13 @@ func (r *RuntimeOpening) selectPeerRecording(ctx context.Context, request factor
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if _, ok := r.recordingsRuntime.(recordings.LiveRecordingReservationOwner); !ok {
+		return fmt.Errorf("peer recording reservation rollback owner is unavailable")
+	}
 	target, err := r.recordingsRuntime.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
-		HomeDir: selection.SystemConfigHome, CanonicalSessionID: selectedID, ReportedSessionID: selectedID,
+		HomeDir: selection.SystemConfigHome, CanonicalSessionID: selectedID, ReportedSessionID: selectedID, RollbackOnFailure: true,
 	})
+	recording.Reservation = target.Reservation
 	if err != nil {
 		return err
 	}
@@ -502,7 +522,7 @@ func startSessionLifecycle(ctx context.Context, lifecycle roles.LifecycleRuntime
 		}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx), activation.lifecycle.StopLifecycle(ctx)))
+		return activation, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Abort(context.WithoutCancel(ctx))))
 	}
 	return activation, nil
 }

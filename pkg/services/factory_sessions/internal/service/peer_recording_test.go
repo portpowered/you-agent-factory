@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"testing"
 	"time"
 
@@ -15,6 +16,67 @@ import (
 type peerRecordingAssembly struct {
 	openingAssembly
 	current *runtimebinding.SessionState
+}
+
+type peerRecordingPlanner struct{ currentBoardTargetPlanner }
+
+func (*peerRecordingPlanner) ReleaseReservation(runtimeartifact.Reservation) error { return nil }
+
+type peerRecordingRollbackOwner struct {
+	recordings.RuntimeScopeService
+	err   error
+	calls int
+}
+
+func (owner *peerRecordingRollbackOwner) ReleaseReservation(runtimeartifact.Reservation) error {
+	owner.calls++
+	return owner.err
+}
+
+func TestPeerRecordingRollbackWaitsForConsumersAndRetriesRelease(t *testing.T) {
+	t.Parallel()
+	consumerErr := errors.New("writer still owns resource")
+	releaseErr := errors.New("owned removal unavailable")
+	owner := &peerRecordingRollbackOwner{err: releaseErr}
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.Add(func() error { return consumerErr })
+	cleanup.OwnRecordingTarget(recordingReservationRollback{owner: owner})
+	if err := cleanup.Close(); !errors.Is(err, consumerErr) || owner.calls != 0 {
+		t.Fatalf("released before consumers joined: %v calls=%d", err, owner.calls)
+	}
+	consumerErr = nil
+	if err := cleanup.Close(); !errors.Is(err, releaseErr) || owner.calls != 1 {
+		t.Fatalf("failed removal was lost: %v calls=%d", err, owner.calls)
+	}
+	owner.err = nil
+	if err := cleanup.Close(); err != nil || owner.calls != 2 {
+		t.Fatalf("release retry: %v calls=%d", err, owner.calls)
+	}
+	if err := cleanup.Close(); err != nil || owner.calls != 2 {
+		t.Fatalf("successful release repeated: %v calls=%d", err, owner.calls)
+	}
+}
+
+func TestPeerRecordingFailedLifecycleRetainsJoinForRollback(t *testing.T) {
+	t.Parallel()
+	startErr := errors.New("startup failed")
+	joinErr := errors.New("worker join failed")
+	lifecycle := &startLifecycleStub{completeErr: startErr, workerStopErr: joinErr}
+	activation, err := startSessionLifecycle(t.Context(), lifecycle, nil, false)
+	if activation == nil || !errors.Is(err, startErr) || !errors.Is(err, joinErr) {
+		t.Fatalf("failed startup lost cleanup ownership: %v", err)
+	}
+	owner := &peerRecordingRollbackOwner{}
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.Add(func() error { return activation.Abort(t.Context()) })
+	cleanup.OwnRecordingTarget(recordingReservationRollback{owner: owner})
+	if err := cleanup.Close(); !errors.Is(err, joinErr) || owner.calls != 0 {
+		t.Fatalf("released before worker joined: %v calls=%d", err, owner.calls)
+	}
+	lifecycle.workerStopErr = nil
+	if err := cleanup.Close(); err != nil || owner.calls != 1 {
+		t.Fatalf("joined retry failed to release: %v calls=%d", err, owner.calls)
+	}
 }
 
 func TestPeerRecordingOpeningRetainsProfile(t *testing.T) {
@@ -50,7 +112,7 @@ func TestPeerRecordingSelection(t *testing.T) {
 			t.Parallel()
 			const peer = "5ca047d8-b32c-4fda-9e45-727b0fe7e3b2"
 			cause := errors.New("reservation unavailable")
-			planner := &currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "peer.json"}}
+			planner := &peerRecordingPlanner{currentBoardTargetPlanner: currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "peer.json"}}}
 			current := &runtimebinding.SessionState{CurrentBoardRecordPath: "host.json", RecordingHome: "host-profile"}
 			opening := &RuntimeOpening{assembly: peerRecordingAssembly{current: current}, recordingsRuntime: planner}
 			selection := factorysessions.SessionRuntimeSelection{SystemConfigHome: "selected-profile", Recording: factorysessions.SessionRecordingSelection{FlushInterval: time.Second}}
@@ -111,7 +173,7 @@ func TestPeerRecordingUsesSelectedHostHomeBeforeAmbientResolver(t *testing.T) {
 	for _, explicit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "inherited", true: "explicit"}[explicit], func(t *testing.T) {
 			t.Parallel()
-			planner := &currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "peer.json"}}
+			planner := &peerRecordingPlanner{currentBoardTargetPlanner: currentBoardTargetPlanner{target: recordings.LiveRecordingTarget{ServicePath: "peer.json"}}}
 			opening := &RuntimeOpening{
 				assembly:          peerRecordingAssembly{current: &runtimebinding.SessionState{RecordingHome: "host-profile", CurrentBoardRecordPath: "host.json"}},
 				recordingsRuntime: planner,

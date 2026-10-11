@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -53,6 +54,18 @@ type Service struct {
 	caseInsensitive bool
 	durableThrough  map[string]recordings.CanonicalEventCursor
 	nextRecordingID int
+}
+
+// ReleaseReservation keeps rollback with the existing target planner owner.
+func (service *Service) ReleaseReservation(reservation runtimeartifact.Reservation) error {
+	if reservation.IsZero() {
+		return nil
+	}
+	owner, ok := service.targets.(recordings.LiveRecordingReservationOwner)
+	if !ok {
+		return fmt.Errorf("recording reservation owner is unavailable")
+	}
+	return owner.ReleaseReservation(reservation)
 }
 
 var _ recordinglifecycle.Service = (*Service)(nil)
