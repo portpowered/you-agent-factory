@@ -125,6 +125,10 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
+	malformed := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexMalformedOutput()})}
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-malformed", malformed, malformed, nil, nil, nil, malformed.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	for _, name := range []string{"captured-codex-tools", "captured-codex-factory", "captured-codex-partial-peer"} {
 		toolRunner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})}
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, toolRunner, toolRunner, nil, nil, nil, toolRunner.Reset); err != nil {

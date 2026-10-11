@@ -296,8 +296,7 @@ func TestRecordingContentCapturedCodexToolPrivateProfilesFenceReadsAndCursors(t 
 		route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
 		started := startContinuationRestartHost(t, root, host, home, route)
 		for _, id := range []string{name, "same-worker-id"} {
-			path := filepath.Join(dir, id+".json")
-			writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt", workingDirectory: dir, userMessage: "ordinary private-profile prompt"})
+			path := capturedCodexExecutionPath(t, &invokeContinueScenario{workingDirectory: dir}, id)
 			summaryRestartCLI(t, started, home, dir, "invoke", "--execution", path)
 		}
 		page := support.GetJSON[api.WorkerSessionLogPage](t, started.baseURL+"/worker-sessions/same-worker-id/logs?limit=1")
