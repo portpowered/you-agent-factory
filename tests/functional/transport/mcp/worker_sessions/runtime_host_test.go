@@ -694,6 +694,7 @@ func (r *captureRecoveryRunner) RunStreaming(ctx context.Context, request platfo
 		defer close(done)
 		return (failedBusinessAttributionRunner{}).RunStreaming(ctx, request, observer)
 	}
+	observer(platformprocess.OutputStreamStdout, []byte("{\"type\":\"thread.started\",\"thread_id\":\"lost-associated-provider\"}\n"))
 	return r.controlHostRunner.Run(ctx, request)
 }
 
@@ -719,6 +720,12 @@ func runAdmittedCaptureRecovery(t *testing.T, process support.Process) {
 	assertCompletedAttributionTranscript(t, transcript, "admitted-completed")
 	assertCompletedAttributionCLITranscript(t, host, "admitted-completed", transcript)
 	lost := admitControlWorker(t, ctx, host.URL(), "admitted-lost", runner.controlHostRunner)
+	_, err := support.WaitForObservation(30*time.Second, func() (map[string]any, error) {
+		return getHost(t, host.URL()+"/worker-sessions/admitted-lost").(map[string]any), nil
+	}, func(row map[string]any) bool { return row["providerSessionAvailable"] == true }) //nolint:testsleep // Operator 2026-10-11T20:11Z: public association readiness precedes bounded read checks.
+	if err != nil {
+		t.Fatal(err)
+	}
 	prefix := getHost(t, host.URL()+"/worker-sessions/admitted-lost/logs")
 	if len(prefix.(map[string]any)["events"].([]any)) == 0 {
 		t.Fatal("admitted execution has no committed opening")
@@ -732,7 +739,7 @@ func runAdmittedCaptureRecovery(t *testing.T, process support.Process) {
 	reopened := support.StartFunctionalAPIServer(t, cfg)
 	recovered, recoveredCtx := startMCP(t, process, reopened.URL())
 	row := getHost(t, reopened.URL()+"/worker-sessions/admitted-lost").(map[string]any)
-	if row["recordingHealth"] != "INCOMPLETE" || row["state"] != "FAILED" {
+	if row["recordingHealth"] != "INCOMPLETE" || row["state"] != "FAILED" || row["transcript"] != "UNAVAILABLE" {
 		t.Fatalf("lost capture invented completion or live ownership: %v", row)
 	}
 	assertFactoryCLIParity(t, reopened, "admitted-lost", row)
@@ -753,6 +760,7 @@ func assertUnavailableTranscriptParity(t *testing.T, ctx context.Context, sessio
 	if err != nil {
 		t.Fatal(err)
 	}
+	started := time.Now()
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
@@ -762,11 +770,22 @@ func assertUnavailableTranscriptParity(t *testing.T, ctx context.Context, sessio
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil || response.StatusCode != http.StatusInternalServerError || body["code"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
 		t.Fatalf("HTTP transcript=%d %v err=%v", response.StatusCode, body, err)
 	}
+	if elapsed := time.Since(started); elapsed > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("HTTP unavailable elapsed=%s", elapsed)
+	}
 	inputs := support.FakeInputs(ctx, []string{"you", "worker-sessions", "read", "--worker-session-id", id, "--view", "transcript", "--server", host.URL(), "--json"})
+	started = time.Now()
 	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(inputs.Stderr(), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") {
 		t.Fatalf("CLI transcript=%v stdout=%s stderr=%s", err, inputs.Stdout(), inputs.Stderr())
 	}
+	if elapsed := time.Since(started); elapsed > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("CLI unavailable elapsed=%s", elapsed)
+	}
+	started = time.Now()
 	result := callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id, "view": "transcript"})
+	if elapsed := time.Since(started); elapsed > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("MCP unavailable elapsed=%s", elapsed)
+	}
 	assertToolError(t, result, "worker_session.unavailable", false)
 	encoded, _ := json.Marshal(result.StructuredContent)
 	var envelope struct {
@@ -778,6 +797,90 @@ func assertUnavailableTranscriptParity(t *testing.T, ctx context.Context, sessio
 	if err := json.Unmarshal(encoded, &envelope); err != nil || envelope.Error.WorkerSessionID != id || envelope.Error.Details["status"] != float64(500) || envelope.Error.Details["upstreamCode"] != "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE" {
 		t.Fatalf("MCP transcript=%s err=%v", encoded, err)
 	}
+}
+
+func TestWorkerSessionUnavailableTerminalReadParity(t *testing.T) {
+	process := newSelectedHostClientProcess(t)
+	t.Run("associated incomplete capture and normal transcript", func(t *testing.T) { t.Parallel(); runAdmittedCaptureRecovery(t, process) })
+	t.Run("ended script", func(t *testing.T) { t.Parallel(); runUnavailableScriptRead(t, process) })
+	t.Run("associated terminal capture failure", func(t *testing.T) { t.Parallel(); runAssociatedUnavailableRead(t, process) })
+}
+
+func runAssociatedUnavailableRead(t *testing.T, process support.Process) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "associated-unavailable")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(models.ProviderCodex, "test-model"))
+	runner := &captureRecoveryRunner{controlHostRunner: controlHostRunner{started: make(chan (<-chan struct{}), 1)}}
+	runner.calls.Store(1)
+	store := &interruptedCaptureStore{completed: make(chan struct{})}
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir), WorkerRecordingWriter: store, WorkerRecordingStoreObserver: func(base recordings.WorkerRecordingStore) { store.WorkerRecordingStore = base }}})
+	session, ctx := startMCP(t, process, host.URL())
+	done := admitControlWorker(t, ctx, host.URL(), "admitted-lost", runner.controlHostRunner)
+	prefix, err := support.WaitForObservation(30*time.Second, func() (map[string]any, error) {
+		return getHost(t, host.URL()+"/worker-sessions/admitted-lost/logs").(map[string]any), nil
+	}, func(page map[string]any) bool { return page["committedPosition"].(float64) >= 2 }) //nolint:testsleep // Operator 2026-10-11T20:11Z: committed association prefix is readiness, not a delay.
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.lost.Store(true)
+	callWorker(t, ctx, session, "control", map[string]any{"workerSessionId": "admitted-lost", "operation": "CANCEL"})
+	waitControlSignal(t, done)
+	row := getHost(t, host.URL()+"/worker-sessions/admitted-lost").(map[string]any)
+	if row["state"] != "CANCELED" || row["providerSessionAvailable"] != true || row["transcript"] != "UNAVAILABLE" {
+		t.Fatalf("associated terminal summary=%v", row)
+	}
+	assertUnavailableTranscriptParity(t, ctx, session, host, "admitted-lost")
+	page := getHost(t, host.URL()+"/worker-sessions/admitted-lost/logs").(map[string]any)
+	assertJSONEqual(t, prefix["events"], page["events"])
+	if page["health"] != "INCOMPLETE" {
+		t.Fatalf("terminal capture health=%v", page)
+	}
+}
+
+type unavailableScriptRunner struct{}
+
+func (unavailableScriptRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte("ended script inspection\n")}, nil
+}
+
+func runUnavailableScriptRead(t *testing.T, process support.Process) {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "unavailable-script-read")
+	workerDir := filepath.Join(dir, "workers", "processor")
+	if err := os.MkdirAll(workerDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workerDir, "AGENTS.md"), []byte("---\ntype: SCRIPT_WORKER\ncommand: controlled-script\n---\nExecute the script.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true, Env: []string{"HOME=" + home, "USERPROFILE=" + home}, Edges: serviceedges.Edges{ScriptCommandRunner: unavailableScriptRunner{}, FactorySessionsWorkingDirectory: historyWorkingDirectory(dir)}})
+	opened := support.OpenFactorySessionAt(t, host.URL(), dir)
+	support.SubmitSessionWorkAt(t, host.URL(), opened.Session.Id, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: map[string]string{"title": "ended script"}})
+	support.WaitForSessionTerminalStatus(t, host.URL(), opened.Session.Id, 30*time.Second) //nolint:testsleep // Operator 2026-10-11T20:11Z: readiness precedes the one-second read measurement.
+	listed := getHost(t, host.URL()+"/worker-sessions?history=all&scope=factory").(map[string]any)["sessions"].([]any)
+	if len(listed) != 1 {
+		t.Fatalf("script workers = %v", listed)
+	}
+	row := listed[0].(map[string]any)
+	id := row["workerSessionId"].(string)
+	if row["state"] != "COMPLETED" || row["providerSession"] != nil || row["transcript"] != "UNAVAILABLE" {
+		t.Fatalf("script summary = %v", row)
+	}
+	session, ctx := startMCP(t, process, host.URL())
+	assertUnavailableTranscriptParity(t, ctx, session, host, id)
+	page := callWorker(t, ctx, session, "read", map[string]any{"workerSessionId": id, "view": "logs"})["result"].(map[string]any)["logs"].(map[string]any)
+	assertJSONEqual(t, page, getHost(t, host.URL()+"/worker-sessions/"+id+"/logs"))
+	if page["health"] != "COMPLETE" || page["nextToken"] != nil || len(page["events"].([]any)) < 2 {
+		t.Fatalf("terminal logs = %v", page)
+	}
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "unknown-worker", "view": "transcript"}), "worker_session.not_found", false)
+	otherDir, otherHome := support.ScaffoldSingleStepFactory(t, "separate-profile"), t.TempDir()
+	otherHost := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: otherDir, Env: []string{"HOME=" + otherHome, "USERPROFILE=" + otherHome}, Edges: serviceedges.Edges{FactorySessionsWorkingDirectory: historyWorkingDirectory(otherDir)}})
+	otherSession, otherCtx := startMCP(t, process, otherHost.URL())
+	assertToolError(t, callAction(t, otherCtx, otherSession, "READ", map[string]any{"workerSessionId": id, "view": "transcript"}), "worker_session.not_found", false)
+	host.Close(t)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": id, "view": "transcript"}), "worker_session.host_unavailable", true)
 }
 
 func assertArchivedProviderRecovery(t *testing.T, host *support.FunctionalAPIServer, ctx context.Context, session *mcp.ClientSession, page map[string]any) {

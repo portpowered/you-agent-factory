@@ -868,7 +868,7 @@ func (r *registry) streamObservationTopic(
 	if err := validateObservationCursorWorkerSessionID(cursor, publicWorkerID(workerSessionID)); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	if !replayOnly && r.eventReader == nil {
+	if !replayOnly && !alreadyTerminal && r.eventReader == nil {
 		r.logger.Info("worker session observation stream", "outcome", "source_unavailable")
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
@@ -876,7 +876,7 @@ func (r *registry) streamObservationTopic(
 		limit = workersessions.DefaultObservationStreamLimit
 	}
 	topic := r.observationTopic(workerSessionID)
-	if replayOnly {
+	if replayOnly || alreadyTerminal {
 		return r.replayObservationStream(ctx, topic, workerSessionState, limit, cursor)
 	}
 	return r.liveObservationStream(ctx, topic, limit, alreadyTerminal, cursor)

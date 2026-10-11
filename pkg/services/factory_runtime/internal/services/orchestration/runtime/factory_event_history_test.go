@@ -460,6 +460,12 @@ func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
 	fixture := newRecordedExactObservationFixture(t)
 	adapter := fixture.service.(*recordedWorkerSessionObservation)
 	ledger := adapter.ledger.(*preparedScopedTestLedger).RuntimeLedger.(*recordingfixtures.ScriptedRuntimeLedger)
+	fact, found, err := adapter.recordedObservationForProvider(t.Context(), fixture.ref)
+	if err != nil || !found {
+		t.Fatalf("fixture fact: found=%v err=%v", found, err)
+	}
+	// Subscription failures concern a live follow, not finite terminal reads.
+	fact.state = workersessions.StateRunning
 
 	for _, test := range []struct {
 		name string
@@ -471,7 +477,7 @@ func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ledger.SubscribeError = test.err
-			_, err := adapter.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
+			_, _, err := adapter.streamRecordedFact(t.Context(), fact, 0, false, nil)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("StreamObservations() error = %v, want %v", err, test.want)
 			}
@@ -501,7 +507,7 @@ func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
 	}
 	liveEvents <- terminalEvent
 	ledger.SubscribeResult = interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{terminalEvent}, Events: liveEvents}
-	subscription, err := adapter.StreamObservations(nil, workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
+	subscription, _, err := adapter.streamRecordedFact(t.Context(), fact, 0, false, nil)
 	if err != nil {
 		t.Fatalf("StreamObservations(nil context) error = %v", err)
 	}

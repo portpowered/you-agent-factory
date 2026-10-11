@@ -30,8 +30,10 @@ export interface WorkerSessionEventReconnectCursor {
 }
 
 export interface BuildWorkerSessionEventStreamURLOptions {
-  factorySessionID: string;
+  factorySessionID: string | null;
   workerSessionID: string;
+  direct?: boolean;
+  origin?: string;
   replayOnly?: boolean;
   reconnect?: WorkerSessionEventReconnectCursor | null;
 }
@@ -92,13 +94,18 @@ function workerSessionEventSource(): WorkerSessionEventSourceConstructor | null 
 export function buildWorkerSessionEventStreamURL({
   factorySessionID,
   workerSessionID,
+  direct = false,
+  origin,
   replayOnly = false,
   reconnect,
 }: BuildWorkerSessionEventStreamURLOptions): string {
-  const path = factorySessionScopedPath(
-    `${WORKER_SESSION_EVENTS_ENDPOINT}/${encodeURIComponent(workerSessionID)}/events`,
-    factorySessionID,
-  );
+  if (factorySessionID === null && !direct)
+    throw new Error("Worker Session observation scope is required.");
+  const endpoint = `${WORKER_SESSION_EVENTS_ENDPOINT}/${encodeURIComponent(workerSessionID)}/events`;
+  const path =
+    factorySessionID === null
+      ? endpoint
+      : factorySessionScopedPath(endpoint, factorySessionID);
   const params = new URLSearchParams();
   if (replayOnly) {
     params.set("replayOnly", "true");
@@ -110,12 +117,17 @@ export function buildWorkerSessionEventStreamURL({
     }
   }
   const query = params.toString();
-  return factoryAPIURL(query.length > 0 ? `${path}?${query}` : path);
+  const scopedPath = query.length > 0 ? `${path}?${query}` : path;
+  return origin === undefined
+    ? factoryAPIURL(scopedPath)
+    : `${origin}${scopedPath}`;
 }
 
 export function openWorkerSessionEventStream({
   factorySessionID,
   workerSessionID,
+  direct,
+  origin,
   replayOnly,
   reconnect,
   onFrame,
@@ -136,6 +148,8 @@ export function openWorkerSessionEventStream({
     buildWorkerSessionEventStreamURL({
       factorySessionID,
       workerSessionID,
+      direct,
+      origin,
       replayOnly,
       reconnect,
     }),

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { factoryAPIURL } from "../../../api/baseUrl";
 
 import {
   type OpenWorkerSessionEventStreamOptions,
@@ -37,6 +38,7 @@ export type WorkerSessionTimelineReconnectScheduler = (
 export interface UseWorkerSessionTimelineOptions {
   factorySessionID: string | null;
   workerSessionID: string | null;
+  direct?: boolean;
   enabled?: boolean;
   replayOnly?: boolean;
   initialReconnectCursor?: WorkerSessionEventReconnectCursor | null;
@@ -67,6 +69,7 @@ const defaultScheduleReconnect: WorkerSessionTimelineReconnectScheduler = (
 export function useWorkerSessionTimeline({
   factorySessionID,
   workerSessionID,
+  direct = false,
   enabled = true,
   replayOnly = false,
   initialReconnectCursor = null,
@@ -92,6 +95,7 @@ export function useWorkerSessionTimeline({
     createWorkerSessionTimelineStreamState(stableInitialReconnectCursor),
   );
   const stateRef = useRef(state);
+  const origin = factoryAPIURL("");
   const openStreamRef = useRef<WorkerSessionTimelineOpenStream>(openStream);
   const scheduleReconnectRef =
     useRef<WorkerSessionTimelineReconnectScheduler>(scheduleReconnect);
@@ -113,7 +117,9 @@ export function useWorkerSessionTimeline({
       initialReconnectCursor: stableInitialReconnectCursor,
     };
     const targetIsReady =
-      enabled && factorySessionID !== null && workerSessionID !== null;
+      enabled &&
+      (factorySessionID !== null || direct) &&
+      workerSessionID !== null;
     const attemptState = targetIsReady
       ? createWorkerSessionTimelineStreamState(stableInitialReconnectCursor)
       : {
@@ -234,6 +240,8 @@ export function useWorkerSessionTimeline({
       connectionRef.current = openStreamRef.current({
         factorySessionID,
         workerSessionID,
+        direct,
+        origin,
         replayOnly,
         reconnect,
         onFrame: handleFrame,
@@ -253,6 +261,8 @@ export function useWorkerSessionTimeline({
     };
   }, [
     enabled,
+    direct,
+    origin,
     factorySessionID,
     replayOnly,
     reconnectDelayMs,
@@ -265,7 +275,7 @@ export function useWorkerSessionTimeline({
     if (
       currentState.terminalDelivery !== null ||
       currentState.replaySummary !== null ||
-      factorySessionID === null ||
+      (factorySessionID === null && !direct) ||
       workerSessionID === null
     ) {
       return;
@@ -280,7 +290,7 @@ export function useWorkerSessionTimeline({
     cancelReconnectRef.current?.();
     cancelReconnectRef.current = null;
     connectRef.current?.();
-  }, [factorySessionID, workerSessionID]);
+  }, [direct, factorySessionID, workerSessionID]);
 
   const entries = useMemo(
     () => projectWorkerSessionTimeline(state.records),

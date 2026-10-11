@@ -17,8 +17,14 @@ import (
 // committed capture without registering a session or restoring supervision.
 // Cursor-based history remains owned by the public captured logs boundary.
 func (r *registry) completedContinuationStream(ctx context.Context, req workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error) {
-	if r.logs == nil || req.Cursor != nil {
+	if r.logs == nil {
 		return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
+	}
+	if err := validateObservationCursorWorkerSessionID(req.Cursor, req.WorkerSessionID); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	if req.Cursor != nil && req.Cursor.StreamGenerationID != "" {
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationCursorUnavailable
 	}
 	request := recordings.WorkerCapturedActivityRequest{WorkerSessionID: req.WorkerSessionID, Limit: req.Limit}
 	if request.Limit == 0 {
@@ -46,6 +52,12 @@ func (r *registry) completedContinuationStream(ctx context.Context, req workerse
 	if page.Terminal != nil {
 		s.terminal, s.state = uint64(page.Terminal.Position), page.Terminal.Status
 	}
+	if req.Cursor != nil {
+		if req.Cursor.Position > s.head {
+			return workersessions.ObservationSubscription{}, workersessions.ErrObservationCursorFuture
+		}
+		s.position = req.Cursor.Position
+	}
 	r.logger.Info("worker session captured observation stream", "workerSessionID", req.WorkerSessionID, "outcome", "captured_replay")
 	return workersessions.ObservationSubscription{NextFunc: s.Next, CloseFunc: s.Close}, nil
 }
@@ -62,29 +74,37 @@ func capturedReplayOpening(payload json.RawMessage) (workers.SessionPayload, boo
 }
 
 type continuationCaptureStream struct {
-	mu       sync.Mutex
-	reader   recordings.WorkerCapturedActivityReader
-	request  recordings.WorkerCapturedActivityRequest
-	page     recordings.WorkerCapturedActivityPage
-	catalog  recordings.WorkerSessionCatalogEntry
-	topic    events.Topic
-	head     uint64
-	health   recordings.WorkerRecordingStatus
-	terminal uint64
-	state    string
-	position uint64
-	closed   bool
+	mu           sync.Mutex
+	reader       recordings.WorkerCapturedActivityReader
+	request      recordings.WorkerCapturedActivityRequest
+	page         recordings.WorkerCapturedActivityPage
+	catalog      recordings.WorkerSessionCatalogEntry
+	topic        events.Topic
+	head         uint64
+	health       recordings.WorkerRecordingStatus
+	terminal     uint64
+	state        string
+	position     uint64
+	emitted      int
+	activeCancel context.CancelFunc
+	closed       bool
 }
 
 func (s *continuationCaptureStream) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.closed = true
+	cancel := s.activeCancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func (s *continuationCaptureStream) Next(ctx context.Context) workersessions.ObservationDelivery {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	ctx, cancel := context.WithCancel(ctx)
+	s.activeCancel = cancel
+	defer func() { s.activeCancel = nil; cancel(); s.mu.Unlock() }()
 	if s.closed {
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
 	}
@@ -93,25 +113,32 @@ func (s *continuationCaptureStream) Next(ctx context.Context) workersessions.Obs
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: err}
 	}
 	head := s.head
+	s.discardAcknowledged()
 	if s.position == head && len(s.page.Records) == 0 {
 		s.closed = true
+		complete := s.terminal == head && head > 0 && s.health == recordings.WorkerRecordingStatusComplete
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryReplaySummary,
-			Summary: &workersessions.ReplaySummary{Complete: false, Reason: "capture-" + string(s.health), EventsEmitted: int(s.position)}}
+			Summary: &workersessions.ReplaySummary{Complete: complete, Reason: "capture-" + string(s.health), EventsEmitted: s.emitted}}
 	}
-	if len(s.page.Records) == 0 && !s.advance(ctx) {
-		s.closed = true
-		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
+	for len(s.page.Records) == 0 {
+		if !s.advance(ctx) {
+			s.closed = true
+			if ctx.Err() != nil {
+				return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryCanceled, Err: workersessions.ErrObservationCanceled}
+			}
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
+		}
+		s.discardAcknowledged()
 	}
 	captured := s.page.Records[0]
 	s.page.Records = s.page.Records[1:]
 	event := projectObservationEvent(captured.Record, s.request.WorkerSessionID)
-	if captured.Record.ID.Topic != s.topic ||
-		event.Position != s.position+1 || event.Position > head ||
-		(event.Position == s.terminal && !isTerminalLifecycleRecord(captured.Record)) {
+	if !s.recordMatches(captured, event) {
 		s.closed = true
 		return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliverySourceFailure, Err: workersessions.ErrObservationSourceUnavailable}
 	}
 	s.position = event.Position
+	s.emitted++
 	event.CapturedAt = captured.CapturedAt
 	event.Truncated, event.ArtifactRef = captured.Truncated, captured.ArtifactRef
 	event.OriginalBytes, event.ReturnedBytes = captured.OriginalBytes, captured.ReturnedBytes
@@ -119,9 +146,20 @@ func (s *continuationCaptureStream) Next(ctx context.Context) workersessions.Obs
 	if event.Position == s.terminal && event.Position == s.head && s.health == recordings.WorkerRecordingStatusComplete {
 		s.closed = true
 		delivery.Kind = workersessions.ObservationDeliveryTerminalReplay
-		delivery.Summary = &workersessions.ReplaySummary{Complete: true, EventsEmitted: int(s.position)}
+		delivery.Summary = &workersessions.ReplaySummary{Complete: true, EventsEmitted: s.emitted}
 	}
 	return delivery
+}
+
+func (s *continuationCaptureStream) discardAcknowledged() {
+	for len(s.page.Records) > 0 && uint64(s.page.Records[0].Record.ID.Position) <= s.position {
+		s.page.Records = s.page.Records[1:]
+	}
+}
+
+func (s *continuationCaptureStream) recordMatches(captured recordings.WorkerCapturedRecord, event workersessions.ObservationEvent) bool {
+	return captured.Record.ID.Topic == s.topic && event.Position == s.position+1 && event.Position <= s.head &&
+		(event.Position != s.terminal || isTerminalLifecycleRecord(captured.Record))
 }
 
 func (s *continuationCaptureStream) advance(ctx context.Context) bool {
@@ -129,8 +167,10 @@ func (s *continuationCaptureStream) advance(ctx context.Context) bool {
 		return false
 	}
 	s.request.NextToken = s.page.NextToken
+	s.mu.Unlock()
 	page, err := s.reader.ReadWorkerCapturedActivity(ctx, s.request)
-	if err != nil || page.Catalog != s.catalog || !s.pageMetadataMatches(page) || len(page.Records) == 0 {
+	s.mu.Lock()
+	if s.closed || err != nil || page.Catalog != s.catalog || !s.pageMetadataMatches(page) || len(page.Records) == 0 {
 		return false
 	}
 	s.page = page

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { factoryAPIURL } from "../../../api/baseUrl";
 import type { WorkerSessionObservation } from "../../../api/worker-sessions";
 import {
   type ListWorkerSessionsForWorkOptions,
@@ -48,7 +49,12 @@ export function useWorkerSessionTimelineTarget({
       }
       return loadTargets({ factorySessionID, signal, workID });
     },
-    queryKey: ["worker-session-timeline-target", factorySessionID, workID],
+    queryKey: [
+      "worker-session-timeline-target",
+      factoryAPIURL(""),
+      factorySessionID,
+      workID,
+    ],
     refetchOnWindowFocus: false,
     retry: false,
   });

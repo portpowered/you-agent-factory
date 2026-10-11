@@ -4,6 +4,28 @@ An Agent Message is a durable message between permitted Worker Sessions.
 Messages have their own store and inbox, separate from Factory Events and Provider Session transcripts.
 Messaging never creates Work, acquires execution slots, or changes Factory execution.
 
+## Inspect messages in the dashboard
+
+1. Open **Message inbox** in the **Worker Session timeline** widget.
+2. Enter a recipient Worker Session, sender Worker Session, thread ID, or status filter.
+3. Select **Apply filters** to view matching messages on the selected host.
+4. Use **Previous** and **Next** to inspect one bounded page at a time.
+5. Select **Open thread** to include replies, regardless of the inbox status filter.
+
+The inbox is available without a selected Work. Worker Session detail also shows
+**Messages** for the exact selected session and verified continuation identities.
+Each record shows its body, delivery status, known reason, age, expiry, and reply association.
+**Open revived Worker Session** appears only after the server confirms revival.
+The dashboard verifies the successor's identity before navigating.
+
+Live observations update existing records in send order. New messages offer
+**Refresh**, which starts a new page walk. After a disconnect or expired page,
+select **Retry** or **Refresh** to reload retained messages.
+
+Dashboard inspection does not mark messages read, send replies, or control
+Worker execution. Agent Messages remain separate from the Factory Session timeline.
+The backend controls authorization and body redaction.
+
 ## Caller authority
 
 Sending requires the execution credentials of an active `RUNNING` Worker Session.
