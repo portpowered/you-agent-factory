@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +18,139 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestConcurrentMessagesUseOneSuccessorAndStableRequest(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 2), requests: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane-a", "lane-b")
+	lead := f.invoke(t, "lead", nil)
+	a, b := f.invoke(t, "lane-a", lead), f.invoke(t, "lane-b", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane-a", "lane-b")
+	start := make(chan struct{})
+	results := make(chan api.AgentMessage, 2)
+	var group sync.WaitGroup
+	for _, caller := range []map[string]string{a, b} {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			<-start
+			results <- f.send(t, map[string]any{"requestId": "ask", "to": map[string]string{"workerSessionId": "lead"}, "body": caller["YOU_WORKER_SESSION_ID"]}, caller)
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	var delivered, queued api.AgentMessage
+	for message := range results {
+		switch message.Status {
+		case "DELIVERED_REVIVE":
+			if delivered.MessageId != "" {
+				t.Fatal("concurrent sends branched")
+			}
+			delivered = message
+		case "QUEUED":
+			if queued.MessageId != "" {
+				t.Fatal("neither send revived the ended recipient")
+			}
+			queued = message
+		default:
+			t.Fatal("unexpected delivery status", message.Status)
+		}
+	}
+	if delivered.MessageId == "" || queued.MessageId == "" || queued.RevivedWorkerSessionId != nil {
+		t.Fatal("missing admitted delivery or queued second message")
+	}
+	successor := assertReviveAdmission(t, f, revival, delivered, lead)
+	caller := a
+	if delivered.From.WorkerSessionId == b["YOU_WORKER_SESSION_ID"] {
+		caller = b
+	}
+	assertConcurrentReviveRetries(t, f, caller, delivered)
+	page := readPage(t, f, "/messages?toMe=true", successor)
+	if len(page.Messages) != 2 {
+		t.Fatal("successor lost queued chain inbox")
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane-a", "lane-b"); !reflect.DeepEqual(before, after) {
+		t.Fatal("concurrent messaging changed canonical Factory Events")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("concurrent sends or retries started another successor")
+	default:
+	}
+}
+
+func assertConcurrentReviveRetries(t *testing.T, f *fixture, caller map[string]string, original api.AgentMessage) {
+	t.Helper()
+	request := map[string]any{"requestId": "ask", "to": map[string]string{"workerSessionId": "lead"}, "body": original.Body}
+	var group sync.WaitGroup
+	for range 4 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if got := f.send(t, request, caller); !reflect.DeepEqual(got, original) {
+				t.Error("concurrent retry changed original admission")
+			}
+		}()
+	}
+	group.Wait()
+	request["body"] = "changed normalized input"
+	assertError(t, f, http.MethodPost, "/messages", request, caller, http.StatusConflict, "MESSAGE_REQUEST_CONFLICT")
+}
+
+func TestMissingProviderReferenceKeepsReviveReadable(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane")
+	f.runner.workers["lead"].result = &platformprocess.CommandResult{Stdout: []byte("{\"type\":\"turn.completed\"}\n")}
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	message := f.cliSend(t, lane, "lead", "--request-id", "unsupported", "--body", "retain this ask")
+	if message.Status != "QUEUED" || message.Reason == nil || *message.Reason != "REVIVE_UNSUPPORTED" || message.RevivedWorkerSessionId != nil {
+		t.Fatal("missing provider reference claimed delivery")
+	}
+	var got api.AgentMessageListResponse
+	if err := json.Unmarshal(f.cli(t, lane, "list", "--thread", message.ThreadId), &got); err != nil || len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], message) {
+		t.Fatal("unsupported revival lost readable message", err)
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("unsupported revival changed Factory Events")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("missing reference reached provider")
+	default:
+	}
+}
+
+func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	raw := "private execution credential: " + lane["YOU_WORKER_SESSION_TOKEN"]
+	message := f.cliSend(t, lane, "lead", "--request-id", "redacted", "--body", raw)
+	if message.Body == raw || strings.Contains(message.Body, lane["YOU_WORKER_SESSION_TOKEN"]) || message.BodyRedactionCount != 1 {
+		t.Fatal("execution token reached public delivery body")
+	}
+	assertReviveAdmission(t, f, revival, message, lead)
+	journal, err := os.ReadFile(filepath.Join(f.home, ".you-agent-factory", "messages", "messages.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(journal), lane["YOU_WORKER_SESSION_TOKEN"]) || strings.Contains(string(journal), raw) {
+		t.Fatal("execution token reached durable message or intent")
+	}
+	alias := f.cliSend(t, lane, "lead", "--request-id", "redacted-alias", "--body", raw)
+	if alias.MessageId != message.MessageId {
+		t.Fatal("normalized private body lost dedup")
+	}
+}
 
 func TestEndedRecipientRevivesOnceThroughCLIAndHTTP(t *testing.T) {
 	t.Parallel()

@@ -27,6 +27,7 @@ type workerGate struct {
 	started  chan map[string]string
 	release  chan struct{}
 	requests chan platformprocess.CommandRequest
+	result   *platformprocess.CommandResult
 }
 
 type commandRunner struct {
@@ -63,6 +64,9 @@ func (r *commandRunner) Run(ctx context.Context, request platformprocess.Command
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-gate.release:
+		if gate.result != nil {
+			return *gate.result, nil
+		}
 		return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"controlled-answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")}, nil
 	}
 }
