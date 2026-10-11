@@ -1,12 +1,103 @@
 package service
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+func TestCapturedFactsPreserveNoncredentialEnvironmentValues(t *testing.T) {
+	t.Parallel()
+	const id = "8528a10f-6314-48ba-8230-542a4cf660f9"
+	for _, value := range []string{"", "1", "1000000", id} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			request := providers.ExecuteRequest{
+				EnvVars:            map[string]string{"VALIDATION_ENVIRONMENT": value, "COMMAND_OUTPUT": value},
+				ProcessEnvironment: []string{"VALIDATION_ENVIRONMENT=" + value, "PROMPT_MODE=" + value},
+			}
+			before := request.Clone()
+			detail := `{"text":"` + id + `","usage":{"input_tokens":1000000,"output_tokens":2000000,"total_tokens":3000000}}`
+			fact := providers.ExecuteProgress{Phase: "usage.updated", Detail: detail, Metadata: map[string]string{"input_tokens": "1000000", "safe": id}}
+			var live providers.ExecuteProgress
+			request.ProgressObserver = func(progress providers.ExecuteProgress) { live = progress }
+			safeProgressRequest(request).ObserveProgress(fact)
+			terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
+			for _, got := range []providers.ExecuteProgress{live, terminal} {
+				if got.Detail != detail || !json.Valid([]byte(got.Detail)) || !reflect.DeepEqual(got.Metadata, fact.Metadata) {
+					t.Fatalf("safe captured UUID/typed usage changed: %+v", got)
+				}
+			}
+			request.ProgressObserver = nil
+			if !reflect.DeepEqual(request, before) {
+				t.Fatal("sanitizer mutated request")
+			}
+		})
+	}
+}
+
+func TestCapturedFactsKeepCredentialPrivacyAndDiagnosticBounds(t *testing.T) {
+	t.Parallel()
+	for _, key := range []string{"API_KEY", "api-key", "ApiKey", "AUTHORIZATION", "PASSWORD", "CREDENTIAL", "tool-secret", "ACCESS_TOKEN"} {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+			request := providers.ExecuteRequest{SystemPrompt: "private prompt", UserMessage: "private input", OutputSchema: "private schema",
+				EnvVars:            map[string]string{key: "xyz", "EXPANDED_SECRET": "xyz-expanded"},
+				ProcessEnvironment: []string{key + "=inherited-credential", "YOU_WORKER_SESSION_TOKEN=worker-credential", "VALIDATION_ENVIRONMENT=1"}}
+			fact := providers.ExecuteProgress{Phase: "tool.completed", Detail: "safe 123 xyz-expanded xyz inherited-credential worker-credential continuation-credential",
+				Metadata: map[string]string{"safe": "123 xyz", "authorization": "hidden"}}
+			want := "safe 123 <redacted> <redacted> <redacted> <redacted> <redacted>"
+			live := sanitizeCapturedProgress(fact, request, "continuation-credential")
+			terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request, "continuation-credential")
+			for _, got := range []providers.ExecuteProgress{live, terminal.Progress[0]} {
+				if got.Detail != want || got.Metadata["safe"] != "123 <redacted>" || got.Metadata["authorization"] != redactedValue {
+					t.Fatalf("credential privacy/safe neighbors changed: %+v", got)
+				}
+			}
+			private := "private prompt private input private schema " + strings.Repeat("safe ", maxDiagnosticRunes)
+			bounded := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{Detail: private}}, Metadata: map[string]string{"stdout": "private output"}}, request)
+			if len([]rune(bounded.Progress[0].Detail)) != maxDiagnosticRunes || !strings.HasPrefix(bounded.Progress[0].Detail, "<redacted> <redacted> <redacted>") || bounded.Metadata["stdout"] != redactedValue || fact.Metadata["safe"] != "123 xyz" {
+				t.Fatal("private diagnostic filtering, bounds or producer immutability changed")
+			}
+		})
+	}
+}
+
+func TestCapturedFactsRedactEvenOneCharacterCredential(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{EnvVars: map[string]string{"API_KEY": "1", "VALIDATION_ENVIRONMENT": "0"}}
+	live := sanitizeCapturedProgress(providers.ExecuteProgress{Detail: "safe 0 key=1"}, request)
+	terminal, err := normalizeSuccess(providers.ExecuteResult{Content: "safe 0 key=1"}, providers.IDCodex, request)
+	if err != nil || live.Detail != "safe 0 key=<redacted>" || terminal.Content != live.Detail {
+		t.Fatal("short real credential was exempted or ordinary flag corrupted")
+	}
+}
+
+func TestCapturedFactsPreserveTypedFailureContext(t *testing.T) {
+	t.Parallel()
+	const id = "8528a10f-6314-48ba-8230-542a4cf660f9"
+	for _, kind := range []providers.ExecuteFailureKind{providers.ExecuteFailureKindDependency, providers.ExecuteFailureKindAuthentication, providers.ExecuteFailureKindInvalidRequest, "malformed-kind"} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			request := providers.ExecuteRequest{SystemPrompt: "private-request", EnvVars: map[string]string{"API_KEY": "private-key", "VALIDATION_ENVIRONMENT": "1"}}
+			failure := normalizeDeclaredFailure(providers.ExecuteFailure{Kind: kind, Message: "safe " + id + " private-request private-key\xff"}, request).(providers.ExecuteFailure)
+			wantKind := kind
+			if kind == "malformed-kind" {
+				wantKind = providers.ExecuteFailureKindUnknown
+			}
+			if failure.Kind != wantKind || failure.Message != "safe "+id+" <redacted> <redacted>" {
+				t.Fatalf("typed/safe failure changed: %+v", failure)
+			}
+			fallback := normalizeDeclaredFailure(providers.ExecuteFailure{Kind: kind}, request).(providers.ExecuteFailure)
+			if fallback.Message == "" || fallback.Kind != wantKind {
+				t.Fatal("empty failure did not retain safe typed default")
+			}
+		})
+	}
+}
 
 func TestRecordingContentPreservesOrdinaryEchoAndRedactsDeclaredSecrets(t *testing.T) {
 	t.Parallel()

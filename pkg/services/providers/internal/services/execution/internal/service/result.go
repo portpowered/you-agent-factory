@@ -121,9 +121,7 @@ func normalizeSuccess(
 	}
 	// Ordinary content is preserved, but execution credentials must never be
 	// returned to Workers for output shaping or capture.
-	for _, token := range workerSessionTokenSecrets(request) {
-		normalized.Content = strings.ReplaceAll(normalized.Content, token, redactedValue)
-	}
+	normalized.Content = sanitizeCapturedProgress(providers.ExecuteProgress{Detail: normalized.Content}, request, extraSecrets...).Detail
 	if normalized.Diagnostics != nil {
 		diagnostics := normalizeDiagnostics(*normalized.Diagnostics, request, extraSecrets...)
 		normalized.Diagnostics = &diagnostics
@@ -247,7 +245,7 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest, extraSecrets ...
 	// adapter may echo one inside ordinary tool/progress text or a safe-keyed
 	// diagnostic, where filtering metadata keys alone cannot protect it.
 	for key, value := range request.EnvVars {
-		if containsSensitiveMetadataTerm(key) {
+		if containsCredentialEnvironmentTerm(key) {
 			secrets = append(secrets, value)
 		}
 	}
@@ -256,7 +254,7 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest, extraSecrets ...
 		key, value, ok := strings.Cut(entry, "=")
 		// Worker identity has one exact credential key, classified above.
 		// Lookalike names are ordinary facts, not additional credentials.
-		if ok && !strings.Contains(strings.ToUpper(key), "YOU_WORKER_SESSION_TOKEN") && containsSensitiveMetadataTerm(key) {
+		if ok && !strings.Contains(strings.ToUpper(key), "YOU_WORKER_SESSION_TOKEN") && containsCredentialEnvironmentTerm(key) {
 			secrets = append(secrets, value)
 		}
 	}
@@ -287,6 +285,19 @@ func containsSensitiveMetadataTerm(key string) bool {
 		return false
 	}
 	for _, term := range sensitiveMetadataTerms {
+		if strings.Contains(normalized, term) {
+			return true
+		}
+	}
+	return false
+}
+
+// Diagnostic metadata hides whole private fields (including env, prompts and
+// output). Environment names instead classify credentials: ordinary flags and
+// captured facts must not become substring replacements in text or typed JSON.
+func containsCredentialEnvironmentTerm(key string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
+	for _, term := range []string{"api_key", "apikey", "authorization", "credential", "password", "secret", "token"} {
 		if strings.Contains(normalized, term) {
 			return true
 		}
