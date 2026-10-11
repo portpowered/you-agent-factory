@@ -177,7 +177,7 @@ func startPromptReloadPeer(t *testing.T, process support.ApplicationProcess, dir
 		t.Fatalf("open explicit prompt peer: %#v, %v", result, err)
 	}
 	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) //nolint:testsleep // Bound cleanup after the test context is canceled; Session close supplies the completion signal.
 		defer cancel()
 		if _, err := sessions.Control(ctx, factorysessions.SessionControlRequest{
 			SessionID: id, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose,
