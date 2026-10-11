@@ -31,6 +31,7 @@ type latencyRunner struct {
 	gates     map[string]chan struct{}
 	started   chan latencyCommand
 	continued chan latencyCommand
+	release   chan struct{}
 }
 
 func (r *latencyRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -44,8 +45,12 @@ func (r *latencyRunner) Run(ctx context.Context, req platformprocess.CommandRequ
 	gate := r.gates[env["YOU_WORKER_SESSION_ID"]]
 	if gate == nil {
 		r.continued <- command
-		<-ctx.Done()
-		return platformprocess.CommandResult{}, ctx.Err()
+		select {
+		case <-r.release:
+			return completedLatencyResult(), nil
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
 	}
 	r.started <- command
 	select {
@@ -53,7 +58,11 @@ func (r *latencyRunner) Run(ctx context.Context, req platformprocess.CommandRequ
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
-	return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"load-thread\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")}, nil
+	return completedLatencyResult(), nil
+}
+
+func completedLatencyResult() platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"load-thread\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")}
 }
 
 type latencyHost struct {
@@ -63,7 +72,7 @@ type latencyHost struct {
 
 func prepareLatencyHost(t *testing.T, ctx context.Context) *latencyHost {
 	t.Helper()
-	f := &latencyHost{dir: t.TempDir(), runner: &latencyRunner{gates: map[string]chan struct{}{}, started: make(chan latencyCommand, 40), continued: make(chan latencyCommand, 20)}}
+	f := &latencyHost{dir: t.TempDir(), runner: &latencyRunner{gates: map[string]chan struct{}{}, started: make(chan latencyCommand, 40), continued: make(chan latencyCommand, 20), release: make(chan struct{})}}
 	for _, prefix := range []string{"source-", "lane-"} {
 		for i := range 20 {
 			f.runner.gates[fmtID(prefix, i)] = make(chan struct{})

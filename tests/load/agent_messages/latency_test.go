@@ -23,6 +23,7 @@ func TestReviveSendToStartingLatency(t *testing.T) {
 		callers[i] = f.prepareChain(t, ctx, i)
 	}
 	values := make([]time.Duration, len(callers))
+	successors := make([]string, len(callers))
 	for i, caller := range callers {
 		started := time.Now()
 		var response api.AgentMessageSendResponse
@@ -37,6 +38,7 @@ func TestReviveSendToStartingLatency(t *testing.T) {
 			t.Fatal("successor did not reach STARTING", ctx.Err())
 		}
 		values[i] = admitted.at.Sub(started)
+		successors[i] = admitted.env["YOU_WORKER_SESSION_ID"]
 		// This runner withholds all provider output. STARTING proves admission,
 		// while the message must remain pending until resumed progress exists.
 		if response.Message.Status != "QUEUED" || response.Message.Reason == nil || *response.Message.Reason != "REVIVE_PENDING" ||
@@ -52,5 +54,14 @@ func TestReviveSendToStartingLatency(t *testing.T) {
 	t.Logf("P-AM6 controlled Codex; prepared chains=20; samples=%v; nearest-rank p95=%s; range=%s..%s", values, p95, values[0], values[19])
 	if p95 > 10*time.Second {
 		t.Fatalf("send-to-STARTING p95 exceeds 10s: %s", p95)
+	}
+	// Completion is outside the measured window. Join all test-owned attempts
+	// before host cleanup so their terminal captures cannot race TempDir removal.
+	close(f.runner.release)
+	for i, caller := range callers {
+		id := caller["YOU_WORKER_SESSION_ID"]
+		close(f.runner.gates[id])
+		f.awaitCompleted(t, ctx, id)
+		f.awaitCompleted(t, ctx, successors[i])
 	}
 }

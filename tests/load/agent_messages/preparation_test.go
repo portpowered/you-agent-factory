@@ -20,7 +20,13 @@ func (f *latencyHost) prepareChain(t *testing.T, ctx context.Context, index int)
 	source := f.invoke(t, ctx, sourceID, nil)
 	lane := f.invoke(t, ctx, fmtID("lane-", index), source)
 	close(f.runner.gates[sourceID])
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.url+"/worker-sessions/"+sourceID+"/events", nil)
+	f.awaitCompleted(t, ctx, sourceID)
+	return lane
+}
+
+func (f *latencyHost) awaitCompleted(t *testing.T, ctx context.Context, id string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, f.url+"/worker-sessions/"+id+"/events", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,11 +45,10 @@ func (f *latencyHost) prepareChain(t *testing.T, ctx context.Context, index int)
 			t.Fatal(err)
 		}
 		if frame.Event.Payload["kind"] == "SESSION" && frame.Event.Payload["phase"] == "COMPLETED" {
-			return lane
+			return
 		}
 	}
-	t.Fatal("source never completed", scanner.Err())
-	return nil
+	t.Fatal("worker never completed", id, scanner.Err())
 }
 
 func (f *latencyHost) invoke(t *testing.T, ctx context.Context, id string, caller map[string]string) map[string]string {
