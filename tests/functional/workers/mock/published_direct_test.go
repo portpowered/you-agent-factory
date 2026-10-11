@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,6 +24,94 @@ type directExampleDeniedRunner struct{ calls atomic.Int32 }
 func (r *directExampleDeniedRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.calls.Add(1)
 	return platformprocess.CommandResult{}, errors.New("native execution denied for published mock example")
+}
+
+// These private hosts have immutable provider policies and deny every native
+// effect. Restart joins the original host before reopening its capture profile.
+func TestRejectedMockCapturedOutput(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			dir := publishedDirectMockFactory(t)
+			mockPath := filepath.Join(dir, "mock-workers.json")
+			if err := os.WriteFile(mockPath, []byte(`{"mockWorkers":[{"runType":"reject","rejectConfig":{"stdout":"PRIVATE ordinary stdout 世界 declared-credential","stderr":"PRIVATE ordinary stderr 世界 declared-credential","exitCode":42}}]}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			environment := builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t))
+			denied := &directExampleDeniedRunner{}
+			cfg := support.FunctionalAPIServerConfig{
+				FactoryDir: dir, WaitForServiceModeRuntime: true, Env: environment,
+				Args:  []string{"--with-mock-workers", mockPath},
+				Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
+			}
+			host := support.StartFunctionalAPIServer(t, cfg)
+			document := publishedDirectExecutionDocument(t)
+			execution := document["execution"].(map[string]any)
+			execution["workingDirectory"] = dir
+			execution["envVars"] = map[string]string{"API_KEY": "declared-credential"}
+			execution["runnerId"], execution["executorProvider"], execution["modelProvider"] = provider, provider, provider
+			if provider == "claude" {
+				execution["model"] = "claude-test"
+			}
+			data, err := json.Marshal(document)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "execution.json")
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--remote", "--json", "worker-sessions", "invoke", "--execution", path, "--async"})
+			inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+			if err := host.Execute(t, inputs.Input); err != nil {
+				t.Fatalf("invoke: %v %s", err, inputs.Stderr())
+			}
+			read := func() string {
+				inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", "direct-example-session", "--view", "logs"})
+				inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+				if err := host.Execute(t, inputs.Input); err != nil {
+					t.Fatalf("read: %v %s", err, inputs.Stderr())
+				}
+				return inputs.Stdout()
+			}
+			before, err := support.WaitForObservation(30*time.Second, func() (string, error) { return read(), nil }, func(s string) bool { return strings.Contains(s, `"health":"COMPLETE"`) })
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, marker := range []string{"PRIVATE ordinary stdout 世界", "PRIVATE ordinary stderr 世界"} {
+				if strings.Count(before, marker) != 1 {
+					t.Fatalf("output count for %q: %s", marker, before)
+				}
+			}
+			if strings.Index(before, "ordinary stdout") > strings.Index(before, "ordinary stderr") {
+				t.Fatalf("stream order: %s", before)
+			}
+			if strings.Contains(before, "declared-credential") || strings.Count(before, "redacted") != 2 {
+				t.Fatalf("declared secret redaction: %s", before)
+			}
+			show := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "show", "--worker-session-id", "direct-example-session"})
+			show.Input.WorkingDirectory, show.Input.Env = dir, environment
+			if err := host.Execute(t, show.Input); err != nil || !strings.Contains(show.Stdout(), `"state":"FAILED"`) {
+				t.Fatalf("failed show: %v %s %s", err, show.Stdout(), show.Stderr())
+			}
+			host.Close(t)
+			host = support.StartFunctionalAPIServer(t, cfg)
+			var original, restored any
+			if err := json.Unmarshal([]byte(before), &original); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(read()), &restored); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(original, restored) {
+				t.Fatalf("restart changed captured output: before=%v after=%v", original, restored)
+			}
+			if denied.calls.Load() != 0 {
+				t.Fatalf("native calls = %d", denied.calls.Load())
+			}
+		})
+	}
 }
 
 // Direct origin needs no submitted Work. This private host has its own idle

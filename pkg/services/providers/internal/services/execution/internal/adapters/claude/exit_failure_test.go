@@ -11,6 +11,48 @@ import (
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 )
 
+func TestClaudeRejectedOutputObservedBeforeFailure(t *testing.T) {
+	t.Parallel()
+	var progress []providers.ExecuteProgress
+	returned := false
+	runner := providerservice.CommandRunner{RunStreaming: func(_ context.Context, _ providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+		if err := observe(providerservice.OutputStreamStdout, []byte("{\"type\":\"stream_event\",\"session_id\":\"mock-claude-session\",\"event\":{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"PRIVATE ordinary output\"}}}\n{\"type\":\"result\",\"subtype\":\"error\",\"is_error\":true,\"result\":\"rejected\",\"session_id\":\"mock-claude-session\"}\n")); err != nil {
+			t.Fatal(err)
+		}
+		if err := observe(providerservice.OutputStreamStderr, []byte("PRIVATE ordinary stderr")); err != nil {
+			t.Fatal(err)
+		}
+		return providerservice.CommandResult{ExitCode: 42}, nil
+	}}
+	effect := claude.NewCommandEffect(runner, platformclock.Real{})
+	registration := claude.NewRegistration(effect)
+	result, err := registration.Attempt(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDClaude, AttemptID: "rejected-attempt", UserMessage: "ordinary",
+		ProgressObserver: func(fact providers.ExecuteProgress) {
+			if returned {
+				t.Fatal("progress after attempt returned")
+			}
+			progress = append(progress, fact)
+		},
+	})
+	returned = true
+	if err == nil || result.Content != "" {
+		t.Fatalf("rejection returned accepted content: %q %v", result.Content, err)
+	}
+	var output []string
+	for _, fact := range progress {
+		if fact.Detail == "PRIVATE ordinary output" || fact.Detail == "PRIVATE ordinary stderr" {
+			output = append(output, fact.Detail)
+		}
+		if fact.Phase == "run.completed" || fact.Phase == "message.completed" {
+			t.Fatalf("false completion: %+v", fact)
+		}
+	}
+	if len(output) != 2 || output[0] != "PRIVATE ordinary output" || output[1] != "PRIVATE ordinary stderr" {
+		t.Fatalf("ordered once-only output: %#v", output)
+	}
+}
+
 func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 	t.Parallel()
 

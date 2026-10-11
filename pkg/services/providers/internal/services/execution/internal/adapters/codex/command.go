@@ -135,6 +135,12 @@ func runStreaming(
 ) (providerservice.CommandResult, error) {
 	return runner.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
 		if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
+			if stream == providerservice.OutputStreamStderr && len(chunk) > 0 {
+				request.ObserveProgress(providers.ExecuteProgress{
+					Phase: "progress.updated", Detail: string(chunk),
+					Metadata: map[string]string{"stream": providerservice.OutputStreamStderr},
+				})
+			}
 			return nil
 		}
 		return observe(chunk)
