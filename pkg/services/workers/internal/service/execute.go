@@ -297,7 +297,7 @@ func publishMockWorkerUsage(
 	request workers.ExecuteRequest,
 	usage *workers.MockWorkerUsageConfig,
 ) {
-	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, usage)
+	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, providerTargetIdentity(&request), usage)
 }
 
 // executeProviderWithRetry preserves the provider-attempt policy at the

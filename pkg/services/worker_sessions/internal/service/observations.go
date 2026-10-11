@@ -686,7 +686,7 @@ func (r *registry) updateUsageProjection(sessionID string, draft workers.Draft) 
 		return
 	}
 	metadata.tokenUsage = usage
-	if strings.TrimSpace(model) != "" {
+	if usage.Origin != "SYNTHETIC" && strings.TrimSpace(model) != "" {
 		metadata.usageModel = strings.TrimSpace(model)
 	}
 }
