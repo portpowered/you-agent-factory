@@ -6442,6 +6442,8 @@ func TestRunInterruptRejectsSuccessorWithConflictingCapturedReference(t *testing
 	wrongReference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-other"}
 	supervision := newSupervision("dispatch-source", "turn-1", execution)
 	supervision.signalDone()
+	// This synthetic source has no running driver; its physical join is complete.
+	supervision.signalDriverDone()
 	supervision.installCancel(func() {})
 	r.sessions[sourceID] = workersessions.Session{
 		ID:    sourceID,
@@ -8210,6 +8212,8 @@ func TestWorkerSessionInterrupt_CoversCancellationAndSuccessorRejection(t *testi
 	setCoverageAccepted(successSupervision, true)
 	successSupervision.installCancel(func() {})
 	successSupervision.signalDone()
+	// This synthetic source has no running driver; its physical join is complete.
+	successSupervision.signalDriverDone()
 	successAssociation := validAssociation("success-source", "success-dispatch", ref)
 	r.sessions["success-source"] = workersessions.Session{ID: "success-source", State: workersessions.StateCanceled, ProviderSessionAssociation: &successAssociation}
 	r.sessions["success-successor"] = workersessions.Session{ID: "success-successor", State: workersessions.StateReserved}
@@ -8301,6 +8305,8 @@ func TestWorkerSessionInterrupt_WaitCancellationIsReplaySafe(t *testing.T) {
 		t.Fatal("Interrupt(canceled caller) did not return")
 	}
 	supervision.signalDone()
+	// This synthetic source has no running driver; its physical join is complete.
+	supervision.signalDriverDone()
 	r.mu.RLock()
 	replay := r.interruptReplays["interrupt-wait-request"]
 	r.mu.RUnlock()

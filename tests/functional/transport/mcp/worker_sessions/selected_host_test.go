@@ -50,7 +50,7 @@ func runSelectedHostScenarios(t *testing.T) {
 		released := make(chan struct{})
 		launched := make(chan struct{}, 2)
 		host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir: support.ScaffoldSingleStepFactory(t, "subagent-host"), WorkingDirectory: workDir, Env: process.environment,
+			FactoryDir: support.ScaffoldSingleStepFactory(t, "subagent-host"), WorkingDirectory: workDir, Env: process.Environment(),
 			Edges: serviceedges.Edges{ProviderCommandRunner: heldSubagentRunner{launched: launched, released: released}},
 		})
 		session, ctx, cancel := startCancellableMCP(t, process, host.URL(), workDir)
@@ -388,59 +388,12 @@ func (r rejectLocalProvider) Run(context.Context, platformprocess.CommandRequest
 
 func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context) {
 	t.Helper()
-	session, ctx, _ := startCancellableMCP(t, process, host)
-	return session, ctx
+	return support.StartSelectedHostMCP(t, process, host)
 }
 
 func startCancellableMCP(t *testing.T, process support.Process, host string, workspace ...string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
 	t.Helper()
-	// The session spans host shutdown/recovery and independent profile setup.
-	// Bound individual protocol operations, rather than expiring the transport
-	// while the scenario is preparing its next host.
-	ctx, cancel := context.WithCancel(t.Context())
-	stdinRead, stdinWrite := io.Pipe()
-	stdoutRead, stdoutWrite := io.Pipe()
-	done := make(chan error, 1)
-	workDir := t.TempDir()
-	if len(workspace) > 0 {
-		workDir = workspace[0]
-	}
-	go func() {
-		err := process.Execute(root.Input{
-			Args: []string{"you", "--server", host, "server", "mcp"}, Context: ctx,
-			WorkingDirectory: workDir,
-			Stdin:            stdinRead, Stdout: stdoutWrite, Stderr: io.Discard,
-		})
-		// Command exit ends its protocol streams, including startup refusal.
-		// Otherwise a client can remain blocked writing initialize to the pipe.
-		_ = stdinRead.CloseWithError(err)
-		_ = stdoutWrite.CloseWithError(err)
-		done <- err
-	}()
-	t.Cleanup(func() {
-		cancel()
-		_ = stdinWrite.Close()
-		_ = stdinRead.Close()
-		_ = stdoutWrite.Close()
-		_ = stdoutRead.Close()
-		select {
-		case err := <-done:
-			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
-				t.Errorf("MCP execute: %v", err)
-			}
-		case <-time.After(30 * time.Second):
-			t.Error("MCP execute did not join")
-		}
-	})
-	client := mcp.NewClient(&mcp.Implementation{Name: "selected-host-parity", Version: "test"}, nil)
-	connectCtx, cancelConnect := context.WithTimeout(ctx, 30*time.Second)
-	defer cancelConnect()
-	session, err := client.Connect(connectCtx, &mcp.IOTransport{Reader: stdoutRead, Writer: stdinWrite}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = session.Close() })
-	return session, ctx, cancel
+	return support.StartCancellableSelectedHostMCP(t, process, host, workspace...)
 }
 
 func packagedOperationsListInput(t *testing.T, process support.Process) map[string]any {
@@ -494,23 +447,12 @@ func readHost(w http.ResponseWriter, r *http.Request) {
 
 func callTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
-	if err != nil {
-		t.Fatalf("%s: %v", name, err)
-	}
-	return result
+	return support.CallMCPTool(t, ctx, session, name, args)
 }
 
 func callAction(t *testing.T, ctx context.Context, session *mcp.ClientSession, action string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
-	input := make(map[string]any, len(args)+1)
-	for key, value := range args {
-		input[key] = value
-	}
-	input["action"] = action
-	return callTool(t, ctx, session, "you.subagent", input)
+	return support.CallSubagentAction(t, ctx, session, action, args)
 }
 
 func callWorker(t *testing.T, ctx context.Context, session *mcp.ClientSession, tool string, args map[string]any) map[string]any {
@@ -528,64 +470,22 @@ func callWorker(t *testing.T, ctx context.Context, session *mcp.ClientSession, t
 
 func getHost(t *testing.T, url string) any {
 	t.Helper()
-	return requestHost(t, http.MethodGet, url)
+	return support.GetHostJSON(t, url)
 }
 
 func requestHost(t *testing.T, method, url string) any {
 	t.Helper()
-	request, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	var value any
-	if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
-		t.Fatal(err)
-	}
-	return value
+	return support.RequestHostJSON(t, method, url)
 }
 
 func assertJSONEqual(t *testing.T, actual, expected any) {
 	t.Helper()
-	left, _ := json.Marshal(actual)
-	right, _ := json.Marshal(expected)
-	var normalized any
-	if err := json.Unmarshal(left, &normalized); err != nil {
-		t.Fatal(err)
-	}
-	left, _ = json.Marshal(normalized)
-	normalized = nil
-	if err := json.Unmarshal(right, &normalized); err != nil {
-		t.Fatal(err)
-	}
-	right, _ = json.Marshal(normalized)
-	if !bytes.Equal(left, right) {
-		t.Fatalf("MCP=%s HTTP=%s", left, right)
-	}
+	support.AssertJSONEqual(t, actual, expected)
 }
 
 func assertToolError(t *testing.T, result *mcp.CallToolResult, code string, retryable bool) {
 	t.Helper()
-	encoded, err := json.Marshal(result.StructuredContent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var envelope struct {
-		Error struct {
-			Code      string `json:"code"`
-			Retryable bool   `json:"retryable"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(encoded, &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if !result.IsError || envelope.Error.Code != code || envelope.Error.Retryable != retryable || strings.Contains(string(encoded), "secret-from-host") {
-		t.Fatalf("error result = %s isError=%v", encoded, result.IsError)
-	}
+	support.AssertMCPToolError(t, result, code, retryable)
 }
 
 func assertReadView(t *testing.T, result map[string]any, view, host string) {

@@ -1,4 +1,4 @@
-package workersessions_test
+package directadmission_test
 
 import (
 	"bytes"
@@ -11,20 +11,21 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestDirectCapacitySuccessors(t *testing.T) {
 	for _, mode := range []string{"continue", "interrupt"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
-			client := newSelectedHostClientProcess(t)
-			runner := &capacitySuccessorRunner{output: capturedProviderFixtureOutput(t), started: make(chan struct{}, 4), canceled: make(chan struct{}), sourceRelease: make(chan struct{}), successorsRelease: make(chan struct{}), sourceJoined: make(chan struct{}), interrupt: mode == "interrupt"}
+			client := support.NewSelectedHostClientProcess(t)
+			runner := &capacitySuccessorRunner{output: support.CapturedCodexSuccessOutput(t), started: make(chan struct{}, 4), canceled: make(chan struct{}), sourceRelease: make(chan struct{}), successorsRelease: make(chan struct{}), sourceJoined: make(chan struct{}), interrupt: mode == "interrupt"}
 			host, dir, _ := newCapacityProfileHost(t, runner, `{"defaults":{"directSessionCapacity":1}}`, nil)
 			t.Cleanup(runner.unblock)
-			session, ctx := startMCP(t, client, host.URL())
+			session, ctx := support.StartSelectedHostMCP(t, client, host.URL())
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			assertSubagentAdmission(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("source", dir)), "source")
+			support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("source", dir)), "source")
 			waitCapacityGate(t, ctx, runner.started)
 			if mode == "continue" {
 				runCapacityContinue(t, ctx, client, session, host.URL(), dir, runner)
@@ -37,39 +38,39 @@ func TestDirectCapacitySuccessors(t *testing.T) {
 			default:
 				t.Fatal("successor admitted before source physical join")
 			}
-			assertToolError(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("successor-excess", dir)), "worker_session.capacity_exceeded", true)
+			support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("successor-excess", dir)), "worker_session.capacity_exceeded", true)
 			runner.successorsOnce.Do(func() { close(runner.successorsRelease) })
 			followCapacityTerminal(t, ctx, client, host.URL(), dir, "successor", "COMPLETED")
-			assertSubagentAdmission(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("replacement", dir)), "replacement")
+			support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("replacement", dir)), "replacement")
 			followCapacityTerminal(t, ctx, client, host.URL(), dir, "replacement", "COMPLETED")
 		})
 	}
 }
 
-func runCapacityContinue(t *testing.T, ctx context.Context, client selectedHostClientProcess, session *mcp.ClientSession, host, dir string, runner *capacitySuccessorRunner) {
+func runCapacityContinue(t *testing.T, ctx context.Context, client support.SelectedHostClientProcess, session *mcp.ClientSession, host, dir string, runner *capacitySuccessorRunner) {
 	t.Helper()
 	runner.sourceOnce.Do(func() { close(runner.sourceRelease) })
 	followCapacityTerminal(t, ctx, client, host, dir, "source", "COMPLETED")
-	assertSubagentAdmission(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("occupied", dir)), "occupied")
+	support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("occupied", dir)), "occupied")
 	waitCapacityGate(t, ctx, runner.started)
 	payload := map[string]any{"requestId": "continue-request", "successorWorkerSessionId": "successor", "followUpInput": "controlled follow-up"}
-	refused := postHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 503).(map[string]any)
+	refused := support.PostHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 503).(map[string]any)
 	if refused["code"] != "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED" {
 		t.Fatal("occupied continuation lost admission failure classification")
 	}
-	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "successor"}), "worker_session.not_found", false)
-	result := callAction(t, ctx, session, "CONTROL", map[string]any{"workerSessionId": "occupied", "operation": "CANCEL"})
+	support.AssertMCPToolError(t, support.CallSubagentAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "successor"}), "worker_session.not_found", false)
+	result := support.CallSubagentAction(t, ctx, session, "CONTROL", map[string]any{"workerSessionId": "occupied", "operation": "CANCEL"})
 	if result.IsError {
 		t.Fatal("occupied session cancellation failed")
 	}
 	followCapacityTerminal(t, ctx, client, host, dir, "occupied", "CANCELED")
-	accepted := postHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 202).(map[string]any)
+	accepted := support.PostHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 202).(map[string]any)
 	if accepted["accepted"] != true || accepted["successorWorkerSessionId"] != "successor" {
 		t.Fatal("continuation did not admit successor")
 	}
-	assertJSONEqual(t, accepted, postHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 202))
+	support.AssertJSONEqual(t, accepted, support.PostHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 202))
 	payload["followUpInput"] = "conflicting follow-up"
-	postHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 409)
+	support.PostHostJSON(t, ctx, host+"/worker-sessions/source/continue", payload, 409)
 	if runner.calls.Load() != 3 {
 		t.Fatal("refused/replayed continuation executed an extra provider")
 	}
@@ -88,19 +89,19 @@ func runCapacityInterrupt(t *testing.T, ctx context.Context, session *mcp.Client
 		done <- response{result, err}
 	}()
 	waitCapacityGate(t, ctx, runner.canceled)
-	assertToolError(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("before-source-join", dir)), "worker_session.capacity_exceeded", true)
+	support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("before-source-join", dir)), "worker_session.capacity_exceeded", true)
 	runner.sourceOnce.Do(func() { close(runner.sourceRelease) })
 	select {
 	case r := <-done:
 		if r.err != nil || r.result == nil || r.result.IsError {
 			t.Fatalf("interrupt admission: %v %+v", r.err, r.result)
 		}
-		assertJSONEqual(t, r.result.StructuredContent, callTool(t, ctx, session, "you.subagent", args).StructuredContent)
+		support.AssertJSONEqual(t, r.result.StructuredContent, support.CallMCPTool(t, ctx, session, "you.subagent", args).StructuredContent)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
 	args["replacementMessage"] = "conflicting replacement"
-	assertToolError(t, callTool(t, ctx, session, "you.subagent", args), "worker_session.conflict", false)
+	support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, session, "you.subagent", args), "worker_session.conflict", false)
 	if runner.calls.Load() != 2 {
 		t.Fatal("interrupt replay executed an extra provider")
 	}
@@ -128,7 +129,7 @@ func (r *capacitySuccessorRunner) RunStreaming(ctx context.Context, req platform
 	source := strings.TrimSpace(string(req.Stdin)) == "source"
 	output := r.output
 	if strings.TrimSpace(string(req.Stdin)) == "occupied" || strings.TrimSpace(string(req.Stdin)) == "replacement" {
-		output = bytes.ReplaceAll(output, []byte(interruptProviderID), []byte("capacity-"+strings.TrimSpace(string(req.Stdin))))
+		output = bytes.ReplaceAll(output, []byte("session_fixture_codex_success"), []byte("capacity-"+strings.TrimSpace(string(req.Stdin))))
 	}
 	if observer != nil {
 		end := bytes.IndexByte(output, '\n') + 1

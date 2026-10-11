@@ -1,4 +1,4 @@
-package workersessions_test
+package directadmission_test
 
 import (
 	"context"
@@ -24,19 +24,19 @@ func TestDirectCapacityJoinedLifetime(t *testing.T) {
 	for _, outcome := range []string{"success", "failure", "cancel", "terminate"} {
 		t.Run(outcome, func(t *testing.T) {
 			t.Parallel()
-			client := newSelectedHostClientProcess(t)
+			client := support.NewSelectedHostClientProcess(t)
 			runner := &joinedCapacityProvider{outcome: outcome, started: make(chan struct{}, 2), canceled: make(chan struct{}), release: make(chan struct{}), replacement: make(chan struct{})}
 			host, workDir := newCapacityLifetimeHost(t, runner)
 			t.Cleanup(runner.unblock)
-			session, ctx := startMCP(t, client, host.URL())
+			session, ctx := support.StartSelectedHostMCP(t, client, host.URL())
 			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			start := func(id string) *mcp.CallToolResult {
-				return callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs(id, workDir))
+				return support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs(id, workDir))
 			}
-			assertSubagentAdmission(t, start("held"), "held")
+			support.AssertSubagentAdmission(t, start("held"), "held")
 			waitCapacityGate(t, ctx, runner.started)
-			assertToolError(t, start("excess"), "worker_session.capacity_exceeded", true)
+			support.AssertMCPToolError(t, start("excess"), "worker_session.capacity_exceeded", true)
 			var control <-chan *mcp.CallToolResult
 			if outcome == "cancel" || outcome == "terminate" {
 				done := make(chan *mcp.CallToolResult, 1)
@@ -52,7 +52,7 @@ func TestDirectCapacityJoinedLifetime(t *testing.T) {
 				waitCapacityGate(t, ctx, runner.canceled)
 				// Cancellation is acknowledged at the edge, but the effect has
 				// not joined. It still owns the slot even if projection is terminal.
-				assertToolError(t, start("before-join"), "worker_session.capacity_exceeded", true)
+				support.AssertMCPToolError(t, start("before-join"), "worker_session.capacity_exceeded", true)
 			}
 			runner.releaseOnce.Do(func() { close(runner.release) })
 			if control != nil {
@@ -67,11 +67,11 @@ func TestDirectCapacityJoinedLifetime(t *testing.T) {
 			}
 			states := map[string]string{"success": "COMPLETED", "failure": "FAILED", "cancel": "CANCELED", "terminate": "TERMINATED"}
 			followCapacityTerminal(t, ctx, client, host.URL(), workDir, "held", states[outcome])
-			assertSubagentAdmission(t, start("replacement"), "replacement")
+			support.AssertSubagentAdmission(t, start("replacement"), "replacement")
 			waitCapacityGate(t, ctx, runner.started)
-			assertToolError(t, start("replacement-excess"), "worker_session.capacity_exceeded", true)
-			assertSubagentAdmission(t, start("held"), "held")
-			assertToolError(t, start("replay-excess"), "worker_session.capacity_exceeded", true)
+			support.AssertMCPToolError(t, start("replacement-excess"), "worker_session.capacity_exceeded", true)
+			support.AssertSubagentAdmission(t, start("held"), "held")
+			support.AssertMCPToolError(t, start("replay-excess"), "worker_session.capacity_exceeded", true)
 			if runner.calls.Load() != 2 {
 				t.Fatalf("refusal/replay effect count=%d", runner.calls.Load())
 			}
@@ -83,11 +83,11 @@ func TestDirectCapacityJoinedLifetime(t *testing.T) {
 
 func TestDirectCapacitySingleSlotRace(t *testing.T) {
 	t.Parallel()
-	client := newSelectedHostClientProcess(t)
+	client := support.NewSelectedHostClientProcess(t)
 	runner := &joinedCapacityProvider{outcome: "success", started: make(chan struct{}, 2), canceled: make(chan struct{}), release: make(chan struct{}), replacement: make(chan struct{})}
 	host, workDir := newCapacityLifetimeHost(t, runner)
 	t.Cleanup(runner.unblock)
-	session, ctx := startMCP(t, client, host.URL())
+	session, ctx := support.StartSelectedHostMCP(t, client, host.URL())
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	type response struct {
@@ -110,13 +110,13 @@ func TestDirectCapacitySingleSlotRace(t *testing.T) {
 				t.Fatalf("racing START transport=%v", r.err)
 			}
 			if r.result.IsError {
-				assertToolError(t, r.result, "worker_session.capacity_exceeded", true)
+				support.AssertMCPToolError(t, r.result, "worker_session.capacity_exceeded", true)
 				if refused != "" {
 					t.Fatal("both racing requests refused")
 				}
 				refused = r.id
 			} else {
-				assertSubagentAdmission(t, r.result, r.id)
+				support.AssertSubagentAdmission(t, r.result, r.id)
 				if winner != "" {
 					t.Fatal("both racing requests admitted")
 				}
@@ -127,7 +127,7 @@ func TestDirectCapacitySingleSlotRace(t *testing.T) {
 		}
 	}
 	waitCapacityGate(t, ctx, runner.started)
-	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": refused}), "worker_session.not_found", false)
+	support.AssertMCPToolError(t, support.CallSubagentAction(t, ctx, session, "READ", map[string]any{"workerSessionId": refused}), "worker_session.not_found", false)
 	if runner.calls.Load() != 1 {
 		t.Fatalf("race provider effects=%d", runner.calls.Load())
 	}
@@ -169,7 +169,7 @@ func waitCapacityGate(t *testing.T, ctx context.Context, gate <-chan struct{}) {
 	}
 }
 
-func followCapacityTerminal(t *testing.T, ctx context.Context, client selectedHostClientProcess, host, workDir, id, state string) {
+func followCapacityTerminal(t *testing.T, ctx context.Context, client support.SelectedHostClientProcess, host, workDir, id, state string) {
 	t.Helper()
 	inputs := support.FakeInputs(ctx, []string{"you", "--server", host, "--json", "worker-sessions", "follow", "--terminal", id})
 	inputs.Input.WorkingDirectory = workDir
