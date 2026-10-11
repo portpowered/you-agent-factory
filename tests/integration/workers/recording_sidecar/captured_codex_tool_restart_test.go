@@ -1,6 +1,7 @@
 package recording_sidecar_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -14,28 +15,46 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// The invoking lane owns compilation. This one real subprocess/restart journey
-// uses the production Codex adapter with a private PATH-owned, unpaid shim.
-func TestCapturedCodexToolJoinedRestart(t *testing.T) {
+// The invoking lane owns compilation. These two subprocess/restart bindings
+// use the production Codex adapter with private PATH-owned, unpaid shims.
+func TestCapturedCodexToolContentRestart(t *testing.T) {
 	t.Parallel()
+	for _, binding := range []string{"direct", "factory"} {
+		t.Run(binding, func(t *testing.T) {
+			t.Parallel()
+			runCapturedCodexToolContentRestart(t, binding)
+		})
+	}
+}
+
+func runCapturedCodexToolContentRestart(t *testing.T, binding string) {
 	f := newInvokeArtifactFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
+	t.Cleanup(cancel)
+	f.ctx = ctx
 	f.env = capturedCodexRestartEnvironment(f.env)
-	raw, err := os.ReadFile(f.document)
-	var document map[string]any
-	if err != nil || json.Unmarshal(raw, &document) != nil {
-		t.Fatal("restart execution unavailable")
-	}
-	document["execution"].(map[string]any)["envVars"].(map[string]any)["API_KEY"] = "wsv-key-fixture"
-	raw, err = json.Marshal(document)
-	if err != nil || os.WriteFile(f.document, raw, 0o600) != nil {
-		t.Fatal("restart credential fixture unavailable")
-	}
+	declareCapturedCodexRestartCredential(t, f)
 	if err := os.WriteFile(filepath.Join(f.project, "provider", "shim.cjs"), []byte(capturedCodexRestartShim), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if binding == "factory" {
+		writeCapturedCodexRestartFactory(t, f)
+		historyCLI(t, f.ctx, f.binary, f.project, f.env, "run", "--dir", filepath.Join(f.project, "factory"), "--quiet")
+		removeHistorySeeds(t, filepath.Join(f.project, "factory"))
+	}
 	first := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
-	f.cli(t, first.url, "invoke", "--execution", f.document)
-	before := readCapturedCodexRestart(t, f, first.url)
+	if binding == "direct" {
+		f.cli(t, first.url, "invoke", "--execution", f.document)
+	}
+	rows := historyRows(t, f.ctx, f.binary, f.project, f.env, first.url, "archived")
+	if len(rows) != 1 {
+		t.Fatal("compiled capture lost unique archived membership")
+	}
+	id := rows[0].WorkerSessionId
+	if binding == "factory" && (rows[0].FactorySessionId == nil || rows[0].WorkId == nil) {
+		t.Fatal("compiled Factory capture lost binding")
+	}
+	before := readCapturedCodexRestart(t, f, first.url, id)
 	first.stop(t, f.ctx, f.binary, f.project, f.env)
 	for _, name := range []string{".codex", ".cursor", ".claude"} {
 		if err := os.WriteFile(filepath.Join(f.home, name), []byte("provider history unavailable"), 0o600); err != nil {
@@ -47,12 +66,45 @@ func TestCapturedCodexToolJoinedRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	second := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
-	after := readCapturedCodexRestart(t, f, second.url)
+	after := readCapturedCodexRestart(t, f, second.url, id)
 	second.stop(t, f.ctx, f.binary, f.project, f.env)
 	// Confirmation describes live Runtime association, not recorded facts.
 	before.Observation.ConfirmationState = after.Observation.ConfirmationState
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("joined restart changed acknowledged tool facts, identities, usage or terminal timing/cause")
+	}
+}
+
+func declareCapturedCodexRestartCredential(t *testing.T, f invokeArtifactFixture) {
+	t.Helper()
+	raw, err := os.ReadFile(f.document)
+	var document map[string]any
+	if err != nil || json.Unmarshal(raw, &document) != nil {
+		t.Fatal("restart execution unavailable")
+	}
+	document["execution"].(map[string]any)["envVars"].(map[string]any)["API_KEY"] = "wsv-key-fixture"
+	writeRecordingIntegrityJSON(t, f.document, document)
+}
+
+func writeCapturedCodexRestartFactory(t *testing.T, f invokeArtifactFixture) {
+	t.Helper()
+	writeSummaryArtifactFactory(t, f)
+	path := filepath.Join(f.project, "factory", "factory.json")
+	raw, err := os.ReadFile(path)
+	var definition map[string]any
+	if err != nil || json.Unmarshal(raw, &definition) != nil {
+		t.Fatal("compiled Factory definition unavailable")
+	}
+	delete(definition["workstations"].([]any)[0].(map[string]any), "expectedArtifacts")
+	writeRecordingIntegrityJSON(t, path, definition)
+	path = filepath.Join(f.project, "factory", "workstations", "process", "AGENTS.md")
+	raw, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = []byte(strings.Replace(string(raw), "type: MODEL_WORKSTATION\n", "type: MODEL_WORKSTATION\nenv:\n  API_KEY: wsv-key-fixture\n", 1))
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -69,9 +121,8 @@ func capturedCodexRestartEnvironment(environment []string) []string {
 	return result
 }
 
-func readCapturedCodexRestart(t *testing.T, f invokeArtifactFixture, server string) capturedSummaryArtifactSnapshot {
+func readCapturedCodexRestart(t *testing.T, f invokeArtifactFixture, server, id string) capturedSummaryArtifactSnapshot {
 	t.Helper()
-	const id = "t7-artifact-session"
 	var snapshot capturedSummaryArtifactSnapshot
 	// Capture commits are asynchronous to command return. Observe the public
 	// health/watermark before taking the detached snapshot used for parity.
@@ -130,16 +181,44 @@ func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtif
 		if entry.CallId == nil || *entry.CallId != id {
 			t.Fatal("restart transcript lost first-seen tool order")
 		}
+		assertCapturedCodexRestartTranscriptEntry(t, entry, i)
 	}
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{"private-command", "private-output", "private-denial", "private-token", "private-reasoning", "wsv-key-fixture", "private-key-value"} {
+	for _, secret := range []string{"private-token", "private-reasoning", "wsv-key-fixture", "private-key-value"} {
 		if strings.Contains(string(raw), secret) {
 			t.Fatal("restart leaked sensitive native-shaped facts")
 		}
 	}
+}
+
+func assertCapturedCodexRestartTranscriptEntry(t *testing.T, entry api.ProviderSessionTranscriptEntry, index int) {
+	t.Helper()
+	if index%2 == 0 {
+		if entry.Type != "tool_call" {
+			t.Fatal("restart transcript lost typed call")
+		}
+		if index == 0 {
+			var arguments map[string]any
+			if entry.Arguments == nil || json.Unmarshal([]byte(*entry.Arguments), &arguments) != nil || arguments["command"] != "benign-command <redacted>" {
+				t.Fatal("restart transcript changed exact command")
+			}
+		}
+		return
+	}
+	if entry.Type != "tool_output" || entry.Output == nil {
+		t.Fatal("restart transcript lost typed output")
+	}
+	payload := workers.ToolPayload{ResultSummary: json.RawMessage(*entry.Output)}
+	resultIndex := 4
+	if index == 1 {
+		resultIndex, payload.Status = 1, "completed"
+	} else if index == 3 {
+		resultIndex, payload.Status = 2, "failed"
+	}
+	assertCapturedCodexRestartResult(t, payload, resultIndex)
 }
 
 func assertCapturedCodexRestartMetadata(t *testing.T, row api.WorkerSessionObservation) {
@@ -193,6 +272,12 @@ func decodeCapturedCodexRestartTool(t *testing.T, value map[string]interface{}) 
 
 func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload, index int) {
 	t.Helper()
+	if index == 0 {
+		var arguments map[string]any
+		if json.Unmarshal(payload.ArgumentsSummary, &arguments) != nil || arguments["command"] != "benign-command <redacted>" {
+			t.Fatal("restart changed selectively sanitized command")
+		}
+	}
 	if index == 4 {
 		var result map[string]any
 		if json.Unmarshal(payload.ResultSummary, &result) != nil {
@@ -208,7 +293,7 @@ func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload,
 		return
 	}
 	var result map[string]any
-	if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != payload.Status {
+	if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != payload.Status || result["aggregated_output"] != []string{"benign-output <redacted>", "benign-denial"}[index-1] {
 		t.Fatal("restart changed zero/sandbox-failed result")
 	}
 }
@@ -216,7 +301,7 @@ func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload,
 func assertCapturedCodexRestartHTTP(t *testing.T, f invokeArtifactFixture, server string, snapshot capturedSummaryArtifactSnapshot) {
 	t.Helper()
 	for _, view := range []string{"logs", "transcript"} {
-		request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/t7-artifact-session/"+view, nil)
+		request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/"+snapshot.Observation.WorkerSessionId+"/"+view, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -242,9 +327,9 @@ const capturedCodexRestartShim = `
 if (process.argv.includes('--version')) { console.log('controlled-codex'); process.exit(0); }
 const emit = value => console.log(JSON.stringify(value));
 emit({type:'thread.started', thread_id:'restart-tools-thread'});
-emit({type:'item.started', item:{id:'success',type:'command_execution',command:'private-command',status:'in_progress'}});
-emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'private-output',exit_code:0,status:'completed'}});
-emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'private-denial',exit_code:1,status:'failed'}});
+emit({type:'item.started', item:{id:'success',type:'command_execution',command:'benign-command wsv-key-fixture',status:'in_progress'}});
+emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'benign-output wsv-key-fixture',exit_code:0,status:'completed'}});
+emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'benign-denial',exit_code:1,status:'failed'}});
 emit({type:'item.started', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',arguments:{query:'visible',api_key:'private-token'},status:'in_progress'}});
 emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible',private_reasoning:'private-reasoning','wsv-key-fixture':'private-key-value',nested:{'prefix-wsv-key-fixture':'private-key-value',safe:0}},status:'completed'}});
 emit({type:'item.completed', item:{id:'answer',type:'agent_message',text:'restart tools COMPLETE'}});

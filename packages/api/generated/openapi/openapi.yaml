@@ -175,6 +175,8 @@ paths:
                       - READ
                       - REPLIED
                       - EXPIRED
+                      - DELIVERED_REVIVE
+                      - DELIVERY_UPDATED
                   message:
                     $ref: '#/components/schemas/AgentMessage'
               x-error-event-schema:
@@ -3452,14 +3454,14 @@ components:
             - QUEUE
             - INTERRUPT
           default: QUEUE
-          description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+          description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED before any effect.
         ifEnded:
           type: string
           enum:
             - REVIVE
             - HOLD
           default: REVIVE
-          description: T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+          description: REVIVE continues an ended eligible recipient. HOLD retains the message for authorized pull.
         replyIfEnded:
           type: string
           enum:
@@ -3556,6 +3558,7 @@ components:
             deliveredWorkerSessionId:
               type: string
               nullable: true
+              description: Exact successor reached after provider-confirmed resumed progress and durable delivery.
         correlation:
           type: object
           additionalProperties: false
@@ -3594,7 +3597,7 @@ components:
         reason:
           type: string
           nullable: true
-          description: Typed code only. T5 may emit REVIVE_UNSUPPORTED.
+          description: Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED.
         hop:
           type: integer
           minimum: 0
@@ -3608,6 +3611,7 @@ components:
         revivedWorkerSessionId:
           type: string
           nullable: true
+          description: Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit.
         repliedByMessageId:
           type: string
           nullable: true
@@ -3621,7 +3625,7 @@ components:
         - REPLIED
         - EXPIRED
         - REJECTED
-      description: T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+      description: Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
     AgentMessageSendResponse:
       type: object
       additionalProperties: false
@@ -3665,6 +3669,8 @@ components:
             - READ
             - REPLIED
             - EXPIRED
+            - DELIVERED_REVIVE
+            - DELIVERY_UPDATED
         message:
           $ref: '#/components/schemas/AgentMessage'
     SubmitWorkRequest:
@@ -17064,6 +17070,11 @@ components:
               type: integer
               minimum: 1
               default: 10
+            revivesPerChainPerHour:
+              type: integer
+              minimum: 1
+              default: 6
+              description: Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit.
             messagesPerThread:
               type: integer
               minimum: 1

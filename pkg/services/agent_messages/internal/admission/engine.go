@@ -2,6 +2,7 @@ package admission
 
 import (
 	"context"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"sync"
 	"time"
@@ -30,12 +31,17 @@ type Quota interface {
 
 // Ledger's commit atomically flushes all changes before making them readable.
 type Ledger interface {
+	DeliveryIntents() ([]store.DeliveryIntent, error)
 	Entries() ([]store.Entry, uint64, error)
 	Matching(store.Filter) ([]store.Entry, uint64, error)
 	LookupMessage(string) (store.Entry, bool, uint64, error)
 	LookupRequest(string, string) (store.Request, bool, error)
 	Commit(store.Transaction) error
 }
+
+type ContinueOperation func(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error)
+type SessionReader func(context.Context, workersessions.GetRequest) (workersessions.Session, error)
+type ObservationStreamReader func(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 
 // EventAppender publishes already committed, privacy-normalized observations.
 // It owns no durable state or admission authority.
@@ -50,21 +56,27 @@ type EventAppender interface {
 // durable transaction. It retains no credentials. Wire supplies one instance
 // per writable profile and injects controlled effects at these exact ports.
 type Engine struct {
-	mu        sync.Mutex
-	enabled   bool
-	authority Authority
-	validator InputValidator
-	quota     Quota
-	ledger    Ledger
-	now       func() time.Time
-	newID     func() string
-	cursorKey []byte
-	events    EventAppender
-	logger    logging.Logger
+	mu               sync.Mutex
+	enabled          bool
+	authority        Authority
+	validator        InputValidator
+	quota            Quota
+	ledger           Ledger
+	now              func() time.Time
+	scheduler        platformclock.TimerSource
+	newID            func() string
+	cursorKey        []byte
+	events           EventAppender
+	logger           logging.Logger
+	continueSession  ContinueOperation
+	readSession      SessionReader
+	readObservations ObservationStreamReader
+	revivesPerHour   int
+	deliveryLife     *deliveryLifetime
 }
 
-func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger) *Engine {
-	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID, cursorKey: append([]byte(nil), cursorKey...), events: stream, logger: logger}
+func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, scheduler platformclock.TimerSource, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation, readSession SessionReader, readObservations ObservationStreamReader) *Engine {
+	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, scheduler: scheduler, newID: newID, cursorKey: append([]byte(nil), cursorKey...), events: stream, logger: logger, continueSession: continueSession, readSession: readSession, readObservations: readObservations, revivesPerHour: 6}
 }
 
 func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, caller *workersessions.CallerIdentity, factory string) (agentmessages.Message, error) {

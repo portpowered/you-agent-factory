@@ -283,6 +283,7 @@ func assertCommittedFailureStopParity(t *testing.T) {
 	reopened := support.StartFunctionalAPIServer(t, config)
 	for index, state := range states {
 		got := assertCommittedTerminalPublicParity(t, reopened, before[index].WorkerSessionId, state)
+		assertUnderlyingFailureAndStop(t, got, map[string]string{"CANCELED": "cancel", "TERMINATED": "terminate"}[state])
 		if !committedTerminalFactsEqual(before[index], got) {
 			t.Fatalf("underlying failure or stop changed on reopen: before=%+v after=%+v", before[index], got)
 		}
@@ -294,6 +295,11 @@ func assertUnderlyingFailureAndStop(t *testing.T, shown factoryapi.WorkerSession
 	if shown.Failure == nil || shown.Failure.Kind != "WORKERS_EXECUTION_FAILURE" || shown.Failure.Detail != "expected output artifact was not produced" ||
 		shown.TerminalCause == nil || string(*shown.TerminalCause) != "OPERATOR_"+strings.ToUpper(action) {
 		t.Fatalf("committed underlying failure conflated with operator stop: %+v", shown)
+	}
+	// This compatible capture records a failure but no provider classification.
+	// Neither live projection nor reconstruction may infer it from the detail.
+	if shown.Failure.ProviderFailureKind != nil || shown.Failure.ProviderContinuationFailureKind != nil || shown.Failure.ProviderContinuationOutcome != nil {
+		t.Fatalf("invented legacy provider classification: %+v", shown.Failure)
 	}
 }
 
@@ -431,11 +437,21 @@ func assertCommittedTerminalPublicParity(t *testing.T, server *support.Functiona
 	if string(shown.State) != state || shown.ConfirmationState != factoryapi.CONFIRMED || shown.EndedAt == nil || shown.DurationMillis == nil {
 		t.Fatalf("unconfirmed committed terminal: %+v", shown)
 	}
-	if shown.Failure != nil && (shown.Failure.ProviderFailureKind != nil || shown.Failure.ProviderContinuationFailureKind != nil || shown.Failure.ProviderContinuationOutcome != nil) {
-		t.Fatalf("invented uncommitted provider classification: %+v", shown.Failure)
-	}
 	if state == "FAILED" && shown.Failure == nil {
 		t.Fatal("committed FAILED lost failure cause")
+	}
+	if shown.Failure != nil {
+		var expected *string
+		// Direct provider errors retain their unknown classification. Factory
+		// failures and operator stops record no provider classification here.
+		if state == "FAILED" && strings.HasPrefix(id, "terminal-direct-") {
+			kind := "unknown"
+			expected = &kind
+		}
+		if !reflect.DeepEqual(shown.Failure.ProviderFailureKind, expected) || shown.Failure.ProviderContinuationFailureKind != nil || shown.Failure.ProviderContinuationOutcome != nil {
+			raw, _ := json.Marshal(shown.Failure)
+			t.Fatalf("%s recorded provider classification changed: %s", id, raw)
+		}
 	}
 	return shown
 }

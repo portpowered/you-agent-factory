@@ -905,11 +905,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v240, err := provideMessageJournal()
+	v240, err := provideMessageJournal(edges2)
 	if err != nil {
 		return nil, err
 	}
-	v241, err := provideMessageEngine(v237, v238, v239, v240, source, eventsService, loggingLogger)
+	v241, err := provideMessageEngine(v237, v238, v239, v240, source, timerSource, eventsService, loggingLogger, workersessionsService)
 	if err != nil {
 		return nil, err
 	}

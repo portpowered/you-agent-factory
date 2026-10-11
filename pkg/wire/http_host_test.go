@@ -190,13 +190,21 @@ func TestWorkerExecutionEndpointMapsActualBinding(t *testing.T) {
 				want = "http://[::1]:8124"
 			}
 			released := false
+			messagesReleased := false
 			bind := func(endpoint string) func() {
 				if endpoint != want {
 					t.Fatalf("mapped endpoint = %q, want %q", endpoint, want)
 				}
-				return func() { released = true }
+				return func() {
+					if !messagesReleased {
+						t.Fatal("execution binding released before Messaging joined")
+					}
+					released = true
+				}
 			}
-			handler := workerExecutionEndpointHandler{Handler: http.NotFoundHandler(), bind: bind}
+			handler := workerExecutionEndpointHandler{Handler: http.NotFoundHandler(), bind: bind, bindMessages: func() func() {
+				return func() { messagesReleased = true }
+			}}
 			release := handler.ObserveHostBinding(platformhttpserver.Binding{Host: host, Port: 8124})
 			release()
 			if !released {

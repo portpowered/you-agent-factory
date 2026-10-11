@@ -42,6 +42,7 @@ type Journal struct {
 	records  map[string]bool
 	entries  map[string]Entry
 	requests map[requestKey]Request
+	intents  map[string]DeliveryIntent
 	ordered  []string
 	indexes  map[indexKey][]string
 }
@@ -117,6 +118,7 @@ func (j *Journal) open() error {
 	}
 	j.entries = make(map[string]Entry)
 	j.requests = make(map[requestKey]Request)
+	j.intents = make(map[string]DeliveryIntent)
 	j.records = make(map[string]bool)
 	j.indexes = make(map[indexKey][]string)
 	if err := j.replay(data); err != nil {
@@ -249,6 +251,9 @@ func (j *Journal) apply(t Transaction) {
 	}
 	for _, request := range t.Requests {
 		j.requests[requestKey{request.SenderIdentity, request.RequestID}] = request
+	}
+	for _, intent := range t.DeliveryIntents {
+		j.intents[intent.RequestID] = intent.clone()
 	}
 	j.records[t.RecordID] = true
 	j.sequence = t.Sequence

@@ -65,10 +65,12 @@ const (
 
 // Defines values for AgentMessageObservationKind.
 const (
-	AgentMessageObservationKindEXPIRED AgentMessageObservationKind = "EXPIRED"
-	AgentMessageObservationKindREAD    AgentMessageObservationKind = "READ"
-	AgentMessageObservationKindREPLIED AgentMessageObservationKind = "REPLIED"
-	AgentMessageObservationKindSENT    AgentMessageObservationKind = "SENT"
+	AgentMessageObservationKindDELIVEREDREVIVE AgentMessageObservationKind = "DELIVERED_REVIVE"
+	AgentMessageObservationKindDELIVERYUPDATED AgentMessageObservationKind = "DELIVERY_UPDATED"
+	AgentMessageObservationKindEXPIRED         AgentMessageObservationKind = "EXPIRED"
+	AgentMessageObservationKindREAD            AgentMessageObservationKind = "READ"
+	AgentMessageObservationKindREPLIED         AgentMessageObservationKind = "REPLIED"
+	AgentMessageObservationKindSENT            AgentMessageObservationKind = "SENT"
 )
 
 // Defines values for AgentMessageSendRequestDelivery.
@@ -1823,19 +1825,22 @@ type AgentMessage struct {
 	// MessageId Globally unique msg-<ULID> identity.
 	MessageId string `json:"messageId"`
 
-	// Reason Typed code only. T5 may emit REVIVE_UNSUPPORTED.
-	Reason                 *string                  `json:"reason"`
-	RepliedByMessageId     *string                  `json:"repliedByMessageId"`
-	ReplyIfEnded           AgentMessageReplyIfEnded `json:"replyIfEnded"`
-	RevivedWorkerSessionId *string                  `json:"revivedWorkerSessionId"`
-	SentAt                 time.Time                `json:"sentAt"`
+	// Reason Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED.
+	Reason             *string                  `json:"reason"`
+	RepliedByMessageId *string                  `json:"repliedByMessageId"`
+	ReplyIfEnded       AgentMessageReplyIfEnded `json:"replyIfEnded"`
 
-	// Status T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+	// RevivedWorkerSessionId Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit.
+	RevivedWorkerSessionId *string   `json:"revivedWorkerSessionId"`
+	SentAt                 time.Time `json:"sentAt"`
+
+	// Status Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
 	Status AgentMessageDeliveryStatus `json:"status"`
 
 	// ThreadId Identity of the first message in the thread.
 	ThreadId string `json:"threadId"`
 	To       struct {
+		// DeliveredWorkerSessionId Exact successor reached after provider-confirmed resumed progress and durable delivery.
 		DeliveredWorkerSessionId *string            `json:"deliveredWorkerSessionId"`
 		FactorySessionId         *string            `json:"factorySessionId"`
 		Kind                     AgentMessageToKind `json:"kind"`
@@ -1863,7 +1868,7 @@ type AgentMessageAddress struct {
 	WorkerSessionId string `json:"workerSessionId"`
 }
 
-// AgentMessageDeliveryStatus T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+// AgentMessageDeliveryStatus Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
 type AgentMessageDeliveryStatus string
 
 // AgentMessageListResponse defines model for AgentMessageListResponse.
@@ -1895,11 +1900,11 @@ type AgentMessageSendRequest struct {
 		WorkId           *string `json:"workId,omitempty"`
 	} `json:"correlation,omitempty"`
 
-	// Delivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+	// Delivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED before any effect.
 	Delivery         *AgentMessageSendRequestDelivery `json:"delivery,omitempty"`
 	ExpiresInSeconds *int                             `json:"expiresInSeconds,omitempty"`
 
-	// IfEnded T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+	// IfEnded REVIVE continues an ended eligible recipient. HOLD retains the message for authorized pull.
 	IfEnded   *AgentMessageSendRequestIfEnded `json:"ifEnded,omitempty"`
 	InReplyTo *string                         `json:"inReplyTo,omitempty"`
 
@@ -1910,10 +1915,10 @@ type AgentMessageSendRequest struct {
 	union        json.RawMessage
 }
 
-// AgentMessageSendRequestDelivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+// AgentMessageSendRequestDelivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED before any effect.
 type AgentMessageSendRequestDelivery string
 
-// AgentMessageSendRequestIfEnded T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+// AgentMessageSendRequestIfEnded REVIVE continues an ended eligible recipient. HOLD retains the message for authorized pull.
 type AgentMessageSendRequestIfEnded string
 
 // AgentMessageSendRequestReplyIfEnded Default ifEnded for a reply, unless explicitly overridden.
@@ -5802,7 +5807,10 @@ type GlobalConfigMessaging struct {
 		MaxBodyBytes         *int `json:"maxBodyBytes,omitempty"`
 		MaxHop               *int `json:"maxHop,omitempty"`
 		MessagesPerThread    *int `json:"messagesPerThread,omitempty"`
-		SendsPerChainPerHour *int `json:"sendsPerChainPerHour,omitempty"`
+
+		// RevivesPerChainPerHour Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit.
+		RevivesPerChainPerHour *int `json:"revivesPerChainPerHour,omitempty"`
+		SendsPerChainPerHour   *int `json:"sendsPerChainPerHour,omitempty"`
 	} `json:"limits,omitempty"`
 	Policy *struct {
 		// AllowCrossScope Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.

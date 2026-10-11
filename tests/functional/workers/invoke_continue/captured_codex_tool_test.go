@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,16 +23,43 @@ import (
 // this protects captured public values without claiming real provider emission.
 func capturedCodexToolOutput() []byte {
 	return []byte(`{"type":"thread.started","thread_id":"captured-tools-thread"}
-{"type":"item.started","item":{"id":"success","type":"command_execution","command":"private-command","status":"in_progress"}}
-{"type":"item.completed","item":{"id":"success","type":"command_execution","aggregated_output":"private-output","exit_code":0,"status":"completed"}}
-{"type":"item.completed","item":{"id":"failure","type":"command_execution","aggregated_output":"private-denial","exit_code":1,"status":"failed"}}
-{"type":"item.started","item":{"id":"mcp","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"visible"},"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"mcp","type":"mcp_tool_call","result":{"value":"visible"},"status":"completed"}}
+{"type":"item.started","item":{"id":"success","type":"command_execution","command":"benign-command captured\u002dcredential","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"success","type":"command_execution","aggregated_output":"benign-output captured\u002dcredential","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"failure","type":"command_execution","aggregated_output":"benign-denial","exit_code":1,"status":"failed"}}
+{"type":"item.started","item":{"id":"mcp","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"visible","password":"captured-private-password","nested":["captured\u002dcredential",0,false,null,{"captured\u002dcredential":"captured-private-key","safe":"visible"}]},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"mcp","type":"mcp_tool_call","result":{"value":"visible","private_reasoning":"captured-private-reasoning","encrypted_content":"captured-private-encrypted","nested":["captured\u002dcredential",0,false,null,{"captured\u002dcredential":"captured-private-key","safe":"visible"}]},"status":"completed"}}
 {"type":"item.started","item":{"id":"collab","type":"collab_tool_call","arguments":{"task":"visible"},"status":"in_progress"}}
 {"type":"item.completed","item":{"id":"collab","type":"collab_tool_call","result":{"answer":"visible"},"status":"completed"}}
 {"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"captured tools COMPLETE"}}
 {"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":2}}
 `)
+}
+
+func capturedCodexExecutionPath(t *testing.T, scenario *invokeContinueScenario, id string) string {
+	t.Helper()
+	path := requesterExecutionPath(t, scenario, id)
+	raw, err := os.ReadFile(path)
+	var document map[string]any
+	if err != nil || json.Unmarshal(raw, &document) != nil {
+		t.Fatal("captured execution unavailable")
+	}
+	document["execution"].(map[string]any)["envVars"] = map[string]string{"CAPTURE_API_KEY": "captured-credential"}
+	writeInvokeContinueJSON(t, path, document)
+	return path
+}
+
+func capturedCodexFactory(t *testing.T, directory string) {
+	t.Helper()
+	t7WriteFactorySibling(t, directory)
+	path := filepath.Join(directory, "workstations", "process", "AGENTS.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = []byte(strings.Replace(string(raw), "type: MODEL_WORKSTATION\n", "type: MODEL_WORKSTATION\nenv:\n  CAPTURE_API_KEY: captured-credential\n", 1))
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestCapturedCodexToolPublicFacts(t *testing.T) {
@@ -41,7 +70,7 @@ func TestCapturedCodexToolPublicFacts(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	id := scenarioScopedID(scenario, "captured-tools")
-	path := requesterExecutionPath(t, scenario, id)
+	path := capturedCodexExecutionPath(t, scenario, id)
 	invoke := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
 	if err := fixture.process.Execute(invoke.Input); err != nil {
 		t.Fatal("tool fixture invocation failed")
@@ -60,7 +89,7 @@ func TestCapturedCodexToolFactoryFacts(t *testing.T) {
 	defer scenario.close(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-	t7WriteFactorySibling(t, scenario.workingDirectory)
+	capturedCodexFactory(t, scenario.workingDirectory)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, scenario.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
 	item := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{WorkTypeName: "task", Payload: "controlled tool capture"})
@@ -102,9 +131,9 @@ func assertCapturedCodexToolReads(t *testing.T, ctx context.Context, fixture *in
 		if json.Unmarshal(mcpBody, httpValue) != nil || !reflect.DeepEqual(cli, httpValue) {
 			t.Fatalf("MCP tool facts differ for %s", view)
 		}
-		for _, private := range []string{"private-command", "private-output", "private-denial"} {
-			if strings.Contains(body, private) {
-				t.Fatal("sensitive tool summary leaked")
+		for _, benign := range []string{"benign-command", "benign-output", "benign-denial"} {
+			if !strings.Contains(body, benign) {
+				t.Fatal("benign tool content lost")
 			}
 		}
 		if view == "logs" {
@@ -223,7 +252,7 @@ func TestCapturedCodexToolIdentitylessRejection(t *testing.T) {
 		t19AwaitSignal(t, ctx, runner.stopped, "denial fixture joined")
 	}()
 	id := scenarioScopedID(scenario, "identityless-denial")
-	path := requesterExecutionPath(t, scenario, id)
+	path := capturedCodexExecutionPath(t, scenario, id)
 	invoke := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)
 	if err := fixture.process.Execute(invoke.Input); err != nil {
 		t.Fatal("denial fixture admission failed")
@@ -395,7 +424,7 @@ func TestCapturedCodexToolLiveFacts(t *testing.T) {
 		t19AwaitSignal(t, ctx, runner.stopped, "tool fixture joined")
 	}()
 	id := scenarioScopedID(scenario, "live-tools")
-	path := requesterExecutionPath(t, scenario, id)
+	path := capturedCodexExecutionPath(t, scenario, id)
 	invoke := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)
 	if err := fixture.process.Execute(invoke.Input); err != nil {
 		t.Fatal("live tool fixture admission failed")
@@ -430,7 +459,7 @@ func TestCapturedCodexToolFactoryLiveFacts(t *testing.T) {
 		}
 		t19AwaitSignal(t, ctx, runner.stopped, "Factory tool fixture joined")
 	}()
-	t7WriteFactorySibling(t, scenario.workingDirectory)
+	capturedCodexFactory(t, scenario.workingDirectory)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, scenario.workingDirectory)
 	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
 	item := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{WorkTypeName: "task", Payload: "controlled live tool capture"})
@@ -503,6 +532,7 @@ func awaitCapturedCodexLiveTools(t *testing.T, ctx context.Context, fixture *inv
 
 func assertCapturedCodexToolTranscript(t *testing.T, body string) {
 	t.Helper()
+	assertCapturedCodexSecretsAbsent(t, body)
 	var transcript api.WorkerSessionTranscriptResponse
 	if json.Unmarshal([]byte(body), &transcript) != nil || len(transcript.Entries) != 9 {
 		t.Fatal("tool transcript lost or duplicated facts")
@@ -530,13 +560,28 @@ func assertCapturedCodexTranscriptCall(t *testing.T, entry api.ProviderSessionTr
 	if *entry.Name != names[*entry.CallId] {
 		t.Fatalf("native tool identity/name lost: id=%q name=%q", *entry.CallId, *entry.Name)
 	}
+	if *entry.CallId == "success" {
+		var arguments map[string]any
+		if entry.Arguments == nil || json.Unmarshal([]byte(*entry.Arguments), &arguments) != nil || arguments["command"] != "benign-command <redacted>" {
+			t.Fatal("command arguments changed")
+		}
+	}
 	if (*entry.CallId == "mcp" || *entry.CallId == "collab") && (entry.Arguments == nil || !strings.Contains(*entry.Arguments, "visible")) {
 		t.Fatal("opening arguments lost on completion")
+	}
+	if *entry.CallId == "mcp" {
+		assertCapturedCodexMixedSummary(t, []byte(*entry.Arguments), false)
 	}
 }
 
 func assertCapturedCodexTranscriptOutput(t *testing.T, entry api.ProviderSessionTranscriptEntry) {
 	t.Helper()
+	if entry.CallId != nil && *entry.CallId == "mcp" {
+		if entry.Output == nil {
+			t.Fatal("MCP output absent")
+		}
+		assertCapturedCodexMixedSummary(t, []byte(*entry.Output), true)
+	}
 	if entry.CallId == nil || (*entry.CallId != "success" && *entry.CallId != "failure") {
 		return
 	}
@@ -548,6 +593,13 @@ func assertCapturedCodexTranscriptOutput(t *testing.T, entry api.ProviderSession
 	if *entry.CallId == "failure" {
 		code, status = 1, "failed"
 	}
+	output := "benign-output <redacted>"
+	if *entry.CallId == "failure" {
+		output = "benign-denial"
+	}
+	if result["aggregated_output"] != output {
+		t.Fatal("command output changed")
+	}
 	if result["exit_code"] != code || result["status"] != status || entry.Status == nil || *entry.Status != status {
 		t.Fatal("tool outcome lost or misreported")
 	}
@@ -555,6 +607,11 @@ func assertCapturedCodexTranscriptOutput(t *testing.T, entry api.ProviderSession
 
 func assertCapturedCodexToolLogs(t *testing.T, logs api.WorkerSessionLogPage) {
 	t.Helper()
+	raw, err := json.Marshal(logs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCapturedCodexSecretsAbsent(t, string(raw))
 	wantIDs := []string{"success", "success", "failure", "mcp", "mcp", "collab", "collab"}
 	wantStatus := []string{"in_progress", "completed", "failed", "in_progress", "completed", "in_progress", "completed"}
 	index := 0
@@ -584,14 +641,53 @@ func assertCapturedCodexToolLogs(t *testing.T, logs api.WorkerSessionLogPage) {
 
 func assertCapturedCodexToolLogResult(t *testing.T, payload workers.ToolPayload, index int, status string) {
 	t.Helper()
+	if index == 3 {
+		assertCapturedCodexMixedSummary(t, payload.ArgumentsSummary, false)
+	}
+	if index == 4 {
+		assertCapturedCodexMixedSummary(t, payload.ResultSummary, true)
+	}
+	if index == 0 {
+		var arguments map[string]any
+		if json.Unmarshal(payload.ArgumentsSummary, &arguments) != nil || arguments["command"] != "benign-command <redacted>" {
+			t.Fatal("captured command changed")
+		}
+	}
 	if index == 1 || index == 2 {
 		var result map[string]any
-		if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != status {
+		if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != status || result["aggregated_output"] != []string{"benign-output <redacted>", "benign-denial"}[index-1] {
 			t.Fatal("command result lost explicit zero or failure")
 		}
 	}
 	if index >= 3 && strings.Contains(string(payload.ResultSummary), "exit_code") {
 		t.Fatal("non-command tool acquired an invented exit code")
+	}
+}
+
+func assertCapturedCodexSecretsAbsent(t *testing.T, body string) {
+	t.Helper()
+	for _, secret := range []string{"captured-credential", "captured-private-password", "captured-private-key", "captured-private-reasoning", "captured-private-encrypted"} {
+		if strings.Contains(body, secret) {
+			t.Fatal("captured public view leaked a classified secret")
+		}
+	}
+}
+
+func assertCapturedCodexMixedSummary(t *testing.T, raw []byte, output bool) {
+	t.Helper()
+	var summary map[string]any
+	if json.Unmarshal(raw, &summary) != nil {
+		t.Fatal("mixed captured summary is invalid JSON")
+	}
+	field := "arguments"
+	want := map[string]any{"query": "visible", "password": "<redacted>"}
+	if output {
+		field = "result"
+		want = map[string]any{"value": "visible", "private_reasoning": "<redacted>", "encrypted_content": "<redacted>"}
+	}
+	want["nested"] = []any{"<redacted>", float64(0), false, nil, map[string]any{"safe": "visible"}}
+	if !reflect.DeepEqual(summary[field], want) {
+		t.Fatal("mixed captured summary lost safe values/types or selective redaction")
 	}
 }
 

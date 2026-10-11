@@ -123,7 +123,7 @@ transports as callers or adapters.
 | `provider_sessions` | Provider-session discovery and provider transcript/session inspection. |
 | `chat_sessions` | Customer conversation and control context used by ACP: selected targets, ordered turns, target episodes, attachments, and control intents. Chat Sessions sequences source-native observations onto Events without owning Factory replay history. |
 | `events` | Process-local, in-memory session-scoped source-native stream for append/attachment, retained reads, cursors, subscriptions, retention gaps, and backpressure. Events is not the canonical Factory Event ledger. |
-| `agent_messages` | Worker-authorized Agent Message admission, independent durable store, inbox/read/reply transitions, idempotency, limits, privacy, and source-native message observations. |
+| `agent_messages` | Worker-authorized Agent Message admission, independent durable store, inbox/read/reply transitions, direct revival delivery and recovery, expiry, idempotency, limits, privacy, and source-native message observations. |
 | `worker_sessions` | Worker Session identity, attempt supervision, lifecycle classification, dispatch association, and publication of source-native Worker observations to Events. Worker Sessions does not own Worker execution policy or Factory replay history. |
 | `operator_settings` | Operator configuration documents, defaults, input inventory, and effective settings resolution. |
 | `factory_visualization` | Factory runtime presentation, live-view projections, and response-event presentation. |

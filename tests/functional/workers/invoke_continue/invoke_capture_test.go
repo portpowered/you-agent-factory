@@ -230,7 +230,7 @@ func assertRequesterPrivacyTool(t *testing.T, body string) {
 			continue
 		}
 		var result map[string]any
-		if payload.ToolName != "command_execution" || json.Unmarshal(payload.ResultSummary, &result) != nil || result["aggregated_output"] != "<redacted>" || result["exit_code"] != float64(0) {
+		if payload.ToolName != "command_execution" || json.Unmarshal(payload.ResultSummary, &result) != nil || result["aggregated_output"] != "public credential progress <redacted>" || result["exit_code"] != float64(0) {
 			t.Fatal("credential tool lost typed redacted facts")
 		}
 		return
@@ -296,8 +296,7 @@ func TestRecordingContentCapturedCodexToolPrivateProfilesFenceReadsAndCursors(t 
 		route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
 		started := startContinuationRestartHost(t, root, host, home, route)
 		for _, id := range []string{name, "same-worker-id"} {
-			path := filepath.Join(dir, id+".json")
-			writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt", workingDirectory: dir, userMessage: "ordinary private-profile prompt"})
+			path := capturedCodexExecutionPath(t, &invokeContinueScenario{workingDirectory: dir}, id)
 			summaryRestartCLI(t, started, home, dir, "invoke", "--execution", path)
 		}
 		page := support.GetJSON[api.WorkerSessionLogPage](t, started.baseURL+"/worker-sessions/same-worker-id/logs?limit=1")

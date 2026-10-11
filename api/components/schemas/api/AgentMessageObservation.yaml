@@ -4,5 +4,5 @@ required: [recordId, sequence, kind, message]
 properties:
   recordId: {type: string, minLength: 1}
   sequence: {type: integer, minimum: 1}
-  kind: {type: string, enum: [SENT, READ, REPLIED, EXPIRED]}
+  kind: {type: string, enum: [SENT, READ, REPLIED, EXPIRED, DELIVERED_REVIVE, DELIVERY_UPDATED]}
   message: {$ref: './AgentMessage.yaml'}

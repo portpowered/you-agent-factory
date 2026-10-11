@@ -175,12 +175,12 @@ Top-level owner · `pkg/services/agent_messages`
 
 | Aspect | Rationale |
 | --- | --- |
-| Authority | Messaging owns admission policy, inbox authorization, read/reply transitions, idempotency, limits, and privacy. Worker Sessions alone validates live caller credentials and supplies requester/continuation facts. |
+| Authority | Messaging owns admission policy, inbox authorization, read/reply transitions, idempotency, delivery policy, limits, and privacy. Worker Sessions validates live caller credentials and supplies requester, continuation, and provider-progress facts. |
 | State store | Independent durable message journal and indexes. Factory Events and Provider Session transcripts contain no Agent Message records or bodies. |
-| Lifecycle | Inert construction followed by selected-profile store activation. Reconstruction and retention precede writable readiness. Messaging owns no Factory dispatch, revival, interruption, or background expiry in the QUEUE milestone. |
+| Lifecycle | Inert construction followed by selected-profile store activation. Reconstruction and retention precede writable readiness. Messaging owns terminal observation, direct revival delivery, recovery, and message expiry. Worker Sessions owns continuation execution. Messaging owns no Factory dispatch or interruption. |
 | Consumers | Service-owned CLI/HTTP adapters, public transport mapping, and Events followers. Operator observation is read-only. |
 | Transaction boundary | Admission serializes policy, quota, deduplication, and journal commit. Replies and original-message status commit together. Durable flush precedes success and source-native Events publication. |
-| Failure recovery | Typed store faults quarantine Messaging and preserve existing bytes without changing Factory execution. Events gaps require durable inbox pull. Process reconstruction restores messages, relationships, statuses, and request aliases. |
+| Failure recovery | Typed store faults quarantine Messaging and preserve existing bytes without changing Factory execution. Events gaps require durable inbox pull and terminal reconciliation. Process reconstruction restores messages, relationships, statuses, request aliases, and delivery intents. Exact continuation replay preserves the original successor and quota timestamp. Provider-confirmed resumed progress and durable status establish delivery; uncertain evidence remains queued. |
 
 ### `events`
 

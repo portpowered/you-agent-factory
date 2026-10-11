@@ -26,7 +26,7 @@ From an authorized running worker, send a message to its permitted recipient:
 you message recipient-worker-session-id "Please review the result" --request-id review-one --output json
 ```
 
-The response contains a stable `messageId` and `QUEUED` status.
+The response contains a stable `messageId` and its durable delivery status.
 The server persists the message before returning HTTP `202`.
 Specify `--server http://127.0.0.1:7437` to select a host explicitly.
 Otherwise, the CLI uses `YOU_SERVER` when available.
@@ -162,6 +162,7 @@ The selected operator configuration accepts these defaults:
     },
     "limits": {
       "sendsPerChainPerHour": 10,
+      "revivesPerChainPerHour": 6,
       "messagesPerThread": 8,
       "maxBodyBytes": 8192,
       "maxHop": 3,
@@ -181,6 +182,11 @@ Read and admission operations durably expire due messages.
 Retention removes complete settled threads older than the configured window during startup.
 Pending messages and retained thread relationships remain available.
 Reconstructing the process with the same isolated profile recovers identities, redacted content, statuses, reply relationships, and request deduplication.
+Startup also reconciles interrupted continuations through the original request, input, and successor identity.
+Confirmed provider progress produces durable delivery facts without another provider attempt.
+Recorded provider-classified rejection retains `REVIVE_UNSUPPORTED` and the failed successor after restart.
+That rejected attempt does not consume successful revival volume.
+Unavailable or incomplete evidence keeps the message queued with `REVIVE_FAILED`.
 Separate processes must not share a writable messaging profile.
 
 Setting `messaging.enabled` to `false` returns `MESSAGING_DISABLED` with HTTP `503` and preserves stored messages.
@@ -190,18 +196,41 @@ Unavailable storage returns `MESSAGE_STORE_UNAVAILABLE`.
 Repair the underlying storage before reconstructing the process.
 Do not include message bodies or execution credentials in diagnostic reports.
 
-## QUEUE milestone
+## Delivery to ended recipients
 
-This increment delivers durable QUEUE messaging and recipient pull.
 Running recipients receive queued inbox records without execution changes.
-Ended recipients also retain queued messages.
-The default `ifEnded` remains `REVIVE`, preserving the later delivery contract.
-In this milestone, ended `REVIVE` requests return `QUEUED` with `REVIVE_UNSUPPORTED`.
+The default `ifEnded` is `REVIVE`.
+An ended eligible recipient resumes its recorded Provider Session in one direct successor, using the normalized message body.
+Messaging does not create Work or acquire a Factory execution slot.
+Admission leaves the message `QUEUED` with `REVIVE_PENDING` while the provider resumes.
+Send returns without waiting for provider progress.
+Provider-confirmed resumed progress and durable delivery produce `DELIVERED_REVIVE` with `revivedWorkerSessionId` and `to.deliveredWorkerSessionId`.
+Use message read or follow to observe that outcome.
+Concurrent sends never branch the recipient chain.
+Messages sent while its newest successor is running remain queued.
+When that recipient ends, Messaging resumes its recorded Provider Session once with eligible unread `REVIVE` bodies in original send order.
+The original messages retain their IDs and share the confirmed successor.
+`HOLD`, `READ`, `REPLIED`, and `EXPIRED` messages do not trigger this delivery.
+
+Missing continuation capability leaves `QUEUED` with `REVIVE_UNSUPPORTED`.
+Provider-classified resume rejection also leaves the message queued with `REVIVE_UNSUPPORTED`; the successor ends `FAILED`.
+Rejected or uncertain admission leaves `QUEUED` with `REVIVE_FAILED`.
+The default rolling limit permits six provider-confirmed revivals per recipient chain per hour.
+Set `messaging.limits.revivesPerChainPerHour` in the selected profile to change this positive limit.
+Further messages remain queued with `REVIVE_LIMIT`.
+Failed attempts do not spend this limit.
+Recovery preserves the original admission time for this rolling limit.
+If an interrupted delivery has no saved admission time, Messaging reads the exact successor's recorded opening time.
+Missing or inconsistent timing evidence leaves the message queued with `REVIVE_FAILED`.
+Retries preserve the original message and never spend another revival.
 Use `--if-ended hold` to request queued retention explicitly.
 Use `--reply-hold` to make a future reply inherit `HOLD`.
 
 `--interrupt` returns `MESSAGE_INTERRUPT_UNSUPPORTED` before any effect.
-Revival, scheduled expiry, interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
+Unreplied messages become `EXPIRED` at `expiresAt`, even without a read request.
+Messaging schedules expiry independently of Factory execution.
+Replies preserve the parent message as `REPLIED`.
+Interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
 No Factory route, guard, or workstation waits on an Agent Message.
 
 For Worker Session discovery and execution identity, run `you docs operations`.
