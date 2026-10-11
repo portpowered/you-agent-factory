@@ -799,11 +799,14 @@ func applyKnownConfirmation(observations []workersessions.Observation, sample co
 	}
 }
 
-// Captured physical outcomes have no Factory state cursor. Observations with
-// that cursor continue to use the Factory recording's flush boundary.
+// Worker Sessions supplies capture health with a committed physical outcome.
+// A cursor-free process-local confirmation alone is not durable evidence.
+// Factory cursors continue to use the Factory recording's flush boundary.
 func capturedTerminalConfirmed(observation workersessions.Observation) bool {
 	return observation.State.Terminal() && !observation.StateSequenceKnown &&
-		observation.ConfirmationState == workersessions.ConfirmationStateConfirmed
+		observation.ConfirmationState == workersessions.ConfirmationStateConfirmed &&
+		(observation.RecordingHealth == recordings.WorkerRecordingStatusComplete ||
+			observation.RecordingHealth == recordings.WorkerRecordingStatusIncomplete)
 }
 
 // Scoped lists confirm live terminal outcomes from selected committed response

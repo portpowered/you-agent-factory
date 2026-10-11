@@ -314,6 +314,15 @@ type archivedSummaryFault struct {
 
 func (store *legacyOpeningNameStore) ListWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	page, err := store.WorkerRecordingStore.ListWorkerSessionCaptures(ctx, request)
+	return store.applyCatalogReadFault(ctx, page, err)
+}
+
+func (store *legacyOpeningNameStore) ListPreparedWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	page, err := store.WorkerRecordingStore.ListPreparedWorkerSessionCaptures(ctx, request)
+	return store.applyCatalogReadFault(ctx, page, err)
+}
+
+func (store *legacyOpeningNameStore) applyCatalogReadFault(ctx context.Context, page recordings.WorkerCapturedCatalogPage, err error) (recordings.WorkerCapturedCatalogPage, error) {
 	if err != nil {
 		return page, err
 	}

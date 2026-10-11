@@ -215,7 +215,8 @@ func TestCapturedArchivedSummarySelectsWorkBeforeTerminalProjection(t *testing.T
 	// The other Work has unusable terminal metadata. Membership is selected
 	// from its validated opening, so it cannot supply or poison selected facts.
 	unrelated.MetadataRecords[len(unrelated.MetadataRecords)-1].Payload = []byte(`{"invalid":true}`)
-	reader := &LogReader{reader: &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{unrelated, selected}}}
+	catalog := &historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{unrelated, selected}}
+	reader := &LogReader{reader: catalog}
 	rows, err := reader.readArchivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "factory"}, nil, "work")
 	if err != nil || len(rows) != 1 || rows[0].AttemptID != "attempt" || rows[0].State != workersessions.StateCompleted {
 		t.Fatalf("exact Work selection=%+v err=%v", rows, err)
@@ -227,6 +228,19 @@ func TestCapturedArchivedSummarySelectsWorkBeforeTerminalProjection(t *testing.T
 	rows, err = reader.readArchivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{FactorySessionID: "foreign"}, nil, "work")
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("foreign scope exposed selected Work: %+v %v", rows, err)
+	}
+	assertPreparedWorkCatalogReads(t, catalog)
+}
+
+func assertPreparedWorkCatalogReads(t *testing.T, catalog *historyCatalogFake) {
+	t.Helper()
+	if catalog.historyReads != 0 || len(catalog.preparedRequests) == 0 {
+		t.Fatalf("ordinary Work reads used history: %+v", catalog)
+	}
+	for _, request := range catalog.preparedRequests {
+		if !request.PreparedSummariesOnly || !request.RequireCompleteMembership || request.FactorySessionID == "" {
+			t.Fatalf("ordinary Work read lost prepared scoped membership: %+v", request)
+		}
 	}
 }
 

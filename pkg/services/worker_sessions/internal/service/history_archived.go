@@ -65,10 +65,15 @@ func (r *registry) historyObservations(ctx context.Context, req workersessions.L
 }
 
 func (s *LogReader) archivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
-	return s.readArchivedHistory(ctx, req, owners, "")
+	// Explicit history may hydrate captures; ordinary Work reads may not.
+	return s.collectArchivedHistory(ctx, req, owners, "", s.reader.ListWorkerSessionCaptures)
 }
 
 func (s *LogReader) readArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string) ([]workersessions.Observation, error) {
+	return s.collectArchivedHistory(ctx, req, owners, workID, s.reader.ListPreparedWorkerSessionCaptures)
+}
+
+func (s *LogReader) collectArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string, readPage func(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error)) ([]workersessions.Observation, error) {
 	result := make([]workersessions.Observation, 0)
 	seen := make(map[historyIdentity]struct{})
 	request := recordings.WorkerCapturedCatalogRequest{Limit: 1000}
@@ -80,7 +85,7 @@ func (s *LogReader) readArchivedHistory(ctx context.Context, req workersessions.
 		if err := observationContextError(ctx); err != nil {
 			return nil, err
 		}
-		page, err := s.reader.ListWorkerSessionCaptures(ctx, request)
+		page, err := readPage(ctx, request)
 		if err != nil {
 			return nil, workersessions.ErrObservationProjectionUnavailable
 		}

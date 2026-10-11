@@ -16,11 +16,18 @@ import (
 
 type historyCatalogFake struct {
 	capturedActivityFake
-	items []recordings.WorkerCapturedCatalogItem
-	err   error
+	items            []recordings.WorkerCapturedCatalogItem
+	err              error
+	preparedRequests []recordings.WorkerCapturedCatalogRequest
+	historyReads     int
 }
 
 func (f *historyCatalogFake) ListWorkerSessionCaptures(_ context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.historyReads++
+	return f.catalogPage(req)
+}
+
+func (f *historyCatalogFake) catalogPage(req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	if req.NextToken == "second" {
 		return recordings.WorkerCapturedCatalogPage{Items: f.items[1:]}, f.err
 	}
@@ -189,8 +196,9 @@ func TestArchivedHistoryUsesBoundedCommittedUsageAndTerminalConfirmation(t *test
 	}
 }
 
-func (*historyCatalogFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
-	panic("unexpected prepared catalog read")
+func (f *historyCatalogFake) ListPreparedWorkerSessionCaptures(_ context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.preparedRequests = append(f.preparedRequests, req)
+	return f.catalogPage(req)
 }
 
 func TestUsageOriginProjectionPreservesPresenceAndLegacy(t *testing.T) {

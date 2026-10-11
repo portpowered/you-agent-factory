@@ -2831,6 +2831,7 @@ recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.bindOpeningCapture#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.capturedInterruptPlan#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/exact_capture.go#registry.capturedInterruptPlan#ReadWorkerRestartRecipe::count=1
+recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/history_archived.go#LogReader.archivedHistory#ListWorkerSessionCaptures::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/interrupt_recorded.go#registry.readInterruptContext#ReadWorkerCapturedActivity::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/interrupt_recovery.go#registry.inspectPendingInterruptSuccessor#LookupWorkerSessionCapture::count=1
 recording-read|pkg/services/worker_sessions/internal/service|pkg/services/worker_sessions/internal/service/interrupt_recovery.go#registry.inspectPendingInterruptSuccessor#ReadWorkerCapturedActivity::count=1
