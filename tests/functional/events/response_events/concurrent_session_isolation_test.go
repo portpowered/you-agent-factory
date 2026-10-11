@@ -601,8 +601,8 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	t.Parallel()
 	gates := make(map[string]*isolatedCommandGate)
 	for i := range 4 {
-		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
-		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 1), release: make(chan struct{}), returned: make(chan error, 1), output: fmt.Sprintf("four-scope-result-%d COMPLETE", i)}
+		prompt := "four-scope-prompt-" + fourScopeMarker(i)
+		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 1), release: make(chan struct{}), returned: make(chan error, 1), output: fourScopeMarker(i) + " independent result COMPLETE"}
 	}
 	runner := &fourScopeCodexRunner{gates: gates}
 	host := support.ScaffoldFactory(t, concurrentIsolationFactoryConfig())
@@ -626,7 +626,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	}
 	contexts := make([]context.Context, 4)
 	for i := range 4 {
-		gate := gates[fmt.Sprintf("four-scope-prompt-%d", i)]
+		gate := gates["four-scope-prompt-"+fourScopeMarker(i)]
 		select {
 		case contexts[i] = <-gate.entered:
 		case <-time.After(concurrentIsolationTimeout):
@@ -636,7 +636,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	canceledID := sessionIDs[3]
 	control := cancelExplicitIsolationSession(t, baseURL, canceledID)
 	select {
-	case err := <-gates["four-scope-prompt-3"].returned:
+	case err := <-gates["four-scope-prompt-dusk"].returned:
 		if err != context.Canceled {
 			t.Fatalf("selected command returned %v", err)
 		}
@@ -647,7 +647,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		if err := contexts[i].Err(); err != nil {
 			t.Fatalf("peer %d canceled: %v", i, err)
 		}
-		close(gates[fmt.Sprintf("four-scope-prompt-%d", i)].release)
+		close(gates["four-scope-prompt-"+fourScopeMarker(i)].release)
 	}
 	assertExplicitIsolationSessionStopped(t, baseURL, canceledID, control.Status)
 	canceled := awaitConcurrentIsolationInvocation(t, invocations[canceledID])
@@ -655,12 +655,12 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		t.Fatalf("canceled caller wait = %#v", canceled)
 	}
 	for i := range 3 {
-		gate := gates[fmt.Sprintf("four-scope-prompt-%d", i)]
+		gate := gates["four-scope-prompt-"+fourScopeMarker(i)]
 		assertConcurrentIsolationInvocationCompleted(t, awaitConcurrentIsolationInvocation(t, invocations[sessionIDs[i]]), gate.output)
 		frames := collectConcurrentIsolationFrames(t, streams[i], gate.output, concurrentIsolationTimeout)
 		for j := range 4 {
 			if i != j {
-				assertSessionScopedOrderedTypedPayloads(t, sessionIDs[i], responseEventsFromFrames(frames), gate.output, gates[fmt.Sprintf("four-scope-prompt-%d", j)].output)
+				assertSessionScopedOrderedTypedPayloads(t, sessionIDs[i], responseEventsFromFrames(frames), gate.output, gates["four-scope-prompt-"+fourScopeMarker(j)].output)
 			}
 		}
 		assertResponseEventStreamResumesFromCursor(t, baseURL, sessionIDs[i], frames)
@@ -693,7 +693,7 @@ func openExplicitIsolationScopes(t *testing.T, baseURL string) ([]string, []*sup
 	acknowledged := make([][]support.FactoryResponseEventFrame, 4)
 	prompts := make(map[string]string)
 	for i := range 4 {
-		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
+		prompt := "four-scope-prompt-" + fourScopeMarker(i)
 		opened := support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt))
 		sessionIDs[i] = opened.Session.Id
 		if sessionIDs[i] == factorysessions.DefaultSessionID {
@@ -724,6 +724,12 @@ func openExplicitIsolationScopes(t *testing.T, baseURL string) ([]string, []*sup
 		prompts[id] = prompt
 	}
 	return sessionIDs, streams, acknowledged, prompts
+}
+
+// Word markers remain distinguishable after public-event secret redaction.
+// Numeric markers can match short classified environment values on the host.
+func fourScopeMarker(index int) string {
+	return [...]string{"amber", "birch", "coral", "dusk"}[index]
 }
 
 type isolatedCommandGate struct {
@@ -840,7 +846,7 @@ func assertCanceledIsolationHistory(t *testing.T, baseURL, canceledID string, ga
 			t.Fatalf("canceled history leaked identity: %#v", event)
 		}
 		for j := range 3 {
-			if strings.Contains(concurrentIsolationMessageText(event), gates[fmt.Sprintf("four-scope-prompt-%d", j)].output) {
+			if strings.Contains(concurrentIsolationMessageText(event), gates["four-scope-prompt-"+fourScopeMarker(j)].output) {
 				t.Fatalf("canceled history leaked peer output: %#v", event)
 			}
 		}
