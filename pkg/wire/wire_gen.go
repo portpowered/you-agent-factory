@@ -940,8 +940,30 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	factoryConfigInitHandler := provideFactoryConfigInitHandler(queryFactoryOperation, listFactoriesOperation, createFactoryFromFileOperation, updateFactoryFromFileOperation, deleteFactoryOperation, replaceFactoryCurrentOperation, validateFactoryOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, configureInitOperation, cliInstallPackagedFactoryOperation, namedFactoryRootsResolver, v239)
 	commandFactory := cli.NewCommandFactory(cliObserver, v, factoryNamesOperation, packagedFactoryNamesOperation, selectedFactorySignatureOperation, namedFactoryRootsResolver, namedFactoryCandidatePathsResolver, v4, factoryConfigRootResolver, factoryConfigFileLoader, requestFileLoader, singleWorkTargetPreparation, invocationInputPreparation, loggerBuilder, v7, batchInputFileSystem, pathInspector, directoryCreator, opener, defaultsResolver, configLoader, v207, cliService, service2, sessionService, localSessionsCLIService, submitWorkOperation, submitBatchOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, v97, configureInitOperation, cliInstallPackagedFactoryOperation, queryFactoryOperation, listFactoriesOperation, validateFactoryOperation, createFactoryFromFileOperation, replaceFactoryCurrentOperation, updateFactoryFromFileOperation, deleteFactoryOperation, listWorkOperation, listHumanApprovalsOperation, showHumanApprovalOperation, watchWorkOperation, showWorkOperation, moveWorkOperation, visualizeWorkOperation, v216, v217, v218, v219, v220, v221, v222, pauseWorkerSessionOperation, resumeWorkerSessionOperation, cancelWorkerSessionOperation, terminateWorkerSessionOperation, wireLocalWorkerSessionsBoundary, wireLocalWorkerSessionsBoundary, selectionFactory, remoteInvocationOperation, v226, operations, server, runtimeMetricsQuery, operation, costReportOperation, cliOperation, serverstopOperation, sessionResolvedHandlers, factoryConfigInitHandler)
 	stdioOpener := stdio.NewOpener()
-	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory, operatorsettingsService, service, fileSystem, homeDirectoryResolver)
-	stdioHandler, err := provideStdioHandler(v207, recordingsService, lifecycleRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v210, workflowPreviewOperation)
+	client, err := provideMCPWorkerHostClient()
+	if err != nil {
+		return nil, err
+	}
+	workersessionmcpAdapter, err := provideMCPWorkerAdapter(client)
+	if err != nil {
+		return nil, err
+	}
+	recordingsInspection := provideMCPInspection(recordingsService)
+	factorysessionProviderIdentityResolver := provideMCPProviderIdentityResolver(service)
+	toolOperation := provideMCPToolOperation(recordingsInspection, v210, workflowPreviewOperation, v207, v13, factorysessionProviderIdentityResolver)
+	hostTransport := provideMCPHostTransport()
+	wireMcpHostOperation := provideMCPHostOperation(hostTransport, v13, factorysessionProviderIdentityResolver)
+	wireMcpProviderConfiguration := provideMCPProviderConfiguration(operatorsettingsService, service, homeDirectoryResolver)
+	serverToolOperation := provideMCPDispatch(workersessionmcpAdapter, toolOperation, wireMcpHostOperation, wireMcpProviderConfiguration)
+	options, err := provideMCPServerOptions(operatorsettingsService, service, fileSystem, homeDirectoryResolver)
+	if err != nil {
+		return nil, err
+	}
+	serverServer, err := provideMCPServer(serverToolOperation, options)
+	if err != nil {
+		return nil, err
+	}
+	stdioHandler, err := provideStdioHandler(lifecycleRunnerBuilder, runnerFactory, stdioOpener, serverServer, workingDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -1413,7 +1435,17 @@ var BundleSet = wire13.NewSet(
 	provideSessionStartRequestFactory, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
 	provideInvocationOperation,
-	provideMCPServerBuilder,
+	provideMCPWorkerHostClient,
+	provideMCPWorkerAdapter,
+	provideMCPHostTransport,
+	provideMCPHostOperation,
+	provideMCPProviderConfiguration,
+	provideMCPInspection,
+	provideMCPToolOperation,
+	provideMCPDispatch,
+	provideMCPServerOptions,
+	provideMCPServer,
+	provideMCPProviderIdentityResolver,
 	provideStdioHandler,
 	provideDirectJavaScriptHostAdapter, run.NewDirectJavaScriptRunOperation, application.NewInitializer, provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation, cli.NewCommandFactory, application.NewProcessWithRuntimeCosts, wire13.Bind(new(process.Initializer), new(*application.Initializer)), wire13.Bind(new(process.CommandFactory), new(cli.CommandFactory)),

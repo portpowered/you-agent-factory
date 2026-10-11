@@ -450,11 +450,9 @@ func mustProjectResultPolicyInventory(t *testing.T) mcpfactorysession.ResultPoli
 
 func newResultPolicyTestServer(t *testing.T, result json.RawMessage) *mcpserver.Server {
 	t.Helper()
-	srv, err := mcpserver.New(mcpserver.Options{
-		ToolOperation: func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
-			return append(json.RawMessage(nil), result...), nil
-		},
-	})
+	srv, err := mcpserver.New(func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
+		return append(json.RawMessage(nil), result...), nil
+	}, mcpserver.Options{})
 	if err != nil {
 		t.Fatalf("server.New() error = %v", err)
 	}
