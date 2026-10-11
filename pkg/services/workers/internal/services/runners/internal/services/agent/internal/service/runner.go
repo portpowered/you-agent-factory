@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -802,9 +803,22 @@ func (s *service) publishProgress(
 		}
 	}
 	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
-		terminalMessages = append(terminalMessages, providers.ExecuteProgress{
-			Phase:  "message.completed",
-			Detail: result.Content,
+		// Content alone is a Workers fallback, not a provider-native message.
+		// Keep the existing progress fields for runner consumers while supplying
+		// truthful canonical provenance to capture and the detached loop.
+		payload, _ := json.Marshal(workers.MessagePayload{Role: "assistant",
+			ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: result.Content}}})
+		s.publish(workers.ProgressFragment{
+			Correlation: identity.correlation, DispatchID: identity.dispatchID,
+			Kind: workers.ProgressFragmentKind, Type: "message.completed", Payload: result.Content,
+			Provider: provider, Continuation: cloneContinuation(continuation),
+			CanonicalDraft: workers.Draft{
+				Kind: workers.KindMessage, Phase: workers.PhaseCompleted, DispatchID: identity.dispatchID,
+				ItemID: identity.dispatchID + "-final-message", Payload: payload,
+				Provenance: workers.Provenance{Provider: "agent-run", NativeEventType: "agent_final_response",
+					Delivery: workers.DeliverySynthesized, Representation: workers.RepresentationSnapshot,
+					Fidelity: workers.FidelityFinalOnly},
+			},
 		})
 	}
 	// Publish authoritative completed messages after provider run/turn lifecycle

@@ -2,14 +2,17 @@ package acceptance
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -104,7 +107,10 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 	}
 	for _, history := range []string{"archived", "all"} {
 		var list api.ListWorkerSessionsResponse
-		decodeDirectWorkerSessionResult(t, summaryRestartCLI(t, host, home, dir, "list", "--history", history), &list)
+		// Joining this target's capture does not join parallel peers' catalog
+		// admission. Await only the typed incomplete fleet projection; compare
+		// the first successful list with the unchanged terminal snapshot below.
+		decodeDirectWorkerSessionResult(t, awaitSummaryRestartHistory(t, host, home, dir, history), &list)
 		found := false
 		for _, row := range list.Sessions {
 			if row.WorkerSessionId == id {
@@ -129,6 +135,26 @@ func readSummaryRestartSnapshot(t *testing.T, host invokeContinueStartedProcess,
 		t.Fatal(err)
 	}
 	return snapshot
+}
+
+func awaitSummaryRestartHistory(t *testing.T, host invokeContinueStartedProcess, home, dir, history string) string {
+	t.Helper()
+	body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+		request := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", host.baseURL, "--json", "worker-sessions", "list", "--history", history})
+		request.Input.Env, request.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+		readErr := host.process.Execute(request.Input)
+		if readErr != nil {
+			var failure *workersessionscli.CLIError
+			if t.Context().Err() != nil || !errors.As(readErr, &failure) || failure.Code != "PROJECTION_UNAVAILABLE" {
+				t.Fatalf("%s history: %v %s %s", history, readErr, request.Stdout(), request.Stderr())
+			}
+		}
+		return request.Stdout(), readErr
+	}, func(string) bool { return true })
+	if err != nil {
+		t.Fatalf("%s history readiness: %v", history, err)
+	}
+	return body
 }
 
 // Report only unequal fields so hosted failure excerpts retain both values.

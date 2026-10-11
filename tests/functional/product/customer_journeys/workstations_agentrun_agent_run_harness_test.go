@@ -87,22 +87,25 @@ func assertAgentRunFinalResponseEvent(
 			event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
 			continue
 		}
-		if event.Provenance.Provider != "agent-run" || event.Provenance.NativeEventType != "agent_final_response" {
-			continue
-		}
-		matchingEvents++
-		if event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliverySynthesized ||
-			event.Provenance.Fidelity != factoryapi.FactoryResponseEventProvenanceFidelityNormalized ||
-			event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
-			t.Fatalf("AGENT_RUN final response provenance = %#v, want synthesized normalized snapshot", event.Provenance)
-		}
-		if event.ItemId == nil || *event.ItemId != "codex-functional-message" ||
-			event.TurnId == nil || *event.TurnId == "" || event.DispatchId == nil || *event.DispatchId == "" {
-			t.Fatalf("AGENT_RUN final snapshot lost provider item or turn/dispatch identity: %#v", event)
-		}
 		payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
 		if err != nil {
 			t.Fatalf("decode AGENT_RUN final response event payload: %v", err)
+		}
+		if payload.Role != "assistant" {
+			continue
+		}
+		matchingEvents++
+		if event.Provenance.Provider != "codex" || event.Provenance.NativeEventType != "message.completed" ||
+			event.Provenance.Delivery != factoryapi.FactoryResponseEventProvenanceDeliveryNativeStream ||
+			event.Provenance.Fidelity != factoryapi.FactoryResponseEventProvenanceFidelityNormalized ||
+			event.Provenance.Representation != factoryapi.FactoryResponseEventProvenanceRepresentationSnapshot {
+			t.Fatalf("AGENT_RUN final response provenance = %#v, want native normalized completion", event.Provenance)
+		}
+		// The native response carries its provider item and dispatch; this
+		// boundary does not invent the detached fallback's request-local turn.
+		if event.ItemId == nil || *event.ItemId != "codex-message" ||
+			event.DispatchId == nil || *event.DispatchId == "" {
+			t.Fatalf("AGENT_RUN native identity: item=%q dispatch=%q", support.StringPointerValue(event.ItemId), support.StringPointerValue(event.DispatchId))
 		}
 		for _, block := range payload.ContentBlocks {
 			text, err := block.AsFactoryResponseEventTextContentBlock()
@@ -123,7 +126,7 @@ func assertAgentRunFinalResponseEvent(
 		return
 	}
 	t.Fatalf(
-		"AGENT_RUN final response event lost its expected structured text: want provider=agent-run nativeType=agent_final_response text=%q, events=%#v",
+		"AGENT_RUN final response event lost its expected native text: text=%q, events=%#v",
 		wantText,
 		events,
 	)

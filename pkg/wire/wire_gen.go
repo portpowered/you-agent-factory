@@ -522,7 +522,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v132 := wire5.RuntimeLedger(v131)
 	v133 := provideRecordingReadFile(edges2)
 	v134 := provideRecordingSnapshotWriter(edges2, storage, v133)
-	v135 := wire5.NewRecordingFlushTickerFactory()
+	v135 := wire5.NewRecordingFlushTickerFactory(timerSource)
 	v136 := provideRecordingLifecycleOwner(v6, v134, v135, v130)
 	portableArtifactPublication, err := provideRecordingPublication(edges2)
 	if err != nil {
