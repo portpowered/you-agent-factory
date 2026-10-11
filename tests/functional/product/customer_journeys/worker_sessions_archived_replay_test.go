@@ -6,6 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/root"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"io"
 	"net/http"
 	"reflect"
@@ -285,5 +288,114 @@ func assertArchivedUnknownCLIHTTP(t *testing.T, server *support.FunctionalAPISer
 	_ = response.Body.Close()
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("foreign scope replay status=%d", response.StatusCode)
+	}
+}
+
+// The legacy cell supplies compatible committed input at the authorized store
+// edge. It proves public reading of a pre-catalog name, not current production
+// emission of that format. All identities and terminal records remain real.
+type legacyOpeningNameStore struct{ *terminalCommitGate }
+
+func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if record.WorkName == "legacy-name" {
+		var draft workers.Draft
+		var opening workers.SessionPayload
+		if err := json.Unmarshal(record.Record.Payload, &draft); err != nil {
+			return err
+		}
+		if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseStarted {
+			if err := json.Unmarshal(draft.Payload, &opening); err != nil {
+				return err
+			}
+			metadata := make(map[string]json.RawMessage)
+			if len(opening.SessionMetadata) > 0 {
+				if err := json.Unmarshal(opening.SessionMetadata, &metadata); err != nil {
+					return err
+				}
+			}
+			metadata["labels"] = json.RawMessage(`["tag:_work_name=legacy-name"]`)
+			var err error
+			opening.SessionMetadata, err = json.Marshal(metadata)
+			if err != nil {
+				return err
+			}
+			draft.Payload, err = json.Marshal(opening)
+			if err != nil {
+				return err
+			}
+			record.Record.Payload, err = json.Marshal(draft)
+			if err != nil {
+				return err
+			}
+			record.WorkName = ""
+		}
+	}
+	return store.terminalCommitGate.PersistWorkerRecord(ctx, record)
+}
+
+func TestWorkerSessionArchivedNameOnEmptyBoard(t *testing.T) {
+	t.Parallel()
+	runner, gates, cases, config := committedTerminalFixture(t)
+	// Two independent sessions share one host and edge shape. Joined reopen
+	// must be sequential: the captured profile has exactly one writer.
+	cases = []committedTerminalCase{cases[8], cases[12]}
+	home := strings.TrimPrefix(config.Env[0], "HOME=")
+	config.BeforeStart = func(tb testing.TB, process support.Process, _ root.Input) {
+		startCommittedTerminalBoards(tb, process, cases, home, ".json")
+	}
+	backing := &terminalCommitGate{entered: make(chan struct{}), proceed: make(chan struct{})}
+	backing.release()
+	config.Edges.WorkerRecordingWriter = &legacyOpeningNameStore{terminalCommitGate: backing}
+	config.Edges.WorkerRecordingStoreObserver = func(store recordings.WorkerRecordingStore) { backing.WorkerRecordingStore = store }
+	server := support.StartFunctionalAPIServer(t, config)
+	names := []string{"catalog-name", "legacy-name"}
+	before := make([]factoryapi.WorkerSessionObservation, len(cases))
+	t.Run("committed named attempts", func(t *testing.T) {
+		for index, cell := range cases {
+			t.Run(string(cell.provider), func(t *testing.T) {
+				t.Parallel()
+				stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), cell.scope))
+				name := names[index]
+				work := support.SubmitSessionWorkAt(t, server.URL(), cell.scope, factoryapi.SubmitWorkRequest{Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": name}})
+				target := waitForRouteCharacterizationAssociation(t, stream, support.StringPointerValue(work.WorkId))
+				runner.slots[cell.model].waitStarted(t)
+				postLiveRuntimeLifecycleControl(t, server.URL(), cell.scope, factoryapi.FactorySessionLifecycleControlKindPause)
+				close(gates[cell.model])
+				runner.slots[cell.model].waitCompleted(t)
+				waitCapturedTerminal(t, server.URL(), target.workerSessionID)
+				before[index] = support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+target.workerSessionID)
+			})
+		}
+	})
+	if t.Failed() {
+		return
+	}
+	for index := range cases {
+		assertArchivedKnownName(t, assertTerminalReadParity(t, server, before[index].WorkerSessionId), names[index])
+	}
+	server.Close(t)
+	config.BeforeStart = func(tb testing.TB, process support.Process, _ root.Input) {
+		// Open the exact original UUID with a fresh empty board, retaining all
+		// captured attempts. This is a missing-board fixture, not restore proof.
+		startCommittedTerminalBoards(tb, process, cases, home, ".empty.json")
+	}
+	reopened := support.StartFunctionalAPIServer(t, config)
+	for index, cell := range cases {
+		board := support.GetJSON[factoryapi.ListWorkResponse](t, reopened.URL()+"/factory-sessions/"+cell.scope+"/work")
+		if len(board.Results) != 0 {
+			t.Fatalf("expected empty board: %+v", board)
+		}
+		got := assertTerminalReadParity(t, reopened, before[index].WorkerSessionId)
+		assertArchivedKnownName(t, got, names[index])
+		if got.FactorySessionId == nil || *got.FactorySessionId != cell.scope || got.AttemptId != before[index].AttemptId || !reflect.DeepEqual(got.WorkId, before[index].WorkId) {
+			t.Fatalf("archived name changed original identity: %+v", got)
+		}
+	}
+}
+
+func assertArchivedKnownName(t *testing.T, row factoryapi.WorkerSessionObservation, name string) {
+	t.Helper()
+	if row.WorkName == nil || *row.WorkName != name {
+		t.Fatalf("committed name lost: %+v; want %q", row, name)
 	}
 }

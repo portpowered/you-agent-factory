@@ -339,22 +339,7 @@ func committedTerminalFixture(t *testing.T) (*committedTerminalRunner, map[strin
 		Env:   []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + home, "LOCALAPPDATA=" + home, "XDG_CONFIG_HOME=" + home, "XDG_DATA_HOME=" + home, "TEMP=" + home, "TMP=" + home},
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)},
 		BeforeStart: func(tb testing.TB, process support.Process, _ root.Input) {
-			for _, cell := range cases {
-				if cell.scope == "" {
-					continue
-				}
-				_, err := process.(support.ApplicationProcess).FactorySessions().Start(tb.Context(), factorysessions.SessionStartRequest{
-					SessionID: cell.scope, Mode: factorysessions.SessionOperationModeLive, FolderPath: cell.dir, ActivationOnly: true,
-					RuntimeSelection: &factorysessions.SessionRuntimeSelection{
-						Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: home,
-						DefinitionSourcePath: filepath.Join(cell.dir, "factory.json"), ExecutionBaseDir: cell.dir, RuntimeInstanceID: uuid.NewString(),
-						Recording: factorysessions.SessionRecordingSelection{RecordPath: filepath.Join(cell.dir, cell.scope+".json")},
-					},
-				})
-				if err != nil {
-					tb.Fatal(err)
-				}
-			}
+			startCommittedTerminalBoards(tb, process, cases, home, ".json")
 		},
 	}
 	return runner, gates, cases, config
@@ -515,8 +500,28 @@ func assertCommittedTerminalMCPParity(t *testing.T, server *support.FunctionalAP
 		}
 		if args["action"] == "LIST" {
 			assertTerminalListed(t, factoryapi.ListWorkerSessionsResponse{Sessions: envelope.Result.Sessions}, shown)
-		} else if !committedTerminalFactsEqual(envelope.Result.Session, shown) || envelope.Result.Session.State != shown.State || !reflect.DeepEqual(envelope.Result.Session.TokenUsage, shown.TokenUsage) {
+		} else if !committedTerminalFactsEqual(envelope.Result.Session, shown) || envelope.Result.Session.State != shown.State || !reflect.DeepEqual(envelope.Result.Session.TokenUsage, shown.TokenUsage) || !reflect.DeepEqual(envelope.Result.Session.WorkName, shown.WorkName) || !reflect.DeepEqual(envelope.Result.Session.WorkId, shown.WorkId) || !reflect.DeepEqual(envelope.Result.Session.FactorySessionId, shown.FactorySessionId) {
 			t.Fatalf("MCP committed facts differ: %+v HTTP=%+v", envelope.Result.Session, shown)
+		}
+	}
+}
+
+func startCommittedTerminalBoards(tb testing.TB, process support.Process, cases []committedTerminalCase, home, suffix string) {
+	tb.Helper()
+	for _, cell := range cases {
+		if cell.scope == "" {
+			continue
+		}
+		_, err := process.(support.ApplicationProcess).FactorySessions().Start(tb.Context(), factorysessions.SessionStartRequest{
+			SessionID: cell.scope, Mode: factorysessions.SessionOperationModeLive, FolderPath: cell.dir, ActivationOnly: true,
+			RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+				Mode: factorysessions.SessionRuntimeModeService, SystemConfigHome: home,
+				DefinitionSourcePath: filepath.Join(cell.dir, "factory.json"), ExecutionBaseDir: cell.dir, RuntimeInstanceID: uuid.NewString(),
+				Recording: factorysessions.SessionRecordingSelection{RecordPath: filepath.Join(cell.dir, cell.scope+suffix)},
+			},
+		})
+		if err != nil {
+			tb.Fatal(err)
 		}
 	}
 }

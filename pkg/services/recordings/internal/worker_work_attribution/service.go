@@ -122,10 +122,11 @@ func (q *attributionQuery) resolve(ctx context.Context, request recordings.Worke
 	if err != nil {
 		return result, err
 	}
-	if page.Catalog.WorkName != "" {
-		result.WorkName = page.Catalog.WorkName
-		return result, nil
+	name, err := capturedWorkName(page.Catalog.WorkName, opening)
+	if err != nil {
+		return result, err
 	}
+	result.WorkName = name
 	q.service.mu.RLock()
 	projection := q.service.prepared[captureIdentity(page)]
 	q.service.mu.RUnlock()
@@ -136,7 +137,14 @@ func (q *attributionQuery) resolve(ctx context.Context, request recordings.Worke
 	if association.dispatch != opening.DispatchID || !containsWork(association.workIDs, request.WorkID) {
 		return result, recordings.ErrInvalidProjectionInput
 	}
-	result.WorkName = projection.names[request.WorkID]
+	names := make(map[string]string)
+	if result.WorkName != "" {
+		names[request.WorkID] = result.WorkName
+	}
+	if err := recordExplicitName(names, request.WorkID, projection.names[request.WorkID]); err != nil {
+		return result, err
+	}
+	result.WorkName = names[request.WorkID]
 	return result, nil
 }
 
@@ -179,4 +187,38 @@ func (q *attributionQuery) capture(ctx context.Context, workerID string) (record
 	}
 	q.captures[workerID] = page
 	return page, nil
+}
+
+// Legacy opening labels are explicit Work facts only after validateOpening has
+// proved their primary Work/Factory/Worker/recording association. Arbitrary
+// provider metadata and labels on other records cannot supply a Work name.
+func capturedWorkName(catalogName string, opening workers.SessionPayload) (string, error) {
+	if len(opening.SessionMetadata) == 0 {
+		return catalogName, nil
+	}
+	var metadata struct {
+		Labels []string `json:"labels"`
+	}
+	if json.Unmarshal(opening.SessionMetadata, &metadata) != nil {
+		return "", recordings.ErrInvalidProjectionInput
+	}
+	names := make(map[string]string)
+	if catalogName != "" {
+		names["work"] = catalogName
+	}
+	for _, label := range metadata.Labels {
+		const prefix = "tag:_work_name="
+		if !strings.HasPrefix(label, prefix) {
+			continue
+		}
+		// A legacy label needs an explicit physical attempt, never an inferred
+		// association from a reused Work name or provider reference.
+		if opening.AttemptID == "" {
+			return "", recordings.ErrWorkerRecordingReplay
+		}
+		if err := recordExplicitName(names, "work", strings.TrimPrefix(label, prefix)); err != nil {
+			return "", err
+		}
+	}
+	return names["work"], nil
 }

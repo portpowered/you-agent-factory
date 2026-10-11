@@ -173,7 +173,6 @@ func (a *Adapter) resolveWorkAttribution(
 	// Each session read clones its runtime snapshot. Share that read only within
 	// this request, including failed reads, and keep session identities separate.
 	namesBySession := make(map[string]map[string]string)
-	available := make(map[string]bool)
 	requests := make([]recordings.WorkerWorkAttributionRequest, 0, len(observations))
 	for _, observation := range observations {
 		if len(observation.WorkIDs) == 0 || strings.TrimSpace(observation.WorkIDs[0]) == "" {
@@ -198,7 +197,6 @@ func (a *Adapter) resolveWorkAttribution(
 					IncludeSuperseded: true, MaxResults: math.MaxInt,
 				})
 				if err == nil {
-					available[sessionID] = true
 					for _, model := range result.Results {
 						if _, exists := names[model.WorkID]; !exists {
 							names[model.WorkID] = model.Name
@@ -219,7 +217,7 @@ func (a *Adapter) resolveWorkAttribution(
 			namesBySession[sessionID] = names
 		}
 		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID, WorkName: names[workID]}
-		if !available[sessionID] {
+		if names[workID] == "" {
 			requests = append(requests, recordings.WorkerWorkAttributionRequest{WorkerSessionID: observation.WorkerSessionID, FactorySessionID: sessionID, WorkID: workID})
 		}
 	}

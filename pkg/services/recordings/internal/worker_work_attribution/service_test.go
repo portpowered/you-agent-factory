@@ -319,3 +319,67 @@ func TestStartupNameProjectionLegacyAbsenceAndAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkerWorkAttributionCommittedOpeningNames(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name, catalog, metadata, prepared, want string
+		foreign, missingAttempt                 bool
+		wantErr                                 error
+	}{
+		{name: "legacy", metadata: `{"labels":["tag:_work_name=Original"]}`, want: "Original"},
+		{name: "matching witnesses", catalog: "Original", metadata: `{"labels":["tag:_work_name=Original","tag:_work_name=Original"]}`, want: "Original"},
+		{name: "absent", metadata: `{"labels":["tag:other=Peer","_work_name=Peer"]}`},
+		{name: "empty label", metadata: `{"labels":["tag:_work_name="]}`},
+		{name: "catalog conflict", catalog: "Catalog", metadata: `{"labels":["tag:_work_name=Legacy"]}`, wantErr: recordings.ErrInvalidProjectionInput},
+		{name: "label conflict", metadata: `{"labels":["tag:_work_name=First","tag:_work_name=Second"]}`, wantErr: recordings.ErrInvalidProjectionInput},
+		{name: "prepared conflict", prepared: "History", metadata: `{"labels":["tag:_work_name=Legacy"]}`, wantErr: recordings.ErrInvalidProjectionInput},
+		{name: "catalog history conflict", catalog: "Catalog", prepared: "History", wantErr: recordings.ErrInvalidProjectionInput},
+		{name: "matching history", prepared: "Original", metadata: `{"labels":["tag:_work_name=Original"]}`, want: "Original"},
+		{name: "foreign", foreign: true, metadata: `{"labels":["tag:_work_name=Peer"]}`, wantErr: recordings.ErrWorkerRecordingReplay},
+		{name: "missing attempt", missingAttempt: true, metadata: `{"labels":["tag:_work_name=Legacy"]}`, wantErr: recordings.ErrWorkerRecordingReplay},
+		{name: "malformed", metadata: `{"labels":"tag:_work_name=Legacy"}`, wantErr: recordings.ErrInvalidProjectionInput},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			page := capturePage(t, "worker", "scope", "recording", "dispatch", "work")
+			var draft workers.Draft
+			var opening workers.SessionPayload
+			if err := json.Unmarshal(page.Opening.Payload, &draft); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(draft.Payload, &opening); err != nil {
+				t.Fatal(err)
+			}
+			opening.AttemptID = "attempt"
+			if cell.missingAttempt {
+				opening.AttemptID = ""
+			}
+			if cell.metadata != "" {
+				opening.SessionMetadata = json.RawMessage(cell.metadata)
+			}
+			if cell.foreign {
+				opening.FactorySessionID = "foreign"
+			}
+			draft.Payload = marshal(t, opening)
+			page.Opening.Payload = marshal(t, draft)
+			page.Catalog.WorkName = cell.catalog
+			captures := &captureFake{pages: map[string]recordings.WorkerCapturedActivityPage{"worker": page}}
+			service := New(captures, nil)
+			if cell.prepared != "" {
+				service.prepared[captureIdentity(page)] = nameProjection{
+					names:        map[string]string{"work": cell.prepared},
+					associations: map[string]association{"worker": {dispatch: "dispatch", workIDs: []string{"work"}}},
+				}
+			}
+			got, err := service.ResolveWorkerWorkAttribution(t.Context(), []recordings.WorkerWorkAttributionRequest{{WorkerSessionID: "worker", FactorySessionID: "scope", WorkID: "work"}})
+			if cell.wantErr != nil {
+				if !errors.Is(err, cell.wantErr) || got != nil {
+					t.Fatalf("unsafe name = %+v, %v", got, err)
+				}
+			} else if err != nil || len(got) != 1 || got[0].WorkName != cell.want {
+				t.Fatalf("recorded name = %+v, %v; want %q", got, err, cell.want)
+			}
+		})
+	}
+}
