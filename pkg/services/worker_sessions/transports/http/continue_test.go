@@ -162,6 +162,7 @@ func TestContinueWorkerSessionMapsStableFailures(t *testing.T) {
 		{name: "request id conflict", err: workersessions.ErrContinuationRequestIDConflict, code: factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT, want: http.StatusConflict},
 		{name: "provider unavailable", err: workersessions.ErrContinuationProviderSessionInvalid, code: factoryapi.ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID, want: http.StatusConflict},
 		{name: "admission unavailable", err: workersessions.ErrContinuationNotAccepted, code: factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED, want: http.StatusServiceUnavailable},
+		{name: "direct capacity full", err: workersessions.DirectCapacityFailure{Host: "local", Capacity: 1}, code: factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED, want: http.StatusServiceUnavailable},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			service := &fakeObservationService{continueErr: testCase.err}

@@ -1701,6 +1701,16 @@ const (
 	ReplaySummary WorkerSessionReplaySummaryKind = "replay-summary"
 )
 
+// Defines values for WorkerSessionStartCapacityResponseCode.
+const (
+	WORKERSESSIONDIRECTCAPACITYEXCEEDED WorkerSessionStartCapacityResponseCode = "WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED"
+)
+
+// Defines values for WorkerSessionStartCapacityResponseFamily.
+const (
+	CONFLICT WorkerSessionStartCapacityResponseFamily = "CONFLICT"
+)
+
 // Defines values for WorkerSessionStartResponseState.
 const (
 	WorkerSessionStartResponseStateCanceled   WorkerSessionStartResponseState = "CANCELED"
@@ -5778,6 +5788,9 @@ type GlobalConfigACPSettings struct {
 
 // GlobalConfigDefaults Operator defaults that participate independently in file, environment, and flag precedence.
 type GlobalConfigDefaults struct {
+	// DirectSessionCapacity File-only maximum concurrent direct Worker Session attempts on this host. Omission resolves to 16.
+	DirectSessionCapacity *int64 `json:"directSessionCapacity,omitempty"`
+
 	// Subagent File-only subagent route, independent of generic worker defaults.
 	Subagent *struct {
 		Model           string  `json:"model"`
@@ -9742,6 +9755,23 @@ type WorkerSessionResolvedExecution struct {
 	Worktree        *string `json:"worktree,omitempty"`
 }
 
+// WorkerSessionStartCapacityResponse defines model for WorkerSessionStartCapacityResponse.
+type WorkerSessionStartCapacityResponse struct {
+	Code    WorkerSessionStartCapacityResponseCode `json:"code"`
+	Details struct {
+		Capacity int64  `json:"capacity"`
+		Host     string `json:"host"`
+	} `json:"details"`
+	Family  WorkerSessionStartCapacityResponseFamily `json:"family"`
+	Message string                                   `json:"message"`
+}
+
+// WorkerSessionStartCapacityResponseCode defines model for WorkerSessionStartCapacityResponse.Code.
+type WorkerSessionStartCapacityResponseCode string
+
+// WorkerSessionStartCapacityResponseFamily defines model for WorkerSessionStartCapacityResponse.Family.
+type WorkerSessionStartCapacityResponseFamily string
+
 // WorkerSessionStartRequest Start one direct Worker Session with a prompt or a resolved execution. The prompt form uses dedicated subagent defaults and optional route overrides. The resolved form supplies its own execution and does not use those defaults.
 type WorkerSessionStartRequest struct {
 	// Execution Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route.
@@ -10399,6 +10429,9 @@ type WorkerSessionInterruptUnavailable = WorkerSessionInterruptError
 
 // WorkerSessionRecordingUnavailable defines model for WorkerSessionRecordingUnavailable.
 type WorkerSessionRecordingUnavailable = ErrorResponse
+
+// WorkerSessionStartCapacity defines model for WorkerSessionStartCapacity.
+type WorkerSessionStartCapacity = WorkerSessionStartCapacityResponse
 
 // WorkerSessionStartConflict defines model for WorkerSessionStartConflict.
 type WorkerSessionStartConflict = ErrorResponse
@@ -12882,6 +12915,14 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["directSessionCapacity"]; found {
+		err = json.Unmarshal(raw, &a.DirectSessionCapacity)
+		if err != nil {
+			return fmt.Errorf("error reading 'directSessionCapacity': %w", err)
+		}
+		delete(object, "directSessionCapacity")
+	}
+
 	if raw, found := object["subagent"]; found {
 		err = json.Unmarshal(raw, &a.Subagent)
 		if err != nil {
@@ -12924,6 +12965,13 @@ func (a *GlobalConfigDefaults) UnmarshalJSON(b []byte) error {
 func (a GlobalConfigDefaults) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
+
+	if a.DirectSessionCapacity != nil {
+		object["directSessionCapacity"], err = json.Marshal(a.DirectSessionCapacity)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'directSessionCapacity': %w", err)
+		}
+	}
 
 	if a.Subagent != nil {
 		object["subagent"], err = json.Marshal(a.Subagent)

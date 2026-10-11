@@ -342,7 +342,7 @@ func persistedDocumentFixture(t *testing.T) (string, []byte, operatorsettings.Do
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	original := []byte(`{"defaults":{"workerModelProvider":"claude","workerModel":"before"},"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/reviewer","allowedTargets":["factory:@you/reviewer","factory:@you/factory-builder"]}}}}`)
+	original := []byte(`{"defaults":{"directSessionCapacity":2,"subagent":{"provider":"codex","model":"direct"},"workerModelProvider":"claude","workerModel":"before"},"workers":{"acp":{"agentProfile":{"defaultTarget":"factory:@you/reviewer","allowedTargets":["factory:@you/reviewer","factory:@you/factory-builder"]}}}}`)
 	if err := os.WriteFile(path, original, 0o600); err != nil {
 		t.Fatalf("WriteFile() = %v", err)
 	}
@@ -353,6 +353,8 @@ func persistedDocumentFixture(t *testing.T) (string, []byte, operatorsettings.Do
 	}
 	document := loaded.Document
 	document.Defaults.WorkerModel = "replacement-model"
+	capacity := int64(1)
+	document.Defaults.DirectSessionCapacity = &capacity
 	profile := operatorsettings.ACPAgentProfile{DefaultTarget: "factory:@you/rejected", AllowedTargets: []string{"factory:@you/rejected"}}
 	document.Workers.ACP.AgentProfile = &profile
 	return path, original, document
@@ -402,8 +404,10 @@ func documentFromConfigForTest(config operatorsettings.Config) operatorsettings.
 	document := operatorsettings.Document{
 		BackendScopeID: strings.TrimSpace(config.BackendScopeID),
 		Defaults: operatorsettings.DocumentDefaults{
-			WorkerModelProvider: config.Defaults.WorkerModelProvider,
-			WorkerModel:         config.Defaults.WorkerModel,
+			DirectSessionCapacity: config.Defaults.CloneCapacity(),
+			Subagent:              config.Defaults.Subagent.Clone(),
+			WorkerModelProvider:   config.Defaults.WorkerModelProvider,
+			WorkerModel:           config.Defaults.WorkerModel,
 		},
 		PriceTable: config.PriceTable.Clone(),
 		Workers:    operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{AgentProfile: config.Workers.ACP.AgentProfile}},

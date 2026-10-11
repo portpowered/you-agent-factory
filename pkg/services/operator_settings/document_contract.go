@@ -127,14 +127,16 @@ func (settings DocumentACPSettings) Clone() DocumentACPSettings {
 
 // DocumentDefaults holds operator default values as a detached peer value.
 type DocumentDefaults struct {
-	Subagent            *SubagentRoute
-	WorkerModelProvider string
-	WorkerModel         string
+	DirectSessionCapacity *int64
+	Subagent              *SubagentRoute
+	WorkerModelProvider   string
+	WorkerModel           string
 }
 
 // Clone returns a detached defaults copy.
 func (defaults DocumentDefaults) Clone() DocumentDefaults {
 	defaults.Subagent = defaults.Subagent.Clone()
+	defaults.DirectSessionCapacity = cloneCapacity(defaults.DirectSessionCapacity)
 	return defaults
 }
 

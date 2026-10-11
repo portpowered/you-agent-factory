@@ -321,6 +321,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/WorkerSessionStartCapacity'
         '409':
           $ref: '#/components/responses/WorkerSessionStartConflict'
         '503':
@@ -2859,6 +2861,8 @@ components:
       $ref: './components/responses/ExecutionRequestIdConflict.yaml'
     WorkerSessionStartConflict:
       $ref: './components/responses/WorkerSessionStartConflict.yaml'
+    WorkerSessionStartCapacity:
+      $ref: './components/responses/WorkerSessionStartCapacity.yaml'
     WorkerSessionStartUnavailable:
       $ref: './components/responses/WorkerSessionStartUnavailable.yaml'
     WorkerSessionContinuationConflict:
@@ -2966,6 +2970,8 @@ components:
       $ref: './components/schemas/api/ListWorkerSessionsResponse.yaml'
     WorkerSessionStartRequest:
       $ref: './components/schemas/api/WorkerSessionStartRequest.yaml'
+    WorkerSessionStartCapacityResponse:
+      $ref: './components/schemas/api/WorkerSessionStartCapacityResponse.yaml'
     WorkerSessionStartResponse:
       $ref: './components/schemas/api/WorkerSessionStartResponse.yaml'
     WorkerSessionContinueRequest:

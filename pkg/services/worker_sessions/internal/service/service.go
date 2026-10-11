@@ -19,6 +19,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -61,6 +62,11 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
+	capacityResolver      DirectCapacityResolver
+	capacityOnce          sync.Once
+	capacityErr           error
+	directCapacity        int64
+	directCharges         map[string]struct{}
 	tokenEntropy          io.Reader
 	tokenEntropyMu        sync.Mutex
 	executionTokens       map[string]string
@@ -234,6 +240,7 @@ func New(
 	startsDone := make(chan struct{})
 	close(startsDone)
 	registry := &registry{
+		directCapacity:              operatorsettings.DefaultDirectSessionCapacity,
 		tokenEntropy:                tokenEntropy,
 		executionTokens:             make(map[string]string),
 		executionSecrets:            make(map[string][]string),
@@ -385,6 +392,9 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		}
 		return awaitStartReplay(callerCtx, replay)
 	}
+	if err := r.resolveDirectCapacity(context.WithoutCancel(callerCtx)); err != nil {
+		return workersessions.StartResult{}, err
+	}
 	if err := r.validateStartExecution(callerCtx, executor, req); err != nil {
 		// A concurrent validated caller may have won while preflight ran.
 		if replay, replayErr := r.lookupStart(req); replay != nil || replayErr != nil {
@@ -457,6 +467,9 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 		return nil, false, workersessions.ErrSessionNotStartable
 	}
 
+	if err := r.chargeDirectLocked(req.ID); err != nil {
+		return nil, false, err
+	}
 	replay := &startReplay{
 		tuple:     tuple,
 		sessionID: req.ID,

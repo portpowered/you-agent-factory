@@ -6,16 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -341,16 +338,6 @@ func (s *failingSuccessorStore) PersistWorkerRecord(ctx context.Context, record 
 	return s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
-func capturedProviderFixtureOutput(t *testing.T) []byte {
-	t.Helper()
-	fixture := filepath.Join(testutil.MustRepoRoot(t), filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
-	output, err := os.ReadFile(filepath.Join(fixture, "stdout.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return output
-}
-
 func waitProviderRequest(t *testing.T, ctx context.Context, runner *interruptHostRunner) platformprocess.CommandRequest {
 	t.Helper()
 	select {
@@ -360,33 +347,6 @@ func waitProviderRequest(t *testing.T, ctx context.Context, runner *interruptHos
 		t.Fatal("provider request barrier not reached")
 		return platformprocess.CommandRequest{}
 	}
-}
-
-func postHostJSON(t *testing.T, ctx context.Context, url string, payload any, status int) any {
-	t.Helper()
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != status {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("POST %s status %d, want %d: %s", url, response.StatusCode, status, body)
-	}
-	var result any
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		t.Fatal(err)
-	}
-	return result
 }
 
 func assertInterruptAdmission(t *testing.T, result map[string]any) {

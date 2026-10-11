@@ -1,0 +1,10 @@
+description: Selected host direct capacity is full. Retry after an attempt ends.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/WorkerSessionStartCapacityResponse.yaml'
+    example:
+      message: Selected host direct capacity is full. Retry after an attempt ends.
+      family: CONFLICT
+      code: WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED
+      details: {host: 'http://127.0.0.1:17437', capacity: 2}

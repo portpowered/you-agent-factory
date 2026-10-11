@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required: [message, family, code, details]
+properties:
+  message: {type: string}
+  family: {type: string, enum: [CONFLICT]}
+  code: {type: string, enum: [WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED]}
+  details:
+    type: object
+    additionalProperties: false
+    required: [host, capacity]
+    properties:
+      host: {type: string, minLength: 1}
+      capacity: {type: integer, format: int64, minimum: 1}

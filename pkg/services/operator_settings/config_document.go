@@ -280,9 +280,10 @@ func configFromDocument(document Document) Config {
 	config := Config{
 		BackendScopeID: document.BackendScopeID,
 		Defaults: Defaults{
-			WorkerModelProvider: document.Defaults.WorkerModelProvider,
-			Subagent:            document.Defaults.Subagent.Clone(),
-			WorkerModel:         document.Defaults.WorkerModel,
+			WorkerModelProvider:   document.Defaults.WorkerModelProvider,
+			Subagent:              document.Defaults.Subagent.Clone(),
+			DirectSessionCapacity: document.Defaults.CloneCapacity(),
+			WorkerModel:           document.Defaults.WorkerModel,
 		},
 		Messaging:  document.Messaging.Clone(),
 		PriceTable: document.PriceTable.Clone(),
@@ -312,9 +313,10 @@ func documentFromConfig(config Config) Document {
 	document := Document{
 		BackendScopeID: config.BackendScopeID,
 		Defaults: DocumentDefaults{
-			WorkerModelProvider: config.Defaults.WorkerModelProvider,
-			Subagent:            config.Defaults.Subagent.Clone(),
-			WorkerModel:         config.Defaults.WorkerModel,
+			WorkerModelProvider:   config.Defaults.WorkerModelProvider,
+			Subagent:              config.Defaults.Subagent.Clone(),
+			DirectSessionCapacity: config.Defaults.CloneCapacity(),
+			WorkerModel:           config.Defaults.WorkerModel,
 		},
 		Messaging:  config.Messaging.Clone(),
 		PriceTable: config.PriceTable.Clone(),

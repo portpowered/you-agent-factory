@@ -36,8 +36,17 @@ func TestDirectStartCallerExit(t *testing.T) {
 	t.Cleanup(cancel)
 	directory, home := t.TempDir(), t.TempDir()
 	writeCurrentFactory(t, directory)
+	config := filepath.Join(home, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(config), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(`{"defaults":{"directSessionCapacity":1}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	env := builtcliacceptance.ProcessEnvForIsolatedHome(home)
-	runner := &heldProvider{started: make(chan platformprocess.CommandRequest, 2), stopped: make(chan struct{}, 2)}
+	runner := &heldProvider{started: make(chan platformprocess.CommandRequest, 4), stopped: make(chan struct{}, 4),
+		gates: map[string]chan struct{}{"held cli": make(chan struct{}), "held mcp": make(chan struct{}),
+			"replacement-cli": make(chan struct{}), "replacement-mcp": make(chan struct{})}}
 	host := startHost(t, ctx, directory, home, env, runner)
 	baseline := factorySessionIDs(t, ctx, host)
 	if len(baseline) == 0 {
@@ -78,11 +87,38 @@ func TestDirectStartCallerExit(t *testing.T) {
 				t.Fatal("caller exit canceled a retained provider")
 			default:
 			}
+			proveCallerCapacityRelease(t, ctx, binary, directory, env, host, mode, runner)
 		})
 	}
 	if after := factorySessionIDs(t, ctx, host); !slices.Equal(after, baseline) {
 		t.Fatalf("direct START created a Factory Session: before=%v after=%v", baseline, after)
 	}
+}
+
+func proveCallerCapacityRelease(t *testing.T, ctx context.Context, binary, directory string, env []string, host, mode string, runner *heldProvider) {
+	t.Helper()
+	id := "caller-exit-" + mode
+	assertCallerCapacity(t, ctx, host, directory, id+"-excess")
+	watcher := launchWatcher(t, ctx, binary, directory, env, host, id)
+	close(runner.gates["held "+mode])
+	if line := compiledLine(t, ctx, watcher, id); !strings.Contains(line, "state=COMPLETED") {
+		t.Fatalf("completed caller attempt = %s", line)
+	}
+	compiledExit(t, watcher, 0)
+	// Terminal follow joins the host driver, so no retry/polling is needed
+	// to prove the next independent caller acquires the released charge.
+	replacement := "replacement-" + mode
+	startWatcherAttempt(t, ctx, binary, directory, env, host, replacement)
+	select {
+	case <-runner.started:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	assertCallerCapacity(t, ctx, host, directory, replacement+"-excess")
+	joined := launchWatcher(t, ctx, binary, directory, env, host, replacement)
+	close(runner.gates[replacement])
+	_ = compiledLine(t, ctx, joined, replacement)
+	compiledExit(t, joined, 0)
 }
 
 func factorySessionIDs(t *testing.T, ctx context.Context, host string) []string {
@@ -207,13 +243,49 @@ func writeCurrentFactory(t *testing.T, directory string) {
 type heldProvider struct {
 	started chan platformprocess.CommandRequest
 	stopped chan struct{}
+	gates   map[string]chan struct{}
 }
 
 func (runner *heldProvider) Run(ctx context.Context, command platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.started <- command
-	<-ctx.Done()
-	runner.stopped <- struct{}{}
-	return platformprocess.CommandResult{}, ctx.Err()
+	select {
+	case <-ctx.Done():
+		runner.stopped <- struct{}{}
+		return platformprocess.CommandResult{}, ctx.Err()
+	case <-runner.gates[string(command.Stdin)]:
+		return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"final\",\"type\":\"agent_message\",\"text\":\"controlled completion\"}}\n{\"type\":\"turn.completed\"}\n")}, nil
+	}
+}
+
+func assertCallerCapacity(t *testing.T, ctx context.Context, host, directory, id string) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"requestId": id, "workerSessionId": id, "prompt": "refused", "provider": "codex", "model": "controlled-model", "workingRoot": directory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/worker-sessions", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var refusal struct {
+		Code    string `json:"code"`
+		Details struct {
+			Host     string `json:"host"`
+			Capacity int64  `json:"capacity"`
+		} `json:"details"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&refusal); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusTooManyRequests || refusal.Code != "WORKER_SESSION_DIRECT_CAPACITY_EXCEEDED" || refusal.Details.Host != host || refusal.Details.Capacity != 1 {
+		t.Fatalf("caller-exit capacity status=%d refusal=%+v", response.StatusCode, refusal)
+	}
 }
 
 func runCLI(t *testing.T, ctx context.Context, binary, directory string, env []string, args ...string) []byte {

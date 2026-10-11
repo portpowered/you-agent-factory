@@ -107,7 +107,7 @@ func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSet
 	t.Parallel()
 	home := writeOperatorConfigForActivation(t, "codex", "before")
 	path := filepath.Join(home, ".you-agent-factory", "config.json")
-	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"workerModelProvider":"codex","workerModel":"before","subagent":{"provider":"opencode","model":"controlled-free-model","reasoningEffort":"high"},"futureDefault":{"enabled":true}},"futureRoot":{"secret":"preserve"},"models":{"custom":{"source":"hf://owner/repo","backend":"backend","loadPolicy":"ON_DEMAND","operations":["OMNI"],"futureModel":{"enabled":true}}},"workerPresets":[{"id":"research","modelProvider":"CODEX","model":"gpt-5","futurePreset":"kept"}]}`)
+	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"directSessionCapacity":2,"workerModelProvider":"codex","workerModel":"before","subagent":{"provider":"opencode","model":"controlled-free-model","reasoningEffort":"high"},"futureDefault":{"enabled":true}},"futureRoot":{"secret":"preserve"},"models":{"custom":{"source":"hf://owner/repo","backend":"backend","loadPolicy":"ON_DEMAND","operations":["OMNI"],"futureModel":{"enabled":true}}},"workerPresets":[{"id":"research","modelProvider":"CODEX","model":"gpt-5","futurePreset":"kept"}]}`)
 	if err := os.WriteFile(path, initial, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSet
 		}
 		defaults := document["defaults"].(map[string]any)
 		wantSubagent := map[string]any{"provider": "OPENCODE", "model": "controlled-free-model", "reasoningEffort": "high"}
-		if !reflect.DeepEqual(defaults["subagent"], wantSubagent) {
+		if defaults["directSessionCapacity"] != float64(2) || !reflect.DeepEqual(defaults["subagent"], wantSubagent) {
 			t.Fatalf("generic settings update changed the dedicated subagent route: %s", payload)
 		}
 		wantPresets := []any{map[string]any{"id": "research", "modelProvider": "CODEX", "model": "gpt-5", "futurePreset": "kept"}}
@@ -150,6 +150,10 @@ func checkSettingsPersistenceFailure(t *testing.T, fixture *sharedOperatorSettin
 	t.Parallel()
 	home := writeOperatorConfigForActivation(t, "codex", "before")
 	path := filepath.Join(home, ".you-agent-factory", "config.json")
+	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"directSessionCapacity":2,"subagent":{"provider":"codex","model":"direct"},"workerModelProvider":"codex","workerModel":"before"},"futureRoot":{"retained":true}}`)
+	if err := os.WriteFile(path, initial, 0600); err != nil {
+		t.Fatal(err)
+	}
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

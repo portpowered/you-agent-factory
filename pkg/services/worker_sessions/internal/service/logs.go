@@ -137,6 +137,7 @@ func NewWithCapturedActivity(
 	continuationSupport providers.Service,
 	inspection providersessions.Service,
 	tokenEntropy io.Reader,
+	capacityResolver DirectCapacityResolver,
 ) (workersessions.Service, error) {
 	if snapshots == nil {
 		return nil, workersessions.ErrObservationProjectionUnavailable
@@ -145,6 +146,7 @@ func NewWithCapturedActivity(
 	if err != nil {
 		return nil, err
 	}
+	service.(*registry).capacityResolver = capacityResolver
 	service.(*registry).continuationSupport = continuationSupport
 	service.(*registry).historySnapshots.HistorySnapshotBudget = snapshots
 	service.(*registry).logs = logs

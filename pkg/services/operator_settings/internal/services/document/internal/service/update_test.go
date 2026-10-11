@@ -24,10 +24,12 @@ func TestApplyDocumentUpdateSubagentPreservesGenericDefaultsAndRejectsBeforePers
 				t.Fatal(err)
 			}
 			var encoded operatorsettings.Config
+			capacity := int64(2)
 			service := internalservice.NewWithPreserver(testLocalFilesystem, testCreateTemp,
 				func([]byte) (operatorsettings.Config, error) {
 					return operatorsettings.Config{Defaults: operatorsettings.Defaults{
-						WorkerModelProvider: "claude", WorkerModel: "generic",
+						DirectSessionCapacity: &capacity,
+						WorkerModelProvider:   "claude", WorkerModel: "generic",
 						Subagent: &operatorsettings.SubagentRoute{Provider: "opencode", Model: "controlled-free"},
 					}}, nil
 				},
@@ -53,7 +55,7 @@ func TestApplyDocumentUpdateSubagentPreservesGenericDefaultsAndRejectsBeforePers
 				}
 				return
 			}
-			expected := operatorsettings.Defaults{WorkerModelProvider: "claude", WorkerModel: "generic", Subagent: &operatorsettings.SubagentRoute{Provider: "OPENCODE", Model: model}}
+			expected := operatorsettings.Defaults{DirectSessionCapacity: &capacity, WorkerModelProvider: "claude", WorkerModel: "generic", Subagent: &operatorsettings.SubagentRoute{Provider: "OPENCODE", Model: model}}
 			if err != nil || !result.Persisted || !reflect.DeepEqual(encoded.Defaults, expected) || string(data) != "controlled updated document" {
 				t.Fatalf("route update lost siblings or persistence: %v, %#v", err, encoded.Defaults)
 			}
@@ -95,6 +97,29 @@ func TestMergeDocumentProviderModelPreservesDetachedMessaging(t *testing.T) {
 	cloned.Messaging.InvalidJSON[1] = 'x'
 	if string(updated.Messaging.InvalidJSON) != `"bad"` {
 		t.Fatal("document clone aliases preserved invalid section")
+	}
+}
+
+func TestDirectSessionCapacityDocumentUpdatePreservesDetachedDefaults(t *testing.T) {
+	t.Parallel()
+	capacity := int64(2)
+	document := operatorsettings.Document{Defaults: operatorsettings.DocumentDefaults{
+		DirectSessionCapacity: &capacity,
+		WorkerModelProvider:   "codex", WorkerModel: "generic",
+		Subagent: &operatorsettings.SubagentRoute{Provider: "CODEX", Model: "direct"},
+	}}
+	service := internalservice.NewWithPreserver(nil, nil, nil, nil, nil, nil, nil)
+	model := "next-generic"
+	updated, err := service.MergeDocumentProviderModel(document, operatorsettings.DocumentProviderModelUpdate{Model: &model})
+	if err != nil || updated.Defaults.DirectSessionCapacity == nil || *updated.Defaults.DirectSessionCapacity != 2 || updated.Defaults.WorkerModel != model || !reflect.DeepEqual(updated.Defaults.Subagent, document.Defaults.Subagent) {
+		t.Fatalf("generic update lost direct defaults: %+v %v", updated.Defaults, err)
+	}
+	*updated.Defaults.DirectSessionCapacity = 3
+	updated.Defaults.Subagent.Model = "changed"
+	cloned := document.Clone()
+	*cloned.Defaults.DirectSessionCapacity = 4
+	if capacity != 2 || document.Defaults.Subagent.Model != "direct" {
+		t.Fatal("update or clone aliases source defaults")
 	}
 }
 

@@ -190,26 +190,6 @@ func assertSubagentUnavailableRoutes(t *testing.T, ctx context.Context, session 
 	assertSubagentProfileSiblings(t, path)
 }
 
-func assertSubagentAdmission(t *testing.T, result *mcp.CallToolResult, id string) {
-	t.Helper()
-	if result.IsError || len(result.Content) != 1 {
-		t.Fatalf("START result: %+v", result)
-	}
-	encoded := result.Content[0].(*mcp.TextContent).Text
-	var envelope struct {
-		Result struct {
-			ID       string `json:"workerSessionId"`
-			Accepted bool   `json:"accepted"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal([]byte(encoded), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if result.IsError || !envelope.Result.Accepted || envelope.Result.ID != id {
-		t.Fatalf("START admission: %s", encoded)
-	}
-}
-
 func assertSubagentInvalidDefaults(t *testing.T, ctx context.Context, session *mcp.ClientSession, path string) {
 	t.Helper()
 	// Successive fixture edits model an operator correcting one document; no

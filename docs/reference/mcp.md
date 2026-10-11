@@ -342,3 +342,12 @@ Replace `you.worker_session.list`, `you.worker_session.read`, and
 `you.worker_session.control` with `you.subagent`. Set `action` to `LIST`,
 `READ`, or `CONTROL`, respectively. Keep the existing action fields and results.
 The old tool names are removed. MESSAGE and REVIVE remain future capabilities.
+
+## Direct admission limit
+
+The selected host limits concurrent direct attempts with the saved
+`defaults.directSessionCapacity` setting. Omission selects 16.
+MCP START refuses excess requests with `worker_session.capacity_exceeded`,
+`retryable: true`, and safe host/capacity details. Retry after an attempt ends.
+An accepted request replay retains its original identity even when the host is full.
+READ and control remain available. Use `you docs config` for restart and rollback behavior.

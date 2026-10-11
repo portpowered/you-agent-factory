@@ -312,8 +312,9 @@ func TestProvideLocalWorkerSessionsBoundaryRetainsSelectedFactClockOnOpeningFail
 	factTime := time.Date(2035, 5, 6, 7, 8, 9, 0, time.UTC)
 	facts := platformclock.NewDeterministic(factTime, time.Second)
 	deadlines := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	home := t.TempDir()
 	service, err := provideWorkerSessionsService(serviceedges.Edges{}, localBoundaryWorkersService{}, localBoundaryRejectedEvents{},
-		logging.NoopLogger{}, facts, deadlines, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil, nil)
+		logging.NoopLogger{}, facts, deadlines, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil, nil, newTestOperatorSettingsService(t, logging.NoopLogger{}), func() (string, error) { return home, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

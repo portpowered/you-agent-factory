@@ -56,6 +56,7 @@ func NewService(
 	continuationSupport providers.Service,
 	inspection providersessions.Service,
 	tokenEntropy io.Reader,
+	capacityResolver internalservice.DirectCapacityResolver,
 ) (workersessions.Service, error) {
 	return internalservice.NewWithCapturedActivity(
 		execution,
@@ -71,6 +72,7 @@ func NewService(
 		continuationSupport,
 		inspection,
 		tokenEntropy,
+		capacityResolver,
 	)
 }
 

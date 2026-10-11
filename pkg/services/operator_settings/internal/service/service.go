@@ -116,9 +116,10 @@ func (s *Service) ResolveFromHomeWithEnvironment(
 	}
 	resolved, err := s.resolution.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
-			WorkerModelProvider: config.Defaults.WorkerModelProvider,
-			Subagent:            config.Defaults.Subagent.Clone(),
-			WorkerModel:         config.Defaults.WorkerModel,
+			DirectSessionCapacity: config.Defaults.CloneCapacity(),
+			WorkerModelProvider:   config.Defaults.WorkerModelProvider,
+			Subagent:              config.Defaults.Subagent.Clone(),
+			WorkerModel:           config.Defaults.WorkerModel,
 		},
 		WorkerPresets: documentWorkerPresets(config.WorkerPresets),
 		EnvironmentOverrides: operatorsettings.EffectiveOverrideFacts{
@@ -431,9 +432,10 @@ func documentConfig(document operatorsettings.Document) operatorsettings.Config 
 	return operatorsettings.Config{
 		BackendScopeID: document.BackendScopeID,
 		Defaults: operatorsettings.Defaults{
-			WorkerModelProvider: document.Defaults.WorkerModelProvider,
-			Subagent:            document.Defaults.Subagent.Clone(),
-			WorkerModel:         document.Defaults.WorkerModel,
+			DirectSessionCapacity: document.Defaults.CloneCapacity(),
+			WorkerModelProvider:   document.Defaults.WorkerModelProvider,
+			Subagent:              document.Defaults.Subagent.Clone(),
+			WorkerModel:           document.Defaults.WorkerModel,
 		},
 		Messaging:  document.Messaging.Clone(),
 		PriceTable: document.PriceTable.Clone(),
@@ -493,9 +495,10 @@ func normalizedDocument(config operatorsettings.Config) (operatorsettings.Docume
 	document := operatorsettings.Document{
 		BackendScopeID: normalized.BackendScopeID,
 		Defaults: operatorsettings.DocumentDefaults{
-			WorkerModelProvider: normalized.Defaults.WorkerModelProvider,
-			Subagent:            normalized.Defaults.Subagent.Clone(),
-			WorkerModel:         normalized.Defaults.WorkerModel,
+			DirectSessionCapacity: normalized.Defaults.CloneCapacity(),
+			WorkerModelProvider:   normalized.Defaults.WorkerModelProvider,
+			Subagent:              normalized.Defaults.Subagent.Clone(),
+			WorkerModel:           normalized.Defaults.WorkerModel,
 		},
 		Messaging:  normalized.Messaging.Clone(),
 		PriceTable: normalized.PriceTable.Clone(),
