@@ -93,6 +93,19 @@ type RuntimeFactory struct {
 	recordingsRuntime        recordings.RuntimeScopeService
 }
 
+// RuntimeFactorySelection carries the existing resource-opening owner through
+// Wire without exporting the concrete host bundle returned by Build.
+type RuntimeFactorySelection interface {
+	selectedRuntimeFactory()
+}
+
+func (*RuntimeFactory) selectedRuntimeFactory() {}
+
+// SelectedRuntimeFactory resolves the sealed construction value inside its owner.
+func SelectedRuntimeFactory(selection RuntimeFactorySelection) *RuntimeFactory {
+	return selection.(*RuntimeFactory)
+}
+
 func NewRuntimeFactory(
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogOwner,

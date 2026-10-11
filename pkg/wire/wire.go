@@ -373,6 +373,7 @@ var servicesSet = wire.NewSet(
 	factoryruntimewire.NewEnablementEvaluator,
 	factoryruntimewire.NewEngineOpening,
 	factoryruntimewire.NewBundleOpening,
+	wire.Bind(new(factoryruntimewire.RuntimeResourceOpening), new(*factoryruntimewire.RuntimeFactory)),
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewOutboxOpening,
 	factoryruntimewire.NewDefinitionMapper,

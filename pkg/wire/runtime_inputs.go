@@ -47,7 +47,7 @@ import (
 // provideFactoryRuntimeAssembly binds process execution effects once. The
 // named runner roles preserve Wire's provider/script effect distinction.
 func provideFactoryRuntimeAssembly(
-	opening *factoryruntimewire.BundleOpening,
+	opening factoryruntimewire.BundleOpening,
 	sidecars *factoryruntimewire.SidecarOpening,
 	instanceHost factoryruntimewire.InstanceHost,
 	preparation factoryruntimewire.RuntimePreparation,

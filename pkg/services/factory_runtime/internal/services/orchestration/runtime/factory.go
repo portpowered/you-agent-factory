@@ -154,6 +154,19 @@ type EngineOpening struct {
 	decisionEnvelopes          interfaces.DecisionEnvelopeService
 }
 
+// EngineOpeningSelection carries one selected owner through canonical Wire.
+// Its engine-facing operational method set stays inside Factory Runtime internals.
+type EngineOpeningSelection interface {
+	selectedEngineOpening()
+}
+
+func (*EngineOpening) selectedEngineOpening() {}
+
+// SelectedEngineOpening resolves the sealed construction value inside its owner.
+func SelectedEngineOpening(selection EngineOpeningSelection) *EngineOpening {
+	return selection.(*EngineOpening)
+}
+
 func NewEngineOpening(
 	invocationInterpolation interfaces.InvocationInterpolationService,
 	providerSessions providersessions.Service,

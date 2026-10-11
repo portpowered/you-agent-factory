@@ -71,7 +71,7 @@ func NewRuntimeFactory(
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	workerAttemptScheduler platformclock.TimerSource,
 	definitionMapper DefinitionMapper,
-	engineOpening *EngineOpening,
+	engineOpening EngineOpening,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
@@ -89,7 +89,7 @@ func NewRuntimeFactory(
 		orchestrationCompilation,
 		workerAttemptScheduler,
 		definitionMapper,
-		engineOpening,
+		runtime.SelectedEngineOpening(engineOpening),
 		submissionRecorder, dispatchRecorder, worldStateProjector, recordingsRuntime,
 	)
 }
@@ -97,7 +97,7 @@ func NewRuntimeFactory(
 // NewAssembly constructs the inert Factory Runtime assembly service selected by
 // Wire. It does not start a runtime or sidecar.
 func NewAssembly(
-	opening *BundleOpening,
+	opening BundleOpening,
 	sidecars *SidecarOpening,
 	instanceHost InstanceHost,
 	preparation RuntimePreparation,
@@ -107,7 +107,7 @@ func NewAssembly(
 	completionFactory func(string) func(string),
 	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(opening.Open,
+	return factoryruntimeinternal.NewAssembly(factoryruntimeinternal.SelectedBundleOpening(opening).Open,
 		sidecars,
 		instanceHost,
 		preparation,
@@ -116,10 +116,14 @@ func NewAssembly(
 		progressFactory, completionFactory, recoverOwners)
 }
 
-// Enablement is reusable scheduling behavior selected by canonical Wire.
-type Enablement = scheduler.Enablement
-type EngineOpening = runtime.EngineOpening
-type BundleOpening = factoryruntimeinternal.BundleOpening
+// These sealed construction values carry one focused owner each. Operational
+// method sets are resolved only at this owner boundary and stay internal.
+type Enablement = scheduler.EnablementSelection
+type EngineOpening = runtime.EngineOpeningSelection
+type BundleOpening = factoryruntimeinternal.BundleOpeningSelection
+
+// RuntimeResourceOpening selects the existing resource owner for BundleOpening.
+type RuntimeResourceOpening = factoryruntimeinternal.RuntimeFactorySelection
 
 func NewEnablementEvaluator() Enablement { return scheduler.NewEnablementEvaluator() }
 
@@ -136,13 +140,13 @@ func NewEngineOpening(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	dispatchOpening OutboxOpening,
 	enablement Enablement,
-) *EngineOpening {
+) EngineOpening {
 	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping,
-		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, enablement)
+		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, scheduler.SelectedEnablement(enablement))
 }
 
 func NewBundleOpening(
-	runtimeFactory *RuntimeFactory,
+	runtimeFactory RuntimeResourceOpening,
 	workerAttemptScheduler platformclock.TimerSource,
 	workerService workers.Service,
 	workerSessions workersessions.Service,
@@ -150,9 +154,13 @@ func NewBundleOpening(
 	requestResolver *WorkstationRequestExecutor,
 	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
-) (*BundleOpening, error) {
-	return factoryruntimeinternal.NewBundleOpening(runtimeFactory.Build, workerAttemptScheduler, workerService,
+) (BundleOpening, error) {
+	opening, err := factoryruntimeinternal.NewBundleOpening(factoryruntimeinternal.SelectedRuntimeFactory(runtimeFactory).Build, workerAttemptScheduler, workerService,
 		workerSessions, workerAttempts, requestResolver, recordingsRuntime, initialFactorySnapshot)
+	if err != nil {
+		return nil, err
+	}
+	return opening, nil
 }
 
 type SidecarOpening = factoryruntimeinternal.SidecarOpening
