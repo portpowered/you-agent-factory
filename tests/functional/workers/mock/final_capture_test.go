@@ -541,3 +541,123 @@ func assertFinalRejectedOutput(t *testing.T, encoded string, rejection *workers.
 		t.Fatalf("configured output order changed: %s", encoded)
 	}
 }
+
+// Each independent scenario owns a profile and runs in parallel. Within a
+// scenario, shutdown must join before reopening the same durable directory:
+// concurrent hosts cannot prove clean-restart capture continuity.
+func TestFactoryFinalCaptureRestart(t *testing.T) {
+	t.Parallel()
+	for _, shape := range []string{"native-envelope", "result-only", "business-invalid"} {
+		t.Run(shape, func(t *testing.T) {
+			t.Parallel()
+			dir, environment := declaredResultFactory(t), finalCaptureEnvironment(t)
+			support.WriteAgentConfig(t, dir, "processor", "---\ntype: AGENT_WORKER\nmodelProvider: CLAUDE\nmodel: claude-sonnet-4-6\nexecutorProvider: CLAUDE\n---\nReturn the requested reply.\n")
+			body, stdout := finalRestartFixture(t, shape)
+			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+			denied := &directExampleDeniedRunner{}
+			cfg := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true,
+				Env: environment, Edges: serviceedges.Edges{ProviderCommandRunner: runner, ScriptCommandRunner: denied}}
+			host := support.StartFunctionalAPIServer(t, cfg)
+			scope := support.OpenFactorySessionAt(t, host.URL(), dir).Session.Id
+			submitted := support.SubmitSessionWorkAt(t, host.URL(), scope, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "PRIVATE_RESTART_INPUT"})
+			status := support.WaitForSessionTerminalStatus(t, host.URL(), scope, 30*time.Second)
+			wantFailed, wantTerminal := 0, 1
+			if shape == "business-invalid" {
+				wantFailed, wantTerminal = 1, 0
+			}
+			if status.Categories.Failed != wantFailed || status.Categories.Terminal != wantTerminal {
+				t.Fatalf("business outcome for %s: %+v", shape, status)
+			}
+			rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.URL()+"/factory-sessions/"+scope+"/worker-sessions?workId="+*submitted.WorkId)
+			if len(rows.Sessions) != 1 {
+				t.Fatalf("Factory membership: %+v", rows)
+			}
+			id := rows.Sessions[0].WorkerSessionId
+			facts := waitFinalCaptureComplete(t, host, id)
+			if facts.FactorySessionId == nil || *facts.FactorySessionId != scope || len(facts.WorkIds) != 1 || facts.WorkIds[0] != *submitted.WorkId {
+				t.Fatalf("capture attribution: %+v", facts)
+			}
+			logs := assertRejectedCapturePages(t, host, id, environment)
+			assertFinalRestartMessage(t, logs, shape, body)
+			transcript := assertFinalCaptureInspection(t, host, facts, "all", environment)
+			host.Close(t)
+			host = support.StartFunctionalAPIServer(t, cfg)
+			restored := waitFinalCaptureComplete(t, host, id)
+			if !equalRejectedCaptureFacts(facts, restored) {
+				t.Fatalf("restart changed physical facts: before=%+v after=%+v", facts, restored)
+			}
+			if got := assertRejectedCapturePages(t, host, id, environment); !reflect.DeepEqual(logs, got) {
+				t.Fatalf("restart changed acknowledged ordered capture: before=%+v after=%+v", logs, got)
+			}
+			if got := assertFinalCaptureInspection(t, host, restored, "archived", environment); !reflect.DeepEqual(transcript, got) {
+				t.Fatalf("restart changed transcript: before=%+v after=%+v", transcript, got)
+			}
+			if len(runner.Requests()) != 1 || denied.calls.Load() != 0 {
+				t.Fatalf("restart execution effects: provider=%d script=%d", len(runner.Requests()), denied.calls.Load())
+			}
+		})
+	}
+}
+
+func finalRestartFixture(t *testing.T, shape string) (string, []byte) {
+	t.Helper()
+	body := `{"decision":"ACCEPTED","output":"PRIVATE_RESTART_FINAL"}`
+	if shape == "business-invalid" {
+		invalid, _ := businessInvalidResultExample(t)
+		body = string(invalid)
+	}
+	if shape != "result-only" {
+		return body, claudeNativeFinalFixture(t, body)
+	}
+	record, err := json.Marshal(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": body, "session_id": "private-restart-claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body, append(record, '\n')
+}
+
+func assertFinalRestartMessage(t *testing.T, logs factoryapi.WorkerSessionLogPage, shape, body string) {
+	t.Helper()
+	completed := completedAssistantDrafts(t, logs)
+	if len(completed) != 1 {
+		t.Fatalf("completions=%d, want one: %+v", len(completed), logs)
+	}
+	assertCompletedEnvelope(t, completed[0], body)
+	provenance := completed[0].Provenance
+	if shape == "result-only" {
+		if provenance.Delivery != workers.DeliverySynthesized || provenance.Fidelity != workers.FidelityFinalOnly || provenance.Provider != "agent-run" {
+			t.Fatalf("fallback provenance: %+v", provenance)
+		}
+	} else if provenance.Delivery != workers.DeliveryNativeStream || provenance.Provider != "claude" {
+		t.Fatalf("native provenance: %+v", provenance)
+	}
+}
+
+func waitFinalCaptureComplete(t *testing.T, host *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	facts, err := support.WaitForObservation(30*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
+		return support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+id), nil
+	}, func(o factoryapi.WorkerSessionObservation) bool {
+		return o.EndedAt != nil && o.RecordingHealth != nil && *o.RecordingHealth == "COMPLETE"
+	})
+	if err != nil || facts.State != "COMPLETED" || facts.TerminalCause == nil || *facts.TerminalCause != "COMPLETED" {
+		t.Fatalf("completed physical capture: %+v %v", facts, err)
+	}
+	return facts
+}
+
+func assertFinalCaptureInspection(t *testing.T, host *support.FunctionalAPIServer, facts factoryapi.WorkerSessionObservation, history string, environment []string) factoryapi.WorkerSessionTranscriptResponse {
+	t.Helper()
+	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
+	defer closeMCP()
+	assertRejectedCaptureList(t, host, connection, facts, history, environment)
+	id := facts.WorkerSessionId
+	transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, host.URL()+"/worker-sessions/"+id+"/transcript")
+	var cli, remote factoryapi.WorkerSessionTranscriptResponse
+	rejectedInspectionCLI(t, host, environment, []string{"worker-sessions", "read", "--worker-session-id", id, "--view", "transcript"}, &cli)
+	rejectedInspectionMCP(t, connection, map[string]any{"action": "READ", "workerSessionId": id, "view": "transcript"}, &remote)
+	if !reflect.DeepEqual(transcript, cli) || !reflect.DeepEqual(transcript, remote) || transcript.State != "COMPLETED" || transcript.WorkerSessionId != id || transcript.AttemptId != facts.AttemptId || !reflect.DeepEqual(transcript.WorkIds, facts.WorkIds) || len(transcript.Entries) != 1 {
+		t.Fatalf("completed transcript parity/attribution: HTTP=%+v CLI=%+v MCP=%+v", transcript, cli, remote)
+	}
+	return transcript
+}
