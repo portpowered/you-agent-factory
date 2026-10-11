@@ -20,6 +20,7 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -687,4 +688,11 @@ func provideRuntimePreparation(workstationLoader factorydefinitions.WorkstationL
 ) factoryruntimewire.RuntimePreparation {
 	return factoryruntimewire.NewRuntimePreparation(workstationLoader, loadFactory, newID, baseLogger,
 		providerOverride, providerCommandRunner, scriptCommandRunner, mockCommandRunnerFactory)
+}
+
+func provideRuntimeAutomationLifecycle(owner *automationswire.Owner) factoryruntimewire.RuntimeAutomationLifecycle {
+	return owner
+}
+func provideInvocationSchedulePreparation(owner *automationswire.Owner) factoryruntimewire.InvocationSchedulePreparation {
+	return owner.PrepareInvocationSchedules
 }

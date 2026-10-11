@@ -42,6 +42,7 @@ type inputFileSystem interface {
 // engineOpening opens scoped state using the already selected runtime behavior.
 type engineOpening interface {
 	Open(
+		ctx context.Context,
 		net *state.Net,
 		runtimeScheduler scheduler.Scheduler,
 		statelessService workers.Service,
@@ -416,6 +417,7 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 		effectiveSubmissionRecorder = f.submissionRecorder
 	}
 	activeFactory, err := f.engineOpening.Open(
+		ctx,
 		net,
 		runtimeScheduler,
 		workerService,

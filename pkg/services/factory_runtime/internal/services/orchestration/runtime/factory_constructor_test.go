@@ -10,19 +10,18 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -1030,7 +1029,7 @@ func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 	})
 	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
 		return interfaces.WorkPropagationModeOutputAsPayload
-	}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open, scheduler.NewEnablementEvaluator(), reader, renderer, nil)
+	}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open, scheduler.NewEnablementEvaluator(), reader, renderer, nil, testPrepareSchedules)
 	selectOpening := func(cfg *testFactoryConfig) { cfg.engineOpening = opening }
 	if _, err := newTestFactory(selectOpening); err == nil {
 		t.Fatal("opening without a net succeeded")

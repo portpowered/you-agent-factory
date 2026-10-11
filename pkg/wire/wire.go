@@ -388,6 +388,8 @@ var servicesSet = wire.NewSet(
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewEnablementEvaluator,
 	factoryruntimewire.NewEngineOpening,
+	provideRuntimeAutomationLifecycle,
+	provideInvocationSchedulePreparation,
 	factoryruntimewire.NewBundleOpening,
 	wire.Bind(new(factoryruntimewire.RuntimeResourceOpening), new(*factoryruntimewire.RuntimeFactory)),
 	factoryruntimewire.NewRuntimeFactory,

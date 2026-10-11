@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	"io"
 	"strings"
 	"sync"
@@ -196,9 +197,10 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	if opening == nil {
 		opening = NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
-		}), testRuntimeWorkService{}, func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) }, func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator(), platformfilesystem.Local{}.ReadFile, testPromptRenderer(workerService), testTemplateFields(workerService))
+		}), testRuntimeWorkService{}, func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) }, func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator(), platformfilesystem.Local{}.ReadFile, testPromptRenderer(workerService), testTemplateFields(workerService), testPrepareSchedules)
 	}
 	runtime, err := opening.Open(
+		context.Background(),
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil,
 		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock, platformclock.Real{},
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
@@ -2726,4 +2728,8 @@ func testPromptRenderer(service workers.Service) runtimePromptRenderer {
 func testTemplateFields(service workers.Service) runtimeTemplateFieldResolver {
 	fields, _ := service.(runtimeTemplateFieldResolver)
 	return fields
+}
+
+func testPrepareSchedules(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error) {
+	return automations.PreparedInvocationSchedules{}, nil
 }

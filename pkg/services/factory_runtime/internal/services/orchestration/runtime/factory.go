@@ -12,6 +12,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -46,18 +47,22 @@ type TickableFactory interface {
 
 // factoryImpl is the concrete Factory implementation.
 type factoryImpl struct {
-	engine       *engine.FactoryEngine
-	cfg          *runtimeConfig
-	topology     *state.Net
-	logger       logging.Logger
-	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
-	dispatchFlow *dispatchPlanningResultHook
-	dispatchPlan dispatchplanning.Service
-	eventHistory recordings.RuntimeLedger
-	state        interfaces.FactoryState
-	startedAt    time.Time
-	clock        factory.Clock
-	mu           sync.RWMutex
+	scheduleCtxMu sync.RWMutex
+	scheduleCtx   context.Context
+	recoveryMu    sync.Mutex
+	recovered     bool
+	engine        *engine.FactoryEngine
+	cfg           *runtimeConfig
+	topology      *state.Net
+	logger        logging.Logger
+	resultBuffer  *buffers.TypedBuffer[workerexecution.WorkResult]
+	dispatchFlow  *dispatchPlanningResultHook
+	dispatchPlan  dispatchplanning.Service
+	eventHistory  recordings.RuntimeLedger
+	state         interfaces.FactoryState
+	startedAt     time.Time
+	clock         factory.Clock
+	mu            sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
 	completeCh                  chan struct{}
@@ -79,6 +84,9 @@ type runtimePromptRenderer interface {
 	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
 }
 type runtimeConfig struct {
+	scheduleCtx                        context.Context
+	scheduleConfig                     interfaces.RuntimeConfigLookup
+	prepareSchedules                   func(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error)
 	invocationCallerMu                 sync.RWMutex
 	invocationCallers                  map[string]*invocationCallerScope
 	requestFactoryDirectory            string
@@ -142,6 +150,7 @@ var _ TickableFactory = (*factoryImpl)(nil)
 // EngineOpening retains reusable engine policy selected once by Wire.
 // Open allocates the marking, buffers, attempts and dispatch state for one runtime.
 type EngineOpening struct {
+	prepareSchedules           func(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error)
 	dispatchOpening            dispatchplanning.OutboxOpening
 	enablement                 scheduler.Enablement
 	invocationInterpolation    interfaces.InvocationInterpolationService
@@ -188,8 +197,9 @@ func NewEngineOpening(
 	promptSources interfaces.FileReader,
 	prompts runtimePromptRenderer,
 	templateFields runtimeTemplateFieldResolver,
+	prepareSchedules func(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error),
 ) *EngineOpening {
-	return &EngineOpening{
+	return &EngineOpening{prepareSchedules: prepareSchedules,
 		dispatchOpening:            dispatchOpening,
 		enablement:                 enablement,
 		invocationInterpolation:    invocationInterpolation,
@@ -208,6 +218,7 @@ func NewEngineOpening(
 
 // Open initializes one exclusively owned engine from runtime-scoped values.
 func (opening *EngineOpening) Open(
+	ctx context.Context,
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	statelessService workers.Service,
@@ -244,6 +255,8 @@ func (opening *EngineOpening) Open(
 		net:                                net,
 		scheduler:                          runtimeScheduler,
 		enablement:                         opening.enablement,
+		prepareSchedules:                   opening.prepareSchedules,
+		scheduleCtx:                        ctx,
 		executeService:                     statelessService,
 		workerExecution:                    statelessService,
 		workerAttemptScheduler:             workerAttemptScheduler,
@@ -284,6 +297,11 @@ func (opening *EngineOpening) Open(
 		workService:                        opening.workService,
 		expectedArtifactFileSystem:         opening.expectedArtifactFileSystem,
 		decisionEnvelopes:                  opening.decisionEnvelopes,
+	}
+	if scoped, ok := runtimeDefinitions.(interfaces.RuntimeConfigLookup); ok {
+		cfg.scheduleConfig = scoped
+		cfg.requestFactoryDirectory = scoped.FactoryDir()
+		cfg.requestRuntimeBaseDir = scoped.RuntimeBaseDir()
 	}
 	return opening.openConfiguredRuntime(cfg)
 }
@@ -600,6 +618,7 @@ func newFactoryImpl(
 		state:                       interfaces.FactoryStateIdle,
 		clock:                       cfg.clock,
 		completeCh:                  make(chan struct{}),
+		scheduleCtx:                 cfg.scheduleCtx,
 		operatorMoveRequests:        make(map[string]appliedOperatorMove),
 		workerSessionControlResults: make(map[workerSessionControlKey]factory.WorkerSessionControlResult),
 	}
@@ -684,7 +703,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 
 // SubmitWorkRequest injects a canonical work request batch idempotently.
 func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	return f.engine.SubmitWorkRequest(ctx, request)
+	return f.submitInvocationWorkRequest(ctx, request)
 }
 
 // PrepareInvocation keeps caller authority beside execution, never inside

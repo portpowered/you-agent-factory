@@ -28,7 +28,6 @@ type Assembly struct {
 	instanceHost      instancehost.Service
 	preparation       runtimebuild.ExecutionPreparation
 	recordingsRuntime recordings.RuntimeScopeService
-	automationService automations.Service
 	progressFactory   func(*zap.Logger) func(string) workers.ProgressPublisher
 	completionFactory func(string) func(string)
 	recoverOwners     recordings.WorkerCapturePreparationOperation
@@ -43,7 +42,7 @@ func NewAssembly(
 	instanceHost instancehost.Service,
 	preparation runtimebuild.ExecutionPreparation,
 	recordingsRuntime recordings.RuntimeScopeService,
-	automationService automations.Service,
+	_ automations.Service,
 	progressFactory func(*zap.Logger) func(string) workers.ProgressPublisher,
 	completionFactory func(string) func(string),
 	recoverOwners recordings.WorkerCapturePreparationOperation,
@@ -58,7 +57,6 @@ func NewAssembly(
 		bundleOpening: bundleOpening, sidecars: sidecars, instanceHost: instanceHost,
 		preparation:       preparation,
 		recordingsRuntime: recordingsRuntime,
-		automationService: automationService,
 		progressFactory:   progressFactory, completionFactory: completionFactory,
 		recoverOwners: recoverOwners,
 	}, nil
@@ -131,7 +129,6 @@ func (a *Assembly) AssembleInitial(ctx context.Context, request factoryruntime.R
 	if err != nil {
 		return result, err
 	}
-	attachInvocationScheduleFactory(ctx, a.automationService, instance)
 	result.Lifecycle = a.instanceHost.Scope(clock)
 	result.Sidecars = a.sidecars.Scope(request.Runtime.Mode == factorydefinitions.RuntimeModeService && !recovery.CheckpointContinuation, request.Inputs.Recordings.ReplayPath != "")
 	return result, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	runtimeopening "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"io/fs"
@@ -121,7 +122,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(nil, nil, nil, nil, factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
 			return factorydefinitions.WorkPropagationModeOutputAsPayload
-		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator(), localRuntimeFiles{}.ReadFile, nil, nil),
+		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator(), localRuntimeFiles{}.ReadFile, nil, nil, testCutoverPrepareSchedules),
 		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
@@ -195,7 +196,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 			nil,
 			dispatchplanningwire.NewOpening(),
 			scheduler.NewEnablementEvaluator(),
-			localRuntimeFiles{}.ReadFile, nil, nil,
+			localRuntimeFiles{}.ReadFile, nil, nil, testCutoverPrepareSchedules,
 		),
 		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(
@@ -289,4 +290,8 @@ func (cutoverWorkflowSourceFiles) Stat(path string) (fs.FileInfo, error) { retur
 
 func cutoverJavaScriptWorkflows() factory.JavaScriptWorkflows {
 	return factoryruntimejavascript.New(cutoverWorkflowSourceFiles{}, os.UserHomeDir, filepath.EvalSymlinks)
+}
+
+func testCutoverPrepareSchedules(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error) {
+	return automations.PreparedInvocationSchedules{}, nil
 }
