@@ -1,10 +1,12 @@
 package execution_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,13 +22,15 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSelectedSessionDiagnosticsAndConcurrentOutput(t *testing.T) {
 	t.Parallel()
 	core, logs := observer.New(zap.DebugLevel)
-	base := zap.New(core).With(zap.String("backend", "selected-diagnostics"))
+	var logErrors bytes.Buffer
+	base := zap.New(core, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&logErrors)))).With(zap.String("backend", "selected-diagnostics"))
 	runner := &selectedCommandRunner{calls: make(chan selectedCommandCall, 16)}
 	process := support.BuildProcess(t, serviceedges.Edges{ProcessLogger: base, ProviderCommandRunner: runner})
 	config := support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex")
@@ -44,12 +48,14 @@ func TestSelectedSessionDiagnosticsAndConcurrentOutput(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = file.Close() })
 	runs = append(runs, startSelectedWriterInvocation(t, process, t.Context(), config, []string{"--output", "primary"}, "private-prompt-canary", file))
+	canceled := startSelectedOutputInvocation(t, process, t.Context(), config, []string{"--json"}, "canceled-private-prompt-canary")
 	// All provider commands enter before any release, proving actual overlap
 	// without a process-wide call lock or a host-time synchronization delay.
 	calls := make([]selectedCommandCall, 0, len(runs))
-	for range runs {
+	for range len(runs) + 1 {
 		calls = append(calls, selectedAwait(t, runner.calls))
 	}
+	assertSelectedCanceledOutput(t, canceled, calls)
 	releaseSelectedOutputCalls(calls, runs)
 	for index, run := range runs {
 		if err := selectedAwait(t, run.done); err != nil {
@@ -61,13 +67,113 @@ func TestSelectedSessionDiagnosticsAndConcurrentOutput(t *testing.T) {
 			assertSelectedOutputMode(t, index, run, runs)
 		}
 		assertSelectedSessionLog(t, logs, run)
+		assertSelectedConcurrentRuntimeSink(t, run, logs)
 	}
 	base.Info("unchanged selected base")
 	fields := logs.FilterMessage("unchanged selected base").All()[0].ContextMap()
 	if len(fields) != 1 || fields["backend"] != "selected-diagnostics" {
 		t.Fatalf("base metadata changed: %#v", fields)
 	}
+	assertSelectedSessionLog(t, logs, canceled)
+	assertSelectedConcurrentRuntimeSink(t, canceled, logs)
+	assertSelectedConcurrentDiagnosticPrivacy(t, logs)
+	if err := process.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if logErrors.Len() != 0 {
+		t.Fatalf("diagnostic writes rejected after concurrent scopes joined: %s", logErrors.String())
+	}
 	t.Log("L01/L03 and L04 JSON/NDJSON: concurrent selected-backend operations retain correlation and invocation framing")
+}
+
+func assertSelectedConcurrentRuntimeSink(t *testing.T, run selectedInvocation, logs *observer.ObservedLogs) {
+	t.Helper()
+	found := map[string]bool{"engine started": false, "factory run completed": false}
+	err := filepath.WalkDir(run.logDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || filepath.Ext(path) != ".log" {
+			return err
+		}
+		return inspectSelectedConcurrentRuntimeRecords(t, path, run, logs, found)
+	})
+	if err != nil || !found["engine started"] || !found["factory run completed"] {
+		t.Fatalf("selected runtime sink lacks start/completion diagnostics: found=%v, err=%v", found, err)
+	}
+}
+
+func inspectSelectedConcurrentRuntimeRecords(t *testing.T, path string, run selectedInvocation, logs *observer.ObservedLogs, found map[string]bool) error {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal(line, &record); err != nil {
+			return err
+		}
+		if bytes.Contains(line, []byte("private-prompt-canary")) {
+			t.Errorf("private prompt in selected runtime sink")
+		}
+		message, _ := record["msg"].(string)
+		if _, expected := found[message]; !expected {
+			continue
+		}
+		if record["session_id"] != run.sessionID || record["runtime_instance_id"] == nil {
+			t.Fatalf("runtime diagnostic correlation = %#v", record)
+		}
+		// Compare the actual file record with the selected backend observation;
+		// custom base fields are not the runtime sink's origin contract.
+		for _, entry := range logs.FilterMessage(message).All() {
+			fields := entry.ContextMap()
+			if fields["session_id"] == run.sessionID && fields["runtime_instance_id"] == record["runtime_instance_id"] {
+				found[message] = true
+			}
+		}
+	}
+	return nil
+}
+
+func assertSelectedCanceledOutput(t *testing.T, run selectedInvocation, calls []selectedCommandCall) {
+	t.Helper()
+	run.cancel()
+	for _, call := range calls {
+		if call.request.ExecutionScopeID != run.sessionID {
+			continue
+		}
+		if err := selectedAwait(t, call.canceled); !errors.Is(err, context.Canceled) {
+			t.Fatalf("selected command cancellation = %v", err)
+		}
+		if err := selectedAwait(t, run.done); err == nil {
+			t.Fatal("canceled invocation returned success")
+		}
+		response := support.DecodeInvocationResponseJSON(t, run.stdout())
+		if response.Status != factoryapi.InvocationTerminalStatusCanceled {
+			t.Fatalf("canceled public outcome = %#v", response)
+		}
+		return
+	}
+	t.Fatal("canceled scope never entered provider")
+}
+
+func assertSelectedConcurrentDiagnosticPrivacy(t *testing.T, logs *observer.ObservedLogs) {
+	t.Helper()
+	if logs.FilterMessage("workers execute finished").Len() == 0 {
+		t.Fatal("missing terminal worker diagnostic")
+	}
+	for _, entry := range logs.All() {
+		encoded, err := json.Marshal(entry.ContextMap())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, private := range []string{"private-prompt-canary", "canceled-private-prompt-canary", "item.completed", "turn.completed"} {
+			if strings.Contains(entry.Message+string(encoded), private) {
+				t.Errorf("private content %s in concurrent diagnostic %q", private, entry.Message)
+			}
+		}
+	}
 }
 
 func releaseSelectedOutputCalls(calls []selectedCommandCall, runs []selectedInvocation) {

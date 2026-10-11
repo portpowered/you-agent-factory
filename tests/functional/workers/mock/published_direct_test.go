@@ -1,20 +1,29 @@
 package mock
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -25,6 +34,550 @@ func (r *directExampleDeniedRunner) Run(context.Context, platformprocess.Command
 	return platformprocess.CommandResult{}, errors.New("native execution denied for published mock example")
 }
 
+// These private hosts have immutable provider policies and deny every native
+// effect. Restart joins the original host before reopening its capture profile.
+func TestRejectedMockCapturedOutput(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			dir := publishedDirectMockFactory(t)
+			mockPath := filepath.Join(dir, "mock-workers.json")
+			gate := support.NewMockWorkerGate(t)
+			usageModel := "gpt-5"
+			if provider == "claude" {
+				usageModel = "claude-test"
+			}
+			config := map[string]any{"mockWorkers": []any{map[string]any{
+				"runType": "reject", "gateConfig": gate.Config(30 * time.Second),
+				"usage":        map[string]any{"provider": provider, "model": usageModel, "inputTokens": 10, "outputTokens": 4, "totalTokens": 14},
+				"rejectConfig": map[string]any{"stdout": "PRIVATE ordinary stdout 世界 declared-credential", "stderr": "PRIVATE ordinary stderr 世界 declared-credential", "exitCode": 42},
+			}}}
+			data, err := json.Marshal(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(mockPath, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			environment := builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t))
+			denied := &directExampleDeniedRunner{}
+			cfg := support.FunctionalAPIServerConfig{
+				FactoryDir: dir, WaitForServiceModeRuntime: true, Env: environment,
+				Args:  []string{"--with-mock-workers", mockPath},
+				Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
+			}
+			host := support.StartFunctionalAPIServer(t, cfg)
+			path := writeRejectedDirectExecution(t, dir, provider)
+			inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--remote", "--json", "worker-sessions", "invoke", "--execution", path, "--async"})
+			inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+			if err := host.Execute(t, inputs.Input); err != nil {
+				t.Fatalf("invoke: %v %s", err, inputs.Stderr())
+			}
+			gate.WaitForArrival(t, 30*time.Second)
+			followed := followRejectedCapture(t, host, environment, gate)
+			assertDirectRejectedCaptureReplay(t, host, cfg, followed)
+			if denied.calls.Load() != 0 {
+				t.Fatalf("native calls = %d", denied.calls.Load())
+			}
+		})
+	}
+}
+
+func assertDirectRejectedCaptureReplay(t *testing.T, host *support.FunctionalAPIServer, cfg support.FunctionalAPIServerConfig, followed []factoryapi.WorkerSessionEvent) {
+	t.Helper()
+	dir, environment := cfg.FactoryDir, cfg.Env
+	read := func() string {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", "direct-example-session", "--view", "logs"})
+		inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+		if err := host.Execute(t, inputs.Input); err != nil {
+			t.Fatalf("read: %v %s", err, inputs.Stderr())
+		}
+		return inputs.Stdout()
+	}
+	before, err := support.WaitForObservation(30*time.Second, func() (string, error) { return read(), nil }, func(s string) bool { return strings.Contains(s, `"health":"COMPLETE"`) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDirectRejectedOutput(t, before)
+	show := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "show", "--worker-session-id", "direct-example-session"})
+	show.Input.WorkingDirectory, show.Input.Env = dir, environment
+	if err := host.Execute(t, show.Input); err != nil || !strings.Contains(show.Stdout(), `"state":"FAILED"`) {
+		t.Fatalf("failed show: %v %s %s", err, show.Stdout(), show.Stderr())
+	}
+	facts := assertRejectedCaptureFacts(t, host, "direct-example-session")
+	head := support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/direct-example-session/logs")
+	if !reflect.DeepEqual(followed, head.Events) {
+		t.Fatalf("live follow differed from ended capture: follow=%+v head=%+v", followed, head.Events)
+	}
+	assertRejectedCapturePages(t, host, "direct-example-session", environment)
+	transcript := assertRejectedCaptureInspection(t, host, facts, "all", environment, "PRIVATE ordinary stdout 世界 <redacted>")
+	host.Close(t)
+	host = support.StartFunctionalAPIServer(t, cfg)
+	if restored := assertRejectedCaptureFacts(t, host, "direct-example-session"); !equalRejectedCaptureFacts(facts, restored) {
+		t.Fatalf("restart changed direct facts: before=%+v after=%+v", facts, restored)
+	}
+	assertRejectedCapturePages(t, host, "direct-example-session", environment)
+	if restored := assertRejectedCaptureInspection(t, host, facts, "archived", environment, "PRIVATE ordinary stdout 世界 <redacted>"); !reflect.DeepEqual(transcript, restored) {
+		t.Fatalf("restart changed direct transcript: before=%+v after=%+v", transcript, restored)
+	}
+	var original, restored any
+	if err := json.Unmarshal([]byte(before), &original); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(read()), &restored); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(original, restored) {
+		t.Fatalf("restart changed captured output: before=%v after=%v", original, restored)
+	}
+}
+
+func writeRejectedDirectExecution(t *testing.T, dir, provider string) string {
+	t.Helper()
+	document := publishedDirectExecutionDocument(t)
+	execution := document["execution"].(map[string]any)
+	execution["workingDirectory"] = dir
+	execution["envVars"] = map[string]string{"API_KEY": "declared-credential"}
+	execution["runnerId"], execution["executorProvider"], execution["modelProvider"] = provider, provider, provider
+	if provider == "claude" {
+		execution["model"] = "claude-test"
+	}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "execution.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// The first committed opening frame proves follow has entered while execution
+// is gated. Release from its output boundary, then drain to the failed terminal.
+// This proves live follow and record order, not a native subprocess exit.
+func followRejectedCapture(t *testing.T, host *support.FunctionalAPIServer, environment []string, gate *support.MockWorkerGate) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	id := "direct-example-session"
+	live := support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+id)
+	if live.State != "RUNNING" || live.EndedAt != nil {
+		t.Fatalf("follow did not start during execution: %+v", live)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	output := &rejectedFollowOutput{release: gate.Release}
+	inputs := support.FakeInputs(ctx, []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--follow"})
+	inputs.Input.Env, inputs.Input.Stdout = environment, output
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("live follow: %v %s", err, inputs.Stderr())
+	}
+	decoder := json.NewDecoder(&output.Buffer)
+	var frames []factoryapi.WorkerSessionEvent
+	for {
+		var frame factoryapi.WorkerSessionEvent
+		if err := decoder.Decode(&frame); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		frames = append(frames, frame)
+	}
+	data, err := json.Marshal(frames)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	stdout, stderr := strings.Index(text, "PRIVATE ordinary stdout"), strings.Index(text, "PRIVATE ordinary stderr")
+	terminal := strings.LastIndex(text, `"status":"FAILED"`)
+	if stdout < 0 || stderr <= stdout || terminal <= stderr || strings.Count(text, "PRIVATE ordinary stdout") != 1 || strings.Count(text, "PRIVATE ordinary stderr") != 1 || strings.Contains(text, "declared-credential") {
+		t.Fatalf("follow output/failed terminal order or redaction: %s", text)
+	}
+	return frames
+}
+
+type rejectedFollowOutput struct {
+	bytes.Buffer
+	release func()
+	once    sync.Once
+}
+
+func (output *rejectedFollowOutput) Write(data []byte) (int, error) {
+	n, err := output.Buffer.Write(data)
+	output.once.Do(output.release)
+	return n, err
+}
+
+// Only the selected declared stderr write fails. Opening, stdout, durable
+// failure classification and all reads delegate to the real private store.
+type rejectedOutputFaultStore struct {
+	recordings.WorkerRecordingStore
+}
+
+func (store *rejectedOutputFaultStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	if bytes.Contains(record.Record.Payload, []byte("LOST rejected stderr")) {
+		return errors.New("injected output-write loss credential=write-secret")
+	}
+	return store.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
+}
+
+func (store *rejectedOutputFaultStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	return store.WorkerRecordingStore.(recordings.WorkerCapturedSummaryReader).LookupWorkerSessionSummary(ctx, id)
+}
+
+func (store *rejectedOutputFaultStore) RecoverWorkerOwners(ctx context.Context) error {
+	return store.WorkerRecordingStore.(interface{ RecoverWorkerOwners(context.Context) error }).RecoverWorkerOwners(ctx)
+}
+
+func TestRejectedMockCapturedOutputWriteLoss(t *testing.T) {
+	t.Parallel()
+	dir := publishedDirectMockFactory(t)
+	path := filepath.Join(dir, "mock-workers.json")
+	if err := os.WriteFile(path, []byte(`{"mockWorkers":[{"runType":"reject","rejectConfig":{"stdout":"KEPT rejected stdout","stderr":"LOST rejected stderr","exitCode":42}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	denied := &directExampleDeniedRunner{}
+	store := &rejectedOutputFaultStore{}
+	cfg := support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env:  builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t)),
+		Args: []string{"--with-mock-workers", path},
+		Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied,
+			WorkerRecordingWriter: store, WorkerRecordingStoreObserver: func(real recordings.WorkerRecordingStore) { store.WorkerRecordingStore = real }},
+	}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	var admitted any
+	rejectedInspectionCLI(t, host, cfg.Env, []string{"--remote", "worker-sessions", "invoke", "--execution", writeRejectedDirectExecution(t, dir, "codex"), "--async"}, &admitted)
+	// Asynchronous capture has no public commit notification. Observe this exact
+	// private session's degraded head, rather than sleeping or guessing a delay.
+	page, err := support.WaitForObservation(30*time.Second, func() (factoryapi.WorkerSessionLogPage, error) {
+		return support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/direct-example-session/logs"), nil
+	}, func(page factoryapi.WorkerSessionLogPage) bool { return page.Health == "DEGRADED" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRejectedLostOutput(t, host, cfg.Env, page)
+	host.Close(t)
+	cfg.Edges.WorkerRecordingWriter, cfg.Edges.WorkerRecordingStoreObserver = nil, nil
+	host = support.StartFunctionalAPIServer(t, cfg)
+	restored := support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/direct-example-session/logs")
+	if restored.Health != "DEGRADED" || !reflect.DeepEqual(page.Events, restored.Events) || page.CommittedPosition != restored.CommittedPosition {
+		t.Fatalf("write-loss replay changed prefix/health: before=%+v after=%+v", page, restored)
+	}
+	assertRejectedLostOutput(t, host, cfg.Env, restored)
+	if denied.calls.Load() != 0 {
+		t.Fatalf("native calls = %d", denied.calls.Load())
+	}
+}
+
+func assertRejectedLostOutput(t *testing.T, host *support.FunctionalAPIServer, environment []string, page factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	facts := support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/direct-example-session")
+	if facts.State != "FAILED" || facts.RecordingHealth == nil || *facts.RecordingHealth != "DEGRADED" {
+		t.Fatalf("write-loss failed execution/health: %+v", facts)
+	}
+	data, err := json.Marshal(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "KEPT rejected stdout") != 1 || strings.Contains(string(data), "LOST rejected stderr") || strings.Contains(string(data), "write-secret") || page.NextToken == nil {
+		t.Fatalf("write-loss prefix/diagnostic privacy: %s", data)
+	}
+	var cli factoryapi.WorkerSessionLogPage
+	rejectedInspectionCLI(t, host, environment, []string{"worker-sessions", "read", "--worker-session-id", "direct-example-session", "--view", "logs"}, &cli)
+	if !reflect.DeepEqual(page, cli) {
+		t.Fatalf("write-loss CLI/HTTP parity: CLI=%+v HTTP=%+v", cli, page)
+	}
+	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
+	defer closeMCP()
+	assertRejectedLostOutputMCP(t, connection, page)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", "direct-example-session", "--view", "logs", "--follow"})
+	inputs.Input.Env = environment
+	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(err.Error()+inputs.Stderr(), "WORKER_SESSION_LOGS_GAP") || strings.Contains(inputs.Stdout()+inputs.Stderr(), "write-secret") {
+		t.Fatalf("write-loss follow should report gap safely: %v %s %s", err, inputs.Stdout(), inputs.Stderr())
+	}
+}
+
+// Factory origin owns an explicit session and named Work. Its private immutable
+// rejection policy is reused by the fresh graph after the first host joins.
+func TestRejectedMockCapturedOutputFactory(t *testing.T) {
+	t.Parallel()
+	dir := publishedDirectMockFactory(t)
+	gate := support.NewMockWorkerGate(t)
+	config := map[string]any{"mockWorkers": []any{map[string]any{
+		"runType": "reject", "gateConfig": gate.Config(30 * time.Second),
+		"usage":        map[string]any{"provider": "codex", "model": "gpt-5", "inputTokens": 10, "outputTokens": 4, "totalTokens": 14},
+		"rejectConfig": map[string]any{"stdout": "FACTORY rejected stdout 世界", "stderr": "FACTORY rejected stderr 世界", "exitCode": 42},
+	}}}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "mock-workers.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	denied := &directExampleDeniedRunner{}
+	cfg := support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env:   builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t)),
+		Args:  []string{"--with-mock-workers", path},
+		Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
+	}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	scope := support.OpenFactorySessionAt(t, host.URL(), dir).Session.Id
+	name := "declared rejected Factory Work"
+	submitted := support.SubmitSessionWorkAt(t, host.URL(), scope, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Name: &name, Payload: "reject with declared output"})
+	gate.WaitForArrival(t, 30*time.Second)
+	endpoint := host.URL() + "/factory-sessions/" + scope + "/worker-sessions?workId=" + url.QueryEscape(*submitted.WorkId)
+	live := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
+	if len(live.Sessions) != 1 || live.Sessions[0].EndedAt != nil {
+		t.Fatalf("gated Factory membership: %+v", live)
+	}
+	id := live.Sessions[0].WorkerSessionId
+	gate.Release()
+	status := support.WaitForSessionTerminalStatus(t, host.URL(), scope, 30*time.Second)
+	if status.Categories.Failed != 1 || status.Categories.Terminal != 0 {
+		t.Fatalf("rejected business outcome: %+v", status)
+	}
+	facts := assertRejectedCaptureFacts(t, host, id)
+	assertRejectedFactoryAttribution(t, facts, live.Sessions[0], scope, name)
+	logs := assertRejectedCapturePages(t, host, id, cfg.Env)
+	transcript := assertRejectedCaptureInspection(t, host, facts, "all", cfg.Env, "FACTORY rejected stdout 世界")
+	assertRejectedFactoryOutput(t, logs.Events)
+	host.Close(t)
+	host = support.StartFunctionalAPIServer(t, cfg)
+	if restored := assertRejectedCaptureFacts(t, host, id); !equalRejectedCaptureFacts(facts, restored) {
+		t.Fatalf("restart changed Factory facts: before=%+v after=%+v", facts, restored)
+	}
+	if restored := assertRejectedCapturePages(t, host, id, cfg.Env); !reflect.DeepEqual(logs, restored) {
+		t.Fatalf("restart changed Factory logs: before=%+v after=%+v", logs, restored)
+	}
+	if restored := assertRejectedCaptureInspection(t, host, facts, "archived", cfg.Env, "FACTORY rejected stdout 世界"); !reflect.DeepEqual(transcript, restored) {
+		t.Fatalf("restart changed Factory transcript: before=%+v after=%+v", transcript, restored)
+	}
+	if denied.calls.Load() != 0 {
+		t.Fatalf("native calls = %d", denied.calls.Load())
+	}
+}
+
+// LIST parity includes archived Factory selection as well as unscoped history.
+// Transcripts project message content; stderr stays a labelled progress record
+// in logs and must not become a fabricated assistant response.
+func assertRejectedCaptureInspection(t *testing.T, host *support.FunctionalAPIServer, facts factoryapi.WorkerSessionObservation, history string, environment []string, stdout string) factoryapi.WorkerSessionTranscriptResponse {
+	t.Helper()
+	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
+	defer closeMCP()
+	assertRejectedCaptureList(t, host, connection, facts, history, environment)
+	id := facts.WorkerSessionId
+	transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, host.URL()+"/worker-sessions/"+url.PathEscape(id)+"/transcript")
+	var cli, remote factoryapi.WorkerSessionTranscriptResponse
+	rejectedInspectionCLI(t, host, environment, []string{"worker-sessions", "read", "--worker-session-id", id, "--view", "transcript"}, &cli)
+	rejectedInspectionMCP(t, connection, map[string]any{"action": "READ", "workerSessionId": id, "view": "transcript"}, &remote)
+	if !reflect.DeepEqual(transcript, cli) || !reflect.DeepEqual(transcript, remote) || transcript.State != "FAILED" || transcript.WorkerSessionId != id || transcript.AttemptId != facts.AttemptId || !reflect.DeepEqual(transcript.WorkIds, facts.WorkIds) || len(transcript.Entries) != 1 {
+		t.Fatalf("rejected transcript parity/attribution: HTTP=%+v CLI=%+v MCP=%+v", transcript, cli, remote)
+	}
+	entry := transcript.Entries[0]
+	if entry.Text == nil || *entry.Text != stdout || entry.Type != "assistant_message" || entry.Timestamp == nil {
+		t.Fatalf("rejected message projection: %+v", entry)
+	}
+	return transcript
+}
+
+func rejectedInspectionCLI(t *testing.T, host *support.FunctionalAPIServer, environment, args []string, result any) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--server", host.URL(), "--json"}, args...))
+	inputs.Input.Env = environment
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI inspection: %v %s", err, inputs.Stderr())
+	}
+	if err := json.Unmarshal([]byte(inputs.Stdout()), result); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func rejectedInspectionMCP(t *testing.T, connection *mcp.ClientSession, args map[string]any, result any) {
+	t.Helper()
+	response, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+	if err != nil || response.IsError || len(response.Content) != 1 {
+		t.Fatalf("MCP inspection: %v %+v", err, response)
+	}
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(response.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if args["action"] == "READ" {
+		var read struct {
+			Transcript json.RawMessage `json:"transcript"`
+		}
+		if err := json.Unmarshal(envelope.Result, &read); err != nil {
+			t.Fatal(err)
+		}
+		envelope.Result = read.Transcript
+	}
+	if err := json.Unmarshal(envelope.Result, result); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertRejectedCaptureFacts(t *testing.T, host *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	row := support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+url.PathEscape(id))
+	if row.State != "FAILED" || row.TerminalCause == nil || *row.TerminalCause != "FAILED" || row.RecordingHealth == nil || *row.RecordingHealth != "COMPLETE" || row.StartedAt == nil || row.EndedAt == nil || row.DurationMillis == nil || row.EndedAt.Before(*row.StartedAt) {
+		t.Fatalf("rejected capture facts: %+v", row)
+	}
+	assertRejectedSyntheticUsage(t, row)
+	return row
+}
+
+// Cancel owns a private gate before the mock produces either configured stream.
+// Joining and reopening verifies that cancellation cannot turn into rejection
+// output during teardown or archived reconstruction.
+func TestRejectedMockCapturedOutputCanceledBeforeRelease(t *testing.T) {
+	t.Parallel()
+	dir := publishedDirectMockFactory(t)
+	gate := support.NewMockWorkerGate(t)
+	config := map[string]any{"mockWorkers": []any{map[string]any{
+		"runType": "reject", "gateConfig": gate.Config(30 * time.Second),
+		"rejectConfig": map[string]any{"stdout": "NEVER rejected stdout", "stderr": "NEVER rejected stderr", "exitCode": 42},
+	}}}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "mock-workers.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	denied := &directExampleDeniedRunner{}
+	cfg := support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env:   builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t)),
+		Args:  []string{"--with-mock-workers", path},
+		Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
+	}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	executionPath := writeRejectedDirectExecution(t, dir, "codex")
+	var admitted any
+	rejectedInspectionCLI(t, host, cfg.Env, []string{"--remote", "worker-sessions", "invoke", "--execution", executionPath, "--async"}, &admitted)
+	gate.WaitForArrival(t, 30*time.Second)
+	id := "direct-example-session"
+	endpoint := host.URL() + "/worker-sessions/" + id
+	live := support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
+	if live.State != "RUNNING" {
+		t.Fatalf("gated state: %+v", live)
+	}
+	var canceled any
+	rejectedInspectionCLI(t, host, cfg.Env, []string{"worker-sessions", "cancel", id}, &canceled)
+	// The public committed capture is the terminal barrier, independent of the
+	// cancel response. Waiting for that exact head cannot fabricate mock output.
+	logs, err := support.WaitForObservation(30*time.Second, func() (factoryapi.WorkerSessionLogPage, error) {
+		return support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+"/logs"), nil
+	}, func(page factoryapi.WorkerSessionLogPage) bool { return page.Health == "COMPLETE" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts := support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
+	if facts.State != "CANCELED" || facts.TerminalCause == nil || *facts.TerminalCause != "OPERATOR_CANCEL" || facts.AttemptId != live.AttemptId {
+		t.Fatalf("canceled facts: %+v", facts)
+	}
+	encoded, err := json.Marshal(logs)
+	if err != nil || strings.Contains(string(encoded), "NEVER rejected") {
+		t.Fatalf("cancellation fabricated declared output: %s %v", encoded, err)
+	}
+	host.Close(t)
+	gate.Release()
+	host = support.StartFunctionalAPIServer(t, cfg)
+	restored := support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/"+id+"/logs")
+	if !reflect.DeepEqual(logs, restored) {
+		t.Fatalf("canceled replay changed logs: before=%+v after=%+v", logs, restored)
+	}
+	if denied.calls.Load() != 0 {
+		t.Fatalf("native calls = %d", denied.calls.Load())
+	}
+}
+
+func equalRejectedCaptureFacts(before, after factoryapi.WorkerSessionObservation) bool {
+	// Restart confirms ended capture storage; that acknowledgement is not an
+	// execution fact. Live failure diagnostics are reconstructed after restart.
+	// Every captured identity, time, usage and terminal outcome stays equal.
+	before.ConfirmationState = after.ConfirmationState
+	before.Failure = after.Failure
+	return reflect.DeepEqual(before, after)
+}
+
+func assertRejectedCapturePages(t *testing.T, host *support.FunctionalAPIServer, id string, environment []string) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
+	defer closeMCP()
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id) + "/logs"
+	head := support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint)
+	for index, frame := range head.Events {
+		if frame.Event.CapturedAt == nil || frame.WorkerSessionId != id || (index > 0 && frame.Event.Position <= head.Events[index-1].Event.Position) {
+			t.Fatalf("captured event identity/time/order: %+v", head.Events)
+		}
+	}
+	var events []factoryapi.WorkerSessionEvent
+	token := ""
+	for {
+		page := readRejectedCapturePage(t, host, connection, id, environment, token, head)
+		events = append(events, page.Events...)
+		if len(events) > len(head.Events) {
+			t.Fatal("cursor duplicated events")
+		}
+		if page.NextToken == nil {
+			break
+		}
+		if *page.NextToken == token {
+			t.Fatal("cursor did not advance")
+		}
+		token = *page.NextToken
+	}
+	if !reflect.DeepEqual(events, head.Events) {
+		t.Fatalf("pages changed ordered events: pages=%+v head=%+v", events, head.Events)
+	}
+	return head
+}
+
+func rejectedCaptureMCP(t *testing.T, host *support.FunctionalAPIServer, environment []string) (*mcp.ClientSession, func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	stdin, input := io.Pipe()
+	output, stdout := io.Pipe()
+	done := make(chan error, 1)
+	workDir := t.TempDir()
+	go func() {
+		err := host.Execute(t, root.Input{Context: ctx, Args: []string{"you", "--server", host.URL(), "server", "mcp"}, WorkingDirectory: workDir, Env: environment, Stdin: stdin, Stdout: stdout, Stderr: io.Discard})
+		_ = stdin.CloseWithError(err)
+		_ = stdout.CloseWithError(err)
+		done <- err
+	}()
+	client := mcp.NewClient(&mcp.Implementation{Name: "rejected-capture-parity", Version: "test"}, nil)
+	connection, err := client.Connect(ctx, &mcp.IOTransport{Reader: output, Writer: input}, nil)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	return connection, func() {
+		_ = connection.Close()
+		cancel()
+		_ = input.Close()
+		_ = stdin.Close()
+		_ = stdout.Close()
+		_ = output.Close()
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+				t.Errorf("MCP join: %v", err)
+			}
+		case <-time.After(30 * time.Second):
+			t.Error("MCP did not join")
+		}
+	}
+}
+
 // Direct origin needs no submitted Work. This private host has its own idle
 // Factory Session and profile, and its immutable accept policy differs from
 // the named-mock fixture. All commands reuse its one root-built process.
@@ -32,7 +585,18 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 	t.Parallel()
 	dir := publishedDirectMockFactory(t)
 	mockPath := filepath.Join(dir, "mock-workers.json")
-	if err := os.WriteFile(mockPath, []byte(`{"unmatchedDispatchPolicy":"accept","mockWorkers":[]}`), 0o600); err != nil {
+	mockConfig := map[string]any{"unmatchedDispatchPolicy": "accept", "mockWorkers": []map[string]any{
+		{"workstationName": "usage-cross", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 17, "outputTokens": 5, "cachedInputTokens": 0, "reasoningOutputTokens": 0}},
+		{"workstationName": "usage-match", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 17, "outputTokens": 5, "cachedInputTokens": 0, "reasoningOutputTokens": 0}},
+		{"workstationName": "usage-zero", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 0, "outputTokens": 5}},
+		{"workstationName": "usage-omitted", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}, "usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "outputTokens": 5}},
+		{"workstationName": "usage-none", "runType": "accept", "resultBody": map[string]string{"output": "MOCK_USAGE_DIRECT_OK"}},
+	}}
+	mockBytes, err := json.Marshal(mockConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(mockPath, mockBytes, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	denied := &directExampleDeniedRunner{}
@@ -65,10 +629,95 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	t.Run("MockUsage", func(t *testing.T) {
+		for _, name := range []string{"cross", "match", "zero", "omitted", "none"} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				publishedDirectUsage(t, server, dir, environment, name)
+			})
+		}
+	})
+	t.Run("MockUsagePeerCursor", func(t *testing.T) {
+		assertMockUsagePeerCursor(t, server, dir, environment, "usage-cross", "usage-match")
+	})
 	publishedDirectMockCommands(t, server, dir, path, environment)
 	if denied.calls.Load() != 0 || nativeCalls.Load() != 0 {
 		t.Fatalf("mock example attempted native effects: commands=%d subprocess/ACP=%d", denied.calls.Load(), nativeCalls.Load())
 	}
+}
+
+func publishedDirectUsage(t *testing.T, server *support.FunctionalAPIServer, dir string, environment []string, name string) {
+	t.Helper()
+	execute := func(args ...string) string {
+		inputs := support.FakeInputs(t.Context(), append([]string{"you", "--server", server.URL(), "--json"}, args...))
+		inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+		if err := server.Execute(t, inputs.Input); err != nil {
+			t.Fatalf("%v: %v stderr=%s", args, err, inputs.Stderr())
+		}
+		return inputs.Stdout()
+	}
+	id := "usage-" + name
+	provider, model := "claude", "claude-sonnet-4-6"
+	if name == "match" {
+		provider, model = "codex", "gpt-5-codex"
+	}
+	document := publishedDirectExecutionDocument(t)
+	document["workerSessionId"], document["requestId"] = id, id+"-request"
+	execution := document["execution"].(map[string]any)
+	execution["workingDirectory"], execution["workstationName"] = dir, id
+	execution["runnerId"], execution["executorProvider"], execution["modelProvider"], execution["model"] = provider, provider, provider, model
+	execution["dispatch"] = map[string]any{"dispatchId": id + "-attempt", "workstationName": id}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, id+".json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	execute("--remote", "worker-sessions", "invoke", "--execution", path, "--async")
+	logs, err := support.WaitForObservation(30*time.Second, func() (string, error) {
+		return execute("worker-sessions", "read", "--worker-session-id", id, "--view", "logs"), nil
+	}, func(body string) bool { return strings.Contains(body, `"health":"COMPLETE"`) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(execute("worker-sessions", "show", "--worker-session-id", id)), &summary); err != nil || summary.Provider == nil || *summary.Provider != provider || summary.Model == nil || *summary.Model != model || summary.FactorySessionId != nil {
+		t.Fatalf("direct execution identity: %+v %v", summary, err)
+	}
+	assertMockUsageReadParity(t, server, dir, environment, summary, logs)
+	assertPublishedDirectUsageCounters(t, summary, logs, name, provider)
+}
+
+func assertPublishedDirectUsageCounters(t *testing.T, summary factoryapi.WorkerSessionObservation, logs, name, provider string) {
+	t.Helper()
+	if name == "none" {
+		if summary.TokenUsage != nil || strings.Contains(logs, `"kind":"USAGE"`) || !strings.Contains(logs, "MOCK_USAGE_DIRECT_OK") {
+			t.Fatalf("no declaration fabricated usage: %s", logs)
+		}
+		return
+	}
+	if summary.TokenUsage == nil {
+		t.Fatalf("declared usage missing: %s", logs)
+	}
+	total := 22
+	if name == "zero" || name == "omitted" {
+		total = 5
+		if summary.TokenUsage.CachedInputTokens != nil || summary.TokenUsage.ReasoningOutputTokens != nil || (summary.TokenUsage.InputTokens == nil) != (name == "omitted") {
+			t.Fatalf("omitted/zero classes changed: %+v", summary.TokenUsage)
+		}
+		if name == "zero" {
+			assertMockUsageObservationToken(t, summary.TokenUsage.InputTokens, 0, "input")
+		}
+	} else {
+		assertMockUsageObservationToken(t, summary.TokenUsage.InputTokens, 17, "input")
+		assertMockUsageObservationToken(t, summary.TokenUsage.CachedInputTokens, 0, "cached")
+		assertMockUsageObservationToken(t, summary.TokenUsage.ReasoningOutputTokens, 0, "reasoning")
+	}
+	assertMockUsageObservationToken(t, summary.TokenUsage.OutputTokens, 5, "output")
+	assertMockUsageObservationToken(t, summary.TokenUsage.TotalTokens, total, "total")
+	assertCapturedMockUsage(t, logs, provider, "gpt-5-codex", "MOCK_USAGE_DIRECT_OK", int64(total))
 }
 
 func publishedDirectMockCommands(t *testing.T, server *support.FunctionalAPIServer, dir, path string, environment []string) {
@@ -160,4 +809,136 @@ func publishedDirectMockHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return home
+}
+
+func assertDirectRejectedOutput(t *testing.T, before string) {
+	t.Helper()
+	for _, marker := range []string{"PRIVATE ordinary stdout 世界", "PRIVATE ordinary stderr 世界"} {
+		if strings.Count(before, marker) != 1 {
+			t.Fatalf("output count for %q: %s", marker, before)
+		}
+	}
+	if strings.Index(before, "ordinary stdout") > strings.Index(before, "ordinary stderr") {
+		t.Fatalf("stream order: %s", before)
+	}
+	if strings.Contains(before, "declared-credential") || strings.Count(before, "redacted") != 2 {
+		t.Fatalf("declared secret redaction: %s", before)
+	}
+}
+
+func assertRejectedLostOutputMCP(t *testing.T, connection *mcp.ClientSession, page factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	result, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": "direct-example-session", "view": "logs"}})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("write-loss MCP: %v %+v", err, result)
+	}
+	var envelope struct {
+		Result struct {
+			Logs factoryapi.WorkerSessionLogPage `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil || !reflect.DeepEqual(page, envelope.Result.Logs) {
+		t.Fatalf("write-loss MCP/HTTP parity: %v MCP=%+v HTTP=%+v", err, envelope.Result.Logs, page)
+	}
+}
+
+func assertRejectedFactoryAttribution(t *testing.T, facts, live factoryapi.WorkerSessionObservation, scope, name string) {
+	t.Helper()
+	if facts.Direct || facts.FactorySessionId == nil || *facts.FactorySessionId != scope || facts.WorkName == nil || *facts.WorkName != name || !reflect.DeepEqual(facts.WorkIds, live.WorkIds) || facts.AttemptId != live.AttemptId {
+		t.Fatalf("rejected attribution: live=%+v ended=%+v", live, facts)
+	}
+}
+
+func assertRejectedFactoryOutput(t *testing.T, events []factoryapi.WorkerSessionEvent) {
+	t.Helper()
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"FACTORY rejected stdout 世界", "FACTORY rejected stderr 世界"} {
+		if strings.Count(string(encoded), marker) != 1 {
+			t.Fatalf("declared Factory output %q: %s", marker, encoded)
+		}
+	}
+	if strings.Index(string(encoded), "rejected stdout") > strings.Index(string(encoded), "rejected stderr") {
+		t.Fatalf("Factory stream order: %s", encoded)
+	}
+}
+
+func assertRejectedCaptureList(t *testing.T, host *support.FunctionalAPIServer, connection *mcp.ClientSession, facts factoryapi.WorkerSessionObservation, history string, environment []string) {
+	t.Helper()
+	scope := "direct"
+	if !facts.Direct {
+		scope = "factory"
+	}
+	for _, scoped := range []bool{false, true} {
+		query := url.Values{"history": {history}, "scope": {scope}}
+		arguments := map[string]any{"action": "LIST", "history": history, "scope": scope}
+		args := []string{"worker-sessions", "list", "--history", history, "--scope", scope}
+		if scoped && facts.FactorySessionId != nil {
+			query.Set("factorySessionId", *facts.FactorySessionId)
+			// MCP LIST has no Factory Session selector; compare its supported scope on this private host.
+			args = append(args, "--session", *facts.FactorySessionId)
+		}
+		page := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.URL()+"/worker-sessions?"+query.Encode())
+		var cli factoryapi.ListWorkerSessionsResponse
+		rejectedInspectionCLI(t, host, environment, args, &cli)
+		var remote factoryapi.ListWorkerSessionsResponse
+		rejectedInspectionMCP(t, connection, arguments, &remote)
+		if !reflect.DeepEqual(cli, page) || !reflect.DeepEqual(remote, page) || len(page.Sessions) != 1 || !equalRejectedCaptureFacts(facts, page.Sessions[0]) {
+			t.Fatalf("rejected LIST parity: HTTP=%+v CLI=%+v MCP=%+v original=%+v", page, cli, remote, facts)
+		}
+	}
+}
+
+func assertRejectedSyntheticUsage(t *testing.T, row factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	u := row.TokenUsage
+	if u == nil || u.InputTokens == nil || *u.InputTokens != 10 || u.OutputTokens == nil || *u.OutputTokens != 4 || u.TotalTokens == nil || *u.TotalTokens != 14 || u.Origin == nil || *u.Origin != "SYNTHETIC" {
+		t.Fatalf("rejected synthetic usage: %+v", row)
+	}
+}
+
+func readRejectedCapturePage(t *testing.T, host *support.FunctionalAPIServer, connection *mcp.ClientSession, id string, environment []string, token string, head factoryapi.WorkerSessionLogPage) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id) + "/logs"
+	query := "?limit=1"
+	args := []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--limit", "1"}
+	if token != "" {
+		query += "&nextToken=" + url.QueryEscape(token)
+		args = append(args, "--next-token", token)
+	}
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+query)
+	arguments := map[string]any{"action": "READ", "workerSessionId": id, "view": "logs", "limit": 1}
+	if token != "" {
+		arguments["nextToken"] = token
+	}
+	result, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: arguments})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("MCP rejected logs: %v %+v", err, result)
+	}
+	var envelope struct {
+		Result struct {
+			Logs factoryapi.WorkerSessionLogPage `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(envelope.Result.Logs, page) {
+		t.Fatalf("MCP log parity: MCP=%+v HTTP=%+v", envelope.Result.Logs, page)
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = environment
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI bounded logs: %v %s", err, inputs.Stderr())
+	}
+	var cli factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cli, page) || len(page.Events) > 1 || page.Health != "COMPLETE" || page.RecordingGenerationId != head.RecordingGenerationId || page.CommittedPosition != head.CommittedPosition {
+		t.Fatalf("bounded log parity: HTTP=%+v CLI=%+v head=%+v", page, cli, head)
+	}
+	return page
 }

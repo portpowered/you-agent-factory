@@ -76,10 +76,31 @@ func mockRejectResult(command string, cfg *MockWorkerRejectConfig, usage ...*Moc
 	case "codex":
 		withSession := len(usage) > 0 && usage[0] != nil
 		result.Stdout = []byte(mockCodexRejectStdoutWithSession(withSession))
-		result.Stderr = nil
+		if cfg != nil && cfg.Stdout != "" {
+			// An updated message retains partial output without supplying a
+			// successful final result before the declared turn failure.
+			partial := mustMarshalJSON(map[string]any{
+				"type": "item.updated",
+				"item": map[string]any{"id": "mock-rejected-output", "type": "agent_message", "text": cfg.Stdout},
+			}) + "\n"
+			failure := string(result.Stdout)
+			if withSession {
+				session, rest, _ := strings.Cut(failure, "\n")
+				result.Stdout = []byte(session + "\n" + partial + rest)
+			} else {
+				result.Stdout = []byte(partial + failure)
+			}
+		}
 	case "claude":
 		result.Stdout = []byte(mockClaudeRejectStdout())
-		result.Stderr = nil
+		if cfg != nil && cfg.Stdout != "" {
+			partial := mustMarshalJSON(map[string]any{
+				"type": "stream_event", "session_id": "mock-claude-session",
+				"event": map[string]any{"type": "content_block_start", "index": 0,
+					"content_block": map[string]string{"type": "text", "text": cfg.Stdout}},
+			}) + "\n"
+			result.Stdout = []byte(partial + string(result.Stdout))
+		}
 	}
 	return result
 }

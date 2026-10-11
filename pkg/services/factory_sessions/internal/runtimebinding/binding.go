@@ -220,20 +220,20 @@ func registerReplacementSession(
 	var projectionOwner SessionProjectionOwner
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
-	var diagnostics factory.RuntimeLogDiagnostics
 	previous := SessionStateFrom(session)
 	if previous != nil {
 		projectionOwner = previous.Owner
 		activation = previous.Activation
 		process = previous.Process
-		diagnostics = previous.Diagnostics
 	}
 	handle := &SessionState{
 		Handle: replacementHandle, Instance: replacement,
 		Spec: preparedSpec, Owner: projectionOwner, Activation: activation,
-		Process: process, Diagnostics: diagnostics,
+		Process: process, Diagnostics: replacement.RuntimeDiagnostics(),
 	}
 	handle.inheritApplicationValues(previous)
+	// Logger ownership follows the published generation, whose sink remains open.
+	handle.Logger = replacement.RuntimeLogger()
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: placement.FolderPath, ExecutionBaseDir: executionBaseDir,

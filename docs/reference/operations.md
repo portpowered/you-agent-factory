@@ -559,6 +559,9 @@ health, and ordered events. New committed events include `capturedAt`, the
 host capture time. Older events omit this field. Capture health describes the
 recorded history independently of execution success.
 
+Rejected mock Workers retain configured `stdout` and `stderr` in captured logs,
+in that order. A complete capture can contain a failed execution.
+
 Script Worker output appears as progress records labelled `stdout` or `stderr`,
 preserving each captured chunk. If capture loses a record, logs return only
 the committed prefix. Health remains `INCOMPLETE` while the execution outcome
