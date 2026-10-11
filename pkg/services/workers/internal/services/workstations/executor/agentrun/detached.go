@@ -108,7 +108,7 @@ func ExecuteDetached(
 // lastRunnerResult keeps the most recent provider turn of one agent loop. It is
 // request-scoped: a new value is created for every ExecuteDetached call.
 type lastRunnerResult struct {
-	runner    workerexecution.Runner
+	runner    workerexecution.Runner //nolint:staticcheck // Retained workstation adapter uses the transitional Runner boundary until workstation adapters are deleted.
 	mu        sync.Mutex
 	result    workerexecution.RunnerExecutionResult
 	lastErr   error

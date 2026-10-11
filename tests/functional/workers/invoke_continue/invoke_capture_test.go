@@ -394,7 +394,7 @@ func assertRecordingDirectReads(t *testing.T, ctx context.Context, fixture *invo
 			t.Fatal("unknown provider accounting invented a captured usage fact")
 		}
 	}
-	assertRecordingMessageProvenance(t, page, false, name == "recording-final-only")
+	assertRecordingMessageProvenance(t, page, name == "recording-final-only")
 	for _, view := range []string{"logs", "transcript"} {
 		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
 		if err := fixture.process.Execute(read.Input); err != nil {
@@ -565,7 +565,7 @@ func runRecordingContentFactoryResult(t *testing.T, name string) {
 		t.Fatalf("Factory transcript: %v %s", err, read.Stderr())
 	}
 	assertRecordingFactoryTranscript(t, read.Stdout(), fixture.baseURL, id, gated)
-	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), true, false)
+	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), false)
 	if !gated && scenario.providerRunner.CallCount() != 2 {
 		t.Fatal("retry witness did not execute two provider turns")
 	}
@@ -660,7 +660,7 @@ func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string
 	return result
 }
 
-func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPage, agentLoop, finalOnly bool) {
+func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPage, finalOnly bool) {
 	t.Helper()
 	var native, synthesized []workers.Draft
 	for _, event := range page.Events {
@@ -682,27 +682,18 @@ func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPag
 			synthesized = append(synthesized, draft)
 		}
 	}
-	wantSynthesized := 0
-	if agentLoop {
-		wantSynthesized = 1
-	}
-	if (finalOnly && len(native) != 1) || (!finalOnly && len(native) < 2) || len(synthesized) != wantSynthesized {
+	if (finalOnly && len(native) != 1) || (!finalOnly && len(native) < 2) || len(synthesized) != 0 {
 		t.Fatalf("stream/final provenance: native=%+v synthesized=%+v", native, synthesized)
 	}
-	if len(synthesized) == 0 {
-		// Direct provider execution has no agent-loop final snapshot.
-		if native[len(native)-1].Phase != workers.PhaseCompleted {
-			t.Fatal("direct stream lost completed message")
-		}
-		return
-	}
-	assertRecordingFinalSnapshotIdentity(t, native[len(native)-1], synthesized[0])
+	// Native completions are authoritative for direct and agent-loop turns.
+	// Result-only synthesized FINAL_ONLY fallback is covered by FactoryFinalCapture.
+	assertRecordingCompletedNativeIdentity(t, native[len(native)-1])
 }
 
-func assertRecordingFinalSnapshotIdentity(t *testing.T, last, final workers.Draft) {
+func assertRecordingCompletedNativeIdentity(t *testing.T, last workers.Draft) {
 	t.Helper()
-	if last.ItemID == "" || last.ItemID != final.ItemID || last.TurnID != final.TurnID || last.RunID != final.RunID || last.DispatchID != final.DispatchID || final.Provenance.Fidelity != workers.FidelityNormalized {
-		t.Fatalf("final snapshot lost last stream identity: %+v / %+v", last, final)
+	if last.Phase != workers.PhaseCompleted || last.ItemID == "" || last.DispatchID == "" || last.Provenance.Fidelity != workers.FidelityNormalized {
+		t.Fatalf("native stream lost completed message identity/provenance: %+v", last)
 	}
 }
 
