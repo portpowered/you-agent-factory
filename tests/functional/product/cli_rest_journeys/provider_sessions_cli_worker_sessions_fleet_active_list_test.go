@@ -3,14 +3,127 @@ package cli_rest_journeys_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// The global fleet has no session selector, so the cohort occupies the same
+// isolated observation window as the neighboring fleet cases. Scoped reads
+// overlap through the reusable process after all four sessions are admitted.
+func testCompletedObservationCapabilities(t *testing.T) {
+	c := newWorkerSessionsCLICase(t)
+	f := c.fixture
+	env := functionalEnvironment(f.homeDir)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	owners, works, ids := make([]string, 4), make([]string, 4), make([]string, 4)
+	for i := range owners {
+		name := fmt.Sprintf("worker-session-completed-%d", i)
+		c.registerRoutes(t, name)
+		owners[i] = c.openSession(t)
+		works[i] = submitWork(t, ctx, f.process, env, c.factoryDir, f.baseURL, owners[i], name)
+		ids[i] = waitForWorkerSessionState(t, ctx, f.process, env, c.factoryDir, f.baseURL, owners[i], works[i], "COMPLETED").WorkerSessionID
+	}
+	t.Run("four scoped reads", func(t *testing.T) {
+		for i := range owners {
+			t.Run(fmt.Sprintf("scoped-%d", i), func(t *testing.T) {
+				t.Parallel()
+				inputs := executeCLI(t, t.Context(), f.process, env, c.factoryDir, "--server", f.baseURL, "worker-sessions", "list", "--session", owners[i], "--work-id", works[i], "--output", "json")
+				var listed workerSessionListJSON
+				decodeCLIJSON(t, inputs, &listed)
+				if len(listed.Sessions) != 1 || listed.Sessions[0].WorkerSessionID != ids[i] || listed.Sessions[0].FactorySessionID == nil || *listed.Sessions[0].FactorySessionID != owners[i] {
+					t.Fatalf("scoped list leaked or omitted late attempt: %#v", listed)
+				}
+			})
+		}
+	})
+	// A continued runtime attempt is supervised as a direct process successor.
+	successor := "completed-successor-" + ids[0]
+	continued := executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL, "worker-sessions", "continue", ids[0], "--session", owners[0], "--request-id", "completed-continue-"+ids[0], "--successor-worker-session-id", successor, "--user-message", "worker-session-route=worker-session-completed-0", "--async", "--output", "json")
+	if !strings.Contains(continued.Stdout(), successor) {
+		t.Fatalf("continuation lost exact successor: %s", continued.Stdout())
+	}
+	// A retained terminal replay joins publication before the runtime is closed.
+	executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL, "worker-sessions", "stream", "--worker-session-id", successor, "--session", owners[0], "--output", "json")
+	support.CloseFactorySessionAt(t, f.baseURL, owners[0])
+	f.recordSessionClosed(owners[0])
+	c.sessionMu.Lock()
+	c.sessionIDs = c.sessionIDs[1:]
+	c.sessionMu.Unlock()
+	shown := executeCLI(t, ctx, f.process, env, c.factoryDir, "--server", f.baseURL, "worker-sessions", "show", "--worker-session-id", successor, "--output", "json")
+	var exact workerSessionJSON
+	decodeCLIJSON(t, shown, &exact)
+	if exact.WorkerSessionID != successor || exact.State != "COMPLETED" || !exact.Direct || exact.FactorySessionID == nil || *exact.FactorySessionID != owners[0] {
+		t.Fatalf("closed-runtime successor = %#v", exact)
+	}
+	assertCompletedCapturedClock(t, c, successor)
+	assertRetainedDirectSuccessor(t, ctx, f, successor)
+}
+
+func assertRetainedDirectSuccessor(t *testing.T, ctx context.Context, f *workerSessionsCLISharedFixture, successor string) {
+	t.Helper()
+	for _, selection := range []struct {
+		history, scope string
+		wantCount      int
+	}{
+		{"", "direct", 1},
+		{"all", "all", 1},
+		{"all", "factory", 1},
+		{"all", "direct", 0},
+		{"archived", "all", 1},
+		{"archived", "direct", 0},
+	} {
+		history := selection.history
+		query := url.Values{"scope": {selection.scope}, "maxResults": {"100"}}
+		if history != "" {
+			query.Set("history", history)
+		}
+		page := fetchBoundedFleetHTTPPageWithQuery(t, ctx, f.baseURL, query)
+		if page.status != http.StatusOK {
+			t.Fatalf("retained history %q: %d %s", history, page.status, page.raw)
+		}
+		count := 0
+		for _, row := range page.list.Sessions {
+			if row.WorkerSessionID == successor {
+				count++
+			}
+		}
+		// Default reads retain process supervision. Explicit history archives
+		// terminal attempts and preserves their captured Factory origin, which
+		// is independent of the direct supervision shown by the default read.
+		if count != selection.wantCount {
+			t.Fatalf("history %q scope %q successor count=%d, want %d", history, selection.scope, count, selection.wantCount)
+		}
+	}
+}
+
+// F23-11 observes the durable public logs, including commit timestamps rather
+// than only provider-authored or live event time.
+func assertCompletedCapturedClock(t *testing.T, c *workerSessionsCLICase, id string) {
+	t.Helper()
+	f := c.fixture
+	// Capture timestamps are an HTTP-owned contract; the CLI does not expose
+	// this logs route. Read after runtime closure to require retained capture.
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, f.baseURL+"/worker-sessions/"+url.PathEscape(id)+"/logs")
+	if page.WorkerSessionId != id || len(page.Events) == 0 {
+		t.Fatalf("captured history lost identity or records: %#v", page)
+	}
+	for _, event := range page.Events {
+		if event.WorkerSessionId != id {
+			t.Fatalf("captured history leaked another Worker Session: %#v", event)
+		}
+		if event.Event.CapturedAt == nil || !event.Event.CapturedAt.Equal((workerCaptureClock{}).Now()) {
+			t.Fatalf("capture substituted selected process clock: %#v", event)
+		}
+	}
+}
 
 type activeFleetFixture struct {
 	c                           *workerSessionsCLICase

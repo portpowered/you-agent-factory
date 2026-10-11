@@ -29,6 +29,7 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	t.Run("TestWorkerSessionsListWorkScopedSelectedReadFailure", testWorkerSessionsListWorkScopedSelectedReadFailure)
 	t.Run("TestWorkerSessionsFleetActiveListDeadlineRepair", testProvidersessionscliWorkerSessionsFleetActiveListDeadlineRepair)
 	t.Run("TestWorkerSessionsFleetListBoundedRootPages", testProvidersessionscliWorkerSessionsFleetListBoundedRootPages)
+	t.Run("TestCompletedObservationCapabilities", testCompletedObservationCapabilities)
 	t.Run("TestWorkerSessionsFleetListCLIConcurrent", testProvidersessionscliWorkerSessionsFleetListCLIConcurrent)
 	t.Run("TestWorkerSessionsListWorkScopedDefault", testWorkerSessionsListWorkScopedDefault)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream")
