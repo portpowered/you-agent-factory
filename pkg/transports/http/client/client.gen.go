@@ -5787,7 +5787,10 @@ type GlobalConfigMessaging struct {
 		MaxBodyBytes         *int `json:"maxBodyBytes,omitempty"`
 		MaxHop               *int `json:"maxHop,omitempty"`
 		MessagesPerThread    *int `json:"messagesPerThread,omitempty"`
-		SendsPerChainPerHour *int `json:"sendsPerChainPerHour,omitempty"`
+
+		// RevivesPerChainPerHour Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit.
+		RevivesPerChainPerHour *int `json:"revivesPerChainPerHour,omitempty"`
+		SendsPerChainPerHour   *int `json:"sendsPerChainPerHour,omitempty"`
 	} `json:"limits,omitempty"`
 	Policy *struct {
 		// AllowCrossScope Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.

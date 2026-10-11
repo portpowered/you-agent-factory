@@ -8062,6 +8062,11 @@ export interface components {
       limits?: {
         /** @default 10 */
         sendsPerChainPerHour: number;
+        /**
+         * @description Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit.
+         * @default 6
+         */
+        revivesPerChainPerHour: number;
         /** @default 8 */
         messagesPerThread: number;
         /** @default 8192 */

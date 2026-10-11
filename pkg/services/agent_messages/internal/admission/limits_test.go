@@ -14,7 +14,18 @@ import (
 
 func TestReviveLimitCountsOnlyAcceptedAdmissionsAndReleasesAtHour(t *testing.T) {
 	t.Parallel()
+	for _, limit := range []int{2, 6} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			t.Parallel()
+			assertReviveLimitCountsOnlyAcceptedAdmissions(t, limit)
+		})
+	}
+}
+
+func assertReviveLimitCountsOnlyAcceptedAdmissions(t *testing.T, limit int) {
+	t.Helper()
 	f := newEngineFixture()
+	f.engine.revivesPerHour = limit
 	recipient := f.authority.recipients["lead"]
 	recipient.Observation.State, recipient.Observation.Revivable = workersessions.StateCompleted, true
 	f.authority.recipients["lead"] = recipient
@@ -32,16 +43,16 @@ func TestReviveLimitCountsOnlyAcceptedAdmissionsAndReleasesAtHour(t *testing.T) 
 	if err != nil || failed.Status != agentmessages.Queued || failed.Reason != "REVIVE_FAILED" {
 		t.Fatal("rejection lost queued message", err)
 	}
-	assertSixRevivesAndRetries(t, f, &calls)
+	assertRevivesAndRetries(t, f, &calls, limit)
 	limited, err := f.engine.Send(t.Context(), engineRequest("seventh", "limited ask"), f.caller, "")
-	if err != nil || limited.Status != agentmessages.Queued || limited.Reason != "REVIVE_LIMIT" || calls != 7 {
-		t.Fatal("seventh accepted revive was not limited", err)
+	if err != nil || limited.Status != agentmessages.Queued || limited.Reason != "REVIVE_LIMIT" || calls != limit+1 {
+		t.Fatal("revive above the configured volume was not limited", err)
 	}
 	// The oldest accepted facts leave the open rolling window exactly at an hour.
 	f.now = f.now.Add(time.Hour)
 	got, err := f.engine.Send(t.Context(), engineRequest("next-hour", "next hour ask"), f.caller, "")
 	got = confirmEngineDelivery(t, f, got)
-	if err != nil || got.Status != agentmessages.DeliveredRevive || calls != 8 {
+	if err != nil || got.Status != agentmessages.DeliveredRevive || calls != limit+2 {
 		t.Fatal("rolling window did not release quota", err)
 	}
 	queued, _, _, err := f.ledger.LookupMessage(limited.MessageID)
@@ -74,9 +85,9 @@ func TestAdmittedUnconfirmedReviveKeepsChainReserved(t *testing.T) {
 	}
 }
 
-func assertSixRevivesAndRetries(t *testing.T, f *engineFixture, calls *int) {
+func assertRevivesAndRetries(t *testing.T, f *engineFixture, calls *int, limit int) {
 	t.Helper()
-	for i := range 6 {
+	for i := range limit {
 		request := engineRequest(fmt.Sprint(i), fmt.Sprintf("accepted %d", i))
 		got, err := f.engine.Send(t.Context(), request, f.caller, "")
 		got = confirmEngineDelivery(t, f, got)

@@ -162,6 +162,7 @@ The selected operator configuration accepts these defaults:
     },
     "limits": {
       "sendsPerChainPerHour": 10,
+      "revivesPerChainPerHour": 6,
       "messagesPerThread": 8,
       "maxBodyBytes": 8192,
       "maxHop": 3,
@@ -209,7 +210,10 @@ The original messages retain their IDs and share the confirmed successor.
 Missing continuation capability leaves `QUEUED` with `REVIVE_UNSUPPORTED`.
 Provider-classified resume rejection also leaves the message queued with `REVIVE_UNSUPPORTED`; the successor ends `FAILED`.
 Rejected or uncertain admission leaves `QUEUED` with `REVIVE_FAILED`.
-The rolling limit permits six accepted revivals per recipient chain per hour; further messages remain queued with `REVIVE_LIMIT`.
+The default rolling limit permits six provider-confirmed revivals per recipient chain per hour.
+Set `messaging.limits.revivesPerChainPerHour` in the selected profile to change this positive limit.
+Further messages remain queued with `REVIVE_LIMIT`.
+Failed attempts do not spend this limit.
 Retries preserve the original message and never spend another revival.
 Use `--if-ended hold` to request queued retention explicitly.
 Use `--reply-hold` to make a future reply inherit `HOLD`.

@@ -3582,7 +3582,7 @@ components:
         reason:
           type: string
           nullable: true
-          description: Typed code only. QUEUED may report REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. Uncertain admission remains queued with REVIVE_FAILED.
+          description: Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED.
         hop:
           type: integer
           minimum: 0
@@ -16951,6 +16951,11 @@ components:
               type: integer
               minimum: 1
               default: 10
+            revivesPerChainPerHour:
+              type: integer
+              minimum: 1
+              default: 6
+              description: Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit.
             messagesPerThread:
               type: integer
               minimum: 1

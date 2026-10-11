@@ -77,6 +77,7 @@ func (s *Configured) Activate(ctx context.Context, configPath string) error {
 	validator.BodyBytes, validator.DefaultExpirySeconds = settings.MaxBodyBytes, settings.DefaultExpirySeconds
 	s.engine.validator = validator
 	s.engine.quota = Limits{SendsPerHour: settings.SendsPerChainPerHour, ThreadMessages: settings.MessagesPerThread, HopLimit: &settings.MaxHop}
+	s.engine.revivesPerHour = settings.RevivesPerChainPerHour
 	s.engine.enabled = settings.Enabled
 	s.path, s.selected = configPath, true
 	return nil
