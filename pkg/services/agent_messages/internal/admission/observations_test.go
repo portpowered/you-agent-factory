@@ -36,12 +36,15 @@ func decodedObservations(t *testing.T, a *observationAppender) []agentmessages.O
 		if err := r.Validate(); err != nil {
 			t.Fatalf("invalid observation envelope: %v", err)
 		}
-		if r.Topic != agentmessages.ObservationTopic || r.SchemaID != agentmessages.ObservationSchema || r.SourceType != "agent-message" {
+		if r.SchemaID != agentmessages.ObservationSchema || r.SourceType != "agent-message" {
 			t.Fatal("observation escaped its source-native messaging contract")
 		}
 		var observation agentmessages.Observation
 		if err := json.Unmarshal(r.Payload, &observation); err != nil {
 			t.Fatal(err)
+		}
+		if r.Topic != observation.Message.To.ObservationTopic() {
+			t.Fatal("observation escaped its exact recipient stream")
 		}
 		if string(r.SourceID) != observation.Message.MessageID || string(r.SourceEventID) != observation.RecordID || uint64(r.SourceSequence) != observation.Sequence {
 			t.Fatal("observation lost its committed identity")
@@ -82,6 +85,10 @@ func TestObservationsFollowDurableSendReplyAndRead(t *testing.T) {
 	observations := decodedObservations(t, a)
 	assertObservationKinds(t, observations, []string{store.Sent, store.Read, store.Sent, store.Replied})
 	child, parent := observations[2], observations[3]
+	if a.requests[0].Topic != a.requests[1].Topic || a.requests[0].Topic != a.requests[3].Topic ||
+		a.requests[2].Topic == a.requests[3].Topic {
+		t.Fatal("reply or parent transition was routed to the wrong recipient")
+	}
 	if child.RecordID != parent.RecordID || child.Sequence != parent.Sequence || child.Message.InReplyTo != first.MessageID ||
 		child.Message.ThreadID != first.ThreadID || parent.Message.RepliedByMessageID != reply.MessageID {
 		t.Fatal("atomic reply observations lost their common commit or relationship")
@@ -97,6 +104,38 @@ func assertObservationCommitted(t *testing.T, ledger *engineLedger, r events.App
 	entry, exists, sequence, err := ledger.LookupMessage(observation.Message.MessageID)
 	if err != nil || !exists || sequence != observation.Sequence || entry.Message.Status != observation.Message.Status {
 		t.Fatal("observation published before durable transaction")
+	}
+}
+
+func TestObservationsSeparateLegacyRecipientScopes(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	a := &observationAppender{}
+	f.engine.events = a
+	a.before = func(_ context.Context, r events.AppendRequest) {
+		assertObservationCommitted(t, f.ledger, r)
+	}
+	first, err := f.engine.Send(context.Background(), engineRequest("first", "question"), f.caller, "factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Authorization and address resolution are controlled collaborators here.
+	// A second exact owner has the same legacy public Worker Session ID.
+	other := engineIdentity("lead")
+	other.Observation.FactorySessionID = "other-factory"
+	other.Chain = "other-lead-chain"
+	other.Work = "other-lead-work"
+	f.authority.recipients["lead"] = other
+	second, err := f.engine.Send(context.Background(), engineRequest("second", "question"), f.caller, "other-factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations := decodedObservations(t, a)
+	if len(observations) != 2 || first.MessageID == second.MessageID || a.requests[0].Topic == a.requests[1].Topic {
+		t.Fatal("distinct legacy recipient scopes shared a record or stream")
+	}
+	if observations[0].Message.To.FactorySessionID != "factory" || observations[1].Message.To.FactorySessionID != "other-factory" {
+		t.Fatal("publication lost the admitted exact recipient scope")
 	}
 }
 

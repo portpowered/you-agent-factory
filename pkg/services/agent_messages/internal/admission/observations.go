@@ -29,7 +29,7 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 		payload, err := json.Marshal(observation)
 		if err == nil {
 			_, err = e.events.Append(publication, events.AppendRequest{
-				Topic: agentmessages.ObservationTopic, SourceType: "agent-message",
+				Topic: entry.Message.To.ObservationTopic(), SourceType: "agent-message",
 				SourceID: events.SourceID(entry.Message.MessageID), SourceSequence: events.SourceSequence(t.Sequence),
 				SourceEventID: events.SourceEventID(t.RecordID), SchemaID: agentmessages.ObservationSchema, Payload: payload,
 			})

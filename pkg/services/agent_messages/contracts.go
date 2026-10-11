@@ -2,14 +2,23 @@ package agentmessages
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
-// ObservationTopic is the process-local Agent Message stream. It is independent
-// of canonical Factory Events; read authorization remains Messaging's policy.
-const ObservationTopic events.Topic = "agent-messages/events"
+// ObservationTopic identifies the process-local stream for an admitted exact
+// recipient. The tuple preserves legacy Factory Session scope without delimiter
+// collisions; its digest bounds opaque IDs to Events' topic alphabet and length.
+// A topic grants no read authority. Messaging must authorize every observation.
+func (recipient Recipient) ObservationTopic() events.Topic {
+	identity, _ := json.Marshal([2]string{recipient.FactorySessionID, recipient.WorkerSessionID})
+	digest := sha256.Sum256(identity)
+	return events.Topic("messages/" + hex.EncodeToString(digest[:]))
+}
 
 const ObservationSchema events.SchemaID = "agent-message-observation/v1"
 
