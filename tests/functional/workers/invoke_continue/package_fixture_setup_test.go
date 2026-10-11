@@ -125,8 +125,14 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
-	toolRunner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})
-	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-tools", toolRunner, toolRunner, nil, nil, nil, toolRunner.Reset); err != nil {
+	for _, name := range []string{"captured-codex-tools", "captured-codex-factory"} {
+		toolRunner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})}
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, toolRunner, toolRunner, nil, nil, nil, toolRunner.Reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	liveTools := newCapturedCodexToolRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-live", liveTools, liveTools, nil, nil, nil, liveTools.reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
 	if err := appendRequesterMCPScenarios(rootDir, &setup); err != nil {
