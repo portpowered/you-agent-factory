@@ -68,6 +68,7 @@ type factoryImpl struct {
 	completeCh                  chan struct{}
 	completeOnce                sync.Once
 	runCancel                   context.CancelFunc
+	engineRunDone               chan struct{}
 	operatorMoveRequests        map[string]appliedOperatorMove
 	resumeDrainPending          bool
 	workerSessionControlMu      sync.Mutex
@@ -643,6 +644,8 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	f.state = interfaces.FactoryStateRunning
 	f.startedAt = f.clock.Now()
 	f.runCancel = cancelEng
+	engineRunDone := make(chan struct{})
+	f.engineRunDone = engineRunDone
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "run started")
 
@@ -659,6 +662,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	// The engine's Run returns when shouldTerminate is true (from
 	// TerminationCheck) or context is cancelled. No doneCh select needed.
 	runErr := f.engine.Run(engCtx)
+	close(engineRunDone)
 	stopReason := dispatchplanning.RuntimeStopReasonTerminated
 	if errors.Is(runErr, context.Canceled) || ctx.Err() != nil {
 		stopReason = dispatchplanning.RuntimeStopReasonCancelled
