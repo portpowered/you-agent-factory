@@ -49,7 +49,6 @@ func (f *artifactFixture) invoke(t *testing.T, server, id string, caller map[str
 	document := map[string]any{"requestId": id + "-invoke", "workerSessionId": id, "execution": map[string]any{
 		"workstationName": "direct", "workingDirectory": f.dir, "factorySessionId": opened.Session.Id,
 		"workerType": "direct-worker", "runnerId": "codex", "executorProvider": "codex", "modelProvider": "codex", "model": "controlled-model", "userMessage": "controlled input",
-		"envVars":  map[string]string{"AM_T5_CREDENTIAL_ROOT": f.dir},
 		"dispatch": map[string]string{"dispatchId": id + "-attempt", "workstationName": "direct", "workerType": "direct-worker"},
 	}}
 	data, err := json.Marshal(document)
@@ -84,6 +83,30 @@ func (f *artifactFixture) workerCredentials(t *testing.T, id string) map[string]
 	}
 }
 
+// This proves the continuation prerequisite and fresh execution credentials.
+// Durable inbox pull with the new caller remains a separate unproved edge.
+func (f *artifactFixture) continueCallerAfterRestart(t *testing.T, server string, previous map[string]string) {
+	t.Helper()
+	request := map[string]string{"requestId": "restart-continue", "successorWorkerSessionId": "lane-next", "followUpInput": "controlled next input"}
+	status, body := f.http(t, server, http.MethodPost, "/worker-sessions/lane/continue", request, nil)
+	if status != http.StatusAccepted {
+		var failure api.ErrorResponse
+		_ = json.Unmarshal(body, &failure)
+		t.Fatalf("fresh continuation: status=%d code=%s", status, failure.Code)
+	}
+	next := f.workerCredentials(t, "lane-next")
+	if next["YOU_WORKER_SESSION_TOKEN"] == previous["YOU_WORKER_SESSION_TOKEN"] {
+		t.Fatal("restart continuation reused the previous execution token")
+	}
+	status, body = f.http(t, server, http.MethodGet, "/worker-sessions/lane-next", nil, nil)
+	var observation api.WorkerSessionObservation
+	if status != http.StatusOK || json.Unmarshal(body, &observation) != nil || observation.State != "RUNNING" ||
+		observation.PredecessorWorkerSessionId == nil || *observation.PredecessorWorkerSessionId != "lane" {
+		t.Fatal("restart continuation lost running state or predecessor identity")
+	}
+	f.releaseCaller(t, server, "lane-next")
+}
+
 func (f *artifactFixture) releaseCaller(t *testing.T, server, id string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(f.dir, id+"-release"), []byte("complete"), 0o600); err != nil {
@@ -115,7 +138,10 @@ process.stdin.on('end', () => {
  const credentials = {YOU_WORKER_SESSION_ID:id, YOU_WORKER_SESSION_TOKEN:process.env.YOU_WORKER_SESSION_TOKEN, YOU_SERVER:process.env.YOU_SERVER};
  fs.writeFileSync(target+'.tmp', JSON.stringify(credentials));
  fs.renameSync(target+'.tmp', target);
- console.log(JSON.stringify({type:'thread.started',thread_id:'controlled-'+id}));
+ const args = process.argv.slice(2);
+ const resume = args.indexOf('resume');
+ const thread = resume >= 0 ? args[resume+1] : 'controlled-'+id;
+ console.log(JSON.stringify({type:'thread.started',thread_id:thread}));
  const parent = process.ppid;
  const lifetime = setTimeout(() => process.exit(1), 80000);
  const interval = setInterval(() => {

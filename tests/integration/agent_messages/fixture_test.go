@@ -55,6 +55,9 @@ func newArtifactFixture(t *testing.T) *artifactFixture {
 		t.Fatal(err)
 	}
 	env := builtcliacceptance.ProcessEnvForIsolatedHome(home)
+	// Per-invocation environment overrides are deliberately not restartable.
+	// The controlled provider's artifact location belongs to the host environment.
+	env = append(env, "AM_T5_CREDENTIAL_ROOT="+dir)
 	provider := installProviderChild(t, dir)
 	for i, entry := range env {
 		key, value, _ := strings.Cut(entry, "=")

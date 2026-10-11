@@ -43,5 +43,6 @@ func TestPrebuiltAuthorizedInboxSurvivesHostRestart(t *testing.T) {
 	if status != http.StatusForbidden || json.Unmarshal(body, &failure) != nil || failure.Code != "MESSAGE_NOT_PERMITTED" {
 		t.Fatal("host reconstruction retained old execution authority")
 	}
+	f.continueCallerAfterRestart(t, second.url, lane)
 	second.stop(t, f)
 }
