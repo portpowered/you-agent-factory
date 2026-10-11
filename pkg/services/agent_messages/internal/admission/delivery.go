@@ -12,9 +12,9 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
-// deliver runs under the admission lock, preserving one effect per chain and
-// send order. Only a new authorized admission enters here; retry and normalized
-// body dedup return durable state without another continuation or quota spend.
+// deliver reserves a chain under the admission lock, then releases the lock
+// during Continue. The durable pending intent prevents another effect on that
+// chain while unrelated admissions and inbox operations remain available.
 func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdentity, entry store.Entry) (agentmessages.Message, error) {
 	m := entry.Message
 	if m.IfEnded != "REVIVE" {
@@ -27,9 +27,6 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 	if !recipient.Observation.State.Terminal() {
 		return m, nil
 	}
-	if !recipient.Observation.Revivable {
-		return e.deliveryReason(ctx, entry, "REVIVE_UNSUPPORTED")
-	}
 	intents, err := e.ledger.DeliveryIntents()
 	if err != nil {
 		return agentmessages.Message{}, err
@@ -39,6 +36,9 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 			return m, nil
 		}
 		return e.deliveryReason(ctx, entry, reason)
+	}
+	if !recipient.Observation.Revivable {
+		return e.deliveryReason(ctx, entry, "REVIVE_UNSUPPORTED")
 	}
 	entries, sequence, err := e.ledger.Entries()
 	if err != nil {
@@ -56,12 +56,20 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 	if err := e.persist(ctx, tx); err != nil {
 		return agentmessages.Message{}, err
 	}
-	result, admissionErr := e.continueSession(ctx, workersessions.ContinueRequest{
+	result, admissionErr := e.continueIntent(ctx, intent)
+	return e.deliveryOutcome(ctx, intent, selected, m.MessageID, result, admissionErr)
+}
+
+// The caller holds e.mu. Restore it before returning, including on panic, so
+// every subsequent ledger transition still uses the same admission authority.
+func (e *Engine) continueIntent(ctx context.Context, intent store.DeliveryIntent) (workersessions.ContinueResult, error) {
+	e.mu.Unlock()
+	defer e.mu.Lock()
+	return e.continueSession(ctx, workersessions.ContinueRequest{
 		FactorySessionID: intent.FactorySessionID, RequestID: intent.RequestID,
 		SourceWorkerSessionID: intent.SourceWorkerSessionID, SuccessorWorkerSessionID: intent.SuccessorWorkerSessionID,
 		FollowUpInput: intent.FollowUpInput, ResolveHead: true,
 	})
-	return e.deliveryOutcome(ctx, intent, selected, m.MessageID, result, admissionErr)
 }
 
 func (e *Engine) deliveryHead(ctx context.Context, entry store.Entry) (Identity, error) {
@@ -149,10 +157,21 @@ func (e *Engine) deliveryOutcome(ctx context.Context, intent store.DeliveryInten
 	intent = e.classifyAdmission(intent, result, admissionErr)
 	var message agentmessages.Message
 	for i := range entries {
+		current, found, _, err := e.ledger.LookupMessage(entries[i].Message.MessageID)
+		if err != nil {
+			return agentmessages.Message{}, err
+		}
+		if !found {
+			return agentmessages.Message{}, store.ErrCorrupt
+		}
+		entries[i] = current
 		m := &entries[i].Message
 		m.Reason = intent.Reason
 		if intent.State == store.IntentAccepted {
-			m.Status, m.RevivedWorkerSessionID, m.To.DeliveredWorkerSessionID = agentmessages.DeliveredRevive, intent.SuccessorWorkerSessionID, intent.SuccessorWorkerSessionID
+			if m.Status == agentmessages.Queued {
+				m.Status = agentmessages.DeliveredRevive
+			}
+			m.RevivedWorkerSessionID, m.To.DeliveredWorkerSessionID = intent.SuccessorWorkerSessionID, intent.SuccessorWorkerSessionID
 		}
 		if m.MessageID == messageID {
 			message = *m

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -178,6 +179,66 @@ func TestJournalReviveIntentAndAtomicOutcomeSurviveReopen(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJournalReviveOutcomePreservesConcurrentInboxState(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{Read, Replied, Expired} {
+		for _, accepted := range []bool{true, false} {
+			t.Run(kind+fmt.Sprint(accepted), func(t *testing.T) {
+				t.Parallel()
+				path := filepath.Join(t.TempDir(), "messages.jsonl")
+				j := newTestJournal(t, testFiles{}, path)
+				mustCommit(t, j, sentTransaction("first", 1))
+				entries, _, _ := j.Entries()
+				intent := pendingDelivery(entries...)
+				mustCommit(t, j, intentTransaction(2, intent))
+				updated := entries[0]
+				updated.Message.Status = agentmessages.Status(kind)
+				change := transaction(3, kind, updated)
+				if kind == Replied {
+					change = concurrentReply(updated)
+					updated = change.Messages[0]
+				}
+				mustCommit(t, j, change)
+				outcome := acceptedTransaction(4, intent, updated)
+				outcome.Messages[0].Message.Status = updated.Message.Status
+				if !accepted {
+					outcome.Messages = []Entry{updated}
+					outcome.Messages[0].Message.Reason = "REVIVE_FAILED"
+					outcome.DeliveryIntents[0] = intent
+					outcome.DeliveryIntents[0].State, outcome.DeliveryIntents[0].Reason = IntentFailed, "REVIVE_FAILED"
+				}
+				regression := outcome
+				regression.Messages = append([]Entry{}, outcome.Messages...)
+				regression.Messages[0].Message.Status = agentmessages.Queued
+				if accepted {
+					regression.Messages[0].Message.Status = agentmessages.DeliveredRevive
+				}
+				if err := j.Commit(regression); !errors.Is(err, ErrInvalidTransaction) {
+					t.Fatal("outcome regressed concurrent inbox state", err)
+				}
+				mustCommit(t, j, outcome)
+				for _, journal := range []*Journal{j, newTestJournal(t, testFiles{}, path)} {
+					got, found, _, err := journal.LookupMessage("first")
+					if err != nil || !found || got != outcome.Messages[0] {
+						t.Fatal("outcome lost durable concurrent inbox state", err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func concurrentReply(parent Entry) Transaction {
+	parent.Message.RepliedByMessageID = "reply"
+	child := message("reply", 3)
+	child.Message.ThreadID, child.Message.InReplyTo = parent.Message.ThreadID, parent.Message.MessageID
+	child.Message.From.WorkerSessionID, child.Message.To.WorkerSessionID = parent.Message.To.WorkerSessionID, parent.Message.From.WorkerSessionID
+	child.SenderChainIdentity, child.RecipientChainIdentity = parent.RecipientChainIdentity, parent.SenderChainIdentity
+	change := transaction(3, Replied, parent, child)
+	change.Requests = []Request{{SenderIdentity: child.SenderChainIdentity, RequestID: "reply", RequestSHA256: strings.Repeat("b", 64), MessageID: "reply"}}
+	return change
 }
 
 func TestJournalInboxUpdatesAreAtomicAndReconstructed(t *testing.T) {

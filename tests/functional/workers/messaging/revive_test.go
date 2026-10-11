@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -179,6 +180,207 @@ func assertRejectedRevive(t *testing.T, message api.AgentMessage) {
 	if message.Status != "QUEUED" || message.Reason == nil || *message.Reason != "REVIVE_FAILED" || message.RevivedWorkerSessionId != nil {
 		t.Fatal("rejected admission claimed success or lost typed reason")
 	}
+}
+
+func TestPendingReviveAllowsInboxAndOtherAdmissions(t *testing.T) {
+	t.Parallel()
+	gate := &reviveInputGate{entered: make(chan struct{}), release: make(chan struct{})}
+	defer gate.unblock.Do(func() { close(gate.release) })
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	dir := t.TempDir()
+	f := startHostRunner(t, t.TempDir(), dir, "", edges.Edges{
+		Clock: struct{ platformclock.Source }{clock}, FactorySessionsWorkingDirectory: reviveRecordingDirectory(dir),
+		WorkerRecordingWriter: gate, WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { gate.WorkerRecordingStore = store },
+	}, nil, revival, "lead", "lane", "other-lead", "other-lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	otherLead := f.invoke(t, "other-lead", nil)
+	otherLane := f.invoke(t, "other-lane", otherLead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane", "other-lead", "other-lane")
+	result := make(chan api.AgentMessage, 1)
+	go func() {
+		result <- f.cliSend(t, lane, "lead", "--request-id", "pending", "--body", "claimed input", "--expires", "1m")
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("continuation did not reach input barrier")
+	}
+	// These public operations must finish while the original admission is
+	// still gated. A test deadline only bounds failure; it never releases it.
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("pending intent hid the inbox or claimed delivery")
+	}
+	request := map[string]any{"requestId": "pending", "to": map[string]string{"workerSessionId": "lead"}, "body": "claimed input", "expiresInSeconds": 60}
+	if retry := f.send(t, request, lane); !reflect.DeepEqual(retry, page.Messages[0]) {
+		t.Fatal("in-flight retry changed the pending admission")
+	}
+	request["body"] = "conflicting input"
+	assertError(t, f, http.MethodPost, "/messages", request, lane, http.StatusConflict, "MESSAGE_REQUEST_CONFLICT")
+	queued := f.cliSend(t, lane, "lead", "--request-id", "queued", "--body", "next head input")
+	if queued.Status != "QUEUED" || queued.RevivedWorkerSessionId != nil || queued.Reason != nil {
+		t.Fatal("pending chain branched")
+	}
+	if other := f.cliSend(t, otherLane, "other-lead", "--request-id", "unrelated", "--body", "independent inbox"); other.Status != "QUEUED" {
+		t.Fatal("unrelated admission failed")
+	}
+	clock.SetTick(60)
+	status, raw := f.request(t, http.MethodGet, "/messages/"+page.Messages[0].MessageId, nil, nil)
+	var expired api.AgentMessage
+	if status != http.StatusOK || json.Unmarshal(raw, &expired) != nil || expired.Status != "EXPIRED" {
+		t.Fatalf("pending admission blocked expiry: %d %s", status, raw)
+	}
+	assertReviveWaitsForAdmission(t, result, revival)
+	gate.unblock.Do(func() { close(gate.release) })
+	assertExpiredReviveOutcome(t, f, lead, revival, result, before)
+	close(revival.release)
+	for _, id := range []string{"lane", "other-lane", "other-lead"} {
+		f.endWorker(t, id)
+	}
+	f.server.Close(t)
+}
+
+func assertExpiredReviveOutcome(t *testing.T, f *fixture, lead map[string]string, revival *workerGate, result <-chan api.AgentMessage, before map[string][]api.FactoryEvent) {
+	t.Helper()
+	var message api.AgentMessage
+	select {
+	case message = <-result:
+	case <-time.After(15 * time.Second):
+		t.Fatal("pending send did not finish")
+	}
+	if message.Status != "EXPIRED" || message.RevivedWorkerSessionId == nil || message.Reason != nil {
+		t.Fatal("admitted outcome regressed expiry or lost delivery facts")
+	}
+	copy := message
+	copy.Status = "DELIVERED_REVIVE"
+	assertReviveAdmission(t, f, revival, copy, lead)
+	page := readPage(t, f, "/messages?threadId="+message.ThreadId, nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], message) {
+		t.Fatal("send outcome differs from durable read after concurrent expiry")
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane", "other-lead", "other-lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("pending delivery changed canonical Factory Events")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("pending retries or sends branched continuation")
+	default:
+	}
+}
+
+func TestLaterSendResolvesNewestEndedHeadAndOrderedBatch(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 2), requests: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	first := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", "first input")
+	head := assertReviveAdmission(t, f, revival, first, lead)
+	queued := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second input")
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	// Story 001 exercises delivery on a later authorized send. Automatic
+	// delivery at the head's end is the retained story 002 lifecycle witness.
+	third := f.cliSend(t, lane, "lead", "--request-id", "third", "--body", "third input")
+	batch := third
+	batch.Body = queued.Body + "\n\n" + third.Body
+	newHead := assertReviveAdmission(t, f, revival, batch, head)
+	f.waitEndedWorker(t, newHead["YOU_WORKER_SESSION_ID"])
+	assertContinuationLinks(t, f, head["YOU_WORKER_SESSION_ID"], newHead["YOU_WORKER_SESSION_ID"])
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 3 || page.Messages[0].MessageId != first.MessageId ||
+		page.Messages[1].MessageId != queued.MessageId || page.Messages[2].MessageId != third.MessageId ||
+		page.Messages[1].RevivedWorkerSessionId == nil || *page.Messages[1].RevivedWorkerSessionId != newHead["YOU_WORKER_SESSION_ID"] {
+		t.Fatal("ordered batch invented or lost an original message")
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("follow-on-head delivery changed canonical Factory Events")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("batch started another continuation")
+	default:
+	}
+}
+
+func assertContinuationLinks(t *testing.T, f *fixture, source, successor string) {
+	t.Helper()
+	for _, id := range []string{source, successor} {
+		status, raw := f.request(t, http.MethodGet, "/worker-sessions/"+id, nil, nil)
+		var observation api.WorkerSessionObservation
+		if status != http.StatusOK || json.Unmarshal(raw, &observation) != nil {
+			t.Fatal("missing continuation observation")
+		}
+		if id == source && (observation.SuccessorWorkerSessionId == nil || *observation.SuccessorWorkerSessionId != successor) {
+			t.Fatal("later send branched from stale source")
+		}
+		if id == successor && (observation.PredecessorWorkerSessionId == nil || *observation.PredecessorWorkerSessionId != source) {
+			t.Fatal("batch did not use newest ended head")
+		}
+	}
+}
+
+func TestReviveAliasSurvivesReconstructionWithFreshCaller(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), t.TempDir()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, home, dir, "", edges.Edges{}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	message := f.cliSend(t, lane, "lead", "--request-id", "original", "--body", "persist normalized input")
+	head := assertReviveAdmission(t, f, revival, message, lead)
+	alias := f.cliSend(t, lane, "lead", "--request-id", "alias", "--body", "persist normalized input")
+	if !reflect.DeepEqual(alias, message) {
+		t.Fatal("body alias changed admitted delivery")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	second := startHost(t, home, dir, "", "lane-next")
+	// Only the existing public Worker Sessions continuation contract restores
+	// this caller. Historical execution tokens must remain unusable.
+	status, raw := second.request(t, http.MethodPost, "/worker-sessions/lane/continue", map[string]any{
+		"resolveHead": true, "requestId": "sender-next-visit", "successorWorkerSessionId": "lane-next", "followUpInput": "authorized later visit",
+	}, nil)
+	if status != http.StatusAccepted {
+		t.Fatalf("sender continuation after restart: %d %s", status, raw)
+	}
+	var caller map[string]string
+	select {
+	case caller = <-second.runner.workers["lane-next"].started:
+	case <-time.After(15 * time.Second):
+		t.Fatal("new sender did not start")
+	}
+	if caller["YOU_WORKER_SESSION_TOKEN"] == "" || caller["YOU_WORKER_SESSION_TOKEN"] == lane["YOU_WORKER_SESSION_TOKEN"] {
+		t.Fatal("reconstruction reused expired execution credentials")
+	}
+	request := map[string]any{"requestId": "alias", "to": map[string]string{"workerSessionId": "lead"}, "body": "persist normalized input"}
+	// The archived caller retains its original owner correlation; rebuilding
+	// the host does not reopen that Factory Session. Observe this host's live
+	// canonical stream rather than claiming the archived session is running.
+	before := second.server.GetFactoryEvents(t)
+	if retry := second.send(t, request, caller); !reflect.DeepEqual(retry, message) {
+		t.Fatal("reconstructed alias changed original delivery")
+	}
+	assertError(t, second, http.MethodPost, "/messages", request, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	request["body"] = "changed alias input"
+	assertError(t, second, http.MethodPost, "/messages", request, caller, http.StatusConflict, "MESSAGE_REQUEST_CONFLICT")
+	page := readPage(t, second, "/messages", nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], message) {
+		t.Fatal("reconstructed alias created a new public message")
+	}
+	if after := second.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+		t.Fatal("alias retry changed canonical Factory Events")
+	}
+	second.endWorker(t, "lane-next")
+	second.server.Close(t)
 }
 
 func TestConcurrentMessagesUseOneSuccessorAndStableRequest(t *testing.T) {

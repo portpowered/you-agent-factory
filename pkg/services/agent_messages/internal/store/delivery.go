@@ -211,14 +211,16 @@ func (j *Journal) validateIntentOutcome(intent DeliveryIntent, changed map[strin
 		}
 		expected := old
 		if intent.State == IntentAccepted {
-			expected.Message.Status = agentmessages.DeliveredRevive
+			if old.Message.Status == agentmessages.Queued {
+				expected.Message.Status = agentmessages.DeliveredRevive
+			}
 			expected.Message.Reason = ""
 			expected.Message.RevivedWorkerSessionID = intent.SuccessorWorkerSessionID
 			expected.Message.To.DeliveredWorkerSessionID = intent.SuccessorWorkerSessionID
 		} else {
 			expected.Message.Reason = intent.Reason
 		}
-		if old.Message.Status != agentmessages.Queued || !reflect.DeepEqual(expected, next) {
+		if old.Message.RevivedWorkerSessionID != "" || !reflect.DeepEqual(expected, next) {
 			return ErrInvalidTransaction
 		}
 	}

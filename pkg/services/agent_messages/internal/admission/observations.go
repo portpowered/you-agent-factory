@@ -54,6 +54,9 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 }
 
 func observationKind(kind string, entry store.Entry) string {
+	if kind == store.ReviveOutcome && entry.Message.RevivedWorkerSessionID != "" {
+		return string(agentmessages.DeliveredRevive)
+	}
 	if (kind == store.DeliveryUpdated || kind == store.ReviveOutcome) && entry.Message.Status == agentmessages.Queued {
 		return store.DeliveryUpdated
 	}

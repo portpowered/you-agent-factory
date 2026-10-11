@@ -140,6 +140,11 @@ func (e *Engine) followRecord(ctx context.Context, request agentmessages.ListReq
 }
 
 func validObservationKind(observation agentmessages.Observation) bool {
+	if observation.Kind == string(agentmessages.DeliveredRevive) {
+		m := observation.Message
+		return m.Status != agentmessages.Queued && m.Reason == "" && m.RevivedWorkerSessionID != "" &&
+			m.To.DeliveredWorkerSessionID == m.RevivedWorkerSessionID
+	}
 	if observation.Kind == store.DeliveryUpdated {
 		return observation.Message.Status == agentmessages.Queued && observation.Message.Reason != ""
 	}

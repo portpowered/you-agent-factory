@@ -14,6 +14,7 @@ import (
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 type observationAppender struct {
@@ -109,6 +110,45 @@ func TestObservationsFollowDurableSendReplyAndRead(t *testing.T) {
 	if child.RecordID != parent.RecordID || child.Sequence != parent.Sequence || child.Message.InReplyTo != first.MessageID ||
 		child.Message.ThreadID != first.ThreadID || parent.Message.RepliedByMessageID != reply.MessageID {
 		t.Fatal("atomic reply observations lost their common commit or relationship")
+	}
+}
+
+func TestReviveOutcomePublishesDeliveryWithoutRegressingInbox(t *testing.T) {
+	t.Parallel()
+	for _, status := range []agentmessages.Status{agentmessages.Read, agentmessages.Replied, agentmessages.Expired} {
+		t.Run(string(status), func(t *testing.T) {
+			t.Parallel()
+			f := newEngineFixture()
+			a := &observationAppender{}
+			f.engine.events = a
+			a.before = func(_ context.Context, r events.AppendRequest) { assertObservationCommitted(t, f.ledger, r) }
+			recipient := f.authority.recipients["lead"]
+			recipient.Observation.State, recipient.Observation.Revivable = "COMPLETED", true
+			f.authority.recipients["lead"] = recipient
+			f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+				// Model the ledger's independently committed read/reply/expiry
+				// while admission waits, without composing another component.
+				f.engine.mu.Lock()
+				f.ledger.entries[0].Message.Status = status
+				if status == agentmessages.Replied {
+					f.ledger.entries[0].Message.RepliedByMessageID = "reply"
+				}
+				f.ledger.sequence++
+				f.engine.mu.Unlock()
+				return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+					SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+			}
+			got, err := f.engine.Send(t.Context(), engineRequest("ask", "safe input"), f.caller, "")
+			if err != nil || got.Status != status || got.RevivedWorkerSessionID == "" ||
+				(status == agentmessages.Replied && got.RepliedByMessageID != "reply") {
+				t.Fatal("admission outcome lost newer inbox state", got, err)
+			}
+			observations := decodedObservations(t, a)
+			assertObservationKinds(t, observations, []string{store.Sent, string(agentmessages.DeliveredRevive)})
+			if observations[1].Message != got || !validObservationKind(observations[1]) {
+				t.Fatal("delivered observation lost monotonic state or cannot follow")
+			}
+		})
 	}
 }
 

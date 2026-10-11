@@ -276,6 +276,8 @@ func TestConcurrentSendsQueueAgainstAdmittedHead(t *testing.T) {
 	f.authority.recipients["lead"] = recipient
 	calls := 0
 	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		f.engine.mu.Lock()
+		defer f.engine.mu.Unlock()
 		calls++
 		head := recipient
 		head.Observation.WorkerSessionID, head.Observation.State = req.SuccessorWorkerSessionID, workersessions.StateRunning
