@@ -96,3 +96,33 @@ func TestAgentMessageRepresentationsAcceptQueueMilestone(t *testing.T) {
 		t.Fatal("schema accepted an operator sender")
 	}
 }
+
+func TestAgentMessageStreamErrorsMatchPublishedAndGeneratedContracts(t *testing.T) {
+	t.Parallel()
+	schema := loadValidatedOpenAPIContract(t).Components.Schemas["ErrorResponse"].Value
+	for _, code := range []factoryapi.ErrorResponseCode{
+		factoryapi.ErrorResponseCodeMESSAGESTREAMUNAVAILABLE,
+		factoryapi.ErrorResponseCodeMESSAGESTREAMGAP,
+		factoryapi.ErrorResponseCodeMESSAGESTREAMBACKPRESSURE,
+	} {
+		family := factoryapi.ErrorFamilyInternalServerError
+		if code == factoryapi.ErrorResponseCodeMESSAGESTREAMGAP {
+			family = factoryapi.ErrorFamilyGone
+		}
+		encoded, err := json.Marshal(factoryapi.ErrorResponse{Code: code, Message: string(code), Family: family})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var value any
+		if err := json.Unmarshal(encoded, &value); err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.VisitJSON(value); err != nil {
+			t.Fatalf("stream error violates public schema: %v", err)
+		}
+		var client generatedclient.ErrorResponse
+		if err := json.Unmarshal(encoded, &client); err != nil || string(client.Code) != string(code) || string(client.Family) != string(family) {
+			t.Fatalf("generated client lost stream failure: %+v %v", client, err)
+		}
+	}
+}

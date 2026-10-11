@@ -6348,6 +6348,9 @@ components:
             - MESSAGING_DISABLED
             - MESSAGE_STORE_UNAVAILABLE
             - MESSAGE_STORE_CORRUPT
+            - MESSAGE_STREAM_UNAVAILABLE
+            - MESSAGE_STREAM_GAP
+            - MESSAGE_STREAM_BACKPRESSURE
           x-enum-descriptions:
             - A Work Request conflicts with an already reserved explicit Work ID.
             - Request payload or parameter validation failed.
@@ -6428,6 +6431,9 @@ components:
             - Messaging is disabled.
             - The message store could not durably commit the operation.
             - The message store contains invalid committed data.
+            - The process-local Agent Message observation stream is unavailable.
+            - Agent Message observation history has a retention gap; pull the durable inbox again.
+            - The Agent Message observation subscriber exceeded its bounded pending capacity.
         targets:
           type: array
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.

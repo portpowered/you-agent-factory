@@ -11454,6 +11454,12 @@ export const ErrorResponseCode = {
   MESSAGE_STORE_UNAVAILABLE: "MESSAGE_STORE_UNAVAILABLE",
   // The message store contains invalid committed data.
   MESSAGE_STORE_CORRUPT: "MESSAGE_STORE_CORRUPT",
+  // The process-local Agent Message observation stream is unavailable.
+  MESSAGE_STREAM_UNAVAILABLE: "MESSAGE_STREAM_UNAVAILABLE",
+  // Agent Message observation history has a retention gap; pull the durable inbox again.
+  MESSAGE_STREAM_GAP: "MESSAGE_STREAM_GAP",
+  // The Agent Message observation subscriber exceeded its bounded pending capacity.
+  MESSAGE_STREAM_BACKPRESSURE: "MESSAGE_STREAM_BACKPRESSURE",
 } as const;
 export type ErrorResponseCode =
   (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];

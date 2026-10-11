@@ -3,6 +3,8 @@
 package agentmessage
 
 import (
+	"math"
+
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -72,6 +74,18 @@ func (mapper Mapper) Page(input agentmessages.Page) factoryapi.AgentMessageListR
 		result.Messages = append(result.Messages, mapper.Message(message))
 	}
 	return result
+}
+
+// Observation preserves the source-native envelope without reusing a Factory
+// Event or silently overflowing the generated integer representation.
+func (mapper Mapper) Observation(input agentmessages.Observation) (factoryapi.AgentMessageObservation, error) {
+	if input.Sequence > uint64(math.MaxInt) {
+		return factoryapi.AgentMessageObservation{}, agentmessages.ErrStreamUnavailable
+	}
+	return factoryapi.AgentMessageObservation{
+		RecordId: input.RecordID, Sequence: int(input.Sequence),
+		Kind: factoryapi.AgentMessageObservationKind(input.Kind), Message: mapper.Message(input.Message),
+	}, nil
 }
 
 func value[T ~string](input *T) string {
