@@ -103,7 +103,7 @@ func (s *service) reusableOrRefreshGenericRuntime(
 	metadataFiles []metadataFile,
 	backendMetadata *runtimeBackendMetadata,
 ) (assets.RuntimeCacheInspection, bool, error) {
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return assets.RuntimeCacheInspection{}, false, err
 	}
 	if err := s.removeStaleGenericRuntimeStages(cacheDirectory, modelName, revision); err != nil {
@@ -250,7 +250,7 @@ func (s *service) stageGenericRuntimePublication(
 	backend *runtimeBackendMetadata,
 ) error {
 	for index := range result.artifacts {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return err
 		}
 		target := filepath.Join(publication.stagePath, filepath.FromSlash(metadataFiles[index].Path))
@@ -278,7 +278,7 @@ func (s *service) stageGenericRuntimePublication(
 	if err := s.writeFile(publication.metadataStagePath, body, 0o644); err != nil {
 		return interruptedAssetError("stage managed runtime metadata", err)
 	}
-	return assetContextError(ctx)
+	return AssetContextError(ctx)
 }
 
 func (s *service) commitGenericRuntimePublication(
@@ -298,7 +298,7 @@ func (s *service) commitGenericRuntimePublication(
 		return fmt.Errorf("%w: publish managed runtime snapshot: %v", models.ErrAssetPreparationInterrupted, err)
 	}
 	publication.finalPromoted = true
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return err
 	}
 	if err := s.renamePath(publication.metadataStagePath, publication.metadataPath); err != nil {
@@ -681,7 +681,7 @@ func (s *service) inspectGenericRuntimeFiles(
 	observed := make([]models.AssetArtifact, 0, len(files))
 	missing := make([]string, 0)
 	for _, file := range files {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return nil, nil, "", err
 		}
 		artifact, verifyErr := s.verifyCachedFile(
@@ -892,7 +892,7 @@ func (s *service) readGenericRuntimeMetadata(
 	ctx context.Context,
 	path string,
 ) (cacheMetadata, bool, error) {
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return cacheMetadata{}, false, err
 	}
 	body, err := s.readFile(path)

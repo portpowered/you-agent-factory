@@ -24,7 +24,7 @@ func (s *Service) measureDirectoryBytes(ctx context.Context, directory string) (
 	if err := s.checkContext(ctx); err != nil {
 		return 0, err
 	}
-	entries, err := s.files.ReadDirectory(directory)
+	entries, err := s.readDirectory(directory)
 	if err != nil {
 		return 0, fmt.Errorf("read managed cache revision %q: %w", directory, err)
 	}

@@ -16,7 +16,9 @@ import (
 
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/reclamation"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -731,7 +733,7 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 		},
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, mustServiceTestLockingService(),
+		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, mustServiceTestLockingService(), newTestReclamation(mustServiceTestLockingService()),
 	).(*service)
 }
 
@@ -961,3 +963,7 @@ type timeoutTestError struct{}
 func (timeoutTestError) Error() string   { return "timeout" }
 func (timeoutTestError) Timeout() bool   { return true }
 func (timeoutTestError) Temporary() bool { return true }
+
+func newTestReclamation(coordination modelseffects.AssetStagingCoordination) reclamation.Policy {
+	return reclamation.New(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, os.Remove, coordination, ManagedSources{}, AssetContextError)
+}

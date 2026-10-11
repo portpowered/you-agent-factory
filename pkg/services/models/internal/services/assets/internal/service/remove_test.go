@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/reclamation"
 )
 
 func TestRemoveModelAssetsRemovesGenericManagedRevisionAndPreservesSiblings(t *testing.T) {
@@ -200,6 +201,7 @@ func TestRemoveModelAssetsReclamationFailureHasNoSuccessByteFields(t *testing.T)
 		}
 		return removePath(path)
 	}
+	service.reclamation = reclamation.New(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, service.removePath, service.coordination, ManagedSources{}, AssetContextError)
 	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
 		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
 	})
@@ -527,6 +529,7 @@ func TestRemoveModelAssetsHonorsCancellationAndRemovalFailure(t *testing.T) {
 		}
 		return os.Remove(path)
 	}
+	failedService.reclamation = reclamation.New(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, failedService.removePath, failedService.coordination, ManagedSources{}, AssetContextError)
 	if _, err := failedService.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
 		Scope: ref,
 		Name:  "OMNIVOICE_Q4_K_M",

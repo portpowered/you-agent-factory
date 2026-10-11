@@ -286,10 +286,11 @@ func provideModelAssets(scopes modelswire.RuntimeScopes, platform models.AssetHo
 	home modelswire.AssetResolveHomeDirectory, write modelswire.AssetWriteFile, rename modelswire.AssetRenamePath,
 	remove modelswire.AssetRemovePath, read modelswire.AssetReadFile, readDir modelswire.AssetReadDirectory,
 	create modelswire.AssetCreateFile, open modelswire.AssetOpenFile, env modelswire.AssetResolveEnvironment,
-	revision modelAssetRevisionResolver, coordination modelswire.AssetStagingCoordination) (modelswire.Assets, error) {
+	revision modelAssetRevisionResolver, coordination modelswire.AssetStagingCoordination,
+	reclamationPolicy modelswire.CacheReclamation) (modelswire.Assets, error) {
 
 	return modelswire.NewAssets(scopes, platform, client, endpoints, mkdir, stat, home, write, rename, remove,
-		read, readDir, create, open, env, revision, coordination)
+		read, readDir, create, open, env, revision, coordination, reclamationPolicy)
 }
 func provideModelSlotFacts(state *modelswire.SlotState, scopes modelswire.RuntimeScopes, assets modelswire.Assets) modelswire.SlotFactsProvider {
 	return modelswire.NewSlotFacts(scopes, assets, state)

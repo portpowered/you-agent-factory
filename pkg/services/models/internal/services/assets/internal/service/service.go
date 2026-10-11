@@ -51,7 +51,7 @@ type service struct {
 
 	preparedRuntimeMu sync.RWMutex
 	preparedRuntime   map[string]assets.RuntimeCacheInspection
-	reclamation       *reclamation.Service
+	reclamation       reclamation.Policy
 }
 
 type assetSpec struct {
@@ -91,8 +91,9 @@ func New(
 	resolveEnvironment modelseffects.AssetResolveEnvironment,
 	resolveRevision func(context.Context, string) (string, error),
 	coordination modelseffects.AssetStagingCoordination,
+	reclamationPolicy reclamation.Policy,
 ) assets.Service {
-	instance := &service{
+	return &service{
 		scopes:             scopes,
 		platform:           platform,
 		client:             client,
@@ -114,9 +115,8 @@ func New(
 		activePulls:        make(map[string]activePullState),
 		pullFailure:        make(map[string]string),
 		preparedRuntime:    make(map[string]assets.RuntimeCacheInspection),
+		reclamation:        reclamationPolicy,
 	}
-	instance.reclamation = reclamation.New(instance, instance.coordination, instance, assetContextError)
-	return instance
 }
 
 func (s *service) InspectModelAssets(
@@ -134,7 +134,7 @@ func (s *service) InspectModelAssets(
 	if err != nil {
 		return models.InspectModelAssetsResult{}, err
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return models.InspectModelAssetsResult{}, err
 	}
 
@@ -276,7 +276,7 @@ func (s *service) invalidRuntimeCacheInspection(
 	isActive bool,
 	pullFailure string,
 ) (assets.RuntimeCacheInspection, error) {
-	if contextErr := assetContextError(ctx); contextErr != nil {
+	if contextErr := AssetContextError(ctx); contextErr != nil {
 		return assets.RuntimeCacheInspection{}, contextErr
 	}
 	return s.applyActivePullFacts(assets.RuntimeCacheInspection{
@@ -597,7 +597,7 @@ func (s *service) resolveScope(
 	ctx context.Context,
 	ref models.RuntimeScopeRef,
 ) (models.RuntimeScopeConfig, error) {
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return models.RuntimeScopeConfig{}, err
 	}
 	if ref.IsZero() {
@@ -735,7 +735,7 @@ func (s *service) readMetadata(
 	ctx context.Context,
 	path string,
 ) (cacheMetadata, bool, error) {
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return cacheMetadata{}, false, err
 	}
 	body, err := s.readFile(path)
@@ -779,7 +779,7 @@ func (s *service) inspectRevision(
 	}
 	artifacts := make([]models.AssetArtifact, 0, len(spec.requiredArtifacts))
 	for _, name := range spec.requiredArtifacts {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return missingSnapshot(spec.modelName, source), false, err
 		}
 		info, err := s.inspectPath(filepath.Join(revisionPath, filepath.FromSlash(name)))
@@ -807,7 +807,7 @@ func (s *service) discoverRevision(
 	spec assetSpec,
 	source models.SourceMetadata,
 ) (models.AssetSnapshot, bool, error) {
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return missingSnapshot(spec.modelName, source), false, err
 	}
 	entries, err := s.readDirectory(root)
@@ -935,7 +935,7 @@ func scopeError(err error) error {
 	}
 }
 
-func assetContextError(ctx context.Context) error {
+func AssetContextError(ctx context.Context) error {
 	if ctx == nil || ctx.Err() == nil {
 		return nil
 	}

@@ -95,6 +95,7 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 				test.create,
 				test.open,
 				func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination,
+				modelswire.NewCacheReclamation(readDirectory, readFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, inspect, os.Remove, coordination, modelswire.NewManagedSources(), modelswire.NewReclamationContextError()),
 			)
 			if test.wantError {
 				if service != nil || err == nil {

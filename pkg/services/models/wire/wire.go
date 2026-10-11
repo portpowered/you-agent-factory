@@ -272,6 +272,7 @@ func NewAssets(
 	readDirectory AssetReadDirectory, createFile AssetCreateFile, openFile AssetOpenFile,
 	resolveEnvironment AssetResolveEnvironment, resolveRevision func(context.Context, string) (string, error),
 	coordination AssetStagingCoordination,
+	reclamationPolicy CacheReclamation,
 ) (Assets, error) {
 	if err := validateAssetConstructionEffects(client, makeDirectories, inspectPath, resolveHome, writeFile,
 		renamePath, removePath, readFile, readDirectory, createFile, openFile); err != nil {
@@ -284,7 +285,7 @@ func NewAssets(
 		return nil, fmt.Errorf("Models Assets staging coordination is required")
 	}
 	return assetswire.NewService(scopes, platform, client, endpoints, makeDirectories, inspectPath, resolveHome,
-		writeFile, renamePath, removePath, readFile, readDirectory, createFile, openFile, resolveEnvironment, resolveRevision, coordination)
+		writeFile, renamePath, removePath, readFile, readDirectory, createFile, openFile, resolveEnvironment, resolveRevision, coordination, reclamationPolicy)
 }
 
 func validateAssetConstructionEffects(client AssetHTTPDoer, mkdir AssetMakeDirectories, inspect AssetInspectPath,
@@ -372,4 +373,21 @@ func NewInference(scopes RuntimeScopes, assets Assets, catalog Catalog, host Run
 		return nil, fmt.Errorf("construct Models: process clock is required")
 	}
 	return inferencewire.NewService(scopes, assets, catalog, host, runtime, registrar, now, executionDeadline)
+}
+
+// CacheReclamation exposes the owner-private completed policy to canonical Wire.
+type CacheReclamation = assetswire.CacheReclamation
+type ManagedSourceIdentity = assetswire.ManagedSourceIdentity
+type ReclamationContextError = assetswire.ReclamationContextError
+
+func NewManagedSources() ManagedSourceIdentity { return assetswire.NewManagedSources() }
+func NewReclamationContextError() ReclamationContextError {
+	return assetswire.NewReclamationContextError()
+}
+func NewCacheReclamation(
+	readDirectory AssetReadDirectory, readFile AssetReadFile, openFile AssetOpenFile,
+	inspectPath AssetInspectPath, removePath AssetRemovePath, coordination AssetStagingCoordination,
+	sources ManagedSourceIdentity, contextError ReclamationContextError,
+) CacheReclamation {
+	return assetswire.NewCacheReclamation(readDirectory, readFile, openFile, inspectPath, removePath, coordination, sources, contextError)
 }

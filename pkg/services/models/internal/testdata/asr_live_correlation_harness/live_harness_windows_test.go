@@ -557,7 +557,7 @@ func newASRLiveCorrelationModelsService(
 		func() (string, error) { return manifest.StateRoot, nil }, os.WriteFile, os.Rename, os.Remove, os.ReadFile, os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Getenv,
-		modelswire.NewUnresolvedAssetRevisionResolver(), coordination)
+		modelswire.NewUnresolvedAssetRevisionResolver(), coordination, modelswire.NewCacheReclamation(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, os.Remove, coordination, modelswire.NewManagedSources(), modelswire.NewReclamationContextError()))
 	if err != nil {
 		t.Fatalf("construct assets: %v", err)
 	}

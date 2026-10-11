@@ -717,7 +717,7 @@ func composeModelsService(
 		return nil, err
 	}
 	assetService, err := NewAssets(runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat, assetHome,
-		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen, resolveEnvironment, revisionResolver, assetCoordination)
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen, resolveEnvironment, revisionResolver, assetCoordination, NewCacheReclamation(assetReadDir, assetReadFile, assetOpen, assetStat, assetRemove, assetCoordination, NewManagedSources(), NewReclamationContextError()))
 	if err != nil {
 		return nil, err
 	}

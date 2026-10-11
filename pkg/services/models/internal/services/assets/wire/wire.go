@@ -8,6 +8,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/reclamation"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
@@ -31,6 +32,7 @@ func NewService(
 	resolveEnvironment modelseffects.AssetResolveEnvironment,
 	resolveRevision func(context.Context, string) (string, error),
 	coordination modelseffects.AssetStagingCoordination,
+	reclamationPolicy CacheReclamation,
 ) (assets.Service, error) {
 	if platform.OperatingSystem == "" || platform.Architecture == "" {
 		return nil, fmt.Errorf("Models Assets host platform is required")
@@ -53,6 +55,26 @@ func NewService(
 		readDirectory,
 		createFile,
 		openFile,
-		resolveEnvironment, resolveRevision, coordination,
+		resolveEnvironment, resolveRevision, coordination, reclamationPolicy,
 	), nil
+}
+
+// CacheReclamation is the completed private cache policy.
+type CacheReclamation = reclamation.Policy
+type ManagedSourceIdentity = reclamation.SourceIdentity
+type ReclamationContextError func(context.Context) error
+
+func NewManagedSources() ManagedSourceIdentity            { return internalservice.ManagedSources{} }
+func NewReclamationContextError() ReclamationContextError { return internalservice.AssetContextError }
+func NewCacheReclamation(
+	readDirectory modelseffects.AssetReadDirectory,
+	readFile modelseffects.AssetReadFile,
+	openFile modelseffects.AssetOpenFile,
+	inspectPath modelseffects.AssetInspectPath,
+	removePath modelseffects.AssetRemovePath,
+	coordination modelseffects.AssetStagingCoordination,
+	sources ManagedSourceIdentity,
+	contextError ReclamationContextError,
+) CacheReclamation {
+	return reclamation.New(readDirectory, readFile, openFile, inspectPath, removePath, coordination, sources, contextError)
 }

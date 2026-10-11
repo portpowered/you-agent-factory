@@ -65,7 +65,7 @@ func (s *service) acquireGenericCache(
 		}
 		select {
 		case <-ctx.Done():
-			return genericCacheResult{}, assetContextError(ctx)
+			return genericCacheResult{}, AssetContextError(ctx)
 		case <-done:
 			return call.result, call.err
 		}
@@ -110,7 +110,7 @@ func (s *service) acquireGenericCacheOnce(
 		}
 	}
 	s.addGenericURLs(source, artifacts)
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return genericCacheResult{}, err
 	}
 	lock, lockErr := s.lockGenericCache(ctx, kind, source, artifacts, roots)
@@ -168,7 +168,7 @@ func (s *service) inspectGenericCache(
 	missing := make([]genericArtifact, 0)
 	identity := genericArtifactIdentityHash(kind, source, artifacts)
 	for _, artifact := range artifacts {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return cached, append(missing, artifact), err
 		}
 		found, ok, err := s.findGenericArtifact(ctx, kind, source, identity, artifact, roots)
@@ -288,7 +288,7 @@ func (s *service) findGenericArtifact(
 ) (genericCachePath, bool, error) {
 	for _, root := range roots {
 		for _, candidate := range genericCandidatePaths(root, kind, source, identity, artifact.requirement.Name) {
-			if err := assetContextError(ctx); err != nil {
+			if err := AssetContextError(ctx); err != nil {
 				return genericCachePath{}, false, err
 			}
 			info, err := s.inspectPath(candidate)
@@ -297,7 +297,7 @@ func (s *service) findGenericArtifact(
 			}
 			actual, err := s.fileSHA256(ctx, candidate)
 			if err != nil {
-				if contextErr := assetContextError(ctx); contextErr != nil {
+				if contextErr := AssetContextError(ctx); contextErr != nil {
 					return genericCachePath{}, false, contextErr
 				}
 				continue
@@ -376,7 +376,7 @@ func (s *service) publishGenericCache(
 			"stage asset metadata", err,
 		)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, published), err
 	}
 	backupPath, hadExisting, err := s.moveExistingGenericSnapshot(finalPath)
@@ -560,7 +560,7 @@ func (s *service) stageGenericArtifacts(
 		published[name] = artifact
 	}
 	for _, artifact := range missing {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return published, err
 		}
 		path := filepath.Join(stagePath, filepath.FromSlash(artifact.requirement.Name))
@@ -732,7 +732,7 @@ func (s *service) downloadGenericArtifact(
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return models.AssetArtifact{}, contextErr
 		}
 		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
@@ -875,7 +875,7 @@ func (s *service) lockAssetStaging(ctx context.Context, path string) (io.Closer,
 	}
 	lock, err := s.coordination.Lock(ctx, path)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return nil, contextErr
 		}
 		return nil, pullsupport.WrapPullStage(
@@ -883,7 +883,7 @@ func (s *service) lockAssetStaging(ctx context.Context, path string) (io.Closer,
 			interruptedAssetError("acquire asset staging ownership", err),
 		)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		_ = lock.Close()
 		return nil, err
 	}

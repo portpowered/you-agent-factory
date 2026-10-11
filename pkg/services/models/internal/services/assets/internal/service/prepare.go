@@ -99,7 +99,7 @@ func (s *service) prepareModelAssets(
 		return models.PrepareModelAssetsResult{}, err
 	}
 	s.updateActivePull(request.Scope, request.Name, assetRequirementsForSpec(spec), "")
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
 
@@ -171,7 +171,7 @@ func (s *service) inspectManifestCache(
 	}
 	artifacts := make([]models.AssetArtifact, 0, len(manifest.files))
 	for _, remote := range manifest.files {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return unavailableSnapshot(
 				spec.modelName, source, manifest.revision, artifacts,
 			), false, err
@@ -222,7 +222,7 @@ func (s *service) inspectVerifiedCache(
 	artifacts := make([]models.AssetArtifact, 0, len(spec.requiredArtifacts))
 	verified := true
 	for _, name := range spec.requiredArtifacts {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return unavailableSnapshot(spec.modelName, source, revision, artifacts), false, err
 		}
 		expected, ok := metadataByName[name]
@@ -308,7 +308,7 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return remoteManifest{}, contextErr
 		}
 		return remoteManifest{}, pullsupport.WrapPullDiagnostics(
@@ -317,11 +317,11 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 		)
 	}
 	defer response.Body.Close()
-	if contextErr := assetContextError(ctx); contextErr != nil {
+	if contextErr := AssetContextError(ctx); contextErr != nil {
 		return remoteManifest{}, contextErr
 	}
 	if response.StatusCode != http.StatusOK {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return remoteManifest{}, contextErr
 		}
 		diagnostics.UpstreamStatusCode = response.StatusCode
@@ -332,7 +332,7 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 	}
 	var payload upstreamModel
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return remoteManifest{}, contextErr
 		}
 		diagnostics.Operation = "decode model asset manifest"
@@ -425,7 +425,7 @@ func (s *service) publishManifest(
 
 	artifacts := make([]models.AssetArtifact, 0, len(manifest.files))
 	for _, remote := range manifest.files {
-		if err := assetContextError(ctx); err != nil {
+		if err := AssetContextError(ctx); err != nil {
 			return failedSnapshot(spec.modelName, source, manifest.revision, artifacts), err
 		}
 		created = append(created, remote.path)
@@ -435,14 +435,14 @@ func (s *service) publishManifest(
 		}
 		artifacts = append(artifacts, artifact)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts), err
 	}
 	if err := s.writeMetadata(metadataStagePath, spec, manifest); err != nil {
 		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts),
 			interruptedAssetError("stage asset metadata", err)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return failedSnapshot(spec.modelName, source, manifest.revision, artifacts), err
 	}
 	promoted, err = s.promoteAttempt(
@@ -501,7 +501,7 @@ func (s *service) promoteAttempt(
 			interruptedAssetError("publish verified asset revision", err),
 		)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return true, err
 	}
 	if err := s.renamePath(metadataStagePath, metadataPath); err != nil {
@@ -547,7 +547,7 @@ func (s *service) downloadFile(
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return models.AssetArtifact{}, contextErr
 		}
 		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
@@ -602,14 +602,14 @@ func (s *service) downloadFile(
 }
 
 func validateDownloadResponse(ctx context.Context, response *http.Response, assetPath string) error {
-	if contextErr := assetContextError(ctx); contextErr != nil {
+	if contextErr := AssetContextError(ctx); contextErr != nil {
 		return contextErr
 	}
 	if response.StatusCode == http.StatusOK {
 		return nil
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 512))
-	if contextErr := assetContextError(ctx); contextErr != nil {
+	if contextErr := AssetContextError(ctx); contextErr != nil {
 		return contextErr
 	}
 	return fmt.Errorf(
@@ -633,7 +633,7 @@ func copyStagedAsset(
 	)
 	closeErr := output.Close()
 	if copyErr != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return 0, "", contextErr
 		}
 		return 0, "", interruptedAssetError("write staged asset "+assetPath, copyErr)
@@ -641,7 +641,7 @@ func copyStagedAsset(
 	if closeErr != nil {
 		return 0, "", interruptedAssetError("close staged asset "+assetPath, closeErr)
 	}
-	if contextErr := assetContextError(ctx); contextErr != nil {
+	if contextErr := AssetContextError(ctx); contextErr != nil {
 		return 0, "", contextErr
 	}
 	return written, hex.EncodeToString(hasher.Sum(nil)), nil
@@ -739,7 +739,7 @@ type contextAssetReader struct {
 }
 
 func (reader contextAssetReader) Read(buffer []byte) (int, error) {
-	if err := assetContextError(reader.ctx); err != nil {
+	if err := AssetContextError(reader.ctx); err != nil {
 		return 0, err
 	}
 	return reader.input.Read(buffer)
