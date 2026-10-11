@@ -454,6 +454,55 @@ func TestWatchRejectsNegativeRetainedEventCount(t *testing.T) {
 	}
 }
 
+func TestWatchEndedRunDrainsRetainedUnfinishedCohort(t *testing.T) {
+	t.Parallel()
+	metadata := watchFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory", 0,
+		factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{
+			WorkTypes: &[]factoryapi.WorkType{{Name: "task", States: []factoryapi.WorkState{
+				{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "processing", Type: factoryapi.WorkStateTypePROCESSING},
+			}}},
+		}})
+	request := watchFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "request", 1,
+		factoryapi.WorkRequestEventPayload{Works: &[]factoryapi.Work{
+			{WorkId: watchStringPtr("work-b"), WorkTypeName: watchStringPtr("task"), State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL}},
+			{WorkId: watchStringPtr("work-a"), WorkTypeName: watchStringPtr("task"), State: &factoryapi.WorkState{Name: "ready", Type: factoryapi.WorkStateTypeINITIAL}},
+		}})
+	canceled := watchFactoryEvent(t, factoryapi.FactoryEventTypeDispatchResponse, "canceled", 2, factoryapi.DispatchResponseEventPayload{Outcome: factoryapi.WorkOutcomeCanceled})
+	ended := watchFactoryEvent(t, factoryapi.FactoryEventTypeRunResponse, "ended", 3, factoryapi.RunResponseEventPayload{})
+	transition := watchTransitionEvent(t, "move", 4, "work-b", "ready", "processing", false)
+	stream := &finiteWatchEventStream{events: []factoryapi.FactoryEvent{metadata, request, canceled, ended, transition}, retainedEventCount: 5}
+	var output bytes.Buffer
+	err := watchWithSource(WatchConfig{Context: t.Context(), Output: &output}, watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
+		return stream, nil
+	}), unexpectedReconnectWait)
+	if err == nil || !strings.Contains(err.Error(), "unfinished Work") || !strings.Contains(err.Error(), "work-a, work-b") {
+		t.Fatalf("finite outcome = %v", err)
+	}
+	if !stream.closed || stream.nextCalls != 5 {
+		t.Fatalf("stream closed=%v reads=%d, want drained retained head", stream.closed, stream.nextCalls)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	var line watchLine
+	if len(lines) != 1 || decodeWatchLine(lines[0], &line) != nil || line.EventID != "move" || line.Terminal {
+		t.Fatalf("canonical transition output=%q", output.String())
+	}
+}
+
+func TestWatchRecoveredDispatchSupersedesPriorCanceledRun(t *testing.T) {
+	t.Parallel()
+	r := newWatchReducer("session")
+	r.cohort["unfinished"] = watchWorkObservation{}
+	r.runEnded, r.interrupted = true, true
+	event := factoryapi.FactoryEvent{Type: factoryapi.FactoryEventTypeDispatchRequest}
+	if _, _, err := r.applyEvent(event); err != nil {
+		t.Fatal(err)
+	}
+	if r.UnfinishedError() != nil || r.Completed() {
+		t.Fatal("recovered dispatch inherited prior run completion")
+	}
+}
+
 type watchTestHTTPClock struct{}
 
 func (watchTestHTTPClock) Now() time.Time { return time.Unix(0, 0) }
@@ -505,6 +554,8 @@ func watchFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id s
 		err = union.FromDispatchResponseEventPayload(typed)
 	case factoryapi.WorkStateChangeEventPayload:
 		err = union.FromWorkStateChangeEventPayload(typed)
+	case factoryapi.RunResponseEventPayload:
+		err = union.FromRunResponseEventPayload(typed)
 	default:
 		t.Fatalf("unsupported watch test payload %T", payload)
 	}

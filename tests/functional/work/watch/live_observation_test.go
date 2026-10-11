@@ -24,10 +24,12 @@ import (
 // directory. No provider execution policy or process-global output mode changes.
 type observationCommandRouter struct{ routes sync.Map }
 type observationCommand struct {
-	arrived chan struct{}
-	release chan struct{}
-	once    sync.Once
-	result  platformprocess.CommandRunner
+	arrived  chan struct{}
+	release  chan struct{}
+	once     sync.Once
+	result   platformprocess.CommandRunner
+	canceled chan struct{}
+	join     chan struct{}
 }
 
 func (r *observationCommandRouter) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -41,6 +43,10 @@ func (r *observationCommandRouter) Run(ctx context.Context, req platformprocess.
 	case <-command.release:
 		return command.result.Run(ctx, req)
 	case <-ctx.Done():
+		if command.canceled != nil {
+			close(command.canceled)
+			<-command.join
+		}
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
 }
@@ -60,12 +66,102 @@ type liveObservation struct {
 func TestWorkWatchLiveProviderObservation(t *testing.T) {
 	ensureWatchFixture(t)
 	host := startSelectedWatchHost(t, observationWatchProcess)
+	t.Run("joined Session cancel leaves unfinished Work and finite diagnostic", func(t *testing.T) {
+		runJoinedSessionCancel(t, host)
+	})
 	t.Run("WATCH1 WATCH2 WATCH3 provider results and retained cohort", func(t *testing.T) {
 		runLiveProviderCohort(t, host)
 	})
 	t.Run("WATCH4 WATCH8 PEER1 cancellation leaves provider peer and cursor usable", func(t *testing.T) {
 		runLiveProviderPeer(t, host)
 	})
+}
+
+func runJoinedSessionCancel(t *testing.T, host *selectedWatchHost) {
+	t.Parallel()
+	s := newLiveObservation(t, host, true, false)
+	s.command.canceled, s.command.join = make(chan struct{}), make(chan struct{})
+	var joined sync.Once
+	releaseJoin := func() { joined.Do(func() { close(s.command.join) }) }
+	t.Cleanup(releaseJoin)
+	workID := s.submit(t, "held-cancel")
+	s.awaitCommand(t)
+	var before factoryapi.FactorySession
+	if err := json.Unmarshal([]byte(host.execute(t, "session", "show", s.session)), &before); err != nil {
+		t.Fatal(err)
+	}
+	if before.Runtime.Progress.InFlightCount != 1 {
+		t.Fatalf("started dispatch progress=%+v", before.Runtime)
+	}
+	cancelJoinedObservation(t, s, releaseJoin)
+	select {
+	case <-s.watch.Done():
+	case <-time.After(selectedWatchCeiling):
+		t.Fatal("finite watch did not finish after joined Session cancel")
+	}
+	if s.watch.Err() == nil || !strings.Contains(s.diagnostics.String(), "unfinished Work") || !strings.Contains(s.diagnostics.String(), workID) {
+		t.Fatalf("finite canceled outcome=%v diagnostics=%q", s.watch.Err(), s.diagnostics.String())
+	}
+	s.watch.AcceptError()
+	var after factoryapi.FactorySession
+	if err := json.Unmarshal([]byte(host.execute(t, "session", "show", s.session)), &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Runtime.Progress.InFlightCount != 0 {
+		t.Fatalf("joined dispatch progress=%+v", after.Runtime)
+	}
+	var item factoryapi.Work
+	if err := json.Unmarshal([]byte(host.execute(t, "work", "show", workID, "--session", s.session)), &item); err != nil {
+		t.Fatal(err)
+	}
+	if item.State == nil || item.State.Type == factoryapi.WorkStateTypeTERMINAL || item.State.Type == factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("canceled Work became terminal: %+v", item)
+	}
+	s.assertCanonicalParity(t, decodeWatchLines(t, s.out.String()))
+	events := support.GetFactoryEventsForSessionAt(t, host.endpoint, s.session)
+	responses := 0
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil || payload.Outcome != factoryapi.WorkOutcomeCanceled || payload.StructuredResult != nil {
+				t.Fatalf("canceled canonical result=%+v error=%v", payload, err)
+			}
+			responses++
+		}
+	}
+	if responses != 1 {
+		t.Fatalf("canonical canceled dispatch responses=%d", responses)
+	}
+}
+
+func cancelJoinedObservation(t *testing.T, s *liveObservation, releaseJoin func()) {
+	t.Helper()
+	input := workWatchInputs(t, []string{"you", "--server", s.host.endpoint, "--json", "session", "cancel", s.session})
+	cancel := support.StartProcessCommand(t, s.host.process, input.Input)
+	t.Cleanup(releaseJoin)
+	var before factoryapi.FactorySession
+	select {
+	case <-s.command.canceled:
+	case <-time.After(selectedWatchCeiling):
+		t.Fatal("cancel did not reach the started provider command")
+	}
+	// Cancellation acknowledgement cannot retire a command that has not joined.
+	if err := json.Unmarshal([]byte(s.host.execute(t, "session", "show", s.session)), &before); err != nil || before.Runtime.Progress.InFlightCount != 1 {
+		t.Fatalf("unjoined dispatch progress=%+v error=%v", before.Runtime, err)
+	}
+	releaseJoin()
+	select {
+	case <-cancel.Done():
+	case <-time.After(selectedWatchCeiling):
+		t.Fatal("joined cancellation command did not finish")
+	}
+	if cancel.Err() != nil {
+		t.Fatalf("cancel command: %v %s", cancel.Err(), input.Stderr())
+	}
+	var applied factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal([]byte(input.Stdout()), &applied); err != nil || applied.Operation != factoryapi.FactorySessionLifecycleControlKindCancel || applied.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("applied cancellation=%+v error=%v", applied, err)
+	}
 }
 
 func runLiveProviderCohort(t *testing.T, host *selectedWatchHost) {
@@ -200,7 +296,7 @@ func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follo
 	if opened.Session == nil || opened.Session.Id == "" {
 		t.Fatal("missing selected session")
 	}
-	t.Cleanup(func() { host.execute(t, "session", "terminate", opened.Session.Id) })
+	t.Cleanup(func() { support.TerminateFactorySessionAt(t, host.endpoint, opened.Session.Id) })
 	return attachLiveObservation(t, host, opened.Session.Id, command, follow)
 }
 
@@ -606,14 +702,25 @@ func TestWorkWatchResumedMixedCohort(t *testing.T) {
 	late.assertCanonicalParity(t, lines)
 	explicit.assertCanonicalParity(t, decodeWatchLines(t, explicit.out.String()))
 	events := support.GetFactoryEventsForSessionAt(t, resumed.endpoint, "~default")
-	var dispatches int
+	var dispatches, canceled int
 	for _, event := range events {
 		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
-			dispatches++
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch payload.Outcome {
+			case factoryapi.WorkOutcomeCanceled:
+				canceled++
+			case factoryapi.WorkOutcomeAccepted:
+				dispatches++
+			default:
+				t.Fatalf("unexpected recovered dispatch outcome: %+v", payload)
+			}
 		}
 	}
-	if dispatches != 2 {
-		t.Fatalf("recovery duplicated completed dispatch: responses=%d", dispatches)
+	if dispatches != 2 || canceled != 1 {
+		t.Fatalf("recovery responses: accepted=%d canceled=%d, want two completions and one joined interruption", dispatches, canceled)
 	}
 }
 

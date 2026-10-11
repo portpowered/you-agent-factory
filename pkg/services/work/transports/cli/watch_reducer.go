@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -27,14 +29,16 @@ type watchWorkObservation struct {
 // It deliberately owns only the short-lived state required by one watch
 // invocation; the Factory Event ledger remains the source of truth.
 type watchReducer struct {
-	sessionID  string
-	hasLast    bool
-	last       int
-	lastID     string
-	accepted   map[string]watchAcceptedEvent
-	stateTypes map[string]map[string]factoryapi.WorkStateType
-	cohort     map[string]watchWorkObservation
-	pending    map[string]watchStructuredResult
+	sessionID   string
+	hasLast     bool
+	last        int
+	lastID      string
+	accepted    map[string]watchAcceptedEvent
+	stateTypes  map[string]map[string]factoryapi.WorkStateType
+	cohort      map[string]watchWorkObservation
+	pending     map[string]watchStructuredResult
+	runEnded    bool
+	interrupted bool
 }
 
 type watchStructuredResult struct {
@@ -177,13 +181,25 @@ func isNonProjectingWatchEvent(eventType factoryapi.FactoryEventType) bool {
 // returns a transition only for a WORK_STATE_CHANGE event.
 func (r *watchReducer) applyEvent(event factoryapi.FactoryEvent) (WatchTransition, bool, error) {
 	switch event.Type {
+	case factoryapi.FactoryEventTypeRunRequest:
+		r.runEnded = false
+		r.interrupted = false
+		return WatchTransition{}, false, r.applyRunRequestEvent(event)
+	case factoryapi.FactoryEventTypeSessionResumed, factoryapi.FactoryEventTypeDispatchRequest:
+		// A recovered runtime can reuse its original RUN_REQUEST. New
+		// canonical dispatch admission supersedes the prior run's stop.
+		r.runEnded = false
+		r.interrupted = false
+		return WatchTransition{}, false, nil
+	case factoryapi.FactoryEventTypeRunResponse:
+		r.runEnded = true
+		return WatchTransition{}, false, nil
 	case factoryapi.FactoryEventTypeInitialStructureRequest:
 		return WatchTransition{}, false, r.applyInitialStructureRequest(event)
-	case factoryapi.FactoryEventTypeRunRequest:
-		return WatchTransition{}, false, r.applyRunRequestEvent(event)
 	case factoryapi.FactoryEventTypeFactoryChange:
 		return WatchTransition{}, false, r.applyFactoryChangeEvent(event)
 	case factoryapi.FactoryEventTypeWorkRequest:
+		r.runEnded = false
 		return WatchTransition{}, false, r.applyWorkRequestFromEvent(event)
 	case factoryapi.FactoryEventTypeDispatchResponse:
 		return WatchTransition{}, false, r.applyDispatchResponseEvent(event)
@@ -247,6 +263,11 @@ func (r *watchReducer) applyDispatchResponseEvent(event factoryapi.FactoryEvent)
 			return nil
 		}
 		return fmt.Errorf("decode Work result event %q: %w", event.Id, err)
+	}
+	if payload.Outcome == factoryapi.WorkOutcomeCanceled {
+		r.interrupted = true
+		r.clearDispatchStructuredResult(event, payload)
+		return nil
 	}
 	if payload.Outcome == factoryapi.WorkOutcomeFailed || payload.Outcome == factoryapi.WorkOutcomeRejected {
 		r.clearDispatchStructuredResult(event, payload)
@@ -334,6 +355,25 @@ func (r *watchReducer) Completed() bool {
 		}
 	}
 	return true
+}
+
+// UnfinishedError reports an ended run only after the stream's retained head
+// has drained. It never invents a terminal Work transition.
+func (r *watchReducer) UnfinishedError() error {
+	if !r.runEnded || !r.interrupted {
+		return nil
+	}
+	var ids []string
+	for id, observation := range r.cohort {
+		if !observation.terminal {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	sort.Strings(ids)
+	return &clidiag.Failure{Code: clidiag.DefaultFailureCode, Message: fmt.Sprintf("unfinished Work in session %q: %s", r.sessionID, strings.Join(ids, ", "))}
 }
 
 func (r *watchReducer) replaceFactory(factory factoryapi.Factory) error {
