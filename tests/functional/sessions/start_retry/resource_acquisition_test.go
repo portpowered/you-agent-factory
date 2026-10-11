@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,8 +31,16 @@ func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Ser
 	joinSelectedProviderCommands(t, cancel, gate, done)
 	history := make([]*factorydefinitions.FactoryEventStream, len(scenarios))
 	identities := make([]factoryapi.FactorySessionStreamIdentity, len(scenarios))
+	retry := scenarios[0].request()
+	retry.Persistence = factorysessions.PersistencePolicyEnabled
+	recordPath := filepath.Join(t.TempDir(), "board.jsonl")
+	retry.RuntimeSelection.Recording.RecordPath = recordPath
 	for i, scenario := range scenarios {
-		startInitialOpeningSession(t, sessions, scenario.request())
+		request := scenario.request()
+		if i == 0 {
+			request = retry
+		}
+		startInitialOpeningSession(t, sessions, request)
 		identities[i] = selectedProviderStreamIdentity(t, baseURL, scenario.candidateID)
 		done[i] = make(chan error, 1)
 		go func() {
@@ -52,6 +61,9 @@ func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Ser
 		}
 		assertSelectedRunningWorker(t, baseURL, scenario.candidateID)
 	}
+	selected := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(baseURL, scenarios[0].candidateID, "/work"))
+	workID := *selected.Results[0].WorkId
 	closeInitialOpeningSession(t, sessions, scenarios[0].candidateID)
 	select {
 	case err := <-done[0]:
@@ -80,6 +92,60 @@ func testSelectedProviderCancellation(t *testing.T, sessions factorysessions.Ser
 		if err := selectedProviderInvoke(ctx, sessions, scenarios[i].candidateID); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// Restore the finalized board into a fresh runtime generation of the same
+	// Session. The original canceled Work must execute again, rather than a
+	// newly submitted invocation standing in for retryability.
+	retry.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+	prepareInitialRecoveryArtifact(t, sessions, &retry, scenarios[0], recordPath, "valid")
+	startInitialOpeningSession(t, sessions, retry)
+	assertCanceledWorkRetry(t, baseURL, scenarios[0].candidateID, workID)
+}
+
+func assertCanceledWorkRetry(t *testing.T, baseURL, sessionID, workID string) {
+	t.Helper()
+	listed, err := support.WaitForObservation(initialOpeningReadCeiling,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.GetJSON[factoryapi.ListWorkResponse](t,
+				support.SessionWorkURL(baseURL, sessionID, "/work")), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			return support.HasWorkAtCustomerState(listed, workID, "task:complete")
+		})
+	if err != nil {
+		t.Fatalf("original canceled Work %s did not retry to completion: %v work=%#v", workID, err, listed)
+	}
+	if len(listed.Results) != 1 || fmt.Sprint(listed.Results[0].Payload) != sessionID+" selected Work" {
+		t.Fatalf("retry replaced the original Work or crossed Sessions: %#v", listed)
+	}
+	workers := support.ListSessionWorkerSessions(t, baseURL, sessionID, workID)
+	if len(workers.Sessions) == 0 {
+		t.Fatal("retried Work has no public Worker Session observation")
+	}
+	for _, worker := range workers.Sessions {
+		if worker.FactorySessionId == nil || *worker.FactorySessionId != sessionID || worker.WorkId == nil || *worker.WorkId != workID {
+			t.Fatalf("retried Worker lost original Work/Session identity: %#v", worker)
+		}
+	}
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	completed := false
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		response, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("retry response crossed Sessions: %#v", event.Context)
+		}
+		if response.Outcome == factoryapi.WorkOutcomeAccepted {
+			completed = response.Output != nil && strings.Contains(*response.Output, sessionID+" COMPLETE")
+		}
+	}
+	if !completed {
+		t.Fatal("retried Work has no attributed accepted provider output")
 	}
 }
 
