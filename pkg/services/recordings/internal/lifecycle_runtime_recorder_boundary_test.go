@@ -210,7 +210,7 @@ func newLiveSubscriptionAdapter(scope recordings.CanonicalEventScope, events []r
 	}}
 	canonical := &liveSubscriptionOwner{}
 	root := NewCombinedService(nil, nil, lifecycle, nil, nil, canonical, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	ref := root.newRecordingScope()
 	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: status.RecordingID, eventScope: scope}
 	return root, ref, canonical
@@ -230,7 +230,7 @@ func newActiveScopeAdapter(scope recordings.CanonicalEventScope) (*combinedServi
 	canonical := &liveSubscriptionOwner{}
 	root := NewCombinedService(&stubLedger{}, nil, owner,
 		injectedArtifactsOwner{err: recordings.ErrPortableArtifactUnavailable}, nil, canonical, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	ref := root.newRecordingScope()
 	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: owner.status.RecordingID, eventScope: scope}
 	return root, ref, owner, canonical
@@ -348,7 +348,7 @@ func TestRuntimeOpeningForwardsDeclaredFactoryPathsToLifecycle(t *testing.T) {
 		) (*factorydefinitions.FactorySnapshot, error) {
 			return snapshot, nil
 		},
-		nil, nil, nil,
+		nil, nil, nil, unavailableTargetClaim, false,
 	)
 	opening, ok := root.(recordings.RuntimeScopeService)
 	if !ok {
@@ -535,7 +535,7 @@ func TestRuntimeRootKeepsConcurrentLedgersIsolatedAndReleasesRoutes(t *testing.T
 	t.Parallel()
 	router := newRuntimeLedgerRouter(nil)
 	root := NewCombinedService(router, nil, nil, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, router, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, router, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	topology := runtimeOpeningTopology{}
 	now := func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
 
@@ -612,7 +612,7 @@ func TestRuntimeRootForwardsCanonicalWorldStateAndProjectionCause(t *testing.T) 
 	ownerErr := errors.New("projection failed")
 	projection := &runtimeOpeningProjection{result: recordings.FactoryWorldState{Tick: 7}, err: ownerErr}
 	root := NewCombinedService(nil, projection, nil, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	events := []recordings.FactoryEvent{{Id: "selected-event", Type: recordings.FactoryEventTypeWorkRequest}}
 	state, err := root.ReconstructCanonicalFactoryWorldState(events, 7)
 	if !errors.Is(err, ownerErr) || !reflect.DeepEqual(state, projection.result) ||
@@ -785,11 +785,11 @@ func openActiveRuntime(t *testing.T, owner *activeRuntimeLifecycle, canonical *a
 		) (*factorydefinitions.FactorySnapshot, error) {
 			return snapshot, nil
 		},
-		nil, nil, nil,
+		nil, nil, nil, unavailableTargetClaim, false,
 	)
 	root, ok := service.(runtimeRoot)
 	if !ok || root == nil {
-		t.Fatal("NewCombinedService() did not expose runtime opening")
+		t.Fatal("NewCombinedService(, unavailableTargetClaim, false) did not expose runtime opening")
 	}
 	opened, err := root.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         runtimeOpeningTopology{},

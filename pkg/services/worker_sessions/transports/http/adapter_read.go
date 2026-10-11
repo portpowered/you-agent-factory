@@ -53,6 +53,11 @@ func (a *Adapter) GetWorkerSessionObservation(
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
+	// Resolve the compatibility reference within its original scope first;
+	// terminal facts then use the same exact capture as canonical Worker reads.
+	if observation.State.Terminal() && a.logs != nil {
+		return a.GetWorkerSessionObservationByWorkerSessionID(ctx, sessionID, observation.WorkerSessionID)
+	}
 	return a.presentWorkerSessionObservation(ctx, observation)
 }
 
@@ -92,6 +97,17 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 		WorkerSessionID:  workerSessionID,
 		FactorySessionID: scope.observationID(),
 	})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		return a.closedScopeWorkerSessionObservation(ctx, workerSessionID, strings.TrimSpace(sessionID))
+	}
+	if err == nil && observation.State.Terminal() && a.logs != nil {
+		captured, captureErr := a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+			WorkerSessionID: workerSessionID, FactorySessionID: strings.TrimSpace(sessionID),
+		})
+		if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) {
+			observation, err = captured, captureErr
+		}
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get Worker Session observation: %w", err)
 	}
@@ -180,6 +196,12 @@ func (a *Adapter) ReadWorkerSessionTranscriptByWorkerSessionID(
 		WorkerSessionID:  workerSessionID,
 		FactorySessionID: scope.observationID(),
 	})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		scope = workerSessionScope{effectiveID: strings.TrimSpace(sessionID)}
+		result, err = a.logs.ReadTranscript(ctx, workersessions.ReadTranscriptRequest{
+			WorkerSessionID: workerSessionID, FactorySessionID: scope.effectiveID,
+		})
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read Worker Session transcript: %w", err)
 	}
@@ -195,6 +217,9 @@ func (a *Adapter) scopedTranscriptIdentity(ctx context.Context, observations obs
 		return response, nil
 	}
 	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID, FactorySessionID: scope.observationID()})
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
+		observation, err = a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID, FactorySessionID: scope.observationID()})
+	}
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
@@ -347,18 +372,31 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	workerSessionID string,
 	factorySessionID string,
 ) (factoryapi.WorkerSessionObservation, error) {
+	observation, err := a.topLevelWorkerSessionObservation(ctx, workerSessionID, factorySessionID)
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
+	}
+	return a.presentWorkerSessionObservation(ctx, observation)
+}
+
+// Stream identity uses the same scoped capture selection as summary reads.
+// Optional Work names belong to the summary representation; resolving them
+// must not hold up event delivery, whose frames carry only Work IDs.
+//
+//nolint:contextcheck // Legacy nil-context callers have no parent to inherit; non-nil observer contexts pass through unchanged.
+func (a *Adapter) topLevelWorkerSessionObservation(ctx context.Context, workerSessionID, factorySessionID string) (workersessions.Observation, error) {
 	if a == nil || a.topLevel == nil {
-		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
+		return workersessions.Observation{}, errors.New("worker sessions service is required")
 	}
 	workerSessionID = strings.TrimSpace(workerSessionID)
 	if workerSessionID == "" {
-		return factoryapi.WorkerSessionObservation{}, errors.New("worker session id is required")
+		return workersessions.Observation{}, errors.New("worker session id is required")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
-		return factoryapi.WorkerSessionObservation{}, err
+		return workersessions.Observation{}, err
 	}
 	factorySessionID = strings.TrimSpace(factorySessionID)
 	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
@@ -376,9 +414,9 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 		}
 	}
 	if err != nil {
-		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
+		return workersessions.Observation{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
-	return a.presentWorkerSessionObservation(ctx, observation)
+	return observation, nil
 }
 
 // ReadTopLevelWorkerSessionTranscript resolves the exact Provider Session
@@ -406,7 +444,25 @@ func (a *Adapter) ReadTopLevelWorkerSessionTranscript(
 	if err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("read top-level Worker Session transcript: %w", err)
 	}
-	return WorkerSessionTranscriptToAPI(result), nil
+	request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: result.WorkerSessionID}
+	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, request)
+	if a.logs != nil && (errors.Is(err, workersessions.ErrObservationSessionNotFound) || (err == nil && observation.State.Terminal())) {
+		captured, captureErr := a.logs.GetCapturedObservation(ctx, request)
+		if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) || err != nil {
+			observation, err = captured, captureErr
+		}
+	}
+	if err != nil {
+		return factoryapi.WorkerSessionTranscriptResponse{}, fmt.Errorf("resolve transcript Factory identity: %w", err)
+	}
+	if observation.WorkerSessionID != result.WorkerSessionID || observation.AttemptID != result.AttemptID {
+		return factoryapi.WorkerSessionTranscriptResponse{}, workersessions.ErrObservationSessionNotFound
+	}
+	response := WorkerSessionTranscriptToAPI(result)
+	if observation.FactorySessionID != "" {
+		response.FactorySessionId = stringPtr(observation.FactorySessionID)
+	}
+	return response, nil
 }
 
 // StreamTopLevelWorkerSessionEvents resolves the canonical event topic by
@@ -431,7 +487,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
 	}
-	observation, err := a.GetTopLevelWorkerSessionObservation(ctx, workerSessionID, "")
+	observation, err := a.topLevelWorkerSessionObservation(ctx, workerSessionID, "")
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
@@ -451,7 +507,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if subscription.NextFunc == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, workersessions.ErrObservationSourceUnavailable
 	}
-	return observation, subscription, nil
+	return WorkerSessionObservationToAPI(observation), subscription, nil
 }
 
 func (a *Adapter) resolveWorkerSessionScope(ctx context.Context, sessionID string) (workerSessionScope, error) {

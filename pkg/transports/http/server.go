@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	agentmessageshttp "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/http"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
@@ -47,6 +48,7 @@ type Server struct {
 	modelsHTTP             *modelshttp.Handler
 	providerSessionsHTTP   *providersessionshttp.Handler
 	workerSessionsHTTP     *workersessionshttp.Handler
+	agentMessagesHTTP      *agentmessageshttp.Handler
 	metricsHTTP            *factoryvisualizationhttp.MetricsHandler
 	costsHTTP              *costshttp.Handler
 	shutdown               ShutdownOperation
@@ -56,6 +58,32 @@ type Server struct {
 
 type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
 type workAdapter struct{ *workhttp.Adapter }
+
+// Messaging adapters decode the original headers and query. Generated values
+// neither establish caller authority nor bypass strict owner validation.
+func (s *Server) SendAgentMessage(w http.ResponseWriter, r *http.Request, _ factoryapi.SendAgentMessageParams) {
+	if s.agentMessagesHTTP == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "MESSAGING_DISABLED", "MESSAGING_DISABLED")
+		return
+	}
+	s.agentMessagesHTTP.Send(w, r)
+}
+
+func (s *Server) ListAgentMessages(w http.ResponseWriter, r *http.Request, _ factoryapi.ListAgentMessagesParams) {
+	if s.agentMessagesHTTP == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "MESSAGING_DISABLED", "MESSAGING_DISABLED")
+		return
+	}
+	s.agentMessagesHTTP.List(w, r)
+}
+
+func (s *Server) GetAgentMessage(w http.ResponseWriter, r *http.Request, messageID string, _ factoryapi.GetAgentMessageParams) {
+	if s.agentMessagesHTTP == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "MESSAGING_DISABLED", "MESSAGING_DISABLED")
+		return
+	}
+	s.agentMessagesHTTP.Get(w, r, messageID)
+}
 
 // Factory caller credentials are decoded from the original headers by the
 // owner adapter; generated parameter values never grant caller authority.
@@ -209,9 +237,12 @@ func NewServerWithRecordingsAndMetricsAndCosts(
 	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
 	costsHTTP *costshttp.Handler,
 	shutdown ShutdownOperation,
+	messagesHTTP *agentmessageshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, shutdown, workerSessions...)
+	server := newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, shutdown, workerSessions...)
+	server.agentMessagesHTTP = messagesHTTP
+	return server
 }
 
 func newServer(

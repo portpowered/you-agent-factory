@@ -425,6 +425,7 @@ func productionRootSubcommands(
 		productionWorkCommand(globals, diagnostics, options),
 		productionWorkerSessionsCommand(globals, diagnostics, options),
 		productionWorkersCommand(options),
+		productionMessagesCommand(options),
 	}
 }
 

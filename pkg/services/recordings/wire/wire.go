@@ -24,7 +24,8 @@ func NewService(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
-	targetOptions ...recordings.RecordingTargetOptions,
+	claim recordings.RecordingTargetClaim,
+	caseInsensitive bool,
 ) recordings.Service {
-	return recordingsinternal.NewCombinedService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, targetOptions...)
+	return recordingsinternal.NewCombinedService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, claim, caseInsensitive)
 }

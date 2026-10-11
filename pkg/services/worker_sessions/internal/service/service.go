@@ -706,6 +706,7 @@ type replayObservationSubscription struct {
 	summarySent        bool
 	closed             bool
 	cursorProvided     bool
+	activeCancel       context.CancelFunc
 	mu                 sync.Mutex
 }
 
@@ -840,9 +841,19 @@ func (s *replayObservationSubscription) Next(ctx context.Context) workersessions
 		}
 		reader := s.reader
 		request := events.ReadRequest{Topic: s.topic, From: s.next, Limit: s.limit}
+		readContext, cancel := context.WithCancel(ctx)
+		s.activeCancel = cancel
 		s.mu.Unlock()
 
-		result, err := reader.Read(ctx, request)
+		result, err := reader.Read(readContext, request)
+		cancel()
+		s.mu.Lock()
+		s.activeCancel = nil
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			return workersessions.ObservationDelivery{Kind: workersessions.ObservationDeliveryClosed}
+		}
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 				s.mu.Lock()
@@ -940,7 +951,11 @@ func (s *replayObservationSubscription) replaySummaryReason() string {
 func (s *replayObservationSubscription) Close() {
 	s.mu.Lock()
 	s.closed = true
+	cancel := s.activeCancel
 	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func cloneEventRecords(records []events.Record) []events.Record {

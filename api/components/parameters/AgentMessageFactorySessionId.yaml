@@ -1,0 +1,6 @@
+name: factorySessionId
+in: query
+schema: {type: string, minLength: 1}
+description: >-
+  Explicit recipient Factory Session for legacy ambiguous Worker Session
+  identities. This selector grants no caller authority.

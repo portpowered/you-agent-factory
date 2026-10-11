@@ -1,11 +1,11 @@
-package wire
+package invocation
 
 import (
 	"context"
 	"io"
+	"reflect"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -55,19 +55,26 @@ func TestOpeningPresentationOwnerInvocationBridgeStreamsAndReconcilesHistory(t *
 	for _, testCase := range []struct {
 		name      string
 		sessionID string
-		durable   bool
 		finalIDs  []string
 	}{
 		{name: "live session", finalIDs: []string{"history", "live", "final"}},
-		{name: "durable session", sessionID: "durable-1", durable: true, finalIDs: []string{"history", "live", "final"}},
+		{name: "named live session with unpublished durable dispatch", sessionID: "durable-1", finalIDs: []string{"history", "live", "final"}},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			owner := NewOpeningPresentationOwner()
 			presented := make(chan string, 8)
+			var finalEvent factorydefinitions.FactoryEvent
+			committedFailure := factorydefinitions.FactoryEvent{
+				Id: "final", Type: factorydefinitions.FactoryEventTypeDispatchResponse,
+				Payload: []byte(`{"transitionId":"execute-goal","outcome":"FAILED","error":"deterministic provider rejection"}`),
+			}
 			scopeID, err := owner.RegisterInvocationEvents(factorysessions.InvocationEventScope{
 				FactorySessionID: testCase.sessionID,
 				Consume: func(events []factorydefinitions.FactoryEvent) {
 					for _, event := range events {
+						if event.Id == committedFailure.Id {
+							finalEvent = event
+						}
 						presented <- event.Id
 					}
 				},
@@ -82,7 +89,7 @@ func TestOpeningPresentationOwnerInvocationBridgeStreamsAndReconcilesHistory(t *
 					Events:  liveEvents,
 				},
 				final: &factorydefinitions.FactoryEventStream{History: []factorydefinitions.FactoryEvent{
-					presentationEvent("history"), presentationEvent("live"), presentationEvent("final"),
+					presentationEvent("history"), presentationEvent("live"), committedFailure,
 				}},
 			}
 			bridge, err := owner.StartFactoryEventBridge(t.Context(), service, scopeID)
@@ -106,17 +113,23 @@ func TestOpeningPresentationOwnerInvocationBridgeStreamsAndReconcilesHistory(t *
 			for _, want := range testCase.finalIDs[1:] {
 				assertPresentedID(t, presented, want)
 			}
+			if !reflect.DeepEqual(finalEvent, committedFailure) {
+				t.Fatalf("terminal dispatch = %#v, want exact committed failure %#v", finalEvent, committedFailure)
+			}
 			select {
 			case duplicate := <-presented:
 				t.Fatalf("duplicate event presented: %q", duplicate)
 			default:
 			}
-			if testCase.durable {
-				if service.durableCalls != 1 || service.liveCalls != 1 {
-					t.Fatalf("durable/live reads = %d/%d, want 1/1", service.durableCalls, service.liveCalls)
-				}
-			} else if service.liveCalls != 2 || service.durableCalls != 0 {
+			if service.liveCalls != 2 || service.durableCalls != 0 {
 				t.Fatalf("live/durable reads = %d/%d, want 2/0", service.liveCalls, service.durableCalls)
+			}
+			wantSession := testCase.sessionID
+			if wantSession == "" {
+				wantSession = factorysessions.DefaultSessionID
+			}
+			if !reflect.DeepEqual(service.sessionIDs, []string{wantSession, wantSession}) {
+				t.Fatalf("event scopes = %v, want only %q", service.sessionIDs, wantSession)
 			}
 		})
 	}
@@ -129,14 +142,16 @@ type invocationEventServiceStub struct {
 	liveCalls    int
 	durableCalls int
 	finalContext context.Context
+	sessionIDs   []string
 }
 
 func (stub *invocationEventServiceStub) SubscribeFactoryEventsForSession(
 	ctx context.Context,
-	_ string,
+	sessionID string,
 	_ *factorydefinitions.FactoryEventReconnectCursor,
 ) (*factorydefinitions.FactoryEventStream, error) {
 	stub.liveCalls++
+	stub.sessionIDs = append(stub.sessionIDs, sessionID)
 	if stub.liveCalls == 1 {
 		return stub.live, nil
 	}
@@ -151,7 +166,8 @@ func (stub *invocationEventServiceStub) ReadDurableFactorySessionEventStream(
 ) (*factorydefinitions.FactoryEventStream, error) {
 	stub.durableCalls++
 	stub.finalContext = ctx
-	return stub.final, nil
+	// The durable projection has not published the live terminal dispatch yet.
+	return &factorydefinitions.FactoryEventStream{History: []factorydefinitions.FactoryEvent{presentationEvent("history")}}, nil
 }
 
 func presentationEvent(id string) factorydefinitions.FactoryEvent {
@@ -165,8 +181,8 @@ func assertPresentedID(t *testing.T, presented <-chan string, want string) {
 		if got != want {
 			t.Fatalf("presented event = %q, want %q", got, want)
 		}
-	case <-time.After(time.Second):
-		t.Fatalf("timed out waiting for event %q", want)
+	default:
+		t.Fatalf("finished presentation lacks event %q", want)
 	}
 }
 

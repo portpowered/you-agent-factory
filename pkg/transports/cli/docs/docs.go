@@ -30,6 +30,7 @@ const (
 	TopicWork                Topic = "work"
 	TopicSessions            Topic = "sessions"
 	TopicMetrics             Topic = "metrics"
+	TopicMessaging           Topic = "messaging"
 	TopicWorkstations        Topic = "workstations"
 	TopicWorkers             Topic = "workers"
 	TopicProviders           Topic = "providers"
@@ -64,6 +65,7 @@ const (
 	referenceWorkPath                = "work.md"
 	referenceSessionsPath            = "sessions.md"
 	referenceMetricsPath             = "metrics.md"
+	referenceMessagingPath           = "messaging.md"
 	referenceWorkstationsPath        = "workstations.md"
 	referenceWorkersPath             = "workers.md"
 	referenceProvidersPath           = "providers.md"
@@ -100,6 +102,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory show, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicMetrics, description: "Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope.", path: referenceMetricsPath, displayOrder: 36},
+	{topic: TopicMessaging, description: "Agent Message authority, durable inboxes, replies, CLI/HTTP contracts, limits, and QUEUE delivery.", path: referenceMessagingPath, displayOrder: 34},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
 	{topic: TopicJavaScriptWorkflows, description: "Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.", path: referenceJavaScriptWorkflowsPath, displayOrder: 38},
 	{topic: TopicMCP, description: "Canonical you server mcp install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},

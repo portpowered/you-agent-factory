@@ -41,6 +41,7 @@ type FactoryEngine struct {
 	historicalWorkIDs     map[string]struct{}
 	replayHistoricalWorks []workdomain.ExistingWork
 	replayPauseControls   []interfaces.FactoryEvent
+	replayCompletedTick   *int
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -609,7 +610,10 @@ func (e *FactoryEngine) tickPhases(ctx context.Context, completionOnly bool) (bo
 	keepAlive = keepAlive || replayControlPending
 	mutated = mutated || replayControlPending
 	shouldTerminate := replayFinished
-	phases, err := e.runTickSubsystems(ctx, paused || replayPaused, rtSnapshot, mutated)
+	// A completion wake may require one final drain tick after the recorded
+	// closeout. Drain results there, but do not schedule unrecorded work.
+	replayClosed := e.replayCompletedTick != nil && e.runtimeState.TickCount > *e.replayCompletedTick
+	phases, err := e.runTickSubsystems(ctx, paused || replayPaused || replayClosed, rtSnapshot, mutated)
 	if err != nil {
 		return false, false, err
 	}
@@ -622,6 +626,11 @@ func (e *FactoryEngine) tickPhases(ctx context.Context, completionOnly bool) (bo
 	// deadlock detection when async results arrive mid-tick.
 	e.retireCompletedDispatches(e.runtimeState.Results, phases.completedDispatches)
 	e.runtimeState.Results = nil
+	// A recorded closeout ends replay, even when cancellation restored retryable
+	// Work. Live execution and resume have no recorded completion boundary.
+	if e.replayCompletedTick != nil && e.runtimeState.TickCount >= *e.replayCompletedTick && e.runtimeState.InFlightCount == 0 {
+		shouldTerminate = true
+	}
 	// Results enrich the first following canonical relocation. Publish only
 	// after accepted mutations and dispatch retirement, in mutation order,
 	// before the resulting snapshot becomes observable to readers.

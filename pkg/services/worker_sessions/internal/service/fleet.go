@@ -106,6 +106,34 @@ func (s *FleetObservationService) GetObservationByWorkerSessionID(
 	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
+// GetCapturedObservation resolves archived identity facts without a live owner.
+// It is an explicit history read and grants no execution or admission authority.
+func (s *FleetObservationService) GetCapturedObservation(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if ctx == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if s.history == nil || s.history.continuation == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+	}
+	observation, err := s.history.continuation.GetCapturedObservation(ctx, req)
+	if _, validationErr := fleetAddressCandidates(req, observation, err); validationErr != nil {
+		return workersessions.Observation{}, validationErr
+	}
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	return observation.Clone(), nil
+}
+
 // A failed source cannot be ignored merely because another source matched.
 // Successful and ambiguous results must prove membership in this exact query.
 func fleetAddressCandidates(req workersessions.GetObservationByWorkerSessionIDRequest, observation workersessions.Observation, lookupErr error) ([]workersessions.AddressCandidate, error) {

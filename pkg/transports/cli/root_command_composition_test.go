@@ -14,15 +14,57 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	agentmessagescli "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/cli"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/spf13/cobra"
 )
+
+func TestMessageCommandCompositionPreservesCallerAndExplicitHost(t *testing.T) {
+	t.Parallel()
+	const token = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		calls.Add(1)
+		if request.URL.Path != "/messages" || request.URL.Query().Get("toMe") != "true" ||
+			request.Header.Get("X-You-Worker-Session-Id") != "caller" || request.Header.Get("Authorization") != "Bearer "+token {
+			t.Error("production command lost caller headers or inbox query")
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(writer, `{"messages":[]}`)
+	}))
+	t.Cleanup(server.Close)
+	protocol, err := clihttp.NewProtocol(server.Client(), platformclock.Real{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		MessagesCLI:              agentmessagescli.NewAdapter(protocol, protocol, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
+	var stdout, stderr bytes.Buffer
+	err = factory.ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: []string{"--server", server.URL, "message", "list", "--to-me", "--output", "json"},
+		Context:   context.Background(), Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr,
+		HomeDir: func() (string, error) { return "operator-home", nil },
+		LookupEnv: func(key string) (string, bool) {
+			value, exists := map[string]string{"YOU_WORKER_SESSION_ID": "caller", "YOU_WORKER_SESSION_TOKEN": token, "YOU_SERVER": "http://ignored.invalid"}[key]
+			return value, exists
+		},
+	})
+	if err != nil || calls.Load() != 1 || stdout.String() != "{\"messages\":[],\"nextToken\":null}\n" || stderr.Len() != 0 {
+		t.Fatalf("message command calls=%d error=%v stdout=%q stderr=%q", calls.Load(), err, stdout.String(), stderr.String())
+	}
+}
 
 func TestNewRootCommandFromSubcommandsAttachesInjectedCommands(t *testing.T) {
 	root := &cobra.Command{Use: "you"}

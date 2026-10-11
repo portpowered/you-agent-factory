@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"slices"
 	"sort"
 	"strings"
 
@@ -64,19 +66,51 @@ func (r *registry) historyObservations(ctx context.Context, req workersessions.L
 }
 
 func (s *LogReader) archivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}) ([]workersessions.Observation, error) {
+	// Explicit history may hydrate captures; ordinary Work reads may not.
+	return s.retryArchivedHistory(ctx, req, owners, "", s.reader.ListWorkerSessionCaptures)
+}
+
+func (s *LogReader) readArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string) ([]workersessions.Observation, error) {
+	return s.retryArchivedHistory(ctx, req, owners, workID, s.reader.ListPreparedWorkerSessionCaptures)
+}
+
+func (s *LogReader) retryArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string, readPage func(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error)) ([]workersessions.Observation, error) {
+	// Concurrent capture admission invalidates the materialized catalog generation.
+	// Restart the whole selection, never combine pages from different generations.
+	for range 3 {
+		rows, err := s.collectArchivedHistory(ctx, req, owners, workID, readPage)
+		if !errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+			return rows, err
+		}
+	}
+	return nil, workersessions.ErrObservationProjectionUnavailable
+}
+
+func (s *LogReader) collectArchivedHistory(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, owners map[historyIdentity]struct{}, workID string, readPage func(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error)) ([]workersessions.Observation, error) {
 	result := make([]workersessions.Observation, 0)
 	seen := make(map[historyIdentity]struct{})
 	request := recordings.WorkerCapturedCatalogRequest{Limit: 1000}
+	if workID != "" {
+		request.FactorySessionID = req.FactorySessionID
+		request.PreparedSummariesOnly, request.RequireCompleteMembership = true, true
+	}
 	for {
 		if err := observationContextError(ctx); err != nil {
 			return nil, err
 		}
-		page, err := s.reader.ListWorkerSessionCaptures(ctx, request)
+		page, err := readPage(ctx, request)
 		if err != nil {
-			return nil, workersessions.ErrObservationProjectionUnavailable
+			return nil, archivedWorkPageError(err)
 		}
 		for _, item := range page.Items {
 			if !catalogHistoryMatches(item.Catalog, req) {
+				continue
+			}
+			selected, err := selectedArchivedWorkItem(item, workID)
+			if err != nil {
+				return nil, err
+			}
+			if !selected {
 				continue
 			}
 			observation, err := capturedHistoryIdentity(item, owners)
@@ -200,4 +234,28 @@ func historyOpening(item recordings.WorkerCapturedCatalogItem) (workers.SessionP
 		return workers.SessionPayload{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return opening, nil
+}
+
+func archivedWorkPageError(err error) error {
+	if errors.Is(err, recordings.ErrInvalidWorkerRecordingRequest) {
+		return err
+	}
+	return workersessions.ErrObservationProjectionUnavailable
+}
+
+func selectedArchivedWorkItem(item recordings.WorkerCapturedCatalogItem, workID string) (bool, error) {
+	if workID == "" {
+		return true, nil
+	}
+	opening, err := historyOpening(item)
+	if err != nil {
+		return false, err
+	}
+	if !slices.Contains(opening.WorkIDs, workID) {
+		return false, nil
+	}
+	// A capture can start after the live snapshot. An intact, still-owned
+	// prefix contributes no archived terminal facts to an ordinary Work read.
+	active := item.Terminal == nil && !item.OwnerLost && item.Health == recordings.WorkerRecordingStatusIncomplete && item.HealthReason == ""
+	return !active, nil
 }

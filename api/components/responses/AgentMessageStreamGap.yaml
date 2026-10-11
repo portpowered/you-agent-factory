@@ -1,0 +1,5 @@
+description: The source-native observation stream has a retention gap. Pull the inbox before following again.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

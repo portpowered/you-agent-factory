@@ -20,6 +20,7 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -57,6 +58,9 @@ type FunctionalAPIServerConfig struct {
 	Env                []string
 	ProviderOverride   providers.Service
 	Edges              serviceedges.Edges
+	// WrapAPIServerStarter controls transport effects around the same root-built
+	// handler and owned listener. The wrapped operation is injected through Edges.
+	WrapAPIServerStarter func(platformhttpserver.Starter) platformhttpserver.Starter
 	// DeniedProcessAttempts replaces the subprocess command factory with a
 	// counted inert command when non-nil. Scenarios can assert zero attempts
 	// without importing OS execution types or allowing a process to start.
@@ -121,6 +125,9 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
+	if cfg.WrapAPIServerStarter != nil {
+		edges.APIServerStarter = cfg.WrapAPIServerStarter(edges.APIServerStarter)
+	}
 	process := BuildProcess(t, edges)
 	recordingReader := process.WorkerRecordingReader()
 	var closeProcess func(context.Context) error

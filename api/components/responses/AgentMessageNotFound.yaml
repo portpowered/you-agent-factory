@@ -1,0 +1,5 @@
+description: The recipient or Agent Message does not exist.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

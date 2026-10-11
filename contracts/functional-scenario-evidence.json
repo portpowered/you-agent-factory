@@ -484,6 +484,17 @@
       ]
     },
     {
+      "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+      "stableIds": [
+        "cli/you.message",
+        "cli/you.message.list",
+        "cli/you.message.reply",
+        "rest/getAgentMessage",
+        "rest/listAgentMessages",
+        "rest/sendAgentMessage"
+      ]
+    },
+    {
       "test": "tests/functional/workers/mock/shared_process_test.go::TestSharedProcessWorkersMock",
       "stableIds": [
         "cli/you.session.resource.set"

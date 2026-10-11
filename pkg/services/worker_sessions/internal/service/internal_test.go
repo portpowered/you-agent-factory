@@ -1036,9 +1036,14 @@ func TestPerRuntimeAttempts_OpeningFailuresLeavePeerUsable(t *testing.T) {
 			boundary := &perRuntimeRejectOpeningAppender{EventsAppender: eventStore}
 			sink := &perRuntimeAppendCapture{EventsAppender: boundary}
 			b := newPerRuntimeAttemptFixture(t, "b", sink)
+			// Both peer snapshots observe the same committed-summary capability.
+			b.service.logs = &LogReader{reader: b.summary}
 			controlB := configurePerRuntimeCancellation(t, b, nil)
 			beforeB := assertPerRuntimeAttemptState(t, t.Context(), b, workersessions.StateRunning)
 			observationB := assertPerRuntimeObservation(t, b, workersessions.StateRunning)
+			if observationB.RecordingHealth != "INCOMPLETE" {
+				t.Fatalf("running peer capture health = %q, want INCOMPLETE", observationB.RecordingHealth)
+			}
 			before := sink.requestsFor(workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID))
 			beforeRead := readPerRuntimeTopic(t, eventStore, workersessions.Topic(b.request.ID, b.request.Execution.Execution.FactorySessionID))
 			a := preparePerRuntimeAttemptFixture(t, "a", sink, b)

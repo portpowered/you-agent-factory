@@ -23,6 +23,8 @@ tags:
     description: Provider-owned session diagnostics for dashboard inspection.
   - name: Worker Sessions
     description: Worker Session observations correlated with Factory Work.
+  - name: Messages
+    description: Durable Agent Message inboxes and permitted Worker Session coordination.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
   - name: Metrics
@@ -30,6 +32,389 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /messages:
+    post:
+      tags:
+        - Messages
+      operationId: sendAgentMessage
+      summary: Send an Agent Message to a Worker Session
+      description: Worker Sessions validates the exact active RUNNING caller. Messaging permits only the caller's evidenced lead/requester chain or a lead's own Project workers. Persist before returning success. Messages remain queued. Revival and interruption are unavailable.
+      security:
+        - WorkerSessionCaller: []
+      parameters:
+        - $ref: '#/components/parameters/AgentMessageCallerId'
+        - $ref: '#/components/parameters/AgentMessageFactorySessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentMessageSendRequest'
+      responses:
+        '202':
+          description: Persisted message, including an idempotent replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentMessageSendResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/AgentMessageNotPermitted'
+        '404':
+          $ref: '#/components/responses/AgentMessageNotFound'
+        '409':
+          $ref: '#/components/responses/AgentMessageConflict'
+        '429':
+          $ref: '#/components/responses/AgentMessageLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AgentMessagingUnavailable'
+    get:
+      tags:
+        - Messages
+      operationId: listAgentMessages
+      summary: Read permitted Agent Messages
+      description: Filters combine with AND after read authorization. Store sequence orders pages ascending. toMe includes the verified continuation chain and exact own-Work identity, never a matching project label alone. markRead affects only messages the caller is permitted to receive. follow uses source-native Events and ends on process reconstruction. Each message frame uses the message SSE event; typed stream failures use the error SSE event with an ErrorResponse payload.
+      security:
+        - WorkerSessionCaller: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/AgentMessageCallerId'
+        - $ref: '#/components/parameters/AgentMessageFactorySessionId'
+        - name: toMe
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: toWorkerSessionId
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: fromWorkerSessionId
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: threadId
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: correlationWorkId
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: correlationFactorySessionId
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/AgentMessageDeliveryStatus'
+        - name: maxResults
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: nextToken
+          in: query
+          schema:
+            type: string
+            minLength: 1
+        - name: markRead
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: follow
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Authorized page or filtered source-native observations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentMessageListResponse'
+            text/event-stream:
+              schema:
+                type: string
+              x-event-schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - recordId
+                  - sequence
+                  - kind
+                  - message
+                properties:
+                  recordId:
+                    type: string
+                    minLength: 1
+                  sequence:
+                    type: integer
+                    minimum: 1
+                  kind:
+                    type: string
+                    enum:
+                      - SENT
+                      - READ
+                      - REPLIED
+                      - EXPIRED
+                  message:
+                    $ref: '#/components/schemas/AgentMessage'
+              x-error-event-schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - message
+                  - family
+                  - code
+                properties:
+                  message:
+                    type: string
+                  family:
+                    $ref: '#/components/schemas/ErrorFamily'
+                  code:
+                    type: string
+                    description: Stable machine-readable error code.
+                    enum:
+                      - CONFLICT
+                      - BAD_REQUEST
+                      - FACTORY_SESSION_CONFIG_LOAD_FAILED
+                      - INVALID_FACTORY_NAME
+                      - FACTORY_ALREADY_EXISTS
+                      - INVALID_FACTORY
+                      - FACTORY_NOT_IDLE
+                      - STALE_FACTORY_VERSION
+                      - MOVE_WORK_REQUEST_ALREADY_APPLIED
+                      - METHOD_NOT_ALLOWED
+                      - EXECUTION_REQUEST_ID_CONFLICT
+                      - REQUEST_CONFLICT
+                      - WORKER_SESSION_START_REQUEST_ID_CONFLICT
+                      - WORKER_SESSION_NOT_STARTABLE
+                      - WORKER_SESSION_CALLER_INVALID
+                      - WORKER_SESSION_START_OPENING_FAILED
+                      - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
+                      - WORKER_SESSION_EVENT_CURSOR_INVALID
+                      - WORKER_SESSION_EVENT_CURSOR_FOREIGN
+                      - WORKER_SESSION_EVENT_CURSOR_FUTURE
+                      - WORKER_SESSION_EVENT_CURSOR_STALE
+                      - WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE
+                      - WORKER_SESSION_ADMISSION_FAILED
+                      - WORKER_SESSION_AMBIGUOUS
+                      - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
+                      - WORKER_SESSION_CONTINUATION_CONFLICT
+                      - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
+                      - WORKER_SESSION_CONTINUATION_ADMISSION_FAILED
+                      - WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT
+                      - WORKER_SESSION_INTERRUPT_CONFLICT
+                      - WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED
+                      - WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED
+                      - WORKER_SESSION_INTERRUPT_ADMISSION_FAILED
+                      - WORKER_SESSION_CONTROL_INVALID
+                      - WORKER_SESSION_CONTROL_CONFLICT
+                      - WORKER_SESSION_CONTROL_FAILED
+                      - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
+                      - RESOURCE_CAPACITY_IN_USE
+                      - REVISION_CONFLICT
+                      - LIFECYCLE_CONFLICT
+                      - ADMITTED_APPLICATION_FAILURE
+                      - INVALID_RESPONSE_EVENT_CURSOR
+                      - INVALID_RESPONSE_EVENT_FILTER
+                      - RESPONSE_EVENT_SESSION_NOT_FOUND
+                      - RESPONSE_EVENT_STREAM_EXPIRED
+                      - PROVIDER_UNSUPPORTED
+                      - SESSION_KIND_UNSUPPORTED
+                      - PROJECTION_UNAVAILABLE
+                      - WORKER_SESSION_RECORDING_CORRUPT
+                      - WORKER_SESSION_RECORDING_UNAVAILABLE
+                      - WORKER_SESSION_STREAM_UNAVAILABLE
+                      - WORKER_SESSION_TRANSCRIPT_ACTIVE
+                      - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
+                      - WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE
+                      - METRICS_INVALID_REQUEST
+                      - METRICS_SESSION_NOT_FOUND
+                      - METRICS_SESSION_SCOPE_UNAVAILABLE
+                      - MODEL_CACHE_NOT_FOUND
+                      - MODEL_CACHE_IN_USE
+                      - MODEL_CACHE_REFERENCE_UNCERTAIN
+                      - NOT_FOUND
+                      - INTERNAL_ERROR
+                      - COSTS_INVALID_REQUEST
+                      - COSTS_QUERY_CANCELED
+                      - COSTS_QUERY_FAILED
+                      - COSTS_QUERY_TIMEOUT
+                      - SHUTDOWN_CONTROL_REJECTED
+                      - SHUTDOWN_CONTROL_UNAVAILABLE
+                      - MESSAGE_INVALID_REQUEST
+                      - MESSAGE_NOT_PERMITTED
+                      - MESSAGE_RECIPIENT_NOT_FOUND
+                      - MESSAGE_NOT_FOUND
+                      - MESSAGE_REQUEST_CONFLICT
+                      - MESSAGE_INTERRUPT_UNSUPPORTED
+                      - MESSAGE_LIMIT_EXCEEDED
+                      - MESSAGE_CURSOR_INVALID
+                      - MESSAGING_DISABLED
+                      - MESSAGE_STORE_UNAVAILABLE
+                      - MESSAGE_STORE_CORRUPT
+                      - MESSAGE_STREAM_UNAVAILABLE
+                      - MESSAGE_STREAM_GAP
+                      - MESSAGE_STREAM_BACKPRESSURE
+                    x-enum-descriptions:
+                      - A Work Request conflicts with an already reserved explicit Work ID.
+                      - Request payload or parameter validation failed.
+                      - Factory session discovery found a readable factory target whose config could not be loaded.
+                      - Named factory name validation failed.
+                      - Submitted named factory already exists.
+                      - Submitted named factory payload failed validation.
+                      - Current factory runtime is not idle and cannot activate a new named factory.
+                      - Submitted editable factory definition was based on an older version than the current definition.
+                      - Operator move requestId was already applied for this session.
+                      - The HTTP method is not allowed for the requested route.
+                      - Durable execution requestId was reused with materially different inputs.
+                      - A live-change requestId was reused with a different normalized request body.
+                      - Worker Session start requestId was reused with different normalized inputs.
+                      - The requested Worker Session identity is already reserved or terminal.
+                      - Worker Session caller credentials are invalid or no longer belong to a running owner.
+                      - The Worker Session opening record could not be published.
+                      - The Worker Session event topic did not reach the required readiness barrier.
+                      - The Worker Session event cursor is malformed.
+                      - The Worker Session event cursor belongs to another Worker Session.
+                      - The Worker Session event cursor is ahead of the available history.
+                      - The Worker Session event cursor no longer names retained history.
+                      - The Worker Session event cursor's durable stream generation is unavailable.
+                      - Workers could not admit the Worker Session execution.
+                      - Worker Session ID is retained by multiple Factory Sessions; select factorySessionId from details.candidates.
+                      - Worker Session continuation requestId was reused with different inputs.
+                      - The Worker Session continuation conflicts with source lifecycle or successor lineage.
+                      - The recorded Provider Session cannot be resumed for this Worker Session continuation.
+                      - Workers could not admit the Worker Session continuation.
+                      - Worker Session interrupt requestId was reused with different inputs.
+                      - Worker Session interrupt conflicts with source lifecycle, lineage, or Provider Session state.
+                      - Worker Sessions could not cancel the exact source dispatch for an interrupt.
+                      - Worker Sessions canceled the source but could not admit the replacement successor.
+                      - Workers could not admit the Worker Session interrupt replacement.
+                      - The Worker Session control request is invalid.
+                      - The Worker Session control conflicts with current lifecycle or request state.
+                      - The Worker Session control could not be completed.
+                      - Lifecycle control requestId was already applied with different control inputs.
+                      - Requested resource capacity is below the number of units currently in use.
+                      - The caller's expected Factory revision is no longer current.
+                      - The Factory Session lifecycle does not admit the requested change.
+                      - A live change was admitted but its runtime application failed.
+                      - The Factory Response Event reconnect cursor is invalid.
+                      - A Factory Response Event filter is invalid.
+                      - The explicitly selected Factory Session for response events does not exist.
+                      - The retained Factory Response Event stream is no longer available.
+                      - The requested Provider Session provider is not loadable by this API.
+                      - The requested Provider Session identifier kind is not loadable by this API.
+                      - The correlated Worker Session projection is temporarily unavailable.
+                      - The durable Worker Session recording contains corrupt history.
+                      - The durable Worker Session recording could not be read.
+                      - The canonical Worker Session event stream is temporarily unavailable.
+                      - The requested Worker Session has not reached a terminal state.
+                      - The finished Worker Session has no normalized transcript available.
+                      - Provider Sessions could not project the normalized Worker Session transcript.
+                      - The metrics request could not be interpreted by the canonical metrics route.
+                      - The requested live Factory Session identity was not discoverable.
+                      - The live Factory Session was discoverable, but no retained metrics scope was available.
+                      - The selected managed model cache revision does not exist.
+                      - The selected managed model cache revision is held by an active model host or invocation.
+                      - Managed model cache references could not be proven safe for reclamation.
+                      - The requested resource does not exist.
+                      - The server failed while handling an otherwise valid request.
+                      - The metrics costs request contained invalid configuration or selection input.
+                      - The metrics costs request was canceled before the report completed.
+                      - The metrics costs query failed while reading or valuing runtime usage.
+                      - The metrics costs query exceeded its server-side completion bound.
+                      - The shutdown control request came from a non-loopback peer.
+                      - The invocation-local shutdown control is unavailable.
+                      - The message input or reference is invalid.
+                      - The caller may not perform this messaging operation.
+                      - The addressed Worker Session does not exist.
+                      - The addressed message does not exist.
+                      - The sender request key has different privacy-normalized inputs.
+                      - T5 cannot interrupt a Worker Session.
+                      - A configured message volume or thread limit was exceeded.
+                      - The page cursor is malformed or belongs to a different authorized query.
+                      - Messaging is disabled.
+                      - The message store could not durably commit the operation.
+                      - The message store contains invalid committed data.
+                      - The process-local Agent Message observation stream is unavailable.
+                      - Agent Message observation history has a retention gap; pull the durable inbox again.
+                      - The Agent Message observation subscriber exceeded its bounded pending capacity.
+                  targets:
+                    type: array
+                    description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
+                    items:
+                      $ref: '#/components/schemas/FactoryValidationTarget'
+                  resourceCapacity:
+                    $ref: '#/components/schemas/FactorySessionResourceCapacityErrorDetails'
+                    description: Resource accounting for a rejected capacity reduction.
+                  details:
+                    description: Optional error-specific JSON details, including legacy string values. When code is WORKER_SESSION_AMBIGUOUS, this is a WorkerSessionAddressDetails object containing exact candidate identities in candidates.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/AgentMessageNotPermitted'
+        '409':
+          $ref: '#/components/responses/AgentMessageConflict'
+        '410':
+          $ref: '#/components/responses/AgentMessageStreamGap'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AgentMessagingUnavailable'
+  /messages/{message_id}:
+    get:
+      tags:
+        - Messages
+      operationId: getAgentMessage
+      summary: Read one Agent Message
+      description: A permitted recipient reading QUEUED marks it READ durably. Sender and operator observation never marks another recipient's message. REPLIED and EXPIRED do not regress to READ.
+      security:
+        - WorkerSessionCaller: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/AgentMessageCallerId'
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: Authorized message with its current durable status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/AgentMessageNotPermitted'
+        '404':
+          $ref: '#/components/responses/AgentMessageNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AgentMessagingUnavailable'
   /metrics:
     get:
       tags:
@@ -2303,6 +2688,21 @@ components:
       scheme: bearer
       bearerFormat: base64url-32-bytes-unpadded
   parameters:
+    AgentMessageCallerId:
+      name: X-You-Worker-Session-Id
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+      description: Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+    AgentMessageFactorySessionId:
+      name: factorySessionId
+      in: query
+      schema:
+        type: string
+        minLength: 1
+      description: Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
     SessionID:
       name: session_id
       in: path
@@ -2574,6 +2974,48 @@ components:
       schema:
         type: string
   responses:
+    AgentMessageNotPermitted:
+      description: The caller lacks authority for this Agent Message operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AgentMessageNotFound:
+      description: The recipient or Agent Message does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AgentMessageConflict:
+      description: The request identity conflicts, or the recipient identity is ambiguous.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AgentMessagingUnavailable:
+      description: Messaging is disabled, or its store or observation stream is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AgentMessageStreamGap:
+      description: The source-native observation stream has a retention gap. Pull the inbox before following again.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    AgentMessageLimitExceeded:
+      description: A configured successful-send or thread limit prevents admission.
+      headers:
+        Retry-After:
+          description: Seconds until a rolling sender limit permits another send.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     BadRequest:
       description: Request payload or parameter was invalid.
       content:
@@ -2958,6 +3400,258 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    AgentMessageSendRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - body
+      description: At least one of to or inReplyTo is required. Replies without to target the original sender.
+      anyOf:
+        - required:
+            - to
+        - required:
+            - inReplyTo
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        to:
+          $ref: '#/components/schemas/AgentMessageAddress'
+        body:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          description: Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction.
+        bodySecret:
+          type: boolean
+          default: false
+          description: Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+        inReplyTo:
+          type: string
+          minLength: 1
+        delivery:
+          type: string
+          enum:
+            - QUEUE
+            - INTERRUPT
+          default: QUEUE
+          description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+        ifEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+          default: REVIVE
+          description: T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+        replyIfEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+          default: REVIVE
+          description: Default ifEnded for a reply, unless explicitly overridden.
+        correlation:
+          type: object
+          additionalProperties: false
+          properties:
+            workId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              minLength: 1
+        expiresInSeconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+          default: 86400
+    AgentMessageAddress:
+      type: object
+      additionalProperties: false
+      required:
+        - workerSessionId
+      properties:
+        workerSessionId:
+          type: string
+          minLength: 1
+    AgentMessage:
+      type: object
+      additionalProperties: false
+      required:
+        - messageId
+        - threadId
+        - from
+        - to
+        - body
+        - bodySha256
+        - bodyRedactionCount
+        - delivery
+        - ifEnded
+        - replyIfEnded
+        - status
+        - hop
+        - sentAt
+        - expiresAt
+      properties:
+        messageId:
+          type: string
+          description: Globally unique msg-<ULID> identity.
+        threadId:
+          type: string
+          description: Identity of the first message in the thread.
+        inReplyTo:
+          type: string
+          nullable: true
+        from:
+          type: object
+          additionalProperties: false
+          required:
+            - principal
+            - workerSessionId
+          properties:
+            principal:
+              type: string
+              enum:
+                - WORKER
+            workerSessionId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              nullable: true
+        to:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - workerSessionId
+          properties:
+            kind:
+              type: string
+              enum:
+                - WORKER_SESSION
+            workerSessionId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              nullable: true
+            deliveredWorkerSessionId:
+              type: string
+              nullable: true
+        correlation:
+          type: object
+          additionalProperties: false
+          properties:
+            workId:
+              type: string
+            factorySessionId:
+              type: string
+        body:
+          type: string
+          description: Privacy-normalized body only. Unauthorized workers receive no record.
+        bodySha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          description: SHA-256 of the redacted UTF-8 body.
+        bodyRedactionCount:
+          type: integer
+          minimum: 0
+        delivery:
+          type: string
+          enum:
+            - QUEUE
+            - INTERRUPT
+        ifEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+        replyIfEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+        status:
+          $ref: '#/components/schemas/AgentMessageDeliveryStatus'
+        reason:
+          type: string
+          nullable: true
+          description: Typed code only. T5 may emit REVIVE_UNSUPPORTED.
+        hop:
+          type: integer
+          minimum: 0
+          maximum: 3
+        sentAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revivedWorkerSessionId:
+          type: string
+          nullable: true
+        repliedByMessageId:
+          type: string
+          nullable: true
+    AgentMessageDeliveryStatus:
+      type: string
+      enum:
+        - QUEUED
+        - READ
+        - DELIVERED_REVIVE
+        - DELIVERED_INTERRUPT
+        - REPLIED
+        - EXPIRED
+        - REJECTED
+      description: T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+    AgentMessageSendResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
+          $ref: '#/components/schemas/AgentMessage'
+    AgentMessageListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMessage'
+        nextToken:
+          type: string
+          nullable: true
+    AgentMessageObservation:
+      type: object
+      additionalProperties: false
+      required:
+        - recordId
+        - sequence
+        - kind
+        - message
+      properties:
+        recordId:
+          type: string
+          minLength: 1
+        sequence:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum:
+            - SENT
+            - READ
+            - REPLIED
+            - EXPIRED
+        message:
+          $ref: '#/components/schemas/AgentMessage'
     SubmitWorkRequest:
       type: object
       additionalProperties: false
@@ -6085,6 +6779,20 @@ components:
             - COSTS_QUERY_TIMEOUT
             - SHUTDOWN_CONTROL_REJECTED
             - SHUTDOWN_CONTROL_UNAVAILABLE
+            - MESSAGE_INVALID_REQUEST
+            - MESSAGE_NOT_PERMITTED
+            - MESSAGE_RECIPIENT_NOT_FOUND
+            - MESSAGE_NOT_FOUND
+            - MESSAGE_REQUEST_CONFLICT
+            - MESSAGE_INTERRUPT_UNSUPPORTED
+            - MESSAGE_LIMIT_EXCEEDED
+            - MESSAGE_CURSOR_INVALID
+            - MESSAGING_DISABLED
+            - MESSAGE_STORE_UNAVAILABLE
+            - MESSAGE_STORE_CORRUPT
+            - MESSAGE_STREAM_UNAVAILABLE
+            - MESSAGE_STREAM_GAP
+            - MESSAGE_STREAM_BACKPRESSURE
           x-enum-descriptions:
             - A Work Request conflicts with an already reserved explicit Work ID.
             - Request payload or parameter validation failed.
@@ -6119,6 +6827,9 @@ components:
             - Worker Sessions could not cancel the exact source dispatch for an interrupt.
             - Worker Sessions canceled the source but could not admit the replacement successor.
             - Workers could not admit the Worker Session interrupt replacement.
+            - The Worker Session control request is invalid.
+            - The Worker Session control conflicts with current lifecycle or request state.
+            - The Worker Session control could not be completed.
             - Lifecycle control requestId was already applied with different control inputs.
             - Requested resource capacity is below the number of units currently in use.
             - The caller's expected Factory revision is no longer current.
@@ -6151,6 +6862,20 @@ components:
             - The metrics costs query exceeded its server-side completion bound.
             - The shutdown control request came from a non-loopback peer.
             - The invocation-local shutdown control is unavailable.
+            - The message input or reference is invalid.
+            - The caller may not perform this messaging operation.
+            - The addressed Worker Session does not exist.
+            - The addressed message does not exist.
+            - The sender request key has different privacy-normalized inputs.
+            - T5 cannot interrupt a Worker Session.
+            - A configured message volume or thread limit was exceeded.
+            - The page cursor is malformed or belongs to a different authorized query.
+            - Messaging is disabled.
+            - The message store could not durably commit the operation.
+            - The message store contains invalid committed data.
+            - The process-local Agent Message observation stream is unavailable.
+            - Agent Message observation history has a retention gap; pull the durable inbox again.
+            - The Agent Message observation subscriber exceeded its bounded pending capacity.
         targets:
           type: array
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
@@ -14912,6 +15637,8 @@ components:
       additionalProperties: true
       description: Shared operator configuration stored in .you-agent-factory/config.json.
       properties:
+        messaging:
+          $ref: '#/components/schemas/GlobalConfigMessaging'
         backendScopeID:
           type: string
           description: Stable identifier for the local provider-backed runtime boundary.
@@ -16182,6 +16909,61 @@ components:
           enum:
             - CANCELED
             - SUPERSEDED
+    GlobalConfigMessaging:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        retentionDays:
+          type: integer
+          minimum: 1
+          default: 30
+        policy:
+          type: object
+          additionalProperties: false
+          properties:
+            scopeLabelKeys:
+              type: array
+              items:
+                type: string
+                minLength: 1
+              default:
+                - tag:project
+            allowCrossScope:
+              type: boolean
+              enum:
+                - false
+              default: false
+              description: Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+        limits:
+          type: object
+          additionalProperties: false
+          properties:
+            sendsPerChainPerHour:
+              type: integer
+              minimum: 1
+              default: 10
+            messagesPerThread:
+              type: integer
+              minimum: 1
+              default: 8
+            maxBodyBytes:
+              type: integer
+              minimum: 1
+              maximum: 8192
+              default: 8192
+            maxHop:
+              type: integer
+              minimum: 0
+              maximum: 3
+              default: 3
+            defaultExpirySeconds:
+              type: integer
+              minimum: 60
+              maximum: 604800
+              default: 86400
     GlobalConfigACPIntegration:
       type: object
       additionalProperties: false

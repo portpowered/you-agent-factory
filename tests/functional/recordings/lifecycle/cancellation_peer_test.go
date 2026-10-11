@@ -5,6 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"runtime"
+	"strings"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"os"
 	"path/filepath"
 	"sync"
@@ -359,4 +364,259 @@ func appendSelectedWorkFact(t *testing.T, service recordings.Service, sessionID,
 		t.Fatal(err)
 	}
 	return result.Event
+}
+
+// Claims and provider gates are path/Factory-owned. One immutable process hosts
+// every parallel fault cell, each with two explicit Sessions and private homes.
+func TestRecordingSelectedClaimLifetime(t *testing.T) {
+	runner := &ownershipRunner{gates: make(map[string]*ownershipGate)}
+	claims := &ownershipClaims{routes: make(map[string]*ownershipRoute)}
+	var service recordings.Service
+	var writes atomic.Int32
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
+		RecordingWriteFile:    func(path string, data []byte) error { writes.Add(1); return os.WriteFile(path, data, 0o600) },
+		ProviderCommandRunner: runner, RecordingTargetClaim: claims.acquire,
+		RecordingsRootObserver: func(root recordings.Service) { service = root },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := process.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+		claims.mu.Lock()
+		defer claims.mu.Unlock()
+		for path, route := range claims.routes {
+			if route.closes > 0 && route.held {
+				t.Errorf("close retry retained target %q", path)
+			}
+		}
+	})
+	if claims.calls.Load() != 0 || runner.calls.Load() != 0 || writes.Load() != 0 {
+		t.Fatal("construction performed recording/provider effects")
+	}
+	for index, mode := range []string{"success", "busy", "acquisition-failure", "release-failure"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			runSelectedClaimLifetime(t, index, mode, process, service, runner, claims)
+		})
+	}
+}
+
+func runSelectedClaimLifetime(t *testing.T, index int, mode string, process support.Process, service recordings.Service, runner *ownershipRunner, claims *ownershipClaims) {
+	t.Helper()
+	id := fmt.Sprintf("019a07c0-0000-7000-8000-%012d", 100+index*3)
+	peerID := fmt.Sprintf("019a07c0-0000-7000-8000-%012d", 101+index*3)
+	pattern := filepath.Join(t.TempDir(), "__factory_session_id__.json")
+	path := strings.ReplaceAll(pattern, "__factory_session_id__", id)
+	peerPath := strings.ReplaceAll(pattern, "__factory_session_id__", peerID)
+	selected := selectedClaimRoute(t, path, mode)
+	t.Cleanup(func() { claims.mu.Lock(); selected.releaseErr = nil; claims.mu.Unlock() })
+	peer := &ownershipRoute{}
+	claims.mu.Lock()
+	claims.routes[path], claims.routes[peerPath] = selected, peer
+	claims.mu.Unlock()
+	peerInputs := cancellationRecordingInputs(t, pattern)
+	peerInputs.WorkingDirectory = peerInputs.Args[3]
+	peerInputs.Args = append(peerInputs.Args, "--session", peerID)
+	gate := &ownershipGate{started: make(chan struct{}), release: make(chan struct{})}
+	runner.mu.Lock()
+	runner.gates[peerInputs.Args[3]] = gate
+	runner.mu.Unlock()
+	var once sync.Once
+	release := func() { once.Do(func() { close(gate.release) }) }
+	peerDone := executeGatedRecordingCommand(t, process, peerInputs, release)
+	select {
+	case <-gate.started:
+	case err := <-peerDone:
+		t.Fatalf("peer failed before readiness: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("peer not ready")
+	}
+	inputs := cancellationRecordingInputs(t, pattern)
+	inputs.Args = append(inputs.Args, "--session", id)
+	err := process.Execute(inputs.Input)
+	assertSelectedClaimOutcome(t, service, id, path, mode, inputs, selected.cause, err)
+	claims.mu.Lock()
+	if selected.calls != 1 || peer.calls != 1 || !peer.held || peer.closes != 0 {
+		t.Error("selected failure/stop released peer or acquired repeatedly")
+	}
+	if selected.held != (mode == "busy" || mode == "release-failure") {
+		t.Error("incorrect selected ownership after close")
+	}
+	selected.releaseErr = nil // Permit the existing public close retry at cleanup.
+	claims.mu.Unlock()
+	release()
+	if err := <-peerDone; err != nil {
+		t.Fatal(err)
+	}
+	assertOwnershipHistory(t, service, peerID, peerPath)
+	if mode == "success" {
+		assertLaterClaimAndDisabledRecording(t, process, claims, selected, pattern, id)
+	}
+}
+
+func selectedClaimRoute(t *testing.T, path, mode string) *ownershipRoute {
+	t.Helper()
+	selected := &ownershipRoute{cause: errors.New("PRIVATE_CLAIM_CAUSE")}
+	if mode == "acquisition-failure" {
+		selected.acquireErr = selected.cause
+	}
+	if mode == "release-failure" {
+		selected.releaseErr = selected.cause
+	}
+	if mode == "busy" {
+		if err := os.WriteFile(path, []byte("existing external owner"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		selected.held = true
+	}
+	return selected
+}
+
+func assertLaterClaimAndDisabledRecording(t *testing.T, process support.Process, claims *ownershipClaims, selected *ownershipRoute, pattern, id string) {
+	t.Helper()
+	again := cancellationRecordingInputs(t, pattern)
+	again.Args = append(again.Args, "--session", id)
+	if err := process.Execute(again.Input); err != nil {
+		t.Fatal(err)
+	}
+	claims.mu.Lock()
+	calls, held := selected.calls, selected.held
+	claims.mu.Unlock()
+	if calls != 2 || held {
+		t.Fatalf("later ownership calls=%d held=%t", calls, held)
+	}
+	disabled := cancellationRecordingInputs(t, pattern)
+	disabled.Args = append(disabled.Args[:len(disabled.Args)-2], "--no-record", "--session", "019a07c0-0000-7000-8000-000000000199")
+	if err := process.Execute(disabled.Input); err != nil {
+		t.Fatal(err)
+	}
+	claims.mu.Lock()
+	calls = selected.calls
+	claims.mu.Unlock()
+	if calls != 2 {
+		t.Fatal("disabled recording acquired ownership")
+	}
+}
+
+func assertSelectedClaimOutcome(t *testing.T, service recordings.Service, id, path, mode string, inputs *support.CapturedInputs, cause, err error) {
+	t.Helper()
+	if mode == "success" {
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertOwnershipHistory(t, service, id, path)
+	} else if mode == "release-failure" {
+		if !errors.Is(err, cause) {
+			t.Fatalf("release cause lost: %v", err)
+		}
+	} else {
+		var coded interface{ CLIErrorCode() string }
+		if !errors.Is(err, recordings.ErrRecordingBindingConflict) || !errors.As(err, &coded) || coded.CLIErrorCode() != "RECORDING_TARGET_CONFLICT" {
+			t.Fatalf("claim refusal lost typed conflict: %v", err)
+		}
+		if mode == "acquisition-failure" && !errors.Is(err, cause) {
+			t.Fatalf("acquisition cause lost: %v", err)
+		}
+		if strings.Contains(inputs.Stderr(), cause.Error()) {
+			t.Fatal("private acquisition cause exposed")
+		}
+		if mode == "busy" {
+			if data, err := os.ReadFile(path); err != nil || string(data) != "existing external owner" {
+				t.Fatalf("busy target bytes changed: %q, %v", data, err)
+			}
+		} else if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("failed acquisition published artifact: %v", err)
+		}
+	}
+}
+
+type ownershipGate struct{ started, release chan struct{} }
+type ownershipRunner struct {
+	mu    sync.Mutex
+	gates map[string]*ownershipGate
+	calls atomic.Int32
+}
+
+func (runner *ownershipRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.calls.Add(1)
+	runner.mu.Lock()
+	gate := runner.gates[request.WorkDir]
+	runner.mu.Unlock()
+	if gate != nil {
+		close(gate.started)
+		select {
+		case <-gate.release:
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	}
+	return support.NewStaticSuccessCommandRunner("ownership COMPLETE").Run(ctx, request)
+}
+
+type ownershipRoute struct {
+	cause, acquireErr, releaseErr error
+	held                          bool
+	calls, closes                 int
+}
+type ownershipClaims struct {
+	mu     sync.Mutex
+	routes map[string]*ownershipRoute
+	calls  atomic.Int32
+}
+
+func (claims *ownershipClaims) acquire(ctx context.Context, path, marker string) (io.Closer, error) {
+	claims.calls.Add(1)
+	key, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	if marker != key+".recording.lock" || ctx.Err() != nil {
+		return nil, fmt.Errorf("incorrect claim arguments")
+	}
+	claims.mu.Lock()
+	defer claims.mu.Unlock()
+	route := claims.routes[path]
+	if route == nil {
+		return nil, fmt.Errorf("unexpected recording destination %q", path)
+	}
+	route.calls++
+	if route.acquireErr != nil {
+		return nil, route.acquireErr
+	}
+	if route.held {
+		return nil, recordings.ErrRecordingBindingConflict
+	}
+	route.held = true
+	return &ownershipLease{claims: claims, route: route}, nil
+}
+
+type ownershipLease struct {
+	claims *ownershipClaims
+	route  *ownershipRoute
+}
+
+func (lease *ownershipLease) Close() error {
+	lease.claims.mu.Lock()
+	defer lease.claims.mu.Unlock()
+	lease.route.closes++
+	if lease.route.releaseErr != nil {
+		return lease.route.releaseErr
+	}
+	lease.route.held = false
+	return nil
+}
+func assertOwnershipHistory(t *testing.T, service recordings.Service, id, path string) {
+	t.Helper()
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: recordings.HistoricalRecordingIdentity{
+		RecordingID: recordings.RecordingID(id), Artifact: recordings.RecordingArtifactReference(path), Scope: recordings.CanonicalEventScope{FactorySessionID: id},
+	}})
+	if err != nil || len(history.Dispatches) != 1 || history.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted {
+		t.Fatalf("owned history = %#v, %v", history, err)
+	}
 }

@@ -303,7 +303,17 @@ func downgradeHistoryCapture(t *testing.T, home string) {
 			if err := json.Unmarshal(line, &record); err != nil {
 				return err
 			}
+			if source, ok := record["record"]; ok {
+				record["record"], err = removeHistoryRecordName(source)
+				if err != nil {
+					return err
+				}
+			}
 			if _, ok := record["originatingArtifact"]; !ok {
+				lines[i], err = json.Marshal(record)
+				if err != nil {
+					return err
+				}
 				continue
 			}
 			delete(record, "originatingArtifact")
@@ -629,4 +639,72 @@ func (output *historyOutput) snapshot() []byte {
 	output.mu.Lock()
 	defer output.mu.Unlock()
 	return bytes.Clone(output.buffer.Bytes())
+}
+
+// Remove only the explicit name label: the legacy fixture retains all opening
+// identities and other metadata, along with its terminal and content records.
+func removeHistoryOpeningName(payload json.RawMessage) (json.RawMessage, error) {
+	var draft workers.Draft
+	if err := json.Unmarshal(payload, &draft); err != nil {
+		return nil, err
+	}
+	if draft.Kind != workers.KindSession || draft.Phase != workers.PhaseStarted {
+		return payload, nil
+	}
+	var opening workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &opening); err != nil {
+		return nil, err
+	}
+	if len(opening.SessionMetadata) == 0 {
+		return payload, nil
+	}
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal(opening.SessionMetadata, &metadata); err != nil {
+		return nil, err
+	}
+	var labels []string
+	if raw, ok := metadata["labels"]; ok {
+		if err := json.Unmarshal(raw, &labels); err != nil {
+			return nil, err
+		}
+	} else {
+		return payload, nil
+	}
+	retained := make([]string, 0, len(labels))
+	for _, label := range labels {
+		if !strings.HasPrefix(label, "tag:_work_name=") {
+			retained = append(retained, label)
+		}
+	}
+	var err error
+	metadata["labels"], err = json.Marshal(retained)
+	if err != nil {
+		return nil, err
+	}
+	opening.SessionMetadata, err = json.Marshal(metadata)
+	if err != nil {
+		return nil, err
+	}
+	draft.Payload, err = json.Marshal(opening)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(draft)
+}
+
+func removeHistoryRecordName(source json.RawMessage) (json.RawMessage, error) {
+	var record map[string]json.RawMessage
+	if err := json.Unmarshal(source, &record); err != nil {
+		return nil, err
+	}
+	payload, ok := record["Payload"]
+	if !ok {
+		return source, nil
+	}
+	var err error
+	record["Payload"], err = removeHistoryOpeningName(payload)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(record)
 }

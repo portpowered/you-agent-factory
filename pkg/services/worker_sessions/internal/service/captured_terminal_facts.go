@@ -10,13 +10,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// Live attempts retain exact capture health, including active prefixes.
 // Durable terminal attempts use the same host capture clock as archives.
 // A live terminal may precede durable admission; retain its owned lifecycle
 // timing until the committed capture can supply the complete timing tuple.
 func (r *registry) withCapturedTerminalObservation(ctx context.Context, observation workersessions.Observation) workersessions.Observation {
-	if _, err := terminalPhase(observation.State); err != nil {
-		return observation
-	}
 	publication := r.publicationFor(r.workerAddress(observation.WorkerSessionID, observation.FactorySessionID))
 	if publication == nil {
 		return observation
@@ -39,6 +37,14 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 		item.Catalog.RecordingGenerationID != target.RecordingGenerationID || item.Catalog.OwnerEpoch != target.OwnerEpoch {
 		return observation
 	}
+	opening, err := historyOpening(item)
+	if err != nil || opening.AttemptID != observation.AttemptID {
+		return observation
+	}
+	observation.RecordingHealth, observation.RecordingHealthReason = item.Health, item.HealthReason
+	if !observation.State.Terminal() {
+		return observation
+	}
 	if !capturedTerminalMatchesObservation(item, observation) {
 		return observation
 	}
@@ -47,24 +53,20 @@ func (r *registry) withCapturedTerminalObservation(ctx context.Context, observat
 		return observation
 	}
 	applySummaryTerminalCause(summary, captured)
+	// Descriptive metadata comes from the same validated opening as archived
+	// READ, including compatible captures whose labels differ from live input.
+	observation.Requester, observation.Correlation, observation.Labels = captured.Requester, captured.Correlation, captured.Labels
 	if captured.StartedAt != nil && captured.EndedAt != nil && captured.Duration != nil {
 		observation.StartedAt, observation.EndedAt, observation.Duration = captured.StartedAt, captured.EndedAt, captured.Duration
 		observation.DurationBasis = captured.DurationBasis
 	}
 	observation.ProviderSession, observation.ProviderSessionAvailable = captured.ProviderSession, captured.ProviderSessionAvailable
 	observation.Transcript, observation.TokenUsage = captured.Transcript, captured.TokenUsage
-	if captured.Failure != nil {
-		if observation.Failure == nil {
-			observation.Failure = captured.Failure
-		} else {
-			failure := *observation.Failure
-			failure.Kind, failure.Detail = captured.Failure.Kind, captured.Failure.Detail
-			if captured.Failure.AgentRunFailureClass != "" {
-				failure.AgentRunFailureClass = captured.Failure.AgentRunFailureClass
-			}
-			observation.Failure = &failure
-		}
-	}
+	// A matched committed terminal is authoritative for optional facts too.
+	// Keeping live-only classifications would make LIST disagree with archived
+	// READ and turn absent legacy evidence into a recorded provider outcome.
+	observation.Failure = captured.Failure
+	observation.ConfirmationState = captured.ConfirmationState
 	observation.TerminalCause = captured.TerminalCause
 	observation.RecordingHealth, observation.RecordingHealthReason = captured.RecordingHealth, captured.RecordingHealthReason
 	return observation
