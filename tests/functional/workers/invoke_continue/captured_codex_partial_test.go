@@ -17,8 +17,8 @@ import (
 
 func newCapturedCodexPartialRunner() *capturedCodexToolRunner {
 	output := []byte(`{"type":"thread.started","thread_id":"captured-partial-thread"}
-{"type":"item.started","item":{"id":"partial","type":"command_execution","command":"private-command","status":"in_progress"}}
-{"type":"item.updated","item":{"id":"partial","type":"command_execution","aggregated_output":"private-output","status":"in_progress"}}
+{"type":"item.started","item":{"id":"partial","type":"command_execution","command":"benign-command","status":"in_progress"}}
+{"type":"item.updated","item":{"id":"partial","type":"command_execution","aggregated_output":"benign-output","status":"in_progress"}}
 {"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"must never arrive"}}
 `)
 	r := &capturedCodexToolRunner{invokeContinueResettableProviderCommandRunner: newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: output})}
@@ -53,7 +53,7 @@ func TestCapturedCodexToolTerminationPreservesPartialFacts(t *testing.T) {
 	peer := fixture.scenario(t, "captured-codex-partial-peer")
 	defer peer.close(t)
 	peerID := scenarioScopedID(peer, "peer")
-	peerInvoke := t7RemoteCLIInputs(peer, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, peer, peerID))
+	peerInvoke := t7RemoteCLIInputs(peer, ctx, fixture.baseURL, "invoke", "--execution", capturedCodexExecutionPath(t, peer, peerID))
 	if err := fixture.process.Execute(peerInvoke.Input); err != nil {
 		t.Fatal("partial tool sibling admission failed")
 	}
@@ -139,8 +139,8 @@ func assertCapturedCodexPartialTranscriptFacts(t *testing.T, transcript api.Work
 	if transcript.Entries[0].Type != "tool_call" || transcript.Entries[0].Arguments == nil || transcript.Entries[1].Type != "tool_output" || transcript.Entries[1].Output == nil {
 		t.Fatal("partial transcript lost earlier arguments or emitted output")
 	}
-	if strings.Contains(body, "exit_code") || strings.Contains(body, "private-command") || strings.Contains(body, "private-output") || strings.Contains(body, "must never arrive") {
-		t.Fatal("partial transcript invented unavailable facts or leaked private summary")
+	if strings.Contains(body, "exit_code") || !strings.Contains(body, "benign-command") || !strings.Contains(body, "benign-output") || strings.Contains(body, "must never arrive") {
+		t.Fatal("partial transcript invented unavailable facts or lost benign content")
 	}
 }
 
@@ -220,8 +220,8 @@ func assertCapturedCodexPartialLogs(t *testing.T, page api.WorkerSessionLogPage)
 		if payload.ToolCallID != "partial" || payload.ToolName != "command_execution" || payload.Status != "in_progress" {
 			t.Fatal("partial tool facts changed")
 		}
-		if strings.Contains(string(raw), "exit_code") || strings.Contains(string(raw), "private-command") || strings.Contains(string(raw), "private-output") {
-			t.Fatal("partial tool invented exit code or leaked sensitive summary")
+		if strings.Contains(string(raw), "exit_code") || (!strings.Contains(string(raw), "benign-command") && !strings.Contains(string(raw), "benign-output")) {
+			t.Fatal("partial tool invented exit code or lost benign content")
 		}
 		count++
 	}

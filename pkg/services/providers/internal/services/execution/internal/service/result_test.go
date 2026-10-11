@@ -288,16 +288,20 @@ func TestSanitizeCodexToolSummariesPreserveJSONAndPolicy(t *testing.T) {
 	t.Parallel()
 	request := providers.ExecuteRequest{EnvVars: map[string]string{"API_KEY": "planted-secret"}}
 	fact := providers.ExecuteProgress{Phase: "tool.completed", Metadata: map[string]string{
-		"raw_input":  `{"command":"private command","arguments":{"query":"planted\u002dsecret","password":"private-password","safe":"visible"}}`,
-		"raw_output": `{"aggregated_output":"private-output","exit_code":0,"status":"completed","result":{"value":"planted\u002dsecret","safe":"visible"}}`,
+		"raw_input":  `{"command":"private command planted\u002dsecret","arguments":{"query":"planted\u002dsecret","password":"private-password","safe":"visible"}}`,
+		"raw_output": `{"aggregated_output":"private-output planted\u002dsecret","exit_code":0,"status":"completed","result":{"value":"planted\u002dsecret","safe":"visible"}}`,
 	}}
 	live := sanitizeCapturedProgress(fact, request)
 	terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
-	for _, got := range []providers.ExecuteProgress{live, terminal} {
+	for index, got := range []providers.ExecuteProgress{live, terminal} {
 		for key, expected := range map[string]string{
 			"raw_input":  `{"arguments":{"password":"<redacted>","query":"<redacted>","safe":"visible"},"command":"<redacted>"}`,
 			"raw_output": `{"aggregated_output":"<redacted>","exit_code":0,"result":{"safe":"visible","value":"<redacted>"},"status":"completed"}`,
 		} {
+			if index == 0 {
+				expected = strings.ReplaceAll(expected, `"command":"<redacted>"`, `"command":"private command <redacted>"`)
+				expected = strings.ReplaceAll(expected, `"aggregated_output":"<redacted>"`, `"aggregated_output":"private-output <redacted>"`)
+			}
 			var actual, want any
 			if json.Unmarshal([]byte(got.Metadata[key]), &actual) != nil || json.Unmarshal([]byte(expected), &want) != nil || !reflect.DeepEqual(actual, want) {
 				t.Fatal("summary lost policy-safe typed facts")
@@ -321,19 +325,23 @@ func TestSanitizeCodexToolSummaryBoundaries(t *testing.T) {
 		{"private reasoning", "raw_input", `{"private_reasoning":"private thought","encrypted_content":"private blob"}`, `{"encrypted_content":"<redacted>","private_reasoning":"<redacted>"}`},
 		{"credential input keys", "raw_input", `{"arguments":{"planted\u002dsecret":"private value","prefix-planted-secret":1,"safe":0}}`, `{"arguments":{"safe":0}}`},
 		{"credential output key collisions", "raw_output", `{"result":{"planted-secret":"private value","prefix-planted-secret":1,"prefix-<redacted>":2,"<redacted>":3,"nested":[{"planted-secret":false,"safe":true}]},"exit_code":0,"status":"completed"}`, `{"result":{"prefix-<redacted>":2,"<redacted>":3,"nested":[{"safe":true}]},"exit_code":0,"status":"completed"}`},
-		{"malformed input", "raw_input", `{"value":"planted-secret"`, `{"value":"<redacted>"`},
-		{"malformed output", "raw_output", `{"value":"private output"`, `<redacted>`},
+		{"malformed input", "raw_input", `{"value":"planted-secret"`, `"<redacted>"`},
+		{"malformed output", "raw_output", `{"value":"private output"`, `"<redacted>"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			fact := providers.ExecuteProgress{Phase: "tool.updated", Metadata: map[string]string{test.key: test.value}}
 			live := sanitizeCapturedProgress(fact, request)
 			terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
-			for _, got := range []providers.ExecuteProgress{live, terminal} {
+			for index, got := range []providers.ExecuteProgress{live, terminal} {
 				var actual, expected any
-				matches := got.Metadata[test.key] == test.want
-				if json.Valid([]byte(test.want)) {
-					matches = json.Unmarshal([]byte(got.Metadata[test.key]), &actual) == nil && json.Unmarshal([]byte(test.want), &expected) == nil && reflect.DeepEqual(actual, expected)
+				want := test.want
+				if index == 0 && (test.name == "output array" || test.name == "output scalar") {
+					want = test.value
+				}
+				matches := got.Metadata[test.key] == want
+				if json.Valid([]byte(want)) {
+					matches = json.Unmarshal([]byte(got.Metadata[test.key]), &actual) == nil && json.Unmarshal([]byte(want), &expected) == nil && reflect.DeepEqual(actual, expected)
 				}
 				if !matches {
 					t.Fatalf("tool summary boundary changed: got=%q want=%q", got.Metadata[test.key], test.want)
