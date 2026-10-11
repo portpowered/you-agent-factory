@@ -127,8 +127,13 @@ func assertArchivedMCPReplayRecords(t *testing.T, logs factoryapi.WorkerSessionL
 
 func assertArchivedUnknownMCPReads(t *testing.T, ctx context.Context, connection *mcp.ClientSession) {
 	t.Helper()
+	assertArchivedMissingMCPReads(t, ctx, connection, "unknown-archive-id")
+}
+
+func assertArchivedMissingMCPReads(t *testing.T, ctx context.Context, connection *mcp.ClientSession, id string) {
+	t.Helper()
 	for _, view := range []string{"summary", "logs", "events"} {
-		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": view, "workerSessionId": "unknown-archive-id"}})
+		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "view": view, "workerSessionId": id}})
 		if err != nil || !result.IsError || len(result.Content) != 1 {
 			t.Fatalf("unknown MCP %s: %+v %v", view, result, err)
 		}
@@ -409,7 +414,10 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 		got := assertTerminalReadParity(t, closedScopes, before[index].WorkerSessionId)
 		assertArchivedKnownName(t, got, names[index])
 		assertArchivedOwnScopeReads(t, closedScopes, got)
+		assertArchivedStopHasNoEffect(t, closedScopes, got, logs[index])
 	}
+	closedScopes.Close(t)
+	assertArchivedPrivateProfileFence(t, config, before)
 }
 
 func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServer, before []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names, cursors []string, retainsWork bool) {
@@ -432,6 +440,7 @@ func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServe
 		}
 		page := assertCommittedTerminalCapture(t, server, got.WorkerSessionId)
 		assertRestoredCapturedEvents(t, page, logs[index])
+		assertArchivedStopHasNoEffect(t, server, got, page)
 		// Resume a cursor acknowledged before shutdown, rather than merely
 		// obtaining a new cursor after reopening the same journal.
 		continued := support.GetJSON[factoryapi.WorkerSessionLogPage](t, server.URL()+"/worker-sessions/"+got.WorkerSessionId+"/logs?nextToken="+url.QueryEscape(cursors[index]))
@@ -440,6 +449,76 @@ func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServe
 		}
 	}
 	assertArchivedPeerFences(t, server, before, cursors)
+}
+
+// Archived terminal identity supports idempotent stop acknowledgement only.
+// Compare the complete capture and fleet after both public control boundaries;
+// a successful response must not manufacture an execution or change facts.
+func assertArchivedStopHasNoEffect(t *testing.T, server *support.FunctionalAPIServer, original factoryapi.WorkerSessionObservation, logs factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	before := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions?history=all")
+	for _, action := range []string{"cancel", "terminate"} {
+		response := postWorkerSessionControl(t, server.URL(), original.WorkerSessionId, action)
+		var result factoryapi.WorkerSessionControlResponse
+		err := json.NewDecoder(response.Body).Decode(&result)
+		_ = response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusOK || result.Outcome != "NOOP" || result.WorkerSessionId != original.WorkerSessionId || result.DispatchId != original.AttemptId || string(result.State) != string(original.State) {
+			t.Fatalf("archived %s acquired control authority: status=%d result=%+v error=%v", action, response.StatusCode, result, err)
+		}
+		input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "--json", "worker-sessions", action, original.WorkerSessionId})
+		if err := server.Execute(t, input.Input); err != nil {
+			t.Fatalf("archived CLI %s: %v %s", action, err, input.Stderr())
+		}
+		var cli factoryapi.WorkerSessionControlResponse
+		if err := json.Unmarshal([]byte(input.Stdout()), &cli); err != nil || !reflect.DeepEqual(cli, result) {
+			t.Fatalf("archived CLI/HTTP control differs: cli=%+v http=%+v error=%v", cli, result, err)
+		}
+	}
+	shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+original.WorkerSessionId)
+	after := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions?history=all")
+	if !reflect.DeepEqual(shown, original) || !reflect.DeepEqual(after, before) {
+		t.Fatalf("archived stop changed identity, facts or fleet: before=%+v after=%+v", before, after)
+	}
+	assertRestoredCapturedEvents(t, assertCommittedTerminalCapture(t, server, original.WorkerSessionId), logs)
+}
+
+// A second private profile has no permission to the first profile's captures,
+// even when the caller supplies the exact original identities.
+func assertArchivedPrivateProfileFence(t *testing.T, config support.FunctionalAPIServerConfig, attempts []factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	home, captures := t.TempDir(), t.TempDir()
+	config.BeforeStart = nil
+	config.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + home, "LOCALAPPDATA=" + home, "XDG_CONFIG_HOME=" + home, "XDG_DATA_HOME=" + home, "TEMP=" + home, "TMP=" + home}
+	config.Edges.WorkerRecordingWriter = nil
+	config.Edges.WorkerRecordingStoreObserver = nil
+	config.Edges.FactorySessionsWorkingDirectory = capturedRecordingDirectory(captures)
+	server := support.StartFunctionalAPIServer(t, config)
+	list := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions?history=all")
+	if len(list.Sessions) != 0 {
+		t.Fatalf("private profile exposed archived fleet: %+v", list)
+	}
+	connection, ctx, cleanup := archivedReplayMCP(t, server)
+	defer cleanup()
+	for _, attempt := range attempts {
+		assertArchivedMissingMCPReads(t, ctx, connection, attempt.WorkerSessionId)
+		input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "--json", "worker-sessions", "show", "--worker-session-id", attempt.WorkerSessionId})
+		var failure interface{ CLIErrorCode() string }
+		if err := server.Execute(t, input.Input); !errors.As(err, &failure) || failure.CLIErrorCode() != "WORKER_SESSION_NOT_FOUND" {
+			t.Fatalf("foreign profile CLI exposed original identity: %v", err)
+		}
+		for _, suffix := range []string{"", "/logs", "/transcript"} {
+			response, err := http.Get(server.URL() + "/worker-sessions/" + attempt.WorkerSessionId + suffix)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var failure factoryapi.ErrorResponse
+			err = json.NewDecoder(response.Body).Decode(&failure)
+			_ = response.Body.Close()
+			if err != nil || response.StatusCode != http.StatusNotFound || (failure.Code != "WORKER_SESSION_NOT_FOUND" && failure.Code != "NOT_FOUND") {
+				t.Fatalf("foreign profile read %s: status=%d failure=%+v error=%v", suffix, response.StatusCode, failure, err)
+			}
+		}
+	}
 }
 
 func assertArchivedPeerFences(t *testing.T, server *support.FunctionalAPIServer, attempts []factoryapi.WorkerSessionObservation, cursors []string) {
