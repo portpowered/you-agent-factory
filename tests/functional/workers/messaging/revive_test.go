@@ -37,14 +37,18 @@ type reviveRecordingDirectory string
 
 func TestProviderConfirmationSettlesPendingRevival(t *testing.T) {
 	t.Parallel()
-	for _, rejected := range []bool{false, true} {
-		t.Run(map[bool]string{false: "resumed progress", true: "missing rollout"}[rejected], func(t *testing.T) {
+	for _, cell := range []struct {
+		name, reason string
+		result       *platformprocess.CommandResult
+	}{
+		{"resumed progress", "", nil},
+		{"missing rollout", "REVIVE_UNSUPPORTED", &platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("No rollout found for thread id controlled-thread\n")}},
+		{"execution failure", "REVIVE_FAILED", &platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("controlled execution failure\n")}},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
 			progress := make(chan struct{})
-			revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
-			if rejected {
-				revival.result = &platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("No rollout found for thread id controlled-thread\n")}
-			}
+			revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress, result: cell.result}
 			core, _ := observer.New(zap.InfoLevel)
 			signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
 			f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{ProcessLogger: zap.New(signal)}, nil, revival, "lead", "lane")
@@ -77,14 +81,20 @@ func TestProviderConfirmationSettlesPendingRevival(t *testing.T) {
 			if string(command.Stdin) != message.Body || !strings.Contains(strings.Join(command.Args, " "), "resume controlled-thread") {
 				t.Fatal("pending revival changed recorded resume input")
 			}
-			if rejected {
+			if cell.reason != "" {
 				close(revival.release)
 			} else {
 				close(progress)
 			}
 			final := f.awaitDeliveryOutcome(t, lane, message)
-			assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, rejected)
+			assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, cell.reason)
 			assertProviderRetry(t, f, request, lane, final)
+			assertPendingCLIParity(t, f, lane, final)
+			select {
+			case <-revival.requests:
+				t.Fatal("final outcome retry started another continuation")
+			default:
+			}
 			if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
 				t.Fatal("provider outcome changed Factory Events")
 			}
@@ -94,7 +104,7 @@ func TestProviderConfirmationSettlesPendingRevival(t *testing.T) {
 			case <-time.After(15 * time.Second):
 				t.Fatal("provider outcome follow did not join")
 			}
-			if !rejected {
+			if cell.reason == "" {
 				close(revival.release)
 			}
 			f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
@@ -153,12 +163,12 @@ func assertPendingProviderFrames(t *testing.T, ctx context.Context, message api.
 	}
 }
 
-func assertProviderFinalOutcome(t *testing.T, ctx context.Context, f *fixture, final api.AgentMessage, successor map[string]string, frames <-chan []byte, finished <-chan error, rejected bool) {
+func assertProviderFinalOutcome(t *testing.T, ctx context.Context, f *fixture, final api.AgentMessage, successor map[string]string, frames <-chan []byte, finished <-chan error, reason string) {
 	t.Helper()
 	want := "DELIVERED_REVIVE"
-	if rejected {
+	if reason != "" {
 		want = "DELIVERY_UPDATED"
-		assertRejectedProviderOutcome(t, f, final, successor)
+		assertRejectedProviderOutcome(t, f, final, successor, reason)
 	} else if final.Status != "DELIVERED_REVIVE" || final.RevivedWorkerSessionId == nil || *final.RevivedWorkerSessionId != successor["YOU_WORKER_SESSION_ID"] || final.Reason != nil {
 		t.Fatal("resumed progress lost durable successor facts")
 	}
@@ -611,6 +621,11 @@ func TestMissingProviderReferenceKeepsReviveReadable(t *testing.T) {
 	if message.Status != "QUEUED" || message.Reason == nil || *message.Reason != "REVIVE_UNSUPPORTED" || message.RevivedWorkerSessionId != nil {
 		t.Fatal("missing provider reference claimed delivery")
 	}
+	request := map[string]any{"requestId": "unsupported", "to": map[string]string{"workerSessionId": "lead"}, "body": "retain this ask"}
+	assertProviderRetry(t, f, request, lane, message)
+	if retry := f.cliSend(t, lane, "lead", "--request-id", "unsupported", "--body", "retain this ask"); !reflect.DeepEqual(retry, message) {
+		t.Fatal("CLI retry changed unsupported outcome")
+	}
 	var got api.AgentMessageListResponse
 	if err := json.Unmarshal(f.cli(t, lane, "list", "--thread", message.ThreadId), &got); err != nil || len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], message) {
 		t.Fatal("unsupported revival lost readable message", err)
@@ -623,6 +638,44 @@ func TestMissingProviderReferenceKeepsReviveReadable(t *testing.T) {
 		t.Fatal("missing reference reached provider")
 	default:
 	}
+}
+
+func TestDeniedEndedRecipientSendHasNoDeliveryEffect(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{}, nil, revival, "lead", "lane", "sibling", "root")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	sibling := f.invoke(t, "sibling", nil)
+	f.invoke(t, "root", nil)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	request := map[string]any{"requestId": "denied", "to": map[string]string{"workerSessionId": "lead"}, "body": "never persist or resume"}
+	for _, caller := range []map[string]string{
+		nil,
+		lead, // Ended execution credentials do not authenticate a new send.
+		sibling,
+		{"YOU_WORKER_SESSION_ID": "lane", "YOU_WORKER_SESSION_TOKEN": strings.Repeat("A", 43)},
+		{"YOU_WORKER_SESSION_ID": "root", "YOU_WORKER_SESSION_TOKEN": lane["YOU_WORKER_SESSION_TOKEN"]},
+	} {
+		assertError(t, f, http.MethodPost, "/messages", request, caller, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	}
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+		t.Fatal("denied caller persisted an ended-recipient ask")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("denied caller started a provider continuation")
+	default:
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("denied send changed Factory Events")
+	}
+	// Denials consume neither this request key nor the authorized sender's quota.
+	message := f.cliSend(t, lane, "lead", "--request-id", "denied", "--body", "never persist or resume")
+	successor := assertReviveAdmission(t, f, revival, message, lead)
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
 }
 
 func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
@@ -821,9 +874,9 @@ func assertPendingOutcomeFrame(t *testing.T, ctx context.Context, frames <-chan 
 	assertPendingProviderResponse(t, pending.Message)
 }
 
-func assertRejectedProviderOutcome(t *testing.T, f *fixture, final api.AgentMessage, successor map[string]string) {
+func assertRejectedProviderOutcome(t *testing.T, f *fixture, final api.AgentMessage, successor map[string]string, reason string) {
 	t.Helper()
-	if final.Status != "QUEUED" || final.Reason == nil || *final.Reason != "REVIVE_UNSUPPORTED" || final.RevivedWorkerSessionId != nil {
+	if final.Status != "QUEUED" || final.Reason == nil || *final.Reason != reason || final.RevivedWorkerSessionId != nil || final.To.DeliveredWorkerSessionId != nil {
 		t.Fatal("provider rejection claimed delivery or lost readable typed reason")
 	}
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])

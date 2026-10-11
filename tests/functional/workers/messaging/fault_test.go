@@ -200,7 +200,7 @@ func exerciseProviderOutcomeFlush(t *testing.T, reject bool) {
 		}
 	} else {
 		final = f.awaitDeliveryOutcome(t, lane, pending)
-		assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, false)
+		assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, "")
 		assertProviderRetry(t, f, request, lane, final)
 	}
 	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
