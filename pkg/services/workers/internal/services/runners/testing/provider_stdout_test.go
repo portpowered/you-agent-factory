@@ -112,7 +112,7 @@ func TestMockRejectStdout_ClaudeEmitsErrorResult(t *testing.T) {
 
 func TestMockRejectResultUsesProviderOutputShapes(t *testing.T) {
 	for _, command := range []string{"codex", "claude"} {
-		result := mockRejectResult(command, &MockWorkerRejectConfig{Stderr: "ignored"})
+		result := mockRejectResult(command, nil)
 		if len(result.Stdout) == 0 {
 			t.Fatalf("%s reject stdout is empty, want provider-shaped output", command)
 		}
@@ -122,5 +122,56 @@ func TestMockRejectResultUsesProviderOutputShapes(t *testing.T) {
 		if result.ExitCode != 1 {
 			t.Fatalf("%s reject exit code = %d, want 1", command, result.ExitCode)
 		}
+	}
+}
+
+func TestMockRejectResultPreservesDeclaredStreams(t *testing.T) {
+	for _, command := range []string{"codex", "claude", "plain"} {
+		for _, streams := range []struct{ name, stdout, stderr string }{
+			{"stdout", "ordinary PRIVATE\n世界", ""},
+			{"stderr", "", "ordinary stderr\n世界"},
+			{"both", "same text\n世界", "same text\n世界"},
+			{"empty", "", ""},
+		} {
+			t.Run(command+"/"+streams.name, func(t *testing.T) {
+				t.Parallel()
+				exit := 42
+				result := mockRejectResult(command, &MockWorkerRejectConfig{Stdout: streams.stdout, Stderr: streams.stderr, ExitCode: &exit})
+				if result.ExitCode != exit || string(result.Stderr) != streams.stderr {
+					t.Fatalf("exit/stderr = %d/%q, want %d/%q", result.ExitCode, result.Stderr, exit, streams.stderr)
+				}
+				if command == "plain" {
+					if string(result.Stdout) != streams.stdout {
+						t.Fatalf("plain stdout = %q", result.Stdout)
+					}
+					return
+				}
+				assertRejectedStructuredStdout(t, result.Stdout, streams.stdout)
+			})
+		}
+	}
+}
+
+func assertRejectedStructuredStdout(t *testing.T, stdout []byte, want string) {
+	t.Helper()
+	var texts []string
+	for _, line := range strings.Split(strings.TrimSpace(string(stdout)), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatal(err)
+		}
+		if record["type"] == "item.updated" {
+			texts = append(texts, record["item"].(map[string]any)["text"].(string))
+		}
+		if record["type"] == "stream_event" {
+			block := record["event"].(map[string]any)["content_block"].(map[string]any)
+			texts = append(texts, block["text"].(string))
+		}
+		if record["type"] == "item.completed" || record["is_error"] == false {
+			t.Fatalf("rejection supplied a successful result: %s", line)
+		}
+	}
+	if want == "" && len(texts) != 0 || want != "" && (len(texts) != 1 || texts[0] != want) {
+		t.Fatalf("declared stdout = %#v, want one %q when nonempty", texts, want)
 	}
 }

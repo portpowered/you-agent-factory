@@ -40,7 +40,7 @@ func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
-		result, runErr := runStreaming(ctx, runner, command, observe)
+		result, runErr := runStreaming(ctx, runner, request.ExecuteRequest, command, observe)
 		effectResult := EffectResult{DurationMillis: clock.Now().Sub(started).Milliseconds()}
 		if runErr != nil {
 			return effectResult, nativeCommandError(ctx, runErr)
@@ -131,11 +131,18 @@ func buildCommandEnv(processEnvironment []string, envVars map[string]string) []s
 func runStreaming(
 	ctx context.Context,
 	runner providerservice.CommandRunner,
+	request providers.ExecuteRequest,
 	command providerservice.CommandRequest,
 	observe func([]byte) error,
 ) (providerservice.CommandResult, error) {
 	return runner.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
 		if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
+			if stream == providerservice.OutputStreamStderr && len(chunk) > 0 {
+				request.ObserveProgress(providers.ExecuteProgress{
+					Phase: "progress.updated", Detail: string(chunk),
+					Metadata: map[string]string{"stream": providerservice.OutputStreamStderr},
+				})
+			}
 			return nil
 		}
 		return observe(chunk)

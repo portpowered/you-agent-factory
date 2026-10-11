@@ -63,20 +63,40 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		request execution.ContinuationRequest,
 	) (providers.ExecuteResult, error) {
 		decoder := newDecoder(request.AttemptID, request.ExecuteRequest.ObserveSession)
-		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
+		observed := 0
+		publish := func() {
+			for observed < len(decoder.progress) {
+				request.ObserveProgress(decoder.progress[observed])
+				observed++
+			}
+		}
+		effectResult, effectErr := effect.Execute(ctx, request, func(chunk []byte) error {
+			err := decoder.observe(chunk)
+			publish()
+			return err
+		})
 		flushErr := decoder.flush()
-		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
+		failure, failed := collectFailure(decoder, effectErr, flushErr)
+		content, session, finalErr := decoder.final()
+		if finalErr != nil && !failed {
+			failure.FinalParseError = finalErr
+			failed = true
+		}
+		if failed && len(decoder.progress) > 0 && decoder.progress[len(decoder.progress)-1].Phase == "run.completed" {
+			decoder.progress = decoder.progress[:len(decoder.progress)-1]
+		}
+		publish()
+		if failed {
 			if failure.SessionRef == nil {
 				failure.SessionRef = decoder.sessionRef()
 			}
-			return providers.ExecuteResult{}, failure
-		}
-		content, session, finalErr := decoder.final()
-		if finalErr != nil {
-			return providers.ExecuteResult{}, execution.AttemptFailure{
-				SessionRef:      decoder.sessionRef(),
-				FinalParseError: finalErr,
+			if failure.Diagnostics == nil {
+				failure.Diagnostics = &providers.ExecuteDiagnostics{}
 			}
+			failure.Diagnostics.DurationMillis = effectResult.DurationMillis
+			failure.Diagnostics.Progress = decoder.progressFacts()
+			failure.Diagnostics.ProgressAlreadyObserved = request.ProgressObserver != nil
+			return providers.ExecuteResult{}, failure
 		}
 		metadata := cloneMetadata(effectResult.Metadata)
 		if metadata == nil {
@@ -90,9 +110,10 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
-				DurationMillis: effectResult.DurationMillis,
-				Progress:       decoder.progressFacts(),
-				Metadata:       metadata,
+				DurationMillis:          effectResult.DurationMillis,
+				Progress:                decoder.progressFacts(),
+				ProgressAlreadyObserved: request.ProgressObserver != nil,
+				Metadata:                metadata,
 			},
 		}, nil
 	}
