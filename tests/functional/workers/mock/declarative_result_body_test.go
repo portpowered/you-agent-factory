@@ -597,6 +597,12 @@ func assertDeclaredCompletedMessage(t *testing.T, page factoryapi.WorkerSessionL
 		t.Fatalf("completed assistant messages = %d, want exactly one", len(completed))
 	}
 	draft := completed[0]
+	// The configured Codex override emits a native assistant item. Its turn
+	// scope proves that the override passes through the detached observer too.
+	if !strings.Contains(name, "claude") && (draft.Provenance.Provider != "codex" ||
+		draft.Provenance.Delivery != workers.DeliveryNativeStream || draft.TurnID != "agent-turn-1") {
+		t.Fatalf("override native completion bypassed turn observation: %+v", draft)
+	}
 	// The declarative Claude stream supplies a result without an assistant
 	// record. Capture its envelope once without claiming native authorship.
 	if strings.Contains(name, "claude") && (draft.Provenance.Provider != "agent-run" ||

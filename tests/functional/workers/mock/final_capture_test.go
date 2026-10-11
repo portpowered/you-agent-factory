@@ -113,6 +113,44 @@ func TestFactoryFinalCapture(t *testing.T) {
 		}
 		assertMockUsagePeerCursor(t, host, t.TempDir(), environment, ids[0], ids[1])
 	})
+	t.Run("claude/factory/earlier-completion-final-fallback", func(t *testing.T) {
+		t.Parallel()
+		runEarlierFinalCapture(t, host, routes)
+	})
+}
+
+// A retryable physical turn can publish a native message before failing. The
+// successful retry has only a result record, so the earlier completion cannot
+// suppress its truthful fallback. Both turns use the actual runner and harness.
+func runEarlierFinalCapture(t *testing.T, host *support.FunctionalAPIServer, routes *sharedWorkersMockCommandRunner) {
+	t.Helper()
+	dir, environment := declaredResultFactory(t), finalCaptureEnvironment(t)
+	body := `{"decision":"ACCEPTED","output":"PRIVATE_NATIVE_FINAL"}`
+	native := claudeNativeFinalFixture(t, "PRIVATE_EARLIER_MESSAGE")
+	fallback, err := json.Marshal(map[string]any{"type": "result", "subtype": "success", "is_error": false,
+		"result": body, "session_id": "private-native-claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: native, Stderr: []byte("service unavailable"), ExitCode: 1},
+		platformprocess.CommandResult{Stdout: append(fallback, '\n')},
+	)
+	routes.setFor(dir, runner)
+	t.Cleanup(func() { routes.setFor(dir, nil) })
+	id := invokeNativeFinalFactory(t, host, dir, "claude", environment)
+	waitFinalCaptureComplete(t, host, id)
+	completed := completedAssistantDrafts(t, assertRejectedCapturePages(t, host, id, environment))
+	if len(completed) != 2 || len(runner.Requests()) != 2 {
+		t.Fatalf("messages=%d calls=%d, want two retained turns", len(completed), len(runner.Requests()))
+	}
+	assertCompletedEnvelope(t, completed[0], "PRIVATE_EARLIER_MESSAGE")
+	assertCompletedEnvelope(t, completed[1], body)
+	if completed[0].Provenance.Delivery != workers.DeliveryNativeStream || completed[0].TurnID != "agent-turn-1" ||
+		completed[1].Provenance.Delivery != workers.DeliverySynthesized || completed[1].Provenance.Fidelity != workers.FidelityFinalOnly ||
+		completed[1].Provenance.Provider != "agent-run" || completed[1].TurnID != "agent-turn-2" {
+		t.Fatalf("turn provenance: %+v %+v", completed[0], completed[1])
+	}
 }
 
 func runFinalCaptureScopeScenario(t *testing.T, host, foreign *support.FunctionalAPIServer, routes *sharedWorkersMockCommandRunner, denied *directExampleDeniedRunner, provider string, foreignEnv []string) {
