@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -324,6 +325,134 @@ func TestAggregateAttachmentFailurePreservesRecipientObservation(t *testing.T) {
 	}
 	if strings.Contains(telemetry.String(), "planted-secret") || strings.Contains(telemetry.String(), f.caller.Token) {
 		t.Fatal("attachment diagnostics leaked")
+	}
+}
+
+// Controlled Events registration exposes the interval after the head read and
+// before live subscription. The coordinator must recheck authoritative state;
+// a stream need not retain the terminal notification for delivery to proceed.
+type recipientRegistrationStream struct {
+	observationAppender
+	register func(events.SubscribeRequest) (events.Subscription, error)
+	read     func(events.ReadRequest) (events.ReadResult, error)
+}
+
+func (s *recipientRegistrationStream) Subscribe(_ context.Context, request events.SubscribeRequest) (events.Subscription, error) {
+	return s.register(request)
+}
+
+func (s *recipientRegistrationStream) Read(_ context.Context, request events.ReadRequest) (events.ReadResult, error) {
+	return s.read(request)
+}
+
+func TestRecipientEndDuringStreamRegistrationUsesAuthoritativeState(t *testing.T) {
+	t.Parallel()
+	for _, boundary := range []string{"initial", "unavailable", "recovered"} {
+		t.Run(boundary, func(t *testing.T) {
+			t.Parallel()
+			f := newEngineFixture()
+			message, err := f.engine.Send(t.Context(), engineRequest("ask", "retained input"), f.caller, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			release := f.engine.BindHost() // Events is not installed until this boundary test.
+			defer release()
+			topic := workersessions.Topic("lead")
+			registrations, calls := 0, 0
+			f.engine.events = &recipientRegistrationStream{register: func(request events.SubscribeRequest) (events.Subscription, error) {
+				registrations++
+				if boundary != "recovered" || registrations == 2 {
+					ended := f.authority.recipients["lead"]
+					ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+					f.authority.recipients["lead"] = ended
+				}
+				if boundary == "unavailable" {
+					return nil, agentmessages.ErrStreamUnavailable
+				}
+				if registrations == 2 && request.From != (events.Cursor{Topic: topic, Position: 9}) {
+					t.Fatal("recovery did not register at the authoritative Events head")
+				}
+				return func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryBackpressure} }, nil
+			}, read: func(events.ReadRequest) (events.ReadResult, error) {
+				return events.ReadResult{Outcome: events.ReadOutcomeAtHead, Next: events.Cursor{Topic: topic, Position: 9},
+					Retained: events.RetainedRange{Topic: topic, Earliest: 1, Head: 9}}, nil
+			}}
+			f.engine.continueSession = func(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+				calls++
+				if request.RequestID != message.MessageID || request.FollowUpInput != message.Body || !request.ResolveHead {
+					t.Fatal("registration race lost the durable delivery identity or input")
+				}
+				return workersessions.ContinueResult{}, workersessions.ErrContinuationNotAccepted
+			}
+			entry := f.ledger.entries[0]
+			f.engine.watchRecipient(t.Context(), entry, topic, "end:factory:lead", &deliveryObserver{cancel: func() {}})
+			if calls != 1 || len(f.ledger.intents) != 1 || f.ledger.entries[0].Message.Reason != "REVIVE_FAILED" {
+				t.Fatal("lost terminal notification suppressed admission or guessed delivery")
+			}
+		})
+	}
+}
+
+func TestConcurrentRecipientEndWakeupsSharePendingAdmission(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	for _, body := range []string{"first", "second"} {
+		if _, err := f.engine.Send(t.Context(), engineRequest(body, body), f.caller, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entry := f.ledger.entries[0]
+	ended := f.authority.recipients["lead"]
+	ended.Observation.State, ended.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = ended
+	started, proceed, finished := make(chan workersessions.ContinueRequest, 2), make(chan struct{}), make(chan struct{})
+	f.engine.continueSession = func(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		started <- request
+		<-proceed
+		return workersessions.ContinueResult{RequestID: request.RequestID, SourceWorkerSessionID: request.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: request.SuccessorWorkerSessionID, Session: workersessions.Session{ID: request.SuccessorWorkerSessionID}}, nil
+	}
+	release := f.engine.BindHost()
+	defer release()
+	var unblock sync.Once
+	observer := &deliveryObserver{cancel: func() {}}
+	go func() {
+		defer close(finished)
+		f.engine.deliverEndedRecipient(t.Context(), entry, "end:factory:lead", observer)
+	}()
+	defer func() {
+		unblock.Do(func() { close(proceed) })
+		<-finished
+	}()
+	request := <-started
+	if request.RequestID != entry.Message.MessageID || request.FollowUpInput != "first\n\nsecond" {
+		t.Fatal("end admission did not freeze the ordered batch")
+	}
+	var wakeups sync.WaitGroup
+	for range 8 {
+		wakeups.Add(1)
+		go func() {
+			defer wakeups.Done()
+			if !f.engine.deliverEndedRecipient(t.Context(), entry, "end:factory:lead", observer) {
+				t.Error("duplicate terminal wakeup lost authoritative completion")
+			}
+		}()
+	}
+	wakeups.Wait()
+	select {
+	case <-started:
+		t.Fatal("duplicate terminal wakeups branched a pending admission")
+	default:
+	}
+	unblock.Do(func() { close(proceed) })
+	<-finished
+	if len(f.ledger.intents) != 1 || len(f.ledger.entries) != 2 {
+		t.Fatal("duplicate wakeups invented an intent or public message")
+	}
+	for _, retained := range f.ledger.entries {
+		if retained.Message.Status != agentmessages.Queued || retained.Message.Reason != "REVIVE_PENDING" || retained.Message.RevivedWorkerSessionID != "" {
+			t.Fatal("duplicate wakeups guessed provider-confirmed delivery")
+		}
 	}
 }
 
