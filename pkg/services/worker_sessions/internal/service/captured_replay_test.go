@@ -255,13 +255,14 @@ func continuationStreamPages(t *testing.T) *continuationPageReader {
 
 func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.T) {
 	t.Parallel()
-	for _, cell := range []string{"foreign-scope", "foreign-worker", "non-terminal", "missing-opening", "cursor"} {
+	for _, cell := range []string{"foreign-scope", "foreign-worker", "non-terminal", "missing-opening", "foreign-cursor", "future-cursor", "unavailable-generation"} {
 		t.Run(cell, func(t *testing.T) {
 			t.Parallel()
 			reader := continuationStreamPages(t)
 			r := newContinuationSource(t, continuationReservationRequest())
 			r.logs = &LogReader{reader: reader}
 			req := workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: "archived-successor"}
+			wantErr := workersessions.ErrObservationSessionNotFound
 			switch cell {
 			case "foreign-scope":
 				req.FactorySessionID = "foreign"
@@ -271,12 +272,19 @@ func TestContinuationCapturedStreamRefusesForeignOrIncompleteHistory(t *testing.
 				reader.page.Terminal.Status = "RUNNING"
 			case "missing-opening":
 				reader.page.Opening.Payload = nil
-			case "cursor":
-				req.Cursor = &workersessions.ObservationCursor{Position: 1}
+			case "foreign-cursor":
+				req.Cursor = &workersessions.ObservationCursor{WorkerSessionID: "foreign", Position: 1}
+				wantErr = workersessions.ErrObservationCursorForeign
+			case "future-cursor":
+				req.Cursor = &workersessions.ObservationCursor{Position: 3}
+				wantErr = workersessions.ErrObservationCursorFuture
+			case "unavailable-generation":
+				req.Cursor = &workersessions.ObservationCursor{Position: 1, StreamGenerationID: "unavailable"}
+				wantErr = workersessions.ErrObservationCursorUnavailable
 			}
 			_, err := r.StreamObservationsByWorkerSessionID(t.Context(), req)
-			if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
-				t.Fatalf("unsafe captured history opened: %v", err)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("unsafe captured history error = %v, want %v", err, wantErr)
 			}
 		})
 	}
