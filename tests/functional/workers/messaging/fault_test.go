@@ -2,24 +2,222 @@ package messaging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+// Gate the selected profile's actual outcome flush, leaving journal policy and
+// provider admission in production. No service or journal internals are replaced.
+type messageOutcomeFileSystem struct {
+	platformfilesystem.Local
+	entered, release chan struct{}
+	unblock          sync.Once
+	reject           bool
+}
+
+type messageOutcomeFile struct {
+	*os.File
+	gate    *messageOutcomeFileSystem
+	outcome bool
+}
+
+func (g *messageOutcomeFileSystem) OpenFile(path string, flags int, mode fs.FileMode) (io.WriteCloser, error) {
+	file, err := os.OpenFile(path, flags, mode)
+	if err != nil {
+		return nil, err
+	}
+	return &messageOutcomeFile{File: file, gate: g}, nil
+}
+
+func (f *messageOutcomeFile) Write(data []byte) (int, error) {
+	var record struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(data, &record) == nil {
+		f.outcome = record.Kind == "REVIVE_OUTCOME"
+	}
+	return f.File.Write(data)
+}
+
+func (f *messageOutcomeFile) Sync() error {
+	if f.outcome {
+		f.outcome = false // Rollback's Sync must flush without entering again.
+		close(f.gate.entered)
+		<-f.gate.release
+		if f.gate.reject {
+			return errors.New("controlled-private-outcome-flush-failure")
+		}
+	}
+	return f.File.Sync()
+}
+
+type outcomeSendResponse struct {
+	status int
+	body   []byte
+}
+
+func TestReviveDeliveryWaitsForOutcomeFlush(t *testing.T) {
+	t.Parallel()
+	for _, reject := range []bool{false, true} {
+		t.Run(map[bool]string{false: "committed", true: "refused"}[reject], func(t *testing.T) {
+			t.Parallel()
+			exerciseOutcomeFlush(t, reject)
+		})
+	}
+}
+
+func exerciseOutcomeFlush(t *testing.T, reject bool) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: reject}
+	defer gate.unblock.Do(func() { close(gate.release) })
+	input := &reviveInputGate{entered: make(chan struct{}), release: make(chan struct{})}
+	defer input.unblock.Do(func() { close(input.release) })
+	core, _ := observer.New(zap.InfoLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	dir := t.TempDir()
+	f := startHostRunner(t, t.TempDir(), dir, "", serviceedges.Edges{
+		AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(signal),
+		FactorySessionsWorkingDirectory: reviveRecordingDirectory(dir), WorkerRecordingWriter: input,
+		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { input.WorkerRecordingStore = store },
+	}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 4), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("follow did not register")
+	}
+	request := map[string]any{"requestId": "flush", "to": map[string]string{"workerSessionId": "lead"}, "body": "flush before delivery facts"}
+	result := make(chan outcomeSendResponse, 1)
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+		result <- outcomeSendResponse{status, body}
+	}()
+	select {
+	case <-input.entered:
+	case <-ctx.Done():
+		t.Fatal("delivery did not reach admission input")
+	}
+	var sent api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &sent) != nil || sent.Kind != "SENT" || sent.Message.Status != "QUEUED" || sent.Message.RevivedWorkerSessionId != nil {
+		t.Fatal("initial follow did not preserve queued admission")
+	}
+	input.unblock.Do(func() { close(input.release) })
+	assertFlushPublicationBlocked(t, ctx, gate, result, frames)
+	assertOutcomeFlushResult(t, ctx, f, lane, lead, revival, sent.Message, result, frames, finished, reject)
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("outcome flush changed Factory Events")
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("outcome follow did not join")
+	}
+	f.endWorker(t, "lane")
+}
+
+func assertFlushPublicationBlocked(t *testing.T, ctx context.Context, gate *messageOutcomeFileSystem, result <-chan outcomeSendResponse, frames <-chan []byte) {
+	t.Helper()
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("delivery did not reach outcome flush")
+	}
+	select {
+	case <-result:
+		t.Fatal("send completed before outcome flush")
+	default:
+	}
+	select {
+	case <-frames:
+		t.Fatal("delivery published before outcome flush")
+	default:
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+}
+
+func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lane, lead map[string]string, revival *workerGate, queued api.AgentMessage, result <-chan outcomeSendResponse, frames <-chan []byte, finished <-chan error, reject bool) {
+	t.Helper()
+	var response outcomeSendResponse
+	select {
+	case response = <-result:
+	case <-ctx.Done():
+		t.Fatal("send did not finish after outcome flush")
+	}
+	if reject {
+		assertRefusedOutcomeFlush(t, f, lane, revival, queued, response, frames)
+		return
+	}
+	var responseBody api.AgentMessageSendResponse
+	if response.status != http.StatusAccepted || json.Unmarshal(response.body, &responseBody) != nil {
+		t.Fatal("committed flush lost send outcome")
+	}
+	var outcome api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || outcome.Kind != "DELIVERED_REVIVE" || !reflect.DeepEqual(outcome.Message, responseBody.Message) {
+		t.Fatal("committed delivery differs from follow")
+	}
+	got := readPage(t, f, "/messages?threadId="+queued.ThreadId, lane)
+	if len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], responseBody.Message) {
+		t.Fatal("committed delivery differs from read")
+	}
+	successor := assertReviveAdmission(t, f, revival, responseBody.Message, lead)
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+}
+
+func assertRefusedOutcomeFlush(t *testing.T, f *fixture, lane map[string]string, revival *workerGate, queued api.AgentMessage, response outcomeSendResponse, frames <-chan []byte) {
+	t.Helper()
+	var failure api.ErrorResponse
+	if response.status != http.StatusServiceUnavailable || json.Unmarshal(response.body, &failure) != nil || string(failure.Code) != "MESSAGE_STORE_UNAVAILABLE" {
+		t.Fatalf("flush failure: %d %s", response.status, response.body)
+	}
+	got := readPage(t, f, "/messages?threadId="+queued.ThreadId, lane)
+	if len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], queued) {
+		t.Fatal("failed flush changed queued record")
+	}
+	select {
+	case <-frames:
+		t.Fatal("failed flush published delivery")
+	default:
+	}
+	// The admitted worker is real even when its message outcome cannot flush.
+	successor := <-revival.started
+	<-revival.requests
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+}
 
 func TestMessagingFaultsLeaveFactoryWorkHealthy(t *testing.T) {
 	t.Parallel()

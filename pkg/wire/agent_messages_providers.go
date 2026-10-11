@@ -10,14 +10,19 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	agentmessageswire "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 )
 
-func provideMessageJournal() (*agentmessageswire.Journal, error) {
-	return agentmessageswire.NewJournal(platformfilesystem.Local{}, "")
+func provideMessageJournal(edges serviceedges.Edges) (*agentmessageswire.Journal, error) {
+	files := edges.AgentMessageStoreFileSystem
+	if files == nil {
+		files = platformfilesystem.Local{}
+	}
+	return agentmessageswire.NewJournal(files, "")
 }
 
 func provideMessageStartup(journal *agentmessageswire.Journal, clock platformclock.Source, logger logging.Logger) (*agentmessageswire.Startup, error) {

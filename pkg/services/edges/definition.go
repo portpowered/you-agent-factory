@@ -29,6 +29,7 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
+	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -49,6 +50,7 @@ import (
 // pkg/root, pkg/wire, and BuildProcess override tests) consumes this bag;
 // constructed services take exact ports instead. It is not a service locator.
 type Edges struct {
+	AgentMessageStoreFileSystem   agentmessages.StoreFileSystem
 	CLIObserver                   platformprocess.CLIObserver
 	PlatformProcessClock          platformprocess.Clock
 	PlatformProcessCommandFactory platformprocess.CommandFactory
@@ -312,6 +314,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	)
 	if replacements.CLIObserver != nil {
 		defaults.CLIObserver = replacements.CLIObserver
+	}
+	if replacements.AgentMessageStoreFileSystem != nil {
+		defaults.AgentMessageStoreFileSystem = replacements.AgentMessageStoreFileSystem
 	}
 	if replacements.PlatformProcessClock != nil {
 		defaults.PlatformProcessClock = replacements.PlatformProcessClock
