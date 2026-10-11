@@ -36,6 +36,8 @@ type StreamConfig struct {
 	Output          io.Writer
 	Diagnostics     io.Writer
 	HTTP            clihttp.Protocol
+	Terminal        bool
+	TerminalIDs     []string
 }
 
 // NewStream returns the composition-facing stream operation bound to one HTTP
@@ -44,6 +46,9 @@ type StreamConfig struct {
 func NewStream(transport clihttp.Protocol) StreamOperation {
 	return func(config StreamConfig) error {
 		config.HTTP = transport
+		if config.Terminal || config.TerminalIDs != nil {
+			return terminalFollow(config)
+		}
 		return stream(config)
 	}
 }

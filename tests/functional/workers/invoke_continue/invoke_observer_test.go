@@ -164,7 +164,7 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-privacy-") {
 			return requesterPrivacyResult(request, observer)
 		}
-		if filepath.Base(request.WorkDir) == "recording-failure" {
+		if filepath.Base(request.WorkDir) == "recording-failure" || filepath.Base(request.WorkDir) == "sam-watch-failed" {
 			terminal := []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"controlled provider failure\"}}\n")
 			if observer != nil {
 				observer(platformprocess.OutputStreamStdout, terminal)
@@ -172,6 +172,9 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 			return platformprocess.CommandResult{Stdout: append(progress, terminal...), Stderr: []byte(t7SecretToken), ExitCode: 1}, nil
 		}
 		output := "T7 detached attempt completed"
+		if filepath.Base(request.WorkDir) == "sam-watch-summary" {
+			output = "Published\r\nsummary"
+		}
 		if strings.HasPrefix(filepath.Base(request.WorkDir), "recording-") {
 			output = "DIRECT_CAPTURE_BETA"
 		}
