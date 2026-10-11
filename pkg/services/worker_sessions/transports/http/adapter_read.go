@@ -53,6 +53,11 @@ func (a *Adapter) GetWorkerSessionObservation(
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
 	}
+	// Resolve the compatibility reference within its original scope first;
+	// terminal facts then use the same exact capture as canonical Worker reads.
+	if observation.State.Terminal() && a.logs != nil {
+		return a.GetWorkerSessionObservationByWorkerSessionID(ctx, sessionID, observation.WorkerSessionID)
+	}
 	return a.presentWorkerSessionObservation(ctx, observation)
 }
 

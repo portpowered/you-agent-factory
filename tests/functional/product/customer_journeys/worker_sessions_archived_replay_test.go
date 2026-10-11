@@ -346,9 +346,17 @@ func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, re
 func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	t.Parallel()
 	runner, gates, cases, config := committedTerminalFixture(t)
-	// Two independent sessions share one host and edge shape. Joined reopen
+	// Independent sessions share one host and edge shape. Joined reopen
 	// must be sequential: the captured profile has exactly one writer.
 	cases = []committedTerminalCase{cases[8], cases[12]}
+	peer := cases[0]
+	peer.model, peer.scope = "archive-peer-codex-COMPLETED", uuid.NewString()
+	peer.dir = support.ScaffoldSingleStepFactory(t, peer.model)
+	support.ClearSeedInputs(t, peer.dir)
+	support.WriteAgentConfig(t, peer.dir, "processor", support.BuildModelWorkerConfig(peer.provider, peer.model))
+	gates[peer.model] = make(chan struct{})
+	runner.slots[peer.model] = newFunctionalWorkerGate(gates[peer.model])
+	cases = append(cases, peer)
 	first := make(map[string]*functionalWorkerGate)
 	for _, cell := range cases {
 		first[cell.model] = newFunctionalWorkerGate(make(chan struct{}))
@@ -369,7 +377,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	earlier.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".latest.json")
 	server := support.StartFunctionalAPIServer(t, config)
-	names := []string{"catalog-name", "catalog-name", "legacy-name", "legacy-name"}
+	names := []string{"catalog-name", "catalog-name", "legacy-name", "legacy-name", "peer-catalog-name", "peer-catalog-name"}
 	before := make([]factoryapi.WorkerSessionObservation, 2*len(cases))
 	logs := make([]factoryapi.WorkerSessionLogPage, len(before))
 	cursors := make([]string, len(before))
@@ -398,16 +406,19 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 		cursors[index] = *page.NextToken
 	}
 	emptyWorks := submitArchivedPeerNamedWork(t, server, cases, names)
+	assertArchivedProviderCollision(t, server, before, true)
 	server.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".latest.json", ".reopened.json")
 	latest := support.StartFunctionalAPIServer(t, config)
 	assertArchivedResumedBoard(t, latest, before, logs, names, cursors, transcripts, true)
 	assertArchivedEmptyWorkParity(t, latest, emptyWorks, true)
+	assertArchivedProviderCollision(t, latest, before, true)
 	latest.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".restored.json")
 	reopened := support.StartFunctionalAPIServer(t, config)
 	assertArchivedResumedBoard(t, reopened, before, logs, names, cursors, transcripts, false)
 	assertArchivedEmptyWorkParity(t, reopened, emptyWorks, false)
+	assertArchivedProviderCollision(t, reopened, before, false)
 	reopened.Close(t)
 	// The retained original Factory need not have a reopened runtime at all.
 	// Its capture remains read-only, exact-scope authority on the same profile.
@@ -415,6 +426,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	closedScopes := support.StartFunctionalAPIServer(t, config)
 	assertArchivedClosedScopeParity(t, closedScopes, before, logs, names, transcripts)
 	assertArchivedEmptyWorkParity(t, closedScopes, emptyWorks, false)
+	assertArchivedProviderCollision(t, closedScopes, before, false)
 	closedScopes.Close(t)
 	assertArchivedPrivateProfileFence(t, config, before)
 }
@@ -574,13 +586,73 @@ func (r *archivedAttemptRunner) Run(ctx context.Context, request platformprocess
 	}
 	result, err := r.final.Run(ctx, request)
 	if err == nil {
-		opening := fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", "archive-provider-"+model)
+		// Provider references can collide across Factories. Canonical Worker
+		// identity must still select only its own captured content.
+		const providerID = "archive-shared-provider-id"
+		opening := fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", providerID)
 		if request.Command == "claude" {
-			opening = fmt.Sprintf("{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":%q}\n", "archive-provider-"+model)
+			opening = fmt.Sprintf("{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":%q}\n", providerID)
 		}
+		result.Stdout = bytes.ReplaceAll(result.Stdout, []byte("functional worker completed"), []byte("captured "+model))
 		result.Stdout = append([]byte(opening), result.Stdout...)
 	}
 	return result, err
+}
+
+func assertArchivedProviderCollision(t *testing.T, server *support.FunctionalAPIServer, attempts []factoryapi.WorkerSessionObservation, retainedAssociation bool) {
+	t.Helper()
+	first, peer := attempts[1], attempts[5]
+	if first.ProviderSession == nil || !reflect.DeepEqual(first.ProviderSession, peer.ProviderSession) || reflect.DeepEqual(first.FactorySessionId, peer.FactorySessionId) {
+		t.Fatalf("fixture did not create a cross-Factory provider tuple collision: %+v / %+v", first, peer)
+	}
+	firstContent := assertArchivedTranscriptParity(t, server, first)
+	peerContent := assertArchivedTranscriptParity(t, server, peer)
+	if firstContent == nil || peerContent == nil || reflect.DeepEqual(firstContent.Entries, peerContent.Entries) {
+		t.Fatal("colliding provider references require distinguishable captured content")
+	}
+	for _, attempt := range []factoryapi.WorkerSessionObservation{first, peer} {
+		ref := attempt.ProviderSession
+		base := server.URL() + "/factory-sessions/" + support.StringPointerValue(attempt.FactorySessionId) + "/worker-sessions"
+		query := "?provider=" + url.QueryEscape(ref.Provider) + "&kind=" + url.QueryEscape(string(ref.Kind)) + "&id=" + url.QueryEscape(ref.Id)
+		transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, base+"/transcript"+query)
+		own := assertArchivedTranscriptParity(t, server, attempt)
+		if !reflect.DeepEqual(&transcript, own) {
+			t.Fatalf("provider collision exposed peer transcript: %+v / %+v", transcript, own)
+		}
+		if !retainedAssociation {
+			// Compatibility summaries require a restored association; explicit
+			// transcript reads can select the existing exact captured association.
+			assertArchivedMissingProviderSummary(t, base+"/detail"+query)
+			continue
+		}
+		shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, base+"/detail"+query)
+		canonical := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+attempt.WorkerSessionId)
+		if !reflect.DeepEqual(shown, canonical) {
+			t.Fatalf("provider collision selected a peer: compatibility=%+v canonical=%+v", shown, canonical)
+		}
+		input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "show", "--session", support.StringPointerValue(attempt.FactorySessionId), "--provider", ref.Provider, "--kind", string(ref.Kind), "--id", ref.Id, "--output", "json"})
+		if err := server.Execute(t, input.Input); err != nil {
+			t.Fatalf("provider compatibility CLI: %v %s", err, input.Stderr())
+		}
+		var cli factoryapi.WorkerSessionObservation
+		if err := json.Unmarshal([]byte(input.Stdout()), &cli); err != nil || !reflect.DeepEqual(cli, canonical) {
+			t.Fatalf("provider CLI selected peer: %+v error=%v", cli, err)
+		}
+	}
+}
+
+func assertArchivedMissingProviderSummary(t *testing.T, endpoint string) {
+	t.Helper()
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure factoryapi.ErrorResponse
+	err = json.NewDecoder(response.Body).Decode(&failure)
+	_ = response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusNotFound || failure.Code != "NOT_FOUND" {
+		t.Fatalf("missing association exposed peer: status=%d failure=%+v error=%v", response.StatusCode, failure, err)
+	}
 }
 
 func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServer, before []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names, cursors []string, transcripts []*factoryapi.WorkerSessionTranscriptResponse, retainsWork bool) {
