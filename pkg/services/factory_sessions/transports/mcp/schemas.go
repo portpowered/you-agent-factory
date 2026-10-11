@@ -152,17 +152,19 @@ func factorySessionExecutionRequestSchema() map[string]any {
 
 func subagentInputSchema() map[string]any {
 	run := objectSchema(map[string]any{
-		"prompt":          stringProperty("Text request for the one-pass subagent."),
+		"prompt":          map[string]any{"type": "string", "minLength": 1, "description": "Text request for the direct subagent."},
+		"requestId":       map[string]any{"type": "string", "minLength": 1},
+		"workerSessionId": map[string]any{"type": "string", "minLength": 1},
 		"provider":        stringProperty("Model provider. Omit to use operator defaults."),
 		"model":           stringProperty("Model name. Omit to use operator defaults."),
 		"reasoningEffort": stringProperty("Reasoning effort. Omit to use the provider default."),
 		"workingRoot":     stringProperty("Absolute workspace directory for the subagent. Omit to use the MCP server workspace."),
-		"timeoutMillis":   integerProperty("Optional maximum wait time for the subagent result."),
+		"timeoutMillis":   map[string]any{"type": "integer", "minimum": 1, "maximum": int64(9223372036854), "description": "Optional execution duration in milliseconds; omitted duration is unbounded."},
 	}, "prompt")
-	run["properties"].(map[string]any)["action"] = map[string]any{"type": "string", "enum": []any{"RUN"}}
+	run["properties"].(map[string]any)["action"] = map[string]any{"type": "string", "enum": []any{"START", "RUN"}}
 	return map[string]any{
 		"type":       "object",
-		"properties": map[string]any{"action": map[string]any{"type": "string", "enum": []any{"RUN", "LIST", "READ", "CONTROL"}, "default": "RUN"}},
+		"properties": map[string]any{"action": map[string]any{"type": "string", "enum": []any{"START", "RUN", "LIST", "READ", "CONTROL"}, "default": "START"}},
 		"oneOf":      append([]any{run}, workerActionSchemas()...),
 	}
 }

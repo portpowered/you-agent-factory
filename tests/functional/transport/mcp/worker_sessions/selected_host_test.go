@@ -43,30 +43,58 @@ func runSelectedHostScenarios(t *testing.T) {
 		t.Parallel()
 		runLogsLimitValidation(t, process)
 	})
-	t.Run("run subagent", func(t *testing.T) {
+
+	t.Run("direct start survives caller disconnect", func(t *testing.T) {
 		t.Parallel()
-		workDir := filepath.Join(t.TempDir(), "run-subagent")
-		if err := os.MkdirAll(workDir, 0o755); err != nil {
+		workDir := t.TempDir()
+		released := make(chan struct{})
+		launched := make(chan struct{}, 2)
+		host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: support.ScaffoldSingleStepFactory(t, "subagent-host"), WorkingDirectory: workDir, Env: process.environment,
+			Edges: serviceedges.Edges{ProviderCommandRunner: heldSubagentRunner{launched: launched, released: released}},
+		})
+		session, ctx, cancel := startCancellableMCP(t, process, host.URL(), workDir)
+		args := map[string]any{"requestId": "direct-request", "workerSessionId": "direct-worker", "prompt": "controlled unfinished prompt", "provider": "codex", "model": "test-model", "workingRoot": workDir}
+		result := callTool(t, ctx, session, "you.subagent", args)
+		if result.IsError {
+			t.Fatalf("START=%#v", result)
+		}
+		var accepted struct {
+			Result struct {
+				WorkerSessionID string `json:"workerSessionId"`
+				Accepted        bool   `json:"accepted"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &accepted); err != nil {
 			t.Fatal(err)
 		}
-		env := append([]string(nil), process.environment...)
-		source := support.InstallPackagedFactoryWithProcess(t, process, env, workDir, "@you/subagent")
-		support.CreateNamedFactoryAtRootWithProcess(t, process, env, workDir, filepath.Join(workDir, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
-		host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir: support.ScaffoldSingleStepFactory(t, "subagent-host"), WorkingDirectory: workDir, Env: env,
-			Edges: serviceedges.Edges{ProviderCommandRunner: subagentScenarioRunner{t: t}},
-		})
-		session, ctx, _ := startCancellableMCP(t, process, host.URL(), workDir)
-		for _, action := range []string{"", "RUN"} {
-			args := map[string]any{"prompt": "Return the controlled answer", "provider": "codex", "model": "test-model", "workingRoot": workDir}
-			if action != "" {
-				args["action"] = action
-			}
-			result := callTool(t, ctx, session, "you.subagent", args)
-			if result.IsError || len(result.Content) != 1 || !strings.Contains(result.Content[0].(*mcp.TextContent).Text, "controlled subagent answer") {
-				t.Fatalf("RUN action=%q result=%#v", action, result)
-			}
+		if !accepted.Result.Accepted || accepted.Result.WorkerSessionID != "direct-worker" {
+			t.Fatalf("admission=%+v", accepted)
 		}
+		select {
+		case <-launched:
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		}
+		cancel()
+		fresh, freshCtx := startMCP(t, process, host.URL())
+		read := callTool(t, freshCtx, fresh, "you.subagent", map[string]any{"action": "READ", "workerSessionId": "direct-worker"})
+		if read.IsError || !strings.Contains(read.Content[0].(*mcp.TextContent).Text, "RUNNING") {
+			t.Fatalf("fresh READ=%#v", read)
+		}
+		replay := callTool(t, freshCtx, fresh, "you.subagent", args)
+		if replay.IsError {
+			t.Fatalf("replay=%#v", replay)
+		}
+		select {
+		case <-launched:
+			t.Fatal("replay launched twice")
+		default:
+		}
+		args["prompt"] = "conflicting prompt"
+		assertToolError(t, callTool(t, freshCtx, fresh, "you.subagent", args), "worker_session.conflict", false)
+		assertToolError(t, callTool(t, freshCtx, fresh, "you.subagent", map[string]any{"action": "RUN", "prompt": "ignored"}), "worker_session.run_removed", false)
+		close(released)
 	})
 	t.Run("unknown action has no effects", func(t *testing.T) {
 		t.Parallel()
@@ -609,5 +637,21 @@ func runHostCancellation(t *testing.T, process support.Process) {
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("canceled MCP call did not join")
+	}
+}
+
+// The provider stays unfinished until released or host cleanup cancels it.
+type heldSubagentRunner struct {
+	launched chan<- struct{}
+	released <-chan struct{}
+}
+
+func (r heldSubagentRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.launched <- struct{}{}
+	select {
+	case <-r.released:
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("controlled completion")}, nil
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
 	}
 }

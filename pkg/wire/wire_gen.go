@@ -985,10 +985,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	recordingsInspection := provideMCPInspection(recordingsService)
 	factorysessionProviderIdentityResolver := provideMCPProviderIdentityResolver(service)
 	toolOperation := provideMCPToolOperation(recordingsInspection, v212, workflowPreviewOperation, v209, v13, factorysessionProviderIdentityResolver)
-	hostTransport := provideMCPHostTransport()
-	wireMcpHostOperation := provideMCPHostOperation(hostTransport, v13, factorysessionProviderIdentityResolver)
-	wireMcpProviderConfiguration := provideMCPProviderConfiguration(operatorsettingsService, service, homeDirectoryResolver)
-	serverToolOperation := provideMCPDispatch(workersessionmcpAdapter, toolOperation, wireMcpHostOperation, wireMcpProviderConfiguration)
+	serverToolOperation := provideMCPDispatch(workersessionmcpAdapter, toolOperation, v13)
 	options, err := provideMCPServerOptions(operatorsettingsService, service, fileSystem, homeDirectoryResolver)
 	if err != nil {
 		return nil, err
@@ -1478,9 +1475,6 @@ var BundleSet = wire14.NewSet(
 	provideInvocationOperation,
 	provideMCPWorkerHostClient,
 	provideMCPWorkerAdapter,
-	provideMCPHostTransport,
-	provideMCPHostOperation,
-	provideMCPProviderConfiguration,
 	provideMCPInspection,
 	provideMCPToolOperation,
 	provideMCPDispatch,

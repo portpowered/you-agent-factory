@@ -1341,14 +1341,6 @@
           "boundary": "rest"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
-          "boundary": "rest"
-        },
-        {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "rest"
         }
@@ -1712,14 +1704,6 @@
           "boundary": "rest"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
-          "boundary": "rest"
-        },
-        {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "rest"
         }
@@ -1912,14 +1896,6 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
           "boundary": "rest"
         },
         {
@@ -2250,6 +2226,14 @@
         {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "rest"
         }
       ]
     },
@@ -2326,14 +2310,6 @@
       "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
-        {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
-          "boundary": "rest"
-        },
         {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "rest"

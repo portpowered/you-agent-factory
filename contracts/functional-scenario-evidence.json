@@ -439,10 +439,7 @@
       "stableIds": [
         "cli/you.server.mcp",
         "mcp/mcp.tool.you.subagent",
-        "rest/closeFactorySession",
-        "rest/invokeFactorySessionBySessionId",
-        "rest/openFactorySession",
-        "rest/terminateFactorySession"
+        "rest/startWorkerSession"
       ]
     },
     {
@@ -450,10 +447,7 @@
       "stableIds": [
         "cli/you.server.mcp",
         "mcp/mcp.tool.you.subagent",
-        "rest/closeFactorySession",
-        "rest/invokeFactorySessionBySessionId",
-        "rest/openFactorySession",
-        "rest/terminateFactorySession"
+        "rest/startWorkerSession"
       ]
     },
     {

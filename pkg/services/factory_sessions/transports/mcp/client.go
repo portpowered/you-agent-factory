@@ -7,14 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"slices"
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	mapping "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
@@ -41,30 +39,6 @@ type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessa
 // accepted provider ids or aliases; protocol tests replace this exact function
 // role.
 type ProviderIdentityResolver func(context.Context, string) (string, error)
-
-// BindSubagentOperation keeps execution-boundary credentials outside tool
-// arguments. Each invocation receives its own detached admission value; only
-// Worker Sessions can verify that value against the running owner.
-func BindSubagentOperation(
-	run func(context.Context, SubagentInput) ToolResponse[SubagentResult],
-	workerSessionID, workerSessionToken string,
-) func(context.Context, json.RawMessage) (json.RawMessage, error) {
-	headers := make(http.Header)
-	if workerSessionID != "" || workerSessionToken != "" {
-		headers.Set("X-You-Worker-Session-Id", workerSessionID)
-		headers.Set("Authorization", "Bearer "+workerSessionToken)
-	}
-	caller, callerErr := mapping.WorkerSessionCallerFromHeaders(headers)
-	return func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
-		return callSubagentJSON(input, func(request SubagentInput) ToolResponse[SubagentResult] {
-			if callerErr != nil {
-				return subagentExecutionFailure(callerErr)
-			}
-			request.Caller = caller.Clone()
-			return run(ctx, request)
-		})
-	}
-}
 
 func callToolJSON[Input any, Output any](
 	input json.RawMessage,
@@ -108,22 +82,6 @@ func callSubagentJSON(input json.RawMessage, handler func(SubagentInput) ToolRes
 		}
 	}
 	return json.Marshal(handler(request))
-}
-
-// ValidateSubagentArguments applies RUN decoding before provider configuration.
-// A nil response means validation succeeded; failures retain Factory errors.
-func ValidateSubagentArguments(input json.RawMessage) (json.RawMessage, error) {
-	response, err := callSubagentJSON(input, func(request SubagentInput) ToolResponse[SubagentResult] {
-		if err := validateSubagentValues(request); err != nil {
-			envelope := requestValidationErrorEnvelope(err)
-			return ToolResponse[SubagentResult]{Error: &envelope}
-		}
-		return ToolResponse[SubagentResult]{}
-	})
-	if err != nil || string(response) != "{}" {
-		return response, err
-	}
-	return nil, nil
 }
 
 type canonicalToolHandler func(

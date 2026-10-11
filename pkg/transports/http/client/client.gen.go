@@ -10504,6 +10504,12 @@ type ListWorkerSessionsParamsScope string
 // ListWorkerSessionsParamsState defines parameters for ListWorkerSessions.
 type ListWorkerSessionsParamsState string
 
+// StartWorkerSessionParams defines parameters for StartWorkerSession.
+type StartWorkerSessionParams struct {
+	// XYouWorkerSessionId Caller Worker Session identity. Requires its execution-only bearer token.
+	XYouWorkerSessionId *string `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // GetWorkerSessionObservationByWorkerSessionIdParams defines parameters for GetWorkerSessionObservationByWorkerSessionId.
 type GetWorkerSessionObservationByWorkerSessionIdParams struct {
 	// FactorySessionId Exact Factory Session owner of the retained Worker Session ID.
@@ -10546,6 +10552,9 @@ type TerminateWorkerSessionJSONBody struct {
 
 // SendAgentMessageJSONRequestBody defines body for SendAgentMessage for application/json ContentType.
 type SendAgentMessageJSONRequestBody = AgentMessageSendRequest
+
+// StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
+type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
 
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
 type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
@@ -19709,6 +19718,11 @@ type ClientInterface interface {
 	// ListWorkerSessions request
 	ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// StartWorkerSessionWithBody request with any body
+	StartWorkerSessionWithBody(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	StartWorkerSession(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetWorkerSessionObservationByWorkerSessionId request
 	GetWorkerSessionObservationByWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19869,6 +19883,30 @@ func (c *Client) GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (
 
 func (c *Client) ListWorkerSessions(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListWorkerSessionsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StartWorkerSessionWithBody(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartWorkerSessionRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) StartWorkerSession(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStartWorkerSessionRequest(c.Server, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -20905,6 +20943,61 @@ func NewListWorkerSessionsRequest(server string, params *ListWorkerSessionsParam
 	return req, nil
 }
 
+// NewStartWorkerSessionRequest calls the generic StartWorkerSession builder with application/json body
+func NewStartWorkerSessionRequest(server string, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewStartWorkerSessionRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewStartWorkerSessionRequestWithBody generates requests for StartWorkerSession with any type of body
+func NewStartWorkerSessionRequestWithBody(server string, params *StartWorkerSessionParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XYouWorkerSessionId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-You-Worker-Session-Id", runtime.ParamLocationHeader, *params.XYouWorkerSessionId)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-You-Worker-Session-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetWorkerSessionObservationByWorkerSessionIdRequest generates requests for GetWorkerSessionObservationByWorkerSessionId
 func NewGetWorkerSessionObservationByWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams) (*http.Request, error) {
 	var err error
@@ -21393,6 +21486,11 @@ type ClientWithResponsesInterface interface {
 	// ListWorkerSessionsWithResponse request
 	ListWorkerSessionsWithResponse(ctx context.Context, params *ListWorkerSessionsParams, reqEditors ...RequestEditorFn) (*ListWorkerSessionsClientResponse, error)
 
+	// StartWorkerSessionWithBodyWithResponse request with any body
+	StartWorkerSessionWithBodyWithResponse(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error)
+
+	StartWorkerSessionWithResponse(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error)
+
 	// GetWorkerSessionObservationByWorkerSessionIdWithResponse request
 	GetWorkerSessionObservationByWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *GetWorkerSessionObservationByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*GetWorkerSessionObservationByWorkerSessionIdClientResponse, error)
 
@@ -21701,6 +21799,32 @@ func (r ListWorkerSessionsClientResponse) StatusCode() int {
 	return 0
 }
 
+type StartWorkerSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *WorkerSessionStartResponse
+	JSON400      *BadRequest
+	JSON403      *ErrorResponse
+	JSON409      *WorkerSessionStartConflict
+	JSON503      *WorkerSessionStartUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r StartWorkerSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r StartWorkerSessionClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetWorkerSessionObservationByWorkerSessionIdClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21988,6 +22112,23 @@ func (c *ClientWithResponses) ListWorkerSessionsWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseListWorkerSessionsClientResponse(rsp)
+}
+
+// StartWorkerSessionWithBodyWithResponse request with arbitrary body returning *StartWorkerSessionClientResponse
+func (c *ClientWithResponses) StartWorkerSessionWithBodyWithResponse(ctx context.Context, params *StartWorkerSessionParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error) {
+	rsp, err := c.StartWorkerSessionWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartWorkerSessionClientResponse(rsp)
+}
+
+func (c *ClientWithResponses) StartWorkerSessionWithResponse(ctx context.Context, params *StartWorkerSessionParams, body StartWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*StartWorkerSessionClientResponse, error) {
+	rsp, err := c.StartWorkerSession(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseStartWorkerSessionClientResponse(rsp)
 }
 
 // GetWorkerSessionObservationByWorkerSessionIdWithResponse request returning *GetWorkerSessionObservationByWorkerSessionIdClientResponse
@@ -22635,6 +22776,60 @@ func ParseListWorkerSessionsClientResponse(rsp *http.Response) (*ListWorkerSessi
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseStartWorkerSessionClientResponse parses an HTTP response from a StartWorkerSessionWithResponse call
+func ParseStartWorkerSessionClientResponse(rsp *http.Response) (*StartWorkerSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &StartWorkerSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest WorkerSessionStartResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest WorkerSessionStartConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionStartUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

@@ -111,54 +111,39 @@ The list must show `you-agent-factory` connected. Set the OpenCode workspace to
 the project whose files the subagent should inspect. OpenCode starts the MCP
 child from that workspace.
 
-## Run A Subagent
+## Start A Subagent
 
-Call `you.subagent` with a short `prompt`. Omitted `action` defaults to `RUN`:
-
-Explicit `action: "RUN"` uses the same inputs and results. RUN uses the local
-process; the other actions use the selected host. Each action accepts only its
-own fields. Unknown actions return nonretryable `worker_session.invalid_request`
-before configuration or execution. RUN errors retain Factory Session codes.
+Call `you.subagent` with a short `prompt`. Omitted `action` defaults to `START`:
 
 ```json
 {"prompt":"Summarize the purpose of this repository in one sentence."}
 ```
 
-The tool runs one bounded `@you/subagent` Factory invocation and returns its
-answer as `result.text`. Optional `provider`, `model`, and `reasoningEffort`
-fields select the worker route for that call. Omit them to use the operator's
-configured provider and model and the provider's default reasoning effort.
-The subagent can inspect and edit its workspace with agent tools. Workspace
-editing is enabled by default and requires no edit flag. Set
-`workingRoot` to an absolute project directory when the MCP server's working
-directory is not the project being edited; otherwise the server's working
-directory is used. Each call opens and closes its own Factory Session.
+START uses the selected `--server` host and returns an admission acknowledgment
+with `requestId`, `workerSessionId`, `accepted`, `state`, and `eventTopic`.
+It starts a direct Worker Session without creating a Factory Session or waiting
+for provider completion. Use READ and CONTROL with the returned `workerSessionId`.
+Caller disconnect after admission does not end the Worker Session.
 
-If no provider default is configured, run `you init --provider opencode`,
-`you init --provider codex`, or `you init --provider pi`; you can also supply
-`provider` in the tool call. Use these public provider IDs directly. Factory
-Session tools use the same process-owned Sessions service.
+Omitted `provider`, `model`, and `reasoningEffort` use the dedicated
+`defaults.subagent` route. Configure that route with
+`you.operator_settings.set_subagent_defaults`, or supply explicit provider and
+model values. Generic worker defaults do not supply this route. A missing or
+unavailable route returns a typed error without provider fallback.
 
-### Troubleshoot a subagent timeout
+Set `workingRoot` to an absolute workspace path, or omit it to use the MCP
+server workspace. Optional `requestId` and `workerSessionId` allow exact replay;
+reuse both with the same inputs to recover admission without another launch.
+A conflicting request returns a typed error.
 
-`timeoutMillis` sets the maximum wait for a `you.subagent` result in
-milliseconds. A `factory_session.subagent.timed_out` error includes the Factory
-Session ID. It includes `requestId`, `traceId`, and `workId` when available,
-plus any explicitly selected `provider` and `model` and a `suggestedAction`.
-The call requests cancellation and closes its live Factory Session on timeout.
+`timeoutMillis` selects a positive execution duration measured from execution
+start. Omission applies no execution deadline. It does not specify a completion
+wait for the MCP call.
 
-Typed tool and domain errors return a readable message in the first MCP content
-text with `isError=true`; `structuredContent` retains the machine-readable
-`code`, `retryable`, `sessionId`, and `details` fields.
-
-If `timeoutMillis` is omitted, `you.subagent` waits up to 20 minutes (1200000
-milliseconds). A shorter caller deadline or MCP host tool wait can end the
-operation sooner. For substantial coding edits, set the MCP host tool wait
-longer than `timeoutMillis` plus cleanup time. Short probes can use a shorter
-`timeoutMillis`.
-
-Workspace edits may have occurred. Inspect the workspace before retrying.
-After inspection, choose another configured model or a longer timeout.
+Explicit `action: "RUN"` returns `worker_session.run_removed` before execution.
+Use START, then READ the admitted identity. Unknown actions and invalid inputs
+return nonretryable `worker_session.invalid_request`. Other failures retain the
+Worker Session typed error envelope.
 
 ## Discover Configuration And Providers
 
@@ -226,10 +211,9 @@ Tool discovery exposes exactly 11 tools: `you.subagent` and this Factory Session
 | `you.factory_session.read_events` | Read ordered Factory Session events |
 | `you.factory_session.control` | Pause, resume, cancel, or terminate a Factory Session |
 
-`you.subagent` closes its live Factory Session before returning. Its response
-includes the session ID and terminal result. A live ID seen in
-`you.factory_session.list` during execution is not readable through the
-durable-only `you.factory_session.get` tool.
+`you.subagent` returns direct Worker Session admission. Its
+`workerSessionId` is readable with READ on the same selected host.
+Factory Session tools continue to expose Factory execution independently.
 
 Source validation uses either the host working directory or an explicit
 `projectRoot`. After starting, preserve the caller-supplied `requestId`, the

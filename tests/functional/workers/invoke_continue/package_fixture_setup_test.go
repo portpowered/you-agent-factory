@@ -444,7 +444,8 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 	ackStore := &interruptPhaseAckStore{}
 	lateStarts := &requesterLateStartBoundary{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Merge(serviceedges.Edges{
-		WorkerRecordingWriter: ackStore,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		WorkerRecordingWriter:              ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
 			ackStore.WorkerRecordingStore = store
 		},

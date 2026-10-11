@@ -231,7 +231,7 @@ func assertRequesterRuntimePreparationFailure(t *testing.T, mode, result, token 
 		}
 		return
 	}
-	var response factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]
+	var response factorysessionmcp.ToolResponse[api.WorkerSessionStartResponse]
 	if !strings.HasPrefix(result, "<nil>") || json.Unmarshal([]byte(result[5:]), &response) != nil || response.Error == nil || response.Result != nil {
 		t.Fatal("MCP preparation loss did not return a terminal error")
 	}
@@ -472,9 +472,17 @@ func TestRequesterMCPSelectedHostDefaultsAndRefusals(t *testing.T) {
 	token := requesterSourceToken(t, runner, parentID)
 	assertRequesterMCPUnattributedCalls(t, fixture, child, ctx)
 	assertRequesterMCPRunningCalls(t, fixture, child, parent, ctx, parentID, token)
+	beforeMissing := child.providerRunner.CallCount()
+	for _, selection := range []requesterMCPSelection{{provider: "codex"}, {model: "gpt-5-codex"}, {}} {
+		result := executeRequesterMCPTimeout(t, fixture, child, ctx, "", "", true, 30000, selection)
+		if result.Error == nil || result.Error.Code != "worker_session.invalid_request" || child.providerRunner.CallCount() != beforeMissing {
+			t.Fatal("missing dedicated default inherited generic defaults")
+		}
+	}
+
 	before := child.providerRunner.CallCount()
 	refused := executeRequesterMCP(t, fixture, child, ctx, parentID, strings.Repeat("A", 43), true)
-	if refused.Error == nil || refused.Error.Code != "WORKER_SESSION_CALLER_INVALID" || child.providerRunner.CallCount() != before {
+	if refused.Error == nil || refused.Error.Code != "worker_session.permission_denied" || child.providerRunner.CallCount() != before {
 		t.Fatalf("invalid caller was not refused: %#v", refused.Error)
 	}
 	assertRequesterMCPPartialCredentials(t, fixture, child, ctx, parentID, token)
@@ -484,10 +492,10 @@ func TestRequesterMCPSelectedHostDefaultsAndRefusals(t *testing.T) {
 	}
 	t19AwaitSignal(t, ctx, runner.stopped, "MCP caller ended")
 	refused = executeRequesterMCP(t, fixture, child, ctx, parentID, token, false)
-	if refused.Error == nil || refused.Error.Code != "WORKER_SESSION_CALLER_INVALID" || child.providerRunner.CallCount() != before {
+	if refused.Error == nil || refused.Error.Code != "worker_session.permission_denied" || child.providerRunner.CallCount() != before {
 		t.Fatalf("ended caller was not refused: %#v", refused.Error)
 	}
-	functionalevidence.Covers(t, "cli/you.server.mcp", "mcp/mcp.tool.you.subagent", "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/terminateFactorySession", "rest/closeFactorySession")
+	functionalevidence.Covers(t, "cli/you.server.mcp", "mcp/mcp.tool.you.subagent", "rest/startWorkerSession")
 }
 
 // Partial execution credentials are rejected before the MCP server initializes;
@@ -512,11 +520,11 @@ func assertRequesterMCPUnattributedCalls(t *testing.T, fixture *invokeContinuePa
 	for _, explicit := range []bool{true, false} {
 		for _, selection := range requesterMCPSelections() {
 			result := executeRequesterMCPTimeout(t, fixture, child, ctx, "", "", explicit, 30000, selection)
-			if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
-				t.Fatalf("selected-host RUN failed: %#v", result.Error)
+			if result.Error != nil || result.Result == nil || !result.Result.Accepted {
+				t.Fatalf("selected-host START selection=%+v failed: %#v", selection, result.Error)
 			}
+			assertRequesterMCPUnattributedChild(t, fixture, child, ctx, result.Result.WorkerSessionId)
 			assertRequesterMCPSelection(t, child, selection)
-			assertRequesterMCPUnattributedChild(t, fixture, child, ctx, result.Result.SessionID)
 		}
 	}
 }
@@ -526,11 +534,11 @@ func assertRequesterMCPRunningCalls(t *testing.T, fixture *invokeContinuePackage
 	for _, explicit := range []bool{true, false} {
 		for _, selection := range requesterMCPSelections() {
 			result := executeRequesterMCPTimeout(t, fixture, child, ctx, parentID, token, explicit, 30000, selection)
-			if result.Error != nil || result.Result == nil || result.Result.Text != "selected host MCP output COMPLETE" {
+			if result.Error != nil || result.Result == nil || !result.Result.Accepted {
 				t.Fatalf("running-caller selected-host RUN failed: %#v", result.Error)
 			}
+			assertRequesterMCPChild(t, fixture, child, ctx, result.Result.WorkerSessionId, parentID, token)
 			assertRequesterMCPSelection(t, child, selection)
-			assertRequesterMCPChild(t, fixture, child, ctx, result.Result.SessionID, parentID, token)
 			assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
 		}
 	}
@@ -539,7 +547,7 @@ func assertRequesterMCPRunningCalls(t *testing.T, fixture *invokeContinuePackage
 type requesterMCPSelection struct{ provider, model string }
 
 func requesterMCPSelections() []requesterMCPSelection {
-	return []requesterMCPSelection{{provider: "codex", model: "gpt-5-codex"}, {provider: "codex"}, {model: "gpt-5-codex"}, {}}
+	return []requesterMCPSelection{{provider: "codex", model: "gpt-5-codex"}}
 }
 
 func assertRequesterMCPSelection(t *testing.T, child *invokeContinueScenario, selection requesterMCPSelection) {
@@ -563,12 +571,12 @@ func assertRequesterMCPParentActive(t *testing.T, fixture *invokeContinuePackage
 	}
 }
 
-func executeRequesterMCP(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, callerID, token string, explicit bool) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
+func executeRequesterMCP(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, callerID, token string, explicit bool) factorysessionmcp.ToolResponse[api.WorkerSessionStartResponse] {
 	t.Helper()
 	return executeRequesterMCPTimeout(t, fixture, child, ctx, callerID, token, explicit, 30000)
 }
 
-func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, callerID, token string, explicit bool, timeoutMillis int, selections ...requesterMCPSelection) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
+func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, callerID, token string, explicit bool, timeoutMillis int, selections ...requesterMCPSelection) factorysessionmcp.ToolResponse[api.WorkerSessionStartResponse] {
 	t.Helper()
 	input := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "server", "mcp", "--project-root", child.workingDirectory})
 	input.Input.Env = child.environment()
@@ -624,7 +632,7 @@ func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixt
 		args["model"] = selection.model
 	}
 	if explicit {
-		args["action"] = "RUN"
+		args["action"] = "START"
 	}
 	raw := call(2, "tools/call", map[string]any{"name": "you.subagent", "arguments": args})
 	if token != "" && (strings.Contains(string(raw), token) || strings.Contains(input.Stderr(), token)) {
@@ -633,25 +641,22 @@ func executeRequesterMCPTimeout(t *testing.T, fixture *invokeContinuePackageFixt
 	return decodeRequesterMCPResult(t, raw)
 }
 
-func assertRequesterMCPUnattributedChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, sessionID string) {
+func assertRequesterMCPUnattributedChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, id string) {
 	t.Helper()
-	requests := child.providerRunner.Requests()
-	command := requests[len(requests)-1]
-	environment := requesterEnvironment(command.Env)
-	if environment["YOU_MESSAGE_TARGET"] != "" || environment["YOU_FACTORY_SESSION_ID"] != sessionID || environment["YOU_SERVER"] != fixture.baseURL || environment["YOU_WORKER_SESSION_TOKEN"] == "" || command.WorkDir != child.workingDirectory {
-		t.Fatal("unattributed MCP child lost own identity, selected host or working root")
+	observation, err := support.WaitForObservation(30*time.Second, func() (api.WorkerSessionObservation, error) {
+		return requesterObservation(t, fixture, child, ctx, id), nil
+	}, func(o api.WorkerSessionObservation) bool { return o.State == "COMPLETED" })
+	if err != nil || observation.Requester != nil || observation.Correlation != nil && observation.Correlation.FactorySessionId != nil {
+		t.Fatalf("unattributed direct child=%+v err=%v", observation, err)
 	}
-	observation := requesterObservation(t, fixture, child, ctx, environment["YOU_WORKER_SESSION_ID"])
-	if observation.Requester != nil || observation.Correlation == nil || observation.Correlation.FactorySessionId == nil || *observation.Correlation.FactorySessionId != sessionID || observation.State != "COMPLETED" {
-		t.Fatal("unattributed MCP runner and observation disagree")
-	}
-	status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+sessionID, nil)
-	if status != http.StatusNotFound {
-		t.Fatal("RUN returned before owner retirement")
+	command := child.providerRunner.Requests()[child.providerRunner.CallCount()-1]
+	env := requesterEnvironment(command.Env)
+	if env["YOU_MESSAGE_TARGET"] != "" || env["YOU_FACTORY_SESSION_ID"] != "" || env["YOU_WORKER_SESSION_ID"] != id || env["YOU_SERVER"] != fixture.baseURL || env["YOU_WORKER_SESSION_TOKEN"] == "" || command.WorkDir != child.workingDirectory {
+		t.Fatal("direct MCP child lost identity, selected host or working root")
 	}
 }
 
-func decodeRequesterMCPResult(t *testing.T, raw json.RawMessage) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
+func decodeRequesterMCPResult(t *testing.T, raw json.RawMessage) factorysessionmcp.ToolResponse[api.WorkerSessionStartResponse] {
 	t.Helper()
 	var response struct {
 		IsError    bool            `json:"isError"`
@@ -663,7 +668,7 @@ func decodeRequesterMCPResult(t *testing.T, raw json.RawMessage) factorysessionm
 	if json.Unmarshal(raw, &response) != nil {
 		t.Fatal("MCP result decode failed")
 	}
-	var result factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]
+	var result factorysessionmcp.ToolResponse[api.WorkerSessionStartResponse]
 	encoded := response.Structured
 	if !response.IsError && len(response.Content) > 0 {
 		encoded = []byte(response.Content[0].Text)
@@ -674,35 +679,20 @@ func decodeRequesterMCPResult(t *testing.T, raw json.RawMessage) factorysessionm
 	return result
 }
 
-func assertRequesterMCPChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, sessionID, parentID, token string) {
+func assertRequesterMCPChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, id, parentID, token string) {
 	t.Helper()
-	requests := child.providerRunner.Requests()
-	command := requests[len(requests)-1]
-	environment := requesterEnvironment(command.Env)
-	if environment["YOU_MESSAGE_TARGET"] != parentID || environment["YOU_FACTORY_SESSION_ID"] != sessionID || environment["YOU_SERVER"] != fixture.baseURL || environment["YOU_WORKER_SESSION_TOKEN"] == token || len(environment["YOU_WORKER_SESSION_TOKEN"]) != 43 || command.WorkDir != child.workingDirectory {
-		t.Fatalf("MCP child agreement target=%t factory=%t host=%t fresh=%t root=%t", environment["YOU_MESSAGE_TARGET"] == parentID, environment["YOU_FACTORY_SESSION_ID"] == sessionID, environment["YOU_SERVER"] == fixture.baseURL, environment["YOU_WORKER_SESSION_TOKEN"] != token, command.WorkDir == child.workingDirectory)
+	observation, err := support.WaitForObservation(30*time.Second, func() (api.WorkerSessionObservation, error) {
+		return requesterObservation(t, fixture, child, ctx, id), nil
+	}, func(o api.WorkerSessionObservation) bool { return o.State == "COMPLETED" })
+	if err != nil || observation.Requester == nil || observation.Requester.WorkerSessionId != parentID || observation.Correlation != nil && observation.Correlation.FactorySessionId != nil {
+		t.Fatalf("direct child=%+v err=%v", observation, err)
 	}
-	observation := requesterObservation(t, fixture, child, ctx, environment["YOU_WORKER_SESSION_ID"])
-	if observation.Requester == nil || observation.Requester.WorkerSessionId != parentID || observation.Correlation == nil || observation.Correlation.FactorySessionId == nil || *observation.Correlation.FactorySessionId != sessionID {
-		t.Fatal("MCP runner and observation disagree")
+	command := child.providerRunner.Requests()[child.providerRunner.CallCount()-1]
+	env := requesterEnvironment(command.Env)
+	if env["YOU_MESSAGE_TARGET"] != parentID || env["YOU_FACTORY_SESSION_ID"] != "" || env["YOU_WORKER_SESSION_ID"] != id || env["YOU_SERVER"] != fixture.baseURL || env["YOU_WORKER_SESSION_TOKEN"] == token || len(env["YOU_WORKER_SESSION_TOKEN"]) != 43 || command.WorkDir != child.workingDirectory {
+		t.Fatal("MCP requester/identity environment disagrees")
 	}
-	assertRequesterMCPMetadata(t, observation.Labels, observation.Correlation.WorkId, environment["YOU_WORK_ID"], parentID)
-	status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+sessionID, nil)
-	if status != http.StatusNotFound {
-		t.Fatal("RUN returned before owner retirement")
-	}
-	if requesterObservation(t, fixture, child, ctx, environment["YOU_WORKER_SESSION_ID"]).State != "COMPLETED" {
-		t.Fatal("MCP child did not complete")
-	}
-}
-
-func assertRequesterMCPMetadata(t *testing.T, labels *[]string, workID *string, executionWorkID, parentID string) {
-	t.Helper()
-	if labels == nil || !slices.Contains(*labels, "parent:"+parentID) || workID == nil || *workID == "" || *workID != executionWorkID {
-		t.Fatal("MCP child lost its parent label or actual Work correlation")
-	}
-	// Packaged invocation creates actual Work tags. These belong to the child;
-	// caller tag inheritance is guarded by Worker Sessions admission units.
+	assertRequesterSuccessorEnvironment(t, env, id, parentID, token)
 }
 
 // These parallel cells cross the MCP protocol and the selected live host. The
@@ -712,11 +702,11 @@ func TestRequesterMCPSelectedHostFailures(t *testing.T) {
 	t.Parallel()
 	t.Cleanup(func() {
 		if !t.Failed() {
-			functionalevidence.Covers(t, "cli/you.server.mcp", "mcp/mcp.tool.you.subagent", "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/terminateFactorySession", "rest/closeFactorySession")
+			functionalevidence.Covers(t, "cli/you.server.mcp", "mcp/mcp.tool.you.subagent", "rest/startWorkerSession")
 		}
 	})
 	fixture := ensureInvokeContinuePackageFixture(t)
-	for _, mode := range []string{"auth", "timeout", "late"} {
+	for _, mode := range []string{"auth", "timeout"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			parent := fixture.scenario(t, "requester-mcp-failure-parent-"+mode)
@@ -734,40 +724,34 @@ func TestRequesterMCPSelectedHostFailures(t *testing.T) {
 			}
 			t19AwaitSignal(t, ctx, runner.started, "failure caller running")
 			token := requesterSourceToken(t, runner, parentID)
-			if mode == "late" {
-				assertRequesterMCPLateStart(t, fixture, child, parent, ctx, parentID, token)
-				return
-			}
-			timeoutMillis := 30000
+			duration := 30000
 			if mode == "timeout" {
-				timeoutMillis = 3000
+				duration = 3000
 				defer t7ReleaseAndJoin(t, ctx, child.providerRunner.(*t7GatedProviderRunner))()
 			}
-			response := executeRequesterMCPTimeout(t, fixture, child, ctx, parentID, token, true, timeoutMillis)
-			assertRequesterMCPFailure(t, fixture, child, ctx, mode, parentID, token, response)
+			response := executeRequesterMCPTimeout(t, fixture, child, ctx, parentID, token, true, duration)
+			if response.Error != nil || response.Result == nil || !response.Result.Accepted {
+				t.Fatalf("START=%+v", response)
+			}
+			id := response.Result.WorkerSessionId
+			observation, err := support.WaitForObservation(30*time.Second, func() (api.WorkerSessionObservation, error) {
+				return requesterObservation(t, fixture, child, ctx, id), nil
+			}, func(o api.WorkerSessionObservation) bool { return o.State == "FAILED" || o.State == "CANCELED" })
+			if err != nil || observation.Requester == nil || observation.Requester.WorkerSessionId != parentID {
+				t.Fatalf("terminal outcome=%+v err=%v", observation, err)
+			}
 			assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
+			requests := child.providerRunner.Requests()
+			if len(requests) != 1 {
+				t.Fatal("failure launched alternate provider")
+			}
+			env := requesterEnvironment(requests[0].Env)
+			encoded, _ := json.Marshal(response)
+			assertRequesterTokenAbsent(t, token, string(encoded))
+			assertRequesterTokenAbsent(t, env["YOU_WORKER_SESSION_TOKEN"], string(encoded))
+			assertRequesterRefusal(t, fixture, child, ctx, "ended-mcp-child", id, env["YOU_WORKER_SESSION_TOKEN"])
 		})
 	}
-}
-
-func assertRequesterMCPFailure(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, mode, parentID, token string, response factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]) {
-	t.Helper()
-	wantState := assertRequesterMCPFailureOutcome(t, mode, response)
-	env := assertRequesterMCPFailureRunner(t, fixture, child, ctx, wantState, parentID, token, response.Error.SessionID)
-	status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+response.Error.SessionID, nil)
-	if status != http.StatusNotFound {
-		t.Fatal("MCP failure reported cleanup before exact child retirement")
-	}
-	encoded, err := json.Marshal(response)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertRequesterTokenAbsent(t, token, string(encoded))
-	assertRequesterTokenAbsent(t, env["YOU_WORKER_SESSION_TOKEN"], string(encoded))
-	if strings.Contains(string(encoded), "controlled MCP authentication failure") {
-		t.Fatal("MCP failure disclosed provider diagnostics")
-	}
-	assertRequesterRefusal(t, fixture, child, ctx, "failed-mcp-child", env["YOU_WORKER_SESSION_ID"], env["YOU_WORKER_SESSION_TOKEN"])
 }
 
 // Delay only response delivery at the existing HTTP server edge, after the real
@@ -847,93 +831,4 @@ func copyRequesterHTTPResponse(w http.ResponseWriter, recorded *httptest.Respons
 	}
 	w.WriteHeader(recorded.Code)
 	_, _ = w.Write(recorded.Body.Bytes())
-}
-
-func assertRequesterMCPLateStart(t *testing.T, fixture *invokeContinuePackageFixture, child, parent *invokeContinueScenario, ctx context.Context, parentID, token string) {
-	t.Helper()
-	for _, explicit := range []bool{true, false} {
-		gate := &requesterLateStartGate{opened: make(chan struct{}), release: make(chan struct{}), retired: make(chan struct{})}
-		fixture.lateStarts.openings.Store(child.workingDirectory, gate)
-		defer gate.unblock()
-		defer fixture.lateStarts.openings.Delete(child.workingDirectory)
-		response := make(chan factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult], 1)
-		go func() {
-			// The operation deadline expires while a successful open response is
-			// gated. Signals, rather than a latency sleep, order release and close.
-			response <- executeRequesterMCPTimeout(t, fixture, child, ctx, parentID, token, explicit, 3000)
-		}()
-		t19AwaitSignal(t, ctx, gate.opened, "late child LIVE activation")
-		if gate.status != http.StatusOK || gate.sessionID == "" {
-			t.Fatal("controlled late start did not open a real child")
-		}
-		defer fixture.lateStarts.retirements.Delete("/factory-sessions/" + gate.sessionID)
-		select {
-		case result := <-response:
-			if result.Error == nil || result.Error.Code != "factory_session.subagent.timed_out" || result.Error.Details["phase"] != "start" || result.Error.Details["sessionClosed"] == true {
-				t.Fatal("late start lost typed timeout or claimed premature retirement")
-			}
-			encoded, err := json.Marshal(result)
-			if err != nil {
-				t.Fatal(err)
-			}
-			assertRequesterTokenAbsent(t, token, string(encoded))
-		case <-ctx.Done():
-			t.Fatal("late start held the MCP response")
-		}
-		gate.unblock()
-		t19AwaitSignal(t, ctx, gate.retired, "late child safe DELETE completion")
-		status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/factory-sessions/"+gate.sessionID, nil)
-		if status != http.StatusNotFound || child.providerRunner.CallCount() != 0 {
-			t.Fatal("late activation was not retired without provider launch")
-		}
-		assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
-	}
-}
-
-func assertRequesterMCPFailureOutcome(t *testing.T, mode string, response factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]) string {
-	t.Helper()
-	wantCode, wantState := "factory_session.subagent.provider_auth_failure", "FAILED"
-	if mode == "timeout" {
-		wantCode, wantState = "factory_session.subagent.timed_out", "CANCELED"
-	}
-	if response.Result != nil || response.Error == nil || response.Error.Code != wantCode || response.Error.Details["sessionClosed"] != true || response.Error.SessionID == "" {
-		t.Fatalf("%s MCP failure classification/retirement missing: %#v", mode, response.Error)
-	}
-	if mode == "auth" && (response.Error.Retryable || response.Error.Details["failureReason"] != string(api.WorkFailureTypeAuthFailure)) {
-		t.Fatal("terminal authentication failure lost nonretryable owner classification")
-	}
-	if mode == "timeout" {
-		assertRequesterMCPTimeoutProgress(t, response.Error.Details)
-	}
-	return wantState
-}
-
-func assertRequesterMCPTimeoutProgress(t *testing.T, details map[string]any) {
-	t.Helper()
-	progress, ok := details["progress"].(map[string]any)
-	if !ok || progress["available"] != true {
-		t.Fatal("timeout lost its public progress snapshot before retirement")
-	}
-	activity, ok := progress["lastObservedProviderActivity"].(map[string]any)
-	if !ok || activity["kind"] == "" || activity["observedAt"] == nil {
-		t.Fatal("timeout lost retained provider activity before retirement")
-	}
-}
-
-func assertRequesterMCPFailureRunner(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, wantState, parentID, token, sessionID string) map[string]string {
-	t.Helper()
-	requests := child.providerRunner.Requests()
-	if len(requests) != 1 {
-		t.Fatal("MCP failure did not own exactly one provider command")
-	}
-	env := requesterEnvironment(requests[0].Env)
-	if env["YOU_MESSAGE_TARGET"] != parentID || env["YOU_FACTORY_SESSION_ID"] != sessionID || env["YOU_SERVER"] != fixture.baseURL || requests[0].WorkDir != child.workingDirectory {
-		t.Fatal("failed MCP command lost caller or selected host identity")
-	}
-	observation := requesterObservation(t, fixture, child, ctx, env["YOU_WORKER_SESSION_ID"])
-	if string(observation.State) != wantState || observation.Requester == nil || observation.Requester.WorkerSessionId != parentID {
-		t.Fatalf("MCP failure worker state/requester mismatch: %s", observation.State)
-	}
-	assertRequesterSuccessorEnvironment(t, env, observation.WorkerSessionId, parentID, token)
-	return env
 }

@@ -19,23 +19,27 @@ user's home directory:
 - Windows: `%USERPROFILE%\.you-agent-factory\config.json`
 - macOS and Linux: `~/.you-agent-factory/config.json`
 
-The `defaults` object can set `workerModelProvider` and `workerModel`. For
-example:
+Direct START uses `defaults.subagent`, independently of generic worker defaults:
 
 ```json
 {
   "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-6-luna"
+    "subagent": {
+      "provider": "opencode",
+      "model": "explicitly-advertised-free-model"
+    }
   }
 }
 ```
 
-Defaults are fallbacks. Each default resolves independently in this order:
-operator file, environment, then explicit invocation flag. Thus environment
-settings override the file, and `you run --provider` or `--model` override both.
-Authored worker values take precedence over operator defaults. Agent and worker
-selections also take precedence for their own execution.
+Select an exact model advertised by the provider catalog; the model above is
+a placeholder. Use `you.operator_settings.set_subagent_defaults` to update
+the dedicated route while preserving sibling configuration.
+
+Per-call provider, model and reasoning effort override the dedicated route.
+A different provider requires an explicit model. Missing or unavailable routes
+fail without fallback. Generic worker defaults and environment values do not
+select the direct subagent route.
 
 Use the read-only MCP resource `you://operator/config/current` to inspect the
 current file. It returns the raw JSON configuration, or `{}` when no file is
@@ -85,9 +89,9 @@ workers select it by its `name` (the provider identity). Adding an existing
 built-in name overrides that preset's launch command; deleting that override
 restores the built-in preset.
 
-To select the custom provider as the default, set `defaults.workerModelProvider`
-in the operator configuration to its canonical `name` (and optionally set
-`defaults.workerModel`). To set it for one worker,
+To select the custom provider for START, set `defaults.subagent.provider`
+in the operator configuration to its canonical `name` and set
+`defaults.subagent.model` to an explicit supported model. To set it for one worker,
 configure that worker's `modelProvider` to the same name. Choose a
 model only when the provider catalog reports an exact supported model ID.
 Custom ACP providers may not publish model metadata, so do not guess one.
