@@ -675,6 +675,16 @@ func runFactoryServiceAndEmitResult(
 		return fmt.Errorf("report batch result: clean invocation snapshot provider is required")
 	}
 	if !snapshotReady {
+		// Managed shutdown can consume cancellation while joining the runtime.
+		// Its selected session is already released here; do not turn a valid
+		// interrupted batch into a startup/session lookup failure.
+		if ctx.Err() != nil {
+			return &InvocationError{
+				Code:    batchFailureCode,
+				Message: "batch interrupted before the selected Work result was available",
+				Cause:   ctx.Err(),
+			}
+		}
 		var snapshotErr error
 		snapshot, snapshotErr = batchProvider.CleanInvocationSnapshot(ctx)
 		if snapshotErr != nil {

@@ -212,6 +212,101 @@ func TestBuildBatchReportSortsFailuresAndUsesCanonicalReasons(t *testing.T) {
 	}
 }
 
+func TestReportBatchResultUnfinishedWorkKeepsActualStateAndDistinctReasons(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"human", "json", "global-json"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			var output bytes.Buffer
+			cfg := RunConfig{Output: &output, JSON: mode == "json", JSONOutput: mode == "global-json"}
+			snapshot := factoryruntime.CleanInvocationSnapshot{
+				Work: []factoryruntime.CleanInvocationWork{
+					{WorkID: "slot:0", State: "available", DataType: string(factoryruntime.RuntimeTokenDataTypeResource)},
+					{WorkID: "z-done", Name: "completed", State: "done", StateCategory: string(factoryruntime.StateCategoryTerminal)},
+					{WorkID: "b-held", Name: "held", WorkTypeID: "task", State: "init", StateCategory: string(factoryruntime.StateCategoryInitial)},
+					{WorkID: "a-failed", Name: "failed", State: "failed", StateCategory: string(factoryruntime.StateCategoryFailed), FailureReason: "actual failure"},
+				},
+				DispatchHistory: []factoryruntime.CleanInvocationDispatch{{Outcome: "FAILED", Reason: "earlier attempt", Consumed: []factoryruntime.CleanInvocationWork{{WorkID: "b-held"}}}},
+			}
+			err := reportBatchResult(cfg, snapshot)
+			var failure *InvocationError
+			if !errors.As(err, &failure) || failure.Code != batchFailureCode {
+				t.Fatalf("result error = %v, want typed batch failure", err)
+			}
+			if !strings.Contains(failure.Message, `Work "held"`) || strings.Contains(failure.Message, "completed") {
+				t.Fatalf("result attribution = %q", failure.Message)
+			}
+			if mode == "human" {
+				if !strings.Contains(output.String(), `Work "held" remained unfinished in state task:init`) ||
+					!strings.Contains(output.String(), `Work "failed" reached failed terminal state failed: actual failure`) ||
+					strings.Contains(output.String(), "success") {
+					t.Fatalf("untruthful human result: %s", &output)
+				}
+				return
+			}
+			var report batchReport
+			if err := json.Unmarshal(output.Bytes(), &report); err != nil {
+				t.Fatal(err)
+			}
+			if report.Status != "FAILED" || len(report.Failures) != 2 || report.Failures[0].WorkID != "a-failed" ||
+				report.Failures[0].Reason != "actual failure" || report.Failures[1].WorkID != "b-held" ||
+				report.Failures[1].WorkState != "task:init" || !strings.Contains(report.Failures[1].Reason, "unfinished") {
+				t.Fatalf("report = %#v", report)
+			}
+		})
+	}
+}
+
+func TestBuildBatchReportUnfinishedCategoriesAndMissingState(t *testing.T) {
+	t.Parallel()
+	for _, category := range []factoryruntime.StateCategory{factoryruntime.StateCategoryInitial, factoryruntime.StateCategoryProcessing, ""} {
+		report := buildBatchReport(factoryruntime.CleanInvocationSnapshot{Work: []factoryruntime.CleanInvocationWork{{
+			WorkID: "held", StateCategory: string(category),
+		}}})
+		if report.Status != "FAILED" || len(report.Failures) != 1 || report.Failures[0].WorkState == "failed" ||
+			!strings.Contains(report.Failures[0].Reason, "unfinished") {
+			t.Fatalf("category %q report = %#v", category, report)
+		}
+	}
+}
+
+func TestRunFactoryServiceAndEmitResultCancellationNeverReadsReleasedSession(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runner := canceledBatchCompletionRunner{cancel: cancel}
+	provider := releasedBatchReportProvider{t: t}
+	err := runFactoryServiceAndEmitResult(ctx, RunConfig{WorkFile: "batch.json"}, runner, resolvedRunRecordPath{}, provider)
+	var failure *InvocationError
+	if !errors.As(err, &failure) || failure.Code != batchFailureCode || !errors.Is(err, context.Canceled) ||
+		!strings.Contains(failure.Message, "interrupted") {
+		t.Fatalf("canceled batch result = %v, want truthful interruption retaining cancellation identity", err)
+	}
+}
+
+type canceledBatchCompletionRunner struct{ cancel context.CancelFunc }
+
+func (canceledBatchCompletionRunner) Run(context.Context) error { return nil }
+
+func (runner canceledBatchCompletionRunner) RunWithCompletion(ctx context.Context, completion initializer.CompletionOperation) error {
+	runner.cancel()
+	if err := completion(ctx); !errors.Is(err, context.Canceled) {
+		return err
+	}
+	return nil // Managed shutdown consumes cancellation after joining.
+}
+
+type releasedBatchReportProvider struct{ t *testing.T }
+
+func (provider releasedBatchReportProvider) CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider.t.Fatal("snapshot read after cancellation/release")
+	return factoryruntime.CleanInvocationSnapshot{}, errors.New("session not found")
+}
+
+func (releasedBatchReportProvider) ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
+	return factoryruntime.WaitToCompleteResult{Done: make(chan struct{})}
+}
+
 func TestBuildBatchReportPrefersFinalTerminalReasonOverEarlierDispatch(t *testing.T) {
 	report := buildBatchReport(factoryruntime.CleanInvocationSnapshot{
 		Work: []factoryruntime.CleanInvocationWork{{
