@@ -772,7 +772,7 @@ func newGenericServiceWithEffects(
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		environment, resolver, coordination,
+		environment, resolver, coordination, newTestReclamation(coordination),
 	)
 	service, ok := value.(*service)
 	if !ok {

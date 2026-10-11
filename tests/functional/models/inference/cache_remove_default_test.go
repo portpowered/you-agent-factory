@@ -19,19 +19,18 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestModelsPublicRemoveWorkflowDefaultsToRevisionOnlyForASR(t *testing.T) {
-	t.Parallel()
+func runModelsDefaultRemoval(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 
 	home := functionalTempDir(t)
 	cacheRoot := filepath.Join(home, "managed-model-cache")
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	fixture := writeDefaultASRRemovalFixture(t, cacheRoot)
-	process := functionalBuildProcess(t, serviceedges.Edges{})
 	environment := isolatedModelEnvironment(home, cacheRoot)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "remove", models.BuiltInModelNameASR})
 	inputs.Input.Env = environment
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := server.Execute(t, inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(default ASR remove) error = %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var removed factoryapi.ModelRemoveResponse
@@ -50,13 +49,16 @@ func TestModelsPublicRemoveWorkflowDefaultsToRevisionOnlyForASR(t *testing.T) {
 	)
 	missingInputs.Input.Env = environment
 	missingInputs.Input.WorkingDirectory = factoryDir
-	if err := process.Execute(missingInputs.Input); err == nil || !errors.Is(err, modelscli.ErrModelCacheNotFound) {
+	if err := server.Execute(t, missingInputs.Input); err == nil || !errors.Is(err, modelscli.ErrModelCacheNotFound) {
 		t.Fatalf("repeated default ASR remove error = %v, want ErrModelCacheNotFound", err)
 	}
 	diagnostic := decodeFirstDiagnostic(t, missingInputs.Stderr())
 	if diagnostic.Code != factoryapi.ErrorResponseCodeMODELCACHENOTFOUND ||
 		diagnostic.Family != factoryapi.ErrorFamilyNotFound {
 		t.Fatalf("repeated default ASR remove diagnostic = %#v, want MODEL_CACHE_NOT_FOUND/NOT_FOUND", diagnostic)
+	}
+	if missingInputs.Stdout() != "" {
+		t.Fatalf("repeat remove produced success output: %q", missingInputs.Stdout())
 	}
 	assertDefaultASRRemovalEffects(t, fixture)
 }

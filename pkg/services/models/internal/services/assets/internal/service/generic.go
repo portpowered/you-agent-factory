@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -122,7 +120,7 @@ func (s *service) prepareGenericAssets(
 	if err := request.Validate(); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
 	preflight, err := s.preflightGenericPreparation(ctx, request, false)
@@ -424,7 +422,7 @@ func (s *service) genericModelRequirements(
 	if source.file != "" {
 		return s.genericArtifactsFromRequirements(source, []models.AssetRequirement{{Name: source.file}}), nil
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -733,31 +731,9 @@ func (s *service) walkLocalRequirements(root, relative string) ([]models.AssetRe
 	return result, nil
 }
 
-func (s *service) ReadDirectory(path string) ([]os.DirEntry, error) {
-	return s.readDirectory(path)
-}
+type ManagedSources struct{}
 
-func (s *service) ReadFile(path string) ([]byte, error) {
-	return s.readFile(path)
-}
-
-func (s *service) OpenFile(path string) (io.ReadCloser, error) {
-	return s.openFile(path)
-}
-
-func (s *service) InspectPath(path string) (os.FileInfo, error) {
-	return s.inspectPath(path)
-}
-
-func (s *service) RemoveManagedTree(ctx context.Context, path string) error {
-	return s.removeManagedTree(ctx, path)
-}
-
-func (s *service) VerifyManagedPathRemoved(ctx context.Context, parent, child string) error {
-	return s.verifyManagedPathRemoved(ctx, parent, child)
-}
-
-func (s *service) ManagedSourceIdentity(name string) (string, bool) {
+func (ManagedSources) ManagedSourceIdentity(name string) (string, bool) {
 	source, ok := genericSourceForManagedModel(name)
 	if !ok {
 		return "", false
@@ -796,7 +772,7 @@ func (s *service) fetchGenericManifest(
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return nil, contextErr
 		}
 		return nil, pullsupport.WrapPullDiagnostics(
@@ -954,12 +930,12 @@ func (s *service) resolveGenericSource(
 	if source.kind != genericSourceHF || isImmutableGenericRevision(source.revision) {
 		return source, nil
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return genericSource{}, err
 	}
 	resolved, err := s.resolveRevision(ctx, source.safe)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return genericSource{}, contextErr
 		}
 		return genericSource{}, genericRevisionFailure()

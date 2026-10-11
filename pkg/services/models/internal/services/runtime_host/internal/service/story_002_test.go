@@ -12,6 +12,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"net/http"
 	"path/filepath"
 )
@@ -76,28 +77,31 @@ func TestResolvedHostConfigurationHandoffReachesHostAndProtocolExactly(t *testin
 	t.Parallel()
 
 	cacheDirectory := t.TempDir()
-	scopes := newScopes(t, "story-002-private-handoff")
-	ref := openScope(t, scopes, cacheDirectory, story002BuiltinLLMConfig())
+	ref := mustParseScope(t, "selected")
+	config := story002BuiltinLLMConfig()
+	scopes := &acceptedScopes{bindings: map[runtimescopes.Reference]models.RuntimeBinding{
+		"selected": {CacheDirectory: cacheDirectory, RuntimeConfig: func() *models.RuntimeConfig { return &config }},
+	}}
 	launcher := &controlledProcessLauncher{}
 	protocol := &testProtocolNegotiator{}
 	compatibility := &testCompatibilityChecker{}
-	assets := &backendRuntimeInspectionAssets{
-		Service: mustAssetsService(t, scopes),
+	assets := &acceptedAssets{
 		inspection: story002BuiltinLLMInspection(cacheDirectory, []models.AssetArtifact{
 			{Name: story002ModelName, Bytes: story002ModelBytes, SHA256: story002ModelSHA256},
 			{Name: story002ProjectorName, Bytes: story002ProjectorBytes, SHA256: story002ProjectorSHA256},
 		}),
 	}
-	host := internalservice.NewWithHostTestConfig(
-		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
-		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-		internalservice.HostOptions{
-			Platform:             managedHostPlatform(),
-			CompatibilityChecker: compatibility,
-			ProtocolNegotiator:   protocol,
-		},
-	)
-	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	host := internalservice.New(scopes, assets, acceptedLeases{}, internalservice.NewSlotState(),
+		launcher, acceptedHTTP{}, newDeterministicHostClock(), nil, nil, managedHostPlatform(), protocol,
+		compatibility, func(path string) (string, error) { return path, nil }, nil, 0, 0).(acceptedHostContract)
+	t.Cleanup(func() {
+		if err := host.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+		for _, process := range launcher.processes {
+			awaitSignal(t, process.waited, "owned process did not join")
+		}
+	})
 
 	configuration := modelseffects.ResolvedHostConfiguration{
 		Scope:            ref,

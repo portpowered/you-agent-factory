@@ -19,7 +19,7 @@ func openFixedLeafSession(t *testing.T, baseURL string) string {
 	return session
 }
 
-func runFixedLeafSessionCancellation(t *testing.T, baseURL string, routes *fixedLeafRoutes) {
+func runFixedLeafSessionCancellation(t *testing.T, baseURL string, routes *fixedLeafRoutes, clock *fixedLeafClock) {
 	t.Helper()
 	selected, peer := openFixedLeafSession(t, baseURL), openFixedLeafSession(t, baseURL)
 	selectedRoute, peerRoute := routes.registerBlocked("cancel-selected"), routes.registerBlocked("cancel-peer")
@@ -48,6 +48,10 @@ func runFixedLeafSessionCancellation(t *testing.T, baseURL string, routes *fixed
 	}
 	support.WaitForSessionStopped(t, baseURL, selected, 5*time.Second)
 	assertFixedLeafCanceledWork(t, baseURL, selected)
+	// Advance beyond any idle deadline while the peer is held at its effect.
+	// Production disables idle unload; configured cleanup is separately proved
+	// by the isolated coordinator witness without changing canonical policy.
+	clock.advance(10 * time.Minute)
 	select {
 	case <-peerRoute.canceled:
 		t.Fatal("selected cancellation canceled the accepted peer effect")

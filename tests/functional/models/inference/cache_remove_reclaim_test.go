@@ -23,54 +23,54 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestModelsPublicOptInRemoveReclaimsUnsharedASRThroughCLIAndHTTP(t *testing.T) {
+// Removal has no Factory Session selector. The active-cache and HTTP parity
+// observation windows are isolated first. Stop joins the hosted ~default
+// session before local commands reuse that same identity and root process.
+// Local removal cannot select a session, so this small cohort is sequential;
+// the explicit-session inference cohort remains parallel.
+func TestModelsCacheReclamationSharedProcess(t *testing.T) {
 	t.Parallel()
+	delegate, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	coordination := &removalMatrixCoordination{delegate: delegate, attempted: make(chan string, 1)}
+	witness := newActiveASRRemovalWitness(t, coordination)
+	t.Run("active lease refuses removal then release permits retry", func(t *testing.T) { runModelsActiveRemoval(t, witness) })
+	t.Run("CLI and HTTP parity", func(t *testing.T) { runModelsRemovalParity(t, witness) })
+	for _, test := range []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{"default revision only and repeat", func(t *testing.T) { runModelsDefaultRemoval(t, witness.server) }},
+		{"shared backend retained once", func(t *testing.T) { runModelsSharedBackendRemoval(t, witness.server) }},
+		{"unsafe reference preserves cache", func(t *testing.T) { runModelsUnsafeRemoval(t, witness.server) }},
+		{"candidate lock failure preserves cache", func(t *testing.T) { runModelsLockFailureRemoval(t, witness.server) }},
+		{"publication is observed after lock release", func(t *testing.T) { runModelsPublicationRemoval(t, witness.server, coordination) }},
+	} {
+		t.Run(test.name, test.run)
+	}
+}
+
+func runModelsRemovalParity(t *testing.T, witness activeASRRemovalWitness) {
+	t.Helper()
 
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	localHome := functionalTempDir(t)
-	localProcess := functionalBuildProcess(t, serviceedges.Edges{})
 	localCache := filepath.Join(localHome, "model-cache")
 	localFixture := writeDefaultASRRemovalFixture(t, localCache)
 	localEnvironment := isolatedModelEnvironment(localHome, localCache)
 	localEvidence := measureASRReclamationEvidence(t, localFixture)
 
-	localInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
-	})
-	localInputs.Input.Env = localEnvironment
-	localInputs.Input.WorkingDirectory = factoryDir
-	if err := localProcess.Execute(localInputs.Input); err != nil {
-		t.Fatalf("Process.Execute(local opt-in ASR remove) error = %v\nstdout=%s\nstderr=%s",
-			err, localInputs.Stdout(), localInputs.Stderr())
-	}
-	var localResponse factoryapi.ModelRemoveResponse
-	if err := json.Unmarshal([]byte(localInputs.Stdout()), &localResponse); err != nil {
-		t.Fatalf("decode local opt-in remove response: %v\nstdout=%s", err, localInputs.Stdout())
-	}
-	assertASRReclaimResponse(t, localResponse, localFixture, localEvidence)
-	assertASRReclaimEffects(t, localFixture)
-
-	localRepeat := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
-	})
-	localRepeat.Input.Env = localEnvironment
-	localRepeat.Input.WorkingDirectory = factoryDir
-	localRepeatErr := localProcess.Execute(localRepeat.Input)
-	assertASRReclaimRepeatNotFound(t, "local", localRepeatErr, localRepeat.Stdout(), localRepeat.Stderr())
-
-	serverHome := functionalTempDir(t)
-	serverCache := filepath.Join(serverHome, "model-cache")
+	serverCache := filepath.Dir(filepath.Dir(witness.fixture.revisionPath))
+	serverHome := filepath.Dir(serverCache)
 	serverFixture := writeDefaultASRRemovalFixture(t, serverCache)
 	serverEnvironment := isolatedModelEnvironment(serverHome, serverCache)
 	serverEvidence := measureASRReclamationEvidence(t, serverFixture)
 	if serverEvidence.modelBytes != localEvidence.modelBytes || serverEvidence.backendBytes != localEvidence.backendBytes {
 		t.Fatalf("equivalent fixture snapshot bytes differ: local=%#v server=%#v", localEvidence, serverEvidence)
 	}
-	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, Env: serverEnvironment, WaitForServiceModeRuntime: true,
-		ServerReadyTimeout: 60 * time.Second,
-	})
-	defer server.Close(t)
+	server := witness.server
 	serverURL := server.URL()
 
 	serverInputs := support.FakeInputs(t.Context(), []string{
@@ -89,13 +89,6 @@ func TestModelsPublicOptInRemoveReclaimsUnsharedASRThroughCLIAndHTTP(t *testing.
 	}
 	assertASRReclaimResponse(t, serverResponse, serverFixture, serverEvidence)
 	assertASRReclaimEffects(t, serverFixture)
-	if localResponse.ModelName != serverResponse.ModelName || localResponse.Revision != serverResponse.Revision ||
-		localResponse.Outcome != serverResponse.Outcome || localResponse.BytesRemoved != serverResponse.BytesRemoved ||
-		int64Value(localResponse.ReclaimedCacheBytes) != int64Value(serverResponse.ReclaimedCacheBytes) ||
-		int64Value(localResponse.RetainedSharedCacheBytes) != int64Value(serverResponse.RetainedSharedCacheBytes) {
-		t.Fatalf("normalized local/configured-server responses differ: local=%#v server=%#v", localResponse, serverResponse)
-	}
-
 	serverRepeat := support.FakeInputs(t.Context(), []string{
 		"you", "--server", serverURL, "--json", "models", "remove", models.BuiltInModelNameASR,
 		"--reclaim-unused-cache",
@@ -104,10 +97,42 @@ func TestModelsPublicOptInRemoveReclaimsUnsharedASRThroughCLIAndHTTP(t *testing.
 	serverRepeat.Input.WorkingDirectory = factoryDir
 	serverRepeatErr := server.Execute(t, serverRepeat.Input)
 	assertASRReclaimRepeatNotFound(t, "configured-server", serverRepeatErr, serverRepeat.Stdout(), serverRepeat.Stderr())
+	server.Stop(t)
+	localInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
+	})
+	localInputs.Input.Env = localEnvironment
+	localInputs.Input.WorkingDirectory = factoryDir
+	if err := witness.server.Execute(t, localInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(local opt-in ASR remove) error = %v\nstdout=%s\nstderr=%s",
+			err, localInputs.Stdout(), localInputs.Stderr())
+	}
+	var localResponse factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal([]byte(localInputs.Stdout()), &localResponse); err != nil {
+		t.Fatalf("decode local opt-in remove response: %v\nstdout=%s", err, localInputs.Stdout())
+	}
+	assertASRReclaimResponse(t, localResponse, localFixture, localEvidence)
+	assertASRReclaimEffects(t, localFixture)
+
+	localRepeat := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
+	})
+	localRepeat.Input.Env = localEnvironment
+	localRepeat.Input.WorkingDirectory = factoryDir
+	localRepeatErr := witness.server.Execute(t, localRepeat.Input)
+	assertASRReclaimRepeatNotFound(t, "local", localRepeatErr, localRepeat.Stdout(), localRepeat.Stderr())
+
+	if localResponse.ModelName != serverResponse.ModelName || localResponse.Revision != serverResponse.Revision ||
+		localResponse.Outcome != serverResponse.Outcome || localResponse.BytesRemoved != serverResponse.BytesRemoved ||
+		int64Value(localResponse.ReclaimedCacheBytes) != int64Value(serverResponse.ReclaimedCacheBytes) ||
+		int64Value(localResponse.RetainedSharedCacheBytes) != int64Value(serverResponse.RetainedSharedCacheBytes) {
+		t.Fatalf("normalized local/configured-server responses differ: local=%#v server=%#v", localResponse, serverResponse)
+	}
+
 }
 
-func TestModelsPublicOptInRemoveRetainsSharedBackendCandidateOnce(t *testing.T) {
-	t.Parallel()
+func runModelsSharedBackendRemoval(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 
 	home := functionalTempDir(t)
 	cacheRoot := filepath.Join(home, "model-cache")
@@ -124,7 +149,7 @@ func TestModelsPublicOptInRemoveRetainsSharedBackendCandidateOnce(t *testing.T) 
 	})
 	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := functionalBuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := server.Execute(t, inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(shared opt-in remove) error = %v\nstdout=%s\nstderr=%s",
 			err, inputs.Stdout(), inputs.Stderr())
 	}
@@ -149,11 +174,9 @@ func TestModelsPublicOptInRemoveRetainsSharedBackendCandidateOnce(t *testing.T) 
 	}
 }
 
-func TestModelsPublicOptInRemoveRefusesActiveASRAndSucceedsAfterRelease(t *testing.T) {
-	t.Parallel()
+func runModelsActiveRemoval(t *testing.T, witness activeASRRemovalWitness) {
+	t.Helper()
 
-	witness := newActiveASRRemovalWitness(t)
-	defer witness.server.Close(t)
 	defer witness.releaseBackend()
 
 	invocation := support.FakeInputs(t.Context(), []string{
@@ -219,7 +242,7 @@ type activeASRRemovalWitness struct {
 	releaseBackend func()
 }
 
-func newActiveASRRemovalWitness(t *testing.T) activeASRRemovalWitness {
+func newActiveASRRemovalWitness(t *testing.T, coordination *removalMatrixCoordination) activeASRRemovalWitness {
 	t.Helper()
 	home := functionalTempDir(t)
 	cacheRoot := filepath.Join(home, "model-cache")
@@ -257,11 +280,12 @@ func newActiveASRRemovalWitness(t *testing.T) activeASRRemovalWitness {
 	selection.SHA256 = fmt.Sprintf("%x", sha256.Sum256(backendBody))
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL, exclusive: true}
 	edges := activeASRRemovalEdges(assetFiles, modelServer.Client(), hostLauncher, backend, selection)
+	edges.ModelAssetStagingCoordinationFactory = func() (serviceedges.AssetStagingCoordination, error) { return coordination, nil }
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir, Env: isolatedModelEnvironment(home, cacheRoot),
 		WaitForServiceModeRuntime: true, ServerReadyTimeout: 60 * time.Second,
-		Edges: edges,
+		Edges: edges, BeforeStart: bootstrapFixedLeafProfile,
 	})
 	return activeASRRemovalWitness{
 		server: server, factoryDir: functionalTempDir(t),
@@ -363,8 +387,8 @@ func assertActiveASRInvocationFinished(t *testing.T, witness activeASRRemovalWit
 	}
 }
 
-func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T) {
-	t.Parallel()
+func runModelsUnsafeRemoval(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 
 	home := functionalTempDir(t)
 	cacheRoot := filepath.Join(home, "model-cache")
@@ -399,7 +423,7 @@ func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T
 	})
 	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
 	inputs.Input.WorkingDirectory = factoryDir
-	removeErr := functionalBuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	removeErr := server.Execute(t, inputs.Input)
 	if removeErr == nil || !errors.Is(removeErr, modelscli.ErrModelCacheReferenceUncertain) {
 		t.Fatalf("unsafe-reference remove = %v, want ErrModelCacheReferenceUncertain; stdout=%q stderr=%q",
 			removeErr, inputs.Stdout(), inputs.Stderr())
@@ -423,29 +447,19 @@ func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T
 
 }
 
-func TestModelsPublicOptInRemoveMapsCandidateLockFailureAndPreservesCache(t *testing.T) {
-	t.Parallel()
+func runModelsLockFailureRemoval(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 
 	home := functionalTempDir(t)
-	cacheRoot := filepath.Join(home, "model-cache")
+	cacheRoot := filepath.Join(home, "candidate-lock-failure")
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	fixture := writeDefaultASRRemovalFixture(t, cacheRoot)
-	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
-	if err != nil {
-		t.Fatalf("construct coordinated cache owner: %v", err)
-	}
-	candidateLockFailure := errors.New("candidate cache lock unavailable")
-	process := functionalBuildProcess(t, serviceedges.Edges{
-		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
-			return failingCandidateCacheCoordination{delegate: coordination, failure: candidateLockFailure}, nil
-		},
-	})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
 	})
 	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
 	inputs.Input.WorkingDirectory = factoryDir
-	removeErr := process.Execute(inputs.Input)
+	removeErr := server.Execute(t, inputs.Input)
 	if removeErr == nil || !errors.Is(removeErr, modelscli.ErrModelCacheReferenceUncertain) {
 		t.Fatalf("candidate-lock remove error = %v, want ErrModelCacheReferenceUncertain; stdout=%q stderr=%q",
 			removeErr, inputs.Stdout(), inputs.Stderr())
@@ -465,58 +479,32 @@ func TestModelsPublicOptInRemoveMapsCandidateLockFailureAndPreservesCache(t *tes
 	}
 }
 
-type failingCandidateCacheCoordination struct {
-	delegate serviceedges.AssetStagingCoordination
-	failure  error
-}
-
-func (coordination failingCandidateCacheCoordination) Lock(
-	ctx context.Context,
-	path string,
-) (io.Closer, error) {
-	if filepath.Base(path) != "references.lock" {
-		return nil, coordination.failure
-	}
-	return coordination.delegate.Lock(ctx, path)
-}
-
-func TestModelsPublicOptInRemoveSerializesAgainstReferencePublication(t *testing.T) {
-	t.Parallel()
+func runModelsPublicationRemoval(t *testing.T, server *support.FunctionalAPIServer, coordination *removalMatrixCoordination) {
+	t.Helper()
 
 	home := functionalTempDir(t)
-	cacheRoot := filepath.Join(home, "model-cache")
+	cacheRoot := filepath.Join(home, "reference-publication")
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	fixture := writeDefaultASRRemovalFixture(t, cacheRoot)
 	_, backend := readASRBackendReference(t, cacheRoot)
-	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
-	if err != nil {
-		t.Fatalf("construct coordinated cache owner: %v", err)
-	}
 	lockPath := filepath.Join(cacheRoot, ".you-asset-locks", "references.lock")
-	owner, err := coordination.Lock(t.Context(), lockPath)
+	owner, err := coordination.delegate.Lock(t.Context(), lockPath)
 	if err != nil {
 		t.Fatalf("acquire reference publication owner: %v", err)
 	}
 	defer owner.Close()
 
-	observing := &observingCacheCoordination{
-		delegate:  coordination,
-		attempted: make(chan string, 1),
-	}
-	process := functionalBuildProcess(t, serviceedges.Edges{
-		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
-			return observing, nil
-		},
-	})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
 	})
 	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
 	inputs.Input.WorkingDirectory = factoryDir
 	removeDone := make(chan error, 1)
-	go func() { removeDone <- process.Execute(inputs.Input) }()
+	joined := make(chan struct{})
+	go func() { defer close(joined); removeDone <- server.Execute(t, inputs.Input) }()
+	t.Cleanup(func() { _ = owner.Close(); <-joined })
 	select {
-	case <-observing.attempted:
+	case <-coordination.attempted:
 	//nolint:testsleep // The test waits for an observed event; this deadline only bounds failure or cleanup.
 	case <-time.After(5 * time.Second):
 		t.Fatal("opt-in removal did not attempt reference coordination")
@@ -543,17 +531,23 @@ func TestModelsPublicOptInRemoveSerializesAgainstReferencePublication(t *testing
 	}
 }
 
-type observingCacheCoordination struct {
+// The edge shape is fixed once; only the public cache pathname selects a fault.
+// Reference publication owns its gate and all other cache roots delegate unchanged.
+type removalMatrixCoordination struct {
 	delegate  serviceedges.AssetStagingCoordination
 	attempted chan string
 	once      sync.Once
 }
 
-func (coordination *observingCacheCoordination) Lock(ctx context.Context, path string) (io.Closer, error) {
-	if strings.EqualFold(filepath.Base(path), "references.lock") {
-		coordination.once.Do(func() { coordination.attempted <- path })
+func (c *removalMatrixCoordination) Lock(ctx context.Context, path string) (io.Closer, error) {
+	normalized := filepath.ToSlash(path)
+	if strings.Contains(normalized, "/candidate-lock-failure/") && filepath.Base(path) != "references.lock" {
+		return nil, errors.New("candidate cache lock unavailable")
 	}
-	return coordination.delegate.Lock(ctx, path)
+	if strings.Contains(normalized, "/reference-publication/") && filepath.Base(path) == "references.lock" {
+		c.once.Do(func() { c.attempted <- path })
+	}
+	return c.delegate.Lock(ctx, path)
 }
 
 func readASRBackendReference(t *testing.T, cacheRoot string) (map[string]any, map[string]any) {

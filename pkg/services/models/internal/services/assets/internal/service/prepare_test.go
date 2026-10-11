@@ -908,7 +908,7 @@ func newPreparationTestService(
 			return os.Create(path)
 		},
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, mustPreparationLockingService(),
+		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, mustPreparationLockingService(), newTestReclamation(mustPreparationLockingService()),
 	).(*service)
 }
 

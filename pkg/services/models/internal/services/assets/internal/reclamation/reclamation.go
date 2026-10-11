@@ -29,14 +29,15 @@ const (
 	referenceLock    = "references.lock"
 )
 
-// FileSystem exposes the exact filesystem effects needed to inspect and
-// reclaim cache trees. Removal methods retain the Assets service's symlink
-// safe deletion rules.
-type FileSystem interface {
-	ReadDirectory(string) ([]os.DirEntry, error)
-	ReadFile(string) ([]byte, error)
-	OpenFile(string) (io.ReadCloser, error)
-	InspectPath(string) (os.FileInfo, error)
+// Policy owns coordinated cache inspection and safe removal.
+type Policy interface {
+	LockReferences(context.Context, string) (io.Closer, error)
+	UncertainReference(string, error) error
+	ReadManagedMetadata(context.Context, string, string, string) (ManagedMetadata, error)
+	PlanAndLockCandidates(context.Context, string, string, string, ManagedMetadata, string) (Plan, []io.Closer, error)
+	CloseLocks([]io.Closer, error) error
+	Apply(context.Context, Plan) (int64, error)
+	MeasureRevisionBytes(context.Context, string) (int64, error)
 	RemoveManagedTree(context.Context, string) error
 	VerifyManagedPathRemoved(context.Context, string, string) error
 }
@@ -65,40 +66,40 @@ type Plan struct {
 
 // Service coordinates reference publication with a census and deletion.
 type Service struct {
-	files        FileSystem
-	coordination modelseffects.AssetStagingCoordination
-	sources      SourceIdentity
-	contextError func(context.Context) error
+	readDirectory modelseffects.AssetReadDirectory
+	readFile      modelseffects.AssetReadFile
+	openFile      modelseffects.AssetOpenFile
+	inspectPath   modelseffects.AssetInspectPath
+	removePath    modelseffects.AssetRemovePath
+	coordination  modelseffects.AssetStagingCoordination
+	sources       SourceIdentity
+	contextError  func(context.Context) error
 }
 
 // New constructs the cache reclamation component for the Assets service.
 func New(
-	files FileSystem,
+	readDirectory modelseffects.AssetReadDirectory,
+	readFile modelseffects.AssetReadFile,
+	openFile modelseffects.AssetOpenFile,
+	inspectPath modelseffects.AssetInspectPath,
+	removePath modelseffects.AssetRemovePath,
 	coordination modelseffects.AssetStagingCoordination,
 	sources SourceIdentity,
 	contextError func(context.Context) error,
 ) *Service {
-	if contextError == nil {
-		contextError = defaultContextError
-	}
 	return &Service{
-		files: files, coordination: coordination, sources: sources,
+		readDirectory: readDirectory, readFile: readFile, openFile: openFile,
+		inspectPath: inspectPath, removePath: removePath, coordination: coordination, sources: sources,
 		contextError: contextError,
 	}
 }
 
 func (s *Service) checkContext(ctx context.Context) error {
-	if s == nil || s.contextError == nil {
-		return defaultContextError(ctx)
-	}
 	return s.contextError(ctx)
 }
 
 // LockReferences serializes reference publication with removal planning.
 func (s *Service) LockReferences(ctx context.Context, cacheRoot string) (io.Closer, error) {
-	if s == nil || s.coordination == nil {
-		return nil, errors.New("cache reference coordination is unavailable")
-	}
 	return s.coordination.Lock(ctx, filepath.Join(cacheRoot, ".you-asset-locks", referenceLock))
 }
 
@@ -187,10 +188,10 @@ func (s *Service) Apply(ctx context.Context, plan Plan) (int64, error) {
 		if item.shared {
 			continue
 		}
-		if err := s.files.RemoveManagedTree(ctx, item.path); err != nil {
+		if err := s.RemoveManagedTree(ctx, item.path); err != nil {
 			return 0, err
 		}
-		if err := s.files.VerifyManagedPathRemoved(ctx, filepath.Dir(item.path), filepath.Base(item.path)); err != nil {
+		if err := s.VerifyManagedPathRemoved(ctx, filepath.Dir(item.path), filepath.Base(item.path)); err != nil {
 			return 0, err
 		}
 		var err error
@@ -203,9 +204,6 @@ func (s *Service) Apply(ctx context.Context, plan Plan) (int64, error) {
 }
 
 func (s *Service) lockCandidate(ctx context.Context, path, modelName string) (io.Closer, error) {
-	if s == nil || s.coordination == nil {
-		return nil, uncertain(modelName, errors.New("cache candidate coordination is unavailable"))
-	}
 	lock, err := s.coordination.Lock(ctx, path)
 	if err != nil {
 		return nil, uncertain(modelName, err)
@@ -415,7 +413,7 @@ func (s *Service) managedPathPresent(ctx context.Context, parent, child, kind st
 	if err := s.checkContext(ctx); err != nil {
 		return false, err
 	}
-	entries, err := s.files.ReadDirectory(parent)
+	entries, err := s.readDirectory(parent)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
@@ -450,7 +448,7 @@ func (s *Service) managedRegularFile(ctx context.Context, parent, name string) (
 	if err := s.checkContext(ctx); err != nil {
 		return nil, false, err
 	}
-	entries, err := s.files.ReadDirectory(parent)
+	entries, err := s.readDirectory(parent)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	}
@@ -471,7 +469,7 @@ func (s *Service) managedRegularFile(ctx context.Context, parent, name string) (
 		if !info.Mode().IsRegular() {
 			return nil, true, errors.New("managed metadata is not a regular file")
 		}
-		body, err := s.files.ReadFile(filepath.Join(parent, name))
+		body, err := s.readFile(filepath.Join(parent, name))
 		return body, true, err
 	}
 	return nil, false, nil
@@ -489,11 +487,11 @@ func (s *Service) verifyArtifacts(ctx context.Context, root string, artifacts []
 		if err := s.requireArtifactPath(root, artifact.Name); err != nil {
 			return err
 		}
-		info, err := s.files.InspectPath(path)
+		info, err := s.inspectPath(path)
 		if err != nil || info == nil || !info.Mode().IsRegular() || info.Size() != artifact.Bytes {
 			return fmt.Errorf("content-addressed artifact is not verified: %s", artifact.Name)
 		}
-		file, err := s.files.OpenFile(path)
+		file, err := s.openFile(path)
 		if err != nil {
 			return fmt.Errorf("content-addressed artifact is not verified: %s", artifact.Name)
 		}
@@ -524,7 +522,7 @@ func (s *Service) requireArtifactPathPart(parent, part string, leaf bool) error 
 	if part == "" || part == "." || part == ".." {
 		return errors.New("content-addressed artifact path is invalid")
 	}
-	entries, err := s.files.ReadDirectory(parent)
+	entries, err := s.readDirectory(parent)
 	if err != nil {
 		return err
 	}
@@ -555,7 +553,7 @@ func validArtifactEntry(entry os.DirEntry, leaf bool) error {
 }
 
 func (s *Service) markShared(ctx context.Context, cacheRoot, selectedRoot string, candidates []candidate) error {
-	entries, err := s.files.ReadDirectory(cacheRoot)
+	entries, err := s.readDirectory(cacheRoot)
 	if err != nil {
 		return err
 	}
@@ -690,7 +688,7 @@ func (s *Service) measureDirectory(ctx context.Context, root string) (int64, err
 	if err := s.checkContext(ctx); err != nil {
 		return 0, err
 	}
-	entries, err := s.files.ReadDirectory(root)
+	entries, err := s.readDirectory(root)
 	if err != nil {
 		return 0, err
 	}
@@ -832,13 +830,6 @@ func addBytes(total, next int64) (int64, error) {
 		return 0, errors.New("managed cache byte count exceeds int64 range")
 	}
 	return total + next, nil
-}
-
-func defaultContextError(ctx context.Context) error {
-	if ctx == nil {
-		return errors.New("context is required")
-	}
-	return ctx.Err()
 }
 
 func uncertain(modelName string, cause error) error {

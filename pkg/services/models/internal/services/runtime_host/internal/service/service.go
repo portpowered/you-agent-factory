@@ -102,9 +102,6 @@ func (s *service) InspectModelHost(
 	if err := hostContextError(ctx); err != nil {
 		return models.InspectModelHostResult{}, err
 	}
-	if s == nil || s.scopes == nil || s.assets == nil {
-		return models.InspectModelHostResult{}, models.ErrUnavailable
-	}
 	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
 	if err != nil {
 		return models.InspectModelHostResult{}, scopeError(err)
@@ -141,9 +138,6 @@ func (s *service) EnsureModelHost(
 	}
 	if err := hostContextError(ctx); err != nil {
 		return models.EnsureModelHostResult{}, err
-	}
-	if s == nil || s.scopes == nil || s.assets == nil {
-		return models.EnsureModelHostResult{}, models.ErrUnavailable
 	}
 	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
 	if err != nil {
@@ -189,9 +183,6 @@ func (s *service) EnsureModelHostWithConfiguration(
 	}
 	if err := hostContextError(ctx); err != nil {
 		return models.EnsureModelHostResult{}, err
-	}
-	if s == nil || s.scopes == nil || s.assets == nil {
-		return models.EnsureModelHostResult{}, models.ErrUnavailable
 	}
 	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
 	if err != nil {
@@ -309,9 +300,6 @@ func (s *service) StopModelHost(
 	}
 	if err := hostContextError(ctx); err != nil {
 		return models.StopModelHostResult{}, err
-	}
-	if s == nil || s.scopes == nil || s.assets == nil {
-		return models.StopModelHostResult{}, models.ErrUnavailable
 	}
 	binding, err := s.scopes.Resolve(runtimescopes.Reference(request.Scope.String()))
 	if err != nil {

@@ -396,6 +396,7 @@ func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
 		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination,
+		assetswire.NewCacheReclamation(os.ReadDir, os.ReadFile, func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Stat, os.Remove, coordination, assetswire.NewManagedSources(), assetswire.NewReclamationContextError()),
 	)
 	if err != nil {
 		t.Fatalf("construct assets: %v", err)

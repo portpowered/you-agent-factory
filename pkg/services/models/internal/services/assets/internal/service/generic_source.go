@@ -369,7 +369,7 @@ func (s *service) verifyGenericCachedArtifact(
 	}
 	actual, err := s.fileSHA256(ctx, path)
 	if err != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
+		if contextErr := AssetContextError(ctx); contextErr != nil {
 			return genericCachePath{}, false, contextErr
 		}
 		return genericCachePath{}, false, nil
@@ -566,21 +566,21 @@ func (s *service) commitLegacyGenericCacheRepair(
 	observed []genericArtifact,
 	cached map[string]genericCachePath,
 ) (map[string]genericCachePath, error) {
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return cached, err
 	}
 	finalPath, err := s.prepareLegacyRepairDestination(record, kind, source, observed)
 	if err != nil {
 		return cached, err
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return cached, err
 	}
 	backupPath, hadMetadata, err := s.replaceLegacyGenericMetadata(record, kind, source, observed)
 	if err != nil {
 		return cached, err
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		restoreErr := s.restoreLegacyMetadata(record.metadataPath, backupPath, hadMetadata)
 		return cached, joinLegacyRepairErrors(err, restoreErr)
 	}
@@ -590,7 +590,7 @@ func (s *service) commitLegacyGenericCacheRepair(
 			legacyRepairInterruption("move legacy cache snapshot", err), restoreErr,
 		)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return s.rollbackLegacyRepairResult(
 			cached, err, finalPath, record.snapshotPath, backupPath, hadMetadata,
 		)
@@ -602,7 +602,7 @@ func (s *service) commitLegacyGenericCacheRepair(
 			cached, err, finalPath, record.snapshotPath, backupPath, hadMetadata,
 		)
 	}
-	if err := assetContextError(ctx); err != nil {
+	if err := AssetContextError(ctx); err != nil {
 		return s.rollbackLegacyRepairResult(
 			cached, err, finalPath, record.snapshotPath, backupPath, hadMetadata,
 		)
