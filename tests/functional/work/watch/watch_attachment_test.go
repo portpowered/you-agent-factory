@@ -205,6 +205,11 @@ func assertWatchLogLifetime(t *testing.T, session, path string, completed bool) 
 			t.Fatalf("selected sink missing %q", message)
 		}
 	}
+	assertWatchTransportDiagnostic(t, session, completed)
+}
+
+func assertWatchTransportDiagnostic(t *testing.T, session string, completed bool) {
+	t.Helper()
 	found := false
 	for _, entry := range observationLogs.FilterMessage("API server error").All() {
 		if entry.ContextMap()["session_id"] == session {

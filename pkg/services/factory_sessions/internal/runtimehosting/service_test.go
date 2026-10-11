@@ -30,6 +30,7 @@ type lifecycleRuntime struct {
 	failErr       error
 	completeErr   error
 	failedBecause error
+	onFailure     func()
 	hosted        roles.RuntimeObservations
 }
 
@@ -58,6 +59,9 @@ func (*lifecycleRuntime) StopLifecycle(context.Context) error {
 func (runtime *lifecycleRuntime) FailStartup(err error) error {
 	runtime.record("fail")
 	runtime.failedBecause = err
+	if runtime.onFailure != nil {
+		runtime.onFailure()
+	}
 	return runtime.failErr
 }
 
@@ -243,12 +247,19 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 	t.Parallel()
 
 	core, observed := observer.New(zapcore.ErrorLevel)
-	logger := zap.New(core)
+	logger := zap.New(core).With(zap.String("session_id", "startup"))
+	selectedCore, selectedLogs := observer.New(zapcore.ErrorLevel)
+	writer := &logLifetimeWriter{}
+	var rejected bytes.Buffer
+	selectedLogger := zap.New(zapcore.NewTee(selectedCore,
+		zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), writer, zapcore.ErrorLevel)),
+		zap.ErrorOutput(zapcore.AddSync(&rejected))).With(zap.String("session_id", "startup"))
 	const secret = "PRIVATE_STARTER_PAYLOAD"
 	primary := &fs.PathError{Op: "open", Path: "retained.json", Err: fs.ErrPermission}
 	cleanup := &fs.PathError{Op: "close", Path: "retained.json", Err: fs.ErrClosed}
 	apiErr := fmt.Errorf("%s: %w", secret, errors.Join(primary, cleanup))
-	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
+	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded"), onFailure: writer.Close,
+		hosted: hostedRuntime{logger: selectedLogger}}
 	err := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return apiErr
 	}).Run(
@@ -277,6 +288,13 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 	}
 	if !errors.Is(runtime.failedBecause, primary) || !errors.Is(runtime.failedBecause, cleanup) {
 		t.Fatalf("startup failure lost joined cause identities: %v", runtime.failedBecause)
+	}
+	selected := selectedLogs.FilterMessage("API server error").All()
+	if len(selected) != 1 || selected[0].ContextMap()["cause"] != want || selected[0].ContextMap()["session_id"] != "startup" {
+		t.Fatalf("selected startup diagnostic = %+v, want attributed safe cause", selected)
+	}
+	if writer.closes.Load() != 1 || rejected.Len() != 0 {
+		t.Fatalf("startup sink closes=%d rejected writes=%s", writer.closes.Load(), rejected.String())
 	}
 }
 
