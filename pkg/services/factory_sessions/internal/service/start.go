@@ -261,7 +261,11 @@ func (r *RuntimeOpening) startLive(ctx context.Context, request factorysessions.
 	var activation *sessionActivation
 	defer func() {
 		reservation := runtimeSelectionForStart(selected).Recording.Reservation
-		if err == nil || reservation.IsZero() {
+		if reservation.IsZero() {
+			return
+		}
+		if err == nil {
+			r.recordingsRuntime.(recordings.LiveRecordingReservationOwner).CommitReservation(reservation)
 			return
 		}
 		if cleanupErr := r.rollbackFailedRecording(ctx, selectedID, reservation, activation, closeArtifacts); cleanupErr != nil {

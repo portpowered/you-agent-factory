@@ -21,6 +21,7 @@ type Snapshot struct {
 // state behind the Recordings root.
 type Service interface {
 	ReleaseReservation(runtimeartifact.Reservation) error
+	CommitReservation(runtimeartifact.Reservation)
 	PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error)
 	StartRecording(recordings.StartRecordingRequest) (recordings.StartRecordingResult, error)
 	BindRecording(recordings.BindRecordingRequest) (recordings.BindRecordingResult, error)

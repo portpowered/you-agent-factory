@@ -20,6 +20,9 @@ type peerRecordingAssembly struct {
 
 type peerRecordingPlanner struct{ currentBoardTargetPlanner }
 
+func (*peerRecordingPlanner) CommitReservation(runtimeartifact.Reservation)       {}
+func (*peerRecordingRollbackOwner) CommitReservation(runtimeartifact.Reservation) {}
+
 func (*peerRecordingPlanner) ReleaseReservation(runtimeartifact.Reservation) error { return nil }
 
 type peerRecordingRollbackOwner struct {

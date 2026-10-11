@@ -11,9 +11,11 @@ import (
 	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 )
 
-// Reservation is detached ownership of one exclusively created placeholder.
-// Its private identity cannot be manufactured from a path or a session ID.
-type Reservation struct {
+// Reservation is an immutable identity scoped to its originating reserver.
+// File metadata and rollback authority remain private to that owner.
+type Reservation struct{ id uint64 }
+
+type reservedFile struct {
 	path     string
 	identity fs.FileInfo
 }
@@ -23,10 +25,11 @@ type Reservation struct {
 type OwnedNamedReserver interface {
 	ReserveNamedOwned(string, time.Time, string, string) (string, Reservation, error)
 	ReleaseReservation(Reservation) error
+	CommitReservation(Reservation)
 }
 
 // IsZero reports whether this value carries rollback authority.
-func (reservation Reservation) IsZero() bool { return reservation.identity == nil }
+func (reservation Reservation) IsZero() bool { return reservation.id == 0 }
 
 // ReserveNamedOwned retains the identity from the exclusive creation handle.
 func (r *reserver) ReserveNamedOwned(root string, at time.Time, name, ext string) (string, Reservation, error) {
@@ -61,7 +64,17 @@ func (r *reserver) ReserveNamedOwned(root string, at time.Time, name, ext string
 			statErr = fmt.Errorf("reservation identity is unavailable")
 		}
 	}
-	reservation := Reservation{path: path, identity: identity}
+	var reservation Reservation
+	if identity != nil {
+		r.reservationMu.Lock()
+		r.nextReservation++
+		reservation = Reservation{id: r.nextReservation}
+		if r.reservations == nil {
+			r.reservations = make(map[Reservation]reservedFile)
+		}
+		r.reservations[reservation] = reservedFile{path: path, identity: identity}
+		r.reservationMu.Unlock()
+	}
 	if err := errors.Join(statErr, file.Close()); err != nil {
 		return path, reservation, err
 	}
@@ -74,11 +87,29 @@ func (r *reserver) ReleaseReservation(reservation Reservation) error {
 	if reservation.IsZero() {
 		return nil
 	}
+	r.reservationMu.Lock()
+	defer r.reservationMu.Unlock()
+	file, exists := r.reservations[reservation]
+	if !exists {
+		return nil
+	}
 	filesystem, ok := r.filesystem.(interface {
 		RemoveReserved(string, fs.FileInfo) error
 	})
 	if !ok {
 		return fmt.Errorf("reservation removal capability is required")
 	}
-	return filesystem.RemoveReserved(reservation.path, reservation.identity)
+	if err := filesystem.RemoveReserved(file.path, file.identity); err != nil {
+		return err
+	}
+	delete(r.reservations, reservation)
+	return nil
+}
+
+// CommitReservation discards rollback metadata after successful activation.
+// It leaves the reserved file in place for its recording writer.
+func (r *reserver) CommitReservation(reservation Reservation) {
+	r.reservationMu.Lock()
+	defer r.reservationMu.Unlock()
+	delete(r.reservations, reservation)
 }

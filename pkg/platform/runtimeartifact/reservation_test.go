@@ -67,8 +67,25 @@ func TestOwnedReservationRetryAndForeignCollision(t *testing.T) {
 	if len(filesystem.removed) != 1 {
 		t.Fatalf("release count=%d", len(filesystem.removed))
 	}
-	if _, _, err := reserver.ReserveNamedOwned(root, at, "peer", ".json"); err != nil {
+	retryPath, retry, err := reserver.ReserveNamedOwned(root, at, "peer", ".json")
+	if err != nil {
 		t.Fatalf("retry: %v", err)
+	}
+	if retry == reservation {
+		t.Fatal("retry reused rollback identity")
+	}
+	if err := reserver.ReleaseReservation(reservation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(retryPath); err != nil {
+		t.Fatalf("stale release removed retry: %v", err)
+	}
+	reserver.CommitReservation(retry)
+	if err := reserver.ReleaseReservation(retry); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(retryPath); err != nil {
+		t.Fatalf("committed placeholder removed: %v", err)
 	}
 	if err := reserver.ReleaseReservation(Reservation{}); err != nil {
 		t.Fatal(err)

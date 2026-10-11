@@ -994,10 +994,11 @@ type LiveRecordingTarget struct {
 	Reservation  runtimeartifact.Reservation
 }
 
-// LiveRecordingReservationOwner releases an opening's detached reservation.
+// LiveRecordingReservationOwner commits or releases an opening's immutable reservation identity.
 // The capability is optional for existing non-transactional planner callers.
 type LiveRecordingReservationOwner interface {
 	ReleaseReservation(runtimeartifact.Reservation) error
+	CommitReservation(runtimeartifact.Reservation)
 }
 
 // LiveRecordingTargetPlanner owns default live-recording layout, naming, and

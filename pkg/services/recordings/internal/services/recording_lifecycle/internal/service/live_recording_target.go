@@ -113,3 +113,12 @@ func isUUID(value string) bool {
 }
 
 var _ recordings.RecordingPathJoiner = filepath.Join
+
+// CommitReservation relinquishes opening rollback authority without removing the target.
+func (planner *liveRecordingTargetPlanner) CommitReservation(reservation runtimeartifact.Reservation) {
+	if reservation.IsZero() {
+		return
+	}
+	owner := planner.reserve.(recordings.LiveRecordingReservationOwner)
+	owner.CommitReservation(reservation)
+}

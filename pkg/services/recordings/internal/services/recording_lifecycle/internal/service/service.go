@@ -600,3 +600,12 @@ func (service *Service) recordFailureLocked(
 func (service *Service) now() time.Time {
 	return service.clock.Now().UTC()
 }
+
+// CommitReservation relinquishes opening rollback authority without removing the target.
+func (service *Service) CommitReservation(reservation runtimeartifact.Reservation) {
+	if reservation.IsZero() {
+		return
+	}
+	owner := service.targets.(recordings.LiveRecordingReservationOwner)
+	owner.CommitReservation(reservation)
+}

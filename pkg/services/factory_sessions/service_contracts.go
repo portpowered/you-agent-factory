@@ -626,7 +626,7 @@ type SessionWorkerSelection struct {
 
 // SessionRecordingSelection carries recording selections for one session.
 type SessionRecordingSelection struct {
-	// Reservation is opening-only rollback authority, never persisted.
+	// Reservation is an immutable opening-only identity; its owner retains rollback metadata.
 	Reservation runtimeartifact.Reservation `json:"-"`
 	// ImplicitCurrentBoard selects the repository board for a local default
 	// continuous server, without changing explicit or batch recording behavior.

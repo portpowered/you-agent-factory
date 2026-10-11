@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
@@ -44,7 +45,12 @@ func RuntimeArtifactPathComponents(components ...string) string {
 	return internalartifact.RuntimeArtifactPathComponents(components...)
 }
 
-type reserver struct{ filesystem FileSystem }
+type reserver struct {
+	filesystem      FileSystem
+	reservationMu   sync.Mutex
+	nextReservation uint64
+	reservations    map[Reservation]reservedFile
+}
 
 func NewReserver(filesystem FileSystem) (Reserver, error) {
 	if filesystem == nil {
