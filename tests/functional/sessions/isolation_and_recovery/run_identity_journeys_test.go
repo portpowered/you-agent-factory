@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -22,6 +23,8 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	clirun "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -250,18 +253,25 @@ func assertIdentityJourneyRemoteRejection(t *testing.T, process support.Process,
 	t.Helper()
 	var diagnostic factoryapi.ErrorResponse
 	inputs := identityJourneyInputs(t, s, []string{"you", "--remote", "--server", base, "run", "--factory", filepath.Join(s.dir, "factory.json"), "--session", selector, "identity invocation"})
-	if err := process.Execute(inputs.Input); err == nil {
+	executeErr := process.Execute(inputs.Input)
+	if executeErr == nil {
 		t.Fatalf("remote selector %q admitted", selector)
 	}
+	if inputs.Stdout() != "" {
+		t.Fatalf("rejected selector stdout = %q", inputs.Stdout())
+	}
 	if status == http.StatusBadRequest {
-		if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "BAD_REQUEST" || diagnostic.Message != "--session must be "+factorysessions.SessionIdentityForm {
+		if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "BAD_REQUEST" || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || diagnostic.Message != "--session must be "+factorysessions.SessionIdentityForm {
 			t.Fatalf("remote diagnostic = %q err=%v", inputs.Stderr(), err)
 		}
 	} else {
-		// The existing remote CLI envelope reports the HTTP 404 inside its
-		// remote-operation error; HTTP itself retains typed NOT_FOUND.
-		if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "REMOTE_DURABLE_START_FAILED" || !strings.Contains(diagnostic.Message, "(404): factory session not found") {
+		if err := json.Unmarshal([]byte(inputs.Stderr()), &diagnostic); err != nil || diagnostic.Code != "NOT_FOUND" || diagnostic.Family != factoryapi.ErrorFamilyNotFound || diagnostic.Message != "factory session not found" {
 			t.Fatalf("missing selector diagnostic = %s err=%v", inputs.Stderr(), err)
+		}
+		var cause *clirun.InvocationError
+		var response *clihttp.APIError
+		if !errors.As(executeErr, &cause) || cause.Code != clirun.RemoteDurableStartCode || !strings.Contains(cause.Message, "(404): factory session not found") || !errors.As(executeErr, &response) || response.StatusCode != status || response.Response.Code != diagnostic.Code || response.Response.Family != diagnostic.Family || response.Response.Message != diagnostic.Message {
+			t.Fatalf("missing selector response/cause = %v", executeErr)
 		}
 	}
 }

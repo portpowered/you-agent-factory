@@ -3,10 +3,13 @@ package admission_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	clirun "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"os"
@@ -118,8 +121,26 @@ func executeFileInvocation(t *testing.T, process support.Process, scenario *flus
 
 func assertFileInvocationRejected(t *testing.T, scenario *flushCase, input *support.CapturedInputs, err error, listed factoryapi.ListWorkResponse) {
 	t.Helper()
-	if err == nil || !strings.Contains(err.Error(), "REMOTE_DURABLE_START_FAILED") || !strings.Contains(err.Error(), "(400)") || !strings.Contains(err.Error(), "could not read FILE_CONTENTS path") {
+	var cause *clirun.InvocationError
+	var response *clihttp.APIError
+	if !errors.As(err, &cause) || cause.Code != clirun.RemoteDurableStartCode || !errors.As(err, &response) || response.StatusCode != 400 || !strings.Contains(cause.Message, "(400)") {
 		t.Fatalf("file diagnostic = %v, stderr=%s", err, input.Stderr())
+	}
+	path := filepath.Join(scenario.dir, "owned input.txt")
+	if scenario.name == "directory" {
+		path = scenario.dir
+	}
+	_, readErr := os.ReadFile(path)
+	if readErr == nil {
+		t.Fatal("rejected FILE_CONTENTS path is readable")
+	}
+	wantMessage := fmt.Sprintf("invocation parameter %q could not read FILE_CONTENTS path %q: %v (factory %q)", "document", path, readErr, "work-recordings-activation")
+	var diagnostic factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal([]byte(input.Stderr()), &diagnostic); decodeErr != nil || diagnostic.Code != "INVOCATION_ARGUMENT_INVALID_INTERPOLATION" || diagnostic.Family != factoryapi.ErrorFamilyBadRequest || diagnostic.Message != wantMessage {
+		t.Fatalf("file diagnostic = %q, decode error=%v", input.Stderr(), decodeErr)
+	}
+	if response.Response.Code != diagnostic.Code || response.Response.Family != diagnostic.Family || response.Response.Message != diagnostic.Message || !strings.Contains(cause.Message, diagnostic.Message) || input.Stdout() != "" {
+		t.Fatalf("file response/cause/output = %#v/%#v/%q", response.Response, cause, input.Stdout())
 	}
 	if len(listed.Results) != 0 || scenario.dispatches.Load() != 0 {
 		t.Fatalf("rejected input admitted Work/dispatch = %#v/%d", listed, scenario.dispatches.Load())
