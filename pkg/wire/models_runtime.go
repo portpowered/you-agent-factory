@@ -19,6 +19,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -675,7 +676,7 @@ func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformproc
 		newCommand = exec.Command
 	}
 	processStateReader := platformprocess.NewProcfsProcessStateReader(os.ReadFile)
-	runner, err := platformprocess.NewExecCommandRunner(newCommand, clock, nil, processStateReader, os.DirFS("/proc"))
+	runner, err := platformprocess.NewExecCommandRunner(newCommand, clock, logging.NoopLogger{}, processStateReader, os.DirFS("/proc"))
 	if err != nil {
 		return nil, err
 	}

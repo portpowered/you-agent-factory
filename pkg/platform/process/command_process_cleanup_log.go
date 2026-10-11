@@ -38,7 +38,7 @@ func newCommandProcessCleanupContext(
 	reason commandProcessCleanupReason,
 	cancellationReasons ...CancellationReason,
 ) commandProcessCleanupContext {
-	cleanup := commandProcessCleanupContext{logger: logging.EnsureLogger(logger), req: req, reason: reason}
+	cleanup := commandProcessCleanupContext{logger: logger, req: req, reason: reason}
 	if len(cancellationReasons) > 0 {
 		cleanup.cancellationReason = cancellationReasons[0]
 	}

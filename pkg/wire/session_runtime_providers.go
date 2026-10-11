@@ -42,7 +42,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
 
@@ -147,59 +146,6 @@ func provideApplicationProcessLifecycle(
 	}}, nil
 }
 
-func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {
-	return provideConfiguredProvidersService(edges, nil, nil)
-}
-
-func provideConfiguredProvidersService(
-	edges serviceedges.Edges,
-	integrations []operatorsettings.ACPIntegration,
-	workersRunner platformprocess.CommandRunner,
-) (providers.Service, error) {
-	agyPTYEffect, err := provideProvidersAgyPTYEffect(edges)
-	if err != nil {
-		return nil, err
-	}
-	configuration := providerswire.Configuration{
-		ACPIntegrations:  projectACPIntegrations(integrations),
-		CatalogOverrides: edges.ProviderCatalogCapabilityOverrides,
-		Registrations:    edges.ProviderRegistrations,
-	}
-	catalogProbe := edges.ProviderCatalogProbe
-	if catalogProbe == nil {
-		catalogProbe = providerswire.IdentityCatalogProbe
-	}
-	if workersRunner != nil {
-		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-			workersRunner,
-			provideWorkersAgentToolFileSystem(edges),
-		)
-		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
-			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
-	}
-	if edges.ProviderCommandRunner != nil {
-		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-			edges.ProviderCommandRunner,
-			provideWorkersAgentToolFileSystem(edges),
-		)
-		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
-			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
-	}
-	commandRunner, err := providePlatformProcessCommandRunner(edges)
-	if err != nil {
-		return nil, err
-	}
-	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-		commandRunner,
-		provideWorkersAgentToolFileSystem(edges),
-	)
-	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-	return newConfiguredProvidersService(configuration, catalogProbe, loggedRunner, agyPTYEffect, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
-		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
-}
-
 func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {
 	if edges.ProvidersExecutableLocator != nil {
 		return edges.ProvidersExecutableLocator
@@ -217,17 +163,6 @@ func provideProvidersStdioPipeFactory(edges serviceedges.Edges) platformprocess.
 		return edges.ProvidersStdioPipeFactory
 	}
 	return platformprocess.NewParentOwnedStdio
-}
-
-func providerCommandRunnerWithLogging(
-	edges serviceedges.Edges,
-	runner platformprocess.CommandRunner,
-) platformprocess.CommandRunner {
-	return workerswire.NewLoggingCommandRunner(
-		runner,
-		logging.NoopLogger{},
-		effectiveProviderCommandClock(edges).Now,
-	)
 }
 
 func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {

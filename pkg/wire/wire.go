@@ -29,6 +29,7 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -94,6 +95,17 @@ var servicesSet = wire.NewSet(
 	provideMessageEngine,
 	agentmessageswire.NewConfiguredService,
 	wire.Bind(new(agentmessages.Service), new(*agentmessageswire.ConfiguredService)),
+	provideProvidersConfiguration,
+	provideProvidersContextualCommandRunner,
+	provideProvidersLoggedCommandRunner,
+	provideProvidersCommandAdapter,
+	provideProvidersAgyCommandEffect,
+	provideProvidersCatalog,
+	provideProvidersACP,
+	provideProvidersCodex,
+	provideProvidersClaude,
+	provideProvidersExecutionRegistrations,
+	providerswire.NewAttemptExecutionService,
 	provideProvidersService,
 	provideEventsService,
 	provideWorkerRecordingWriter,

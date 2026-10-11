@@ -940,7 +940,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 	t.Helper()
 
 	edges := serviceedges.Edges{}
-	providersRoot, err := provideProvidersService(selectedTestTimeEdges(edges))
+	providersRoot, err := newProvidersServiceFixture(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
