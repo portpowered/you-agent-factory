@@ -867,7 +867,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v235, err := provideMessageEngine(v231, v232, v233, v234, source, eventsService, loggingLogger, workersessionsService)
+	v235, err := provideMessageEngine(v231, v232, v233, v234, source, timerSource, eventsService, loggingLogger, workersessionsService)
 	if err != nil {
 		return nil, err
 	}

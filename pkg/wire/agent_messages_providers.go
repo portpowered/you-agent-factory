@@ -41,12 +41,12 @@ func provideMessageQuota() (agentmessageswire.Quota, error) {
 	return agentmessageswire.NewQuota(10, 8, 3)
 }
 
-func provideMessageEngine(authority agentmessageswire.Authority, validator agentmessageswire.InputValidator, quota agentmessageswire.Quota, journal *agentmessageswire.Journal, clock platformclock.Source, stream events.Service, logger logging.Logger, sessions workersessions.Service) (*agentmessageswire.Engine, error) {
+func provideMessageEngine(authority agentmessageswire.Authority, validator agentmessageswire.InputValidator, quota agentmessageswire.Quota, journal *agentmessageswire.Journal, clock platformclock.Source, scheduler platformclock.TimerSource, stream events.Service, logger logging.Logger, sessions workersessions.Service) (*agentmessageswire.Engine, error) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
-	return agentmessageswire.NewService(true, authority, validator, quota, journal, clock.Now, func() string {
+	return agentmessageswire.NewService(true, authority, validator, quota, journal, clock.Now, scheduler, func() string {
 		id := uuid.New()
 		millis := uint64(clock.Now().UnixMilli())
 		for i := 5; i >= 0; i-- {

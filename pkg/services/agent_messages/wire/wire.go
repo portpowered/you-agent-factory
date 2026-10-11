@@ -5,6 +5,7 @@ package wire
 
 import (
 	"crypto/sha256"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"path/filepath"
 	"strings"
 	"time"
@@ -66,12 +67,12 @@ func NewQuota(sendsPerHour, threadMessages, maxHop int) (Quota, error) {
 	return admission.Limits{SendsPerHour: sendsPerHour, ThreadMessages: threadMessages, HopLimit: &maxHop}, nil
 }
 
-func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation, readSession SessionReader) (*Engine, error) {
-	if authority == nil || validator == nil || quota == nil || ledger == nil || now == nil ||
+func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, scheduler platformclock.TimerSource, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation, readSession SessionReader) (*Engine, error) {
+	if authority == nil || validator == nil || quota == nil || ledger == nil || now == nil || scheduler == nil ||
 		newID == nil || len(cursorKey) < sha256.Size || stream == nil || logger == nil || continueSession == nil || readSession == nil {
 		return nil, agentmessages.ErrBadRequest
 	}
-	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, newID, cursorKey, stream, logger, continueSession, readSession), nil
+	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, scheduler, newID, cursorKey, stream, logger, continueSession, readSession), nil
 }
 
 // NewConfiguredService supplies selected-profile lifecycle over the same Engine

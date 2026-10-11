@@ -18,6 +18,12 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 	if err := e.ledger.Commit(t); err != nil {
 		return err
 	}
+	if e.deliveryLife != nil {
+		select {
+		case e.deliveryLife.expiryWake <- struct{}{}:
+		default:
+		}
+	}
 	if e.events == nil {
 		return nil
 	}

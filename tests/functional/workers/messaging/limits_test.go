@@ -438,6 +438,114 @@ func TestInboxExpiryAndSelectedRetentionAfterReconstruction(t *testing.T) {
 	}
 }
 
+// Host-readiness timers of at most one second keep wall time; message
+// and attempt deadlines use controlled time. This test owns expiry,
+// not Factory bootstrap timers, and never advances time to make a host ready.
+type expiryDeadlineScheduler struct{ platformclock.TimerSource }
+
+func (s expiryDeadlineScheduler) NewTimer(duration time.Duration) platformclock.Timer {
+	if duration > 0 && duration <= time.Second {
+		return platformclock.Real{}.NewTimer(duration)
+	}
+	return s.TimerSource.NewTimer(duration)
+}
+
+// Timestamp and timer advancement cross only the injected clock edge. Follow
+// observes the autonomous commit before any read can perform lazy maintenance.
+func TestInboxExpiresWithoutCustomerRequestsAndCannotRevive(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	core, _ := observer.New(zap.InfoLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}, ProcessScheduler: expiryDeadlineScheduler{clock}, ProcessLogger: zap.New(signal)}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", effects, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	queued := f.cliSend(t, lane, "lead", "--request-id", "expire-revive", "--body", "unread ask", "--expires", "1m")
+	held := f.cliSend(t, lane, "lead", "--request-id", "expire-hold", "--body", "held ask", "--expires", "1m", "--if-ended", "hold")
+	read := f.cliSend(t, lane, "lead", "--request-id", "expire-read", "--body", "read ask", "--expires", "1m")
+	readPage(t, f, "/messages?threadId="+read.ThreadId+"&markRead=true", lead)
+	parent := f.cliSend(t, lane, "lead", "--request-id", "replied-parent", "--body", "answered ask", "--expires", "1m")
+	reply := f.cliSend(t, lead, "reply", parent.MessageId, "--request-id", "reply", "--body", "held answer", "--if-ended", "hold", "--expires", "2m")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 32), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("expiry follow did not register")
+	}
+	clock.SetTick(60)
+	awaitExpiredMessages(t, ctx, frames, finished, queued, held, read)
+	if message := f.get(t, parent.MessageId, lane); message.Status != "REPLIED" {
+		t.Fatal("expiry regressed the replied parent")
+	}
+	if message := f.get(t, reply.MessageId, lead); message.Status != "QUEUED" {
+		t.Fatal("expiry ignored the later answer deadline")
+	}
+	clock.SetTick(120)
+	awaitExpiredMessages(t, ctx, frames, finished, reply)
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("autonomous expiry changed Factory Events")
+	}
+	f.endWorker(t, "lead")
+	select {
+	case <-revival.requests:
+		t.Fatal("expired unread asks revived the ended recipient")
+	default:
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("expiry follow did not join")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	second := startHostEffects(t, f.home, f.dir, "", effects)
+	for _, original := range []api.AgentMessage{queued, held, read, reply} {
+		if message := second.get(t, original.MessageId, nil); message.Status != "EXPIRED" || message.Body != original.Body || message.RevivedWorkerSessionId != nil {
+			t.Fatal("reconstruction lost autonomous expiry or revived its content")
+		}
+	}
+}
+
+func awaitExpiredMessages(t *testing.T, ctx context.Context, frames <-chan []byte, finished <-chan error, messages ...api.AgentMessage) {
+	t.Helper()
+	pending := map[string]api.AgentMessage{}
+	for _, message := range messages {
+		pending[message.MessageId] = message
+	}
+	for len(pending) != 0 {
+		var observation api.AgentMessageObservation
+		if err := json.Unmarshal(nextFrame(t, ctx, frames, finished), &observation); err != nil {
+			t.Fatal(err)
+		}
+		original, exists := pending[observation.Message.MessageId]
+		if !exists || observation.Kind != "EXPIRED" {
+			continue
+		}
+		message := observation.Message
+		if message.Status != "EXPIRED" || message.Body != original.Body || message.ThreadId != original.ThreadId || message.RevivedWorkerSessionId != nil {
+			t.Fatal("expiry observation changed content or claimed delivery")
+		}
+		delete(pending, message.MessageId)
+	}
+}
+
+func (f *fixture) get(t *testing.T, id string, caller map[string]string) api.AgentMessage {
+	t.Helper()
+	status, body := f.request(t, http.MethodGet, "/messages/"+id, nil, caller)
+	var message api.AgentMessage
+	if status != http.StatusOK || json.Unmarshal(body, &message) != nil {
+		t.Fatal("message lookup failed", status)
+	}
+	return message
+}
+
 func TestOversizedBodyCLIHTTPParity(t *testing.T) {
 	t.Parallel()
 	f := startHost(t, t.TempDir(), t.TempDir(), "", "lead", "lane")

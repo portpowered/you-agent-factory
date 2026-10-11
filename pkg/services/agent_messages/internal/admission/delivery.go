@@ -232,10 +232,12 @@ func (e *Engine) classifyAdmission(intent store.DeliveryIntent, result workerses
 // The host owns cancellation and joins every observer before releasing its
 // binding. Multiple hosts share the already-selected Messaging instance.
 type deliveryLifetime struct {
-	hosts     int
-	observers sync.WaitGroup
-	cancels   map[string]*deliveryObserver
-	active    map[*deliveryObserver]struct{}
+	hosts        int
+	expiryWake   chan struct{}
+	expiryCancel context.CancelFunc
+	observers    sync.WaitGroup
+	cancels      map[string]*deliveryObserver
+	active       map[*deliveryObserver]struct{}
 }
 
 type deliveryObserver struct{ cancel context.CancelFunc }
@@ -247,11 +249,12 @@ func (e *Engine) BindHost() func() {
 		return func() {}
 	}
 	if e.deliveryLife == nil {
-		e.deliveryLife = &deliveryLifetime{cancels: map[string]*deliveryObserver{}, active: map[*deliveryObserver]struct{}{}}
+		e.deliveryLife = &deliveryLifetime{cancels: map[string]*deliveryObserver{}, active: map[*deliveryObserver]struct{}{}, expiryWake: make(chan struct{}, 1)}
 	}
 	life := e.deliveryLife
 	life.hosts++
 	if life.hosts == 1 {
+		e.startExpiry(life)
 		e.resumeRecipientObservers(context.Background())
 	}
 	e.mu.Unlock()
@@ -264,6 +267,7 @@ func (e *Engine) releaseDeliveryHost(life *deliveryLifetime) {
 	life.hosts--
 	last := life.hosts == 0
 	if last {
+		life.expiryCancel()
 		for observer := range life.active {
 			observer.cancel()
 		}

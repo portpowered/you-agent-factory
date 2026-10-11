@@ -2,6 +2,7 @@ package admission
 
 import (
 	"context"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"sync"
 	"time"
@@ -61,6 +62,7 @@ type Engine struct {
 	quota           Quota
 	ledger          Ledger
 	now             func() time.Time
+	scheduler       platformclock.TimerSource
 	newID           func() string
 	cursorKey       []byte
 	events          EventAppender
@@ -71,8 +73,8 @@ type Engine struct {
 	deliveryLife    *deliveryLifetime
 }
 
-func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation, readSession SessionReader) *Engine {
-	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID, cursorKey: append([]byte(nil), cursorKey...), events: stream, logger: logger, continueSession: continueSession, readSession: readSession, revivesPerHour: 6}
+func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, scheduler platformclock.TimerSource, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation, readSession SessionReader) *Engine {
+	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, scheduler: scheduler, newID: newID, cursorKey: append([]byte(nil), cursorKey...), events: stream, logger: logger, continueSession: continueSession, readSession: readSession, revivesPerHour: 6}
 }
 
 func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, caller *workersessions.CallerIdentity, factory string) (agentmessages.Message, error) {

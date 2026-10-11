@@ -219,7 +219,10 @@ Use `--if-ended hold` to request queued retention explicitly.
 Use `--reply-hold` to make a future reply inherit `HOLD`.
 
 `--interrupt` returns `MESSAGE_INTERRUPT_UNSUPPORTED` before any effect.
-Restart reconciliation and scheduled expiry are pending the remaining T6 work.
+Unreplied messages become `EXPIRED` at `expiresAt`, even without a read request.
+Messaging schedules expiry independently of Factory execution.
+Replies preserve the parent message as `REPLIED`.
+Restart reconciliation is pending the remaining T6 work.
 Interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
 No Factory route, guard, or workstation waits on an Agent Message.
 

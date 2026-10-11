@@ -87,3 +87,81 @@ func readTransition(now time.Time, recipient bool, m agentmessages.Message) stri
 	}
 	return ""
 }
+
+// One host-owned scheduler expires unreplied content independently of readers.
+// Every committed change wakes it so newly admitted or replied content updates
+// the next deadline. The admission lock serializes expiry with delivery.
+func (e *Engine) startExpiry(life *deliveryLifetime) {
+	ctx, cancel := context.WithCancel(context.Background())
+	life.expiryCancel = cancel
+	life.observers.Add(1)
+	go func() {
+		defer life.observers.Done()
+		defer cancel()
+		for {
+			deadline, err := e.expireDue(ctx, life)
+			if err != nil {
+				if ctx.Err() == nil && e.logger != nil {
+					e.logger.Warn("Agent Message expiry unavailable", "code", "MESSAGE_STORE_UNAVAILABLE")
+				}
+				return // A quarantined journal cannot admit further maintenance.
+			}
+			var fired <-chan time.Time
+			var stop func() bool
+			if !deadline.IsZero() {
+				timer := e.scheduler.NewTimer(deadline.Sub(e.now().UTC()))
+				fired, stop = timer.C(), timer.Stop
+			}
+			select {
+			case <-ctx.Done():
+			case <-life.expiryWake:
+			case <-fired:
+			}
+			if stop != nil {
+				stop()
+			}
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}()
+}
+
+func (e *Engine) expireDue(ctx context.Context, life *deliveryLifetime) (time.Time, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return time.Time{}, err
+	}
+	if e.deliveryLife != life {
+		return time.Time{}, context.Canceled
+	}
+	entries, sequence, err := e.ledger.Entries()
+	if err != nil {
+		return time.Time{}, err
+	}
+	now := e.now().UTC()
+	var deadline time.Time
+	changed := []store.Entry{}
+	for _, entry := range entries {
+		m := entry.Message
+		if m.Status == agentmessages.Replied || m.Status == agentmessages.Expired {
+			continue
+		}
+		if readTransition(now, false, m) == store.Expired {
+			entry.Message.Status = agentmessages.Expired
+			changed = append(changed, entry)
+		} else if deadline.IsZero() || m.ExpiresAt.Before(deadline) {
+			deadline = m.ExpiresAt
+		}
+	}
+	if len(changed) == 0 {
+		return deadline, nil
+	}
+	err = e.persist(ctx, store.Transaction{Version: store.Version, RecordID: e.newID(), Sequence: sequence + 1,
+		Kind: store.Expired, CommittedAt: now, Messages: changed, Requests: []store.Request{}})
+	if err == nil && e.logger != nil {
+		e.logger.Info("Agent Message expiry committed", "count", len(changed))
+	}
+	return deadline, err
+}
