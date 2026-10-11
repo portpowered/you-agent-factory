@@ -404,11 +404,11 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 
 ## Related Topics
 
-- `you docs javascript-workflows` â€” author, validate, execute, and inspect
+- `you docs javascript-workflows` — author, validate, execute, and inspect
   JavaScript workflows
-- `you docs orchestrators` â€” Factory Session, dispatch, artifact, and event
+- `you docs orchestrators` — Factory Session, dispatch, artifact, and event
   vocabulary
-- `you docs sessions` â€” inspect live Factory Sessions from the CLI
+- `you docs sessions` — inspect live Factory Sessions from the CLI
 
 ## Migrate Worker Session Calls
 
