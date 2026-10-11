@@ -43,6 +43,11 @@ type RuntimeAttemptKey struct {
 	DispatchID string
 }
 
+// ExecutionEndpointBinding publishes a live host exposing this Worker Sessions
+// owner. The returned release removes only that host's binding. Endpoints are
+// execution-only facts and are never retained in session metadata or recipes.
+type ExecutionEndpointBinding func(string) func()
+
 // RuntimeAttemptRequest asks Worker Sessions to open the durable observation
 // window for an attempt whose admission and execution remain owned by
 // Factory Runtime. ID is the Worker Session identity; AttemptID is the
@@ -58,6 +63,13 @@ type RuntimeAttemptRequest struct {
 	ID                          string
 	AttemptID                   string
 	Execution                   workers.WorkstationDispatchRequest
+	Metadata                    *SessionMetadata
+	// Caller is execution-only authority for an invocation-local Factory child.
+	// Its correlation remains the child's own, rather than the caller's.
+	Caller *CallerIdentity `json:"-"`
+	// BindEnvironment installs detached execution-only identity and credentials
+	// after safe recipe preparation and admission, before provider handoff.
+	BindEnvironment func([]string) `json:"-"`
 	// BindAttemptControl installs the exact admitted generation's observer into
 	// the externally executed request. It runs once after admission, before
 	// BeginRuntimeAttempt returns, and must return promptly. The observer is
@@ -69,7 +81,7 @@ type RuntimeAttemptRequest struct {
 // Callers normalize legacy blank runtime correlation from the resolved runtime
 // before supplying it in both the key and execution request.
 func (r RuntimeAttemptRequest) Validate() error {
-	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution}).Validate(); err != nil {
+	if err := (InvokeSessionRequest{ID: r.ID, Execution: r.Execution, Metadata: r.Metadata}).Validate(); err != nil {
 		return err
 	}
 	if strings.TrimSpace(r.Key.RuntimeID) == "" || strings.TrimSpace(r.Key.DispatchID) == "" ||
@@ -112,6 +124,10 @@ func (a RuntimeAttempt) Resolve(ctx context.Context, result workers.WorkstationD
 	}
 	return a(ctx, result, dispatchErr)
 }
+
+// CallerValidator checks execution-only authority against the running owner.
+// Validation grants no durable authority; each child admission revalidates.
+type CallerValidator func(context.Context, *CallerIdentity) error
 
 // Service is the W1+W2+W3 Worker Session identity, registry, supervision,
 // and Events publication foundation: stable identity reservation, immutable
@@ -323,7 +339,8 @@ type Service interface {
 
 // ReserveRequest asks Service to reserve one new Worker Session identity.
 type ReserveRequest struct {
-	ID string
+	ID       string
+	Metadata *SessionMetadata
 }
 
 // Validate reports whether req carries a non-empty stable identity. Validate
@@ -332,7 +349,7 @@ func (req ReserveRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
 	}
-	return nil
+	return req.Metadata.Validate()
 }
 
 // GetRequest asks Service to inspect one Worker Session identity.
@@ -395,7 +412,9 @@ type InvokeSessionRequest struct {
 	// InvokeSession reserves it. If ID is already registered in StateReserved,
 	// InvokeSession reuses that exact session and never creates a replacement.
 	// Any other existing state is a conflicting invocation.
-	ID string
+	ID       string
+	Metadata *SessionMetadata
+	Caller   *CallerIdentity `json:"-"`
 	// Execution is the already-resolved Workers execution request.
 	// InvokeSession hands a detached clone of Execution to the injected
 	// workers.Service, so the caller retains exclusive
@@ -428,6 +447,8 @@ type StartRequest struct {
 	ID        string
 	Execution workers.WorkstationDispatchRequest
 	Retry     RetryPolicy
+	Metadata  *SessionMetadata
+	Caller    *CallerIdentity `json:"-"`
 }
 
 // Validate reports whether req carries the required caller request identity
@@ -441,6 +462,7 @@ func (req StartRequest) Validate() error {
 		ID:        req.ID,
 		Execution: req.Execution,
 		Retry:     req.Retry,
+		Metadata:  req.Metadata,
 	}).Validate()
 }
 
@@ -562,6 +584,9 @@ func (p RetryPolicy) Validate() error {
 func (req InvokeSessionRequest) Validate() error {
 	if !validSessionID(req.ID) {
 		return ErrInvalidSessionID
+	}
+	if err := req.Metadata.Validate(); err != nil {
+		return err
 	}
 	if err := req.Retry.Validate(); err != nil {
 		return err

@@ -7,6 +7,7 @@ import (
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -253,6 +254,13 @@ func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
+	if errors.Is(err, workersessions.ErrCallerInvalid) {
+		return ToolErrorEnvelope{
+			Code:      "WORKER_SESSION_CALLER_INVALID",
+			Message:   "Worker Session caller credentials are invalid",
+			Retryable: false,
+		}
+	}
 	if envelope, ok := contextRequestErrorEnvelope(err); ok {
 		return envelope
 	}

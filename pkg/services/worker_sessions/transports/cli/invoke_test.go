@@ -602,6 +602,7 @@ func TestInvokeOutputAndRemoteErrorHelpersCoverStableMappings(t *testing.T) {
 
 type invokeLocalFake struct {
 	startResult       workersessions.StartResult
+	startErr          error
 	startRequests     []workersessions.StartRequest
 	continueResult    workersessions.ContinueResult
 	continueErr       error
@@ -616,7 +617,7 @@ type invokeLocalFake struct {
 
 func (fake *invokeLocalFake) Start(_ context.Context, request workersessions.StartRequest) (workersessions.StartResult, error) {
 	fake.startRequests = append(fake.startRequests, request)
-	return fake.startResult, nil
+	return fake.startResult, fake.startErr
 }
 
 func (fake *invokeLocalFake) Continue(_ context.Context, request workersessions.ContinueRequest) (workersessions.ContinueResult, error) {

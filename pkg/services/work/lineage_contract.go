@@ -78,9 +78,9 @@ type WorkPayloadResolution struct {
 	Snapshot *WorkPayloadSnapshot        `json:"snapshot,omitempty"`
 }
 
-func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick int, requestID string, item FactoryWorkItem) {
+func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick int, requestID string, item FactoryWorkItem, producingDispatchID ...string) {
 	inner := toLineageProjection(*p)
-	inner.RecordWorkRequestSnapshot(observedTick, requestID, toLineageWorkItem(item))
+	inner.RecordWorkRequestSnapshot(observedTick, requestID, toLineageWorkItem(item), producingDispatchID...)
 	*p = fromLineageProjection(inner)
 }
 

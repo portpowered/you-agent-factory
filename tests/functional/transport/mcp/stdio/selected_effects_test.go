@@ -3,14 +3,21 @@ package stdio_test
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -19,6 +26,35 @@ import (
 type selectedSyncPoll struct {
 	delay time.Duration
 	ticks <-chan time.Time
+}
+
+// The filesystem edge signals completed terminal persistence without changing
+// the data written or asserting a private snapshot layout as product behavior.
+type selectedSyncPersistence struct {
+	platformfilesystem.Recovery
+	terminal sync.Map
+}
+
+func (files *selectedSyncPersistence) WriteFile(path string, data []byte, _ fs.FileMode) error {
+	if err := platformreplay.NewLocal(runtime.GOOS).WriteFile(path, data); err != nil {
+		return err
+	}
+	var snapshot struct {
+		Session factorysessions.SessionReadResult
+	}
+	if json.Unmarshal(data, &snapshot) != nil || !factorysessions.IsTerminalLifecycleStatus(snapshot.Session.Status) {
+		return nil
+	}
+	files.terminal.Range(func(key, value any) bool {
+		if strings.HasPrefix(filepath.Clean(path), key.(string)+string(filepath.Separator)) {
+			select {
+			case value.(chan struct{}) <- struct{}{}:
+			default:
+			}
+		}
+		return true
+	})
+	return nil
 }
 
 type selectedSyncScheduler struct {
@@ -73,7 +109,8 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 	facts := platformclock.NewDeterministic(base, time.Second)
 	scheduler := &selectedSyncScheduler{Deterministic: platformclock.NewDeterministic(base.Add(time.Hour), 10*time.Millisecond), polls: make(chan selectedSyncPoll, 8)}
 	runner := &mcpRootResultRunner{}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{Clock: facts, ProcessScheduler: scheduler, ProviderCommandRunner: runner})
+	files := &selectedSyncPersistence{Recovery: platformfilesystem.NewRecovery(platformfilesystem.Local{}, platformfilesystem.Local{})}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{Clock: facts, ProcessScheduler: scheduler, ProviderCommandRunner: runner, FactorySessionRuntimePersistenceFileSystem: files})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,6 +124,11 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 			server := startComposedMemoryMCPWithLifetime(t, cohort, process)
 			initializeMCPClient(t, server.client)
 			gate := runner.gate(t, server.root)
+			terminal := make(chan struct{}, 1)
+			if cancelOnTimeout || name == "completion" {
+				files.terminal.Store(filepath.Clean(server.root), terminal)
+				defer files.terminal.Delete(filepath.Clean(server.root))
+			}
 			reply := make(chan mcpJSONRPCResponse, 1)
 			timeout := int64(3600000)
 			if name != "completion" {
@@ -108,8 +150,17 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 			}
 			if name == "completion" {
 				close(gate.release)
+				awaitComposedSignal(t, terminal)
 			}
 			scheduler.advance()
+			if cancelOnTimeout {
+				scheduler.poll(t)
+				scheduler.advance() // The unchanged 20ms wait timeout requests cancellation.
+				// Persistence runs on host goroutines, independently of selected
+				// time. Do not exhaust five virtual seconds of join polls before
+				// those goroutines run; release any join poll after the edge signals.
+				awaitComposedSignal(t, terminal)
+			}
 			response := advanceSelectedSyncToReply(t, scheduler, reply)
 			result := decodeComposedTool[factoryapi.FactorySessionSyncExecutionResponse](t, response)
 			if result.SessionId == "" {
@@ -134,7 +185,7 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 		})
 	}
 	t.Run("request cancellation leaves live peer held", func(t *testing.T) {
-		assertSelectedSyncRequestCancellation(t, cohort, process, runner, scheduler)
+		assertSelectedSyncRequestCancellation(t, cohort, process, runner, scheduler, files)
 	})
 	// A peer invocation remains usable after the timed-out connection closes.
 	peer := startComposedMemoryMCP(t, process)
@@ -143,12 +194,15 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 	peer.closeInput(t)
 }
 
-func assertSelectedSyncRequestCancellation(t, lifetime *testing.T, process support.Process, runner *mcpRootResultRunner, scheduler *selectedSyncScheduler) {
+func assertSelectedSyncRequestCancellation(t, lifetime *testing.T, process support.Process, runner *mcpRootResultRunner, scheduler *selectedSyncScheduler, files *selectedSyncPersistence) {
 	t.Helper()
 	caller, peer := startComposedMemoryMCPWithLifetime(t, lifetime, process), startComposedMemoryMCPWithLifetime(t, lifetime, process)
 	initializeMCPClient(t, caller.client)
 	initializeMCPClient(t, peer.client)
 	callerGate, peerGate := runner.gate(t, caller.root), runner.gate(t, peer.root)
+	terminal := make(chan struct{}, 1)
+	files.terminal.Store(filepath.Clean(peer.root), terminal)
+	defer files.terminal.Delete(filepath.Clean(peer.root))
 	callerReply, peerReply := make(chan mcpJSONRPCResponse, 1), make(chan mcpJSONRPCResponse, 1)
 	requestID := caller.client.nextID + 1
 	go func() { callerReply <- selectedSyncCall(caller.client, 3600000, false) }()
@@ -189,6 +243,7 @@ func assertSelectedSyncRequestCancellation(t, lifetime *testing.T, process suppo
 	}
 	close(callerGate.release)
 	close(peerGate.release)
+	awaitComposedSignal(t, terminal)
 	// Both initial registrations were consumed above to prove the held state.
 	// Release them before waiting for subsequent public-waiter polls.
 	scheduler.advance()

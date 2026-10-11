@@ -1,6 +1,9 @@
 package contracts
 
-import "context"
+import (
+	"context"
+	sessionprojectionfacts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
+)
 
 // WorkerWorkAttributionRequest selects an existing captured association.
 type WorkerWorkAttributionRequest struct {
@@ -21,4 +24,10 @@ type WorkerWorkAttribution struct {
 // WorkerWorkAttributionReader is the read-only, query-local batch capability.
 type WorkerWorkAttributionReader interface {
 	ResolveWorkerWorkAttribution(context.Context, []WorkerWorkAttributionRequest) ([]WorkerWorkAttribution, error)
+}
+
+// WorkOriginProjectionReader selects retained Work ancestry and named, typed Work
+// identities within one Factory Session without replaying its recording.
+type WorkOriginProjectionReader interface {
+	CurrentWorkOriginFacts(context.Context, string, string, string) (sessionprojectionfacts.WorkOriginFacts, error)
 }

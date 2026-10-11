@@ -588,7 +588,6 @@ pkg/services/factory_definitions/internal/testcomposition/composition.go: unreac
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: namedFactoryCatalog.DeleteNamedFactory
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: namedFactoryCatalog.ListNamedFactories
 pkg/services/factory_definitions/internal/testcomposition/composition.go: unreachable func: namedFactoryCatalog.ResolveNamedFactoryAcrossRoots
-pkg/services/factory_definitions/named_paths.go: unreachable func: ValidateName
 pkg/services/factory_definitions/transports/cli/composition.go: unreachable func: BindInstallPackagedFactory
 pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: BlockingFactoryLoadFindings
 pkg/services/factory_definitions/transports/mapping/factoryconfig/diagnostics/diagnostics.go: unreachable func: FactoryDefinitionFindings

@@ -486,6 +486,12 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 		cfg.ListenExplicit = true
 		return nil
 	}
+	// YOU_SERVER selects a client endpoint, never a local listener binding.
+	if inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd); err == nil {
+		if state, found := inputs.State("you.flag.server"); found && state.Provenance == resolvedinput.SourceEnvironment {
+			server = cliserver.DefaultBaseURI
+		}
+	}
 	target, err := cliserver.LocalBindTargetFromServer(server)
 	if err != nil {
 		return err

@@ -2,7 +2,9 @@ package invocation
 
 import (
 	"encoding/json"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -167,5 +169,32 @@ func TestJavaScriptInvocationResultFallsBackToSessionFailureWhenResultUnavailabl
 	}
 	if result.Message != policyMessage {
 		t.Fatalf("message = %q, want %q", result.Message, policyMessage)
+	}
+}
+
+func TestFactoryInvocationCallerMappingKeepsAuthorityOutOfInputs(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-invocation-token"}
+	request := factorysessions.InvocationRequest{Caller: caller}
+	projection := factorysessions.ProjectionContext{FactoryCfg: &factorydefinitions.FactoryConfig{Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{Kind: factorydefinitions.OrchestratorKindJavaScript, JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{SourceRef: "workflow.js"}}}}
+	start, err := javaScriptStartRequest(projection, roles.InvocationTarget{FactoryDir: "/project"}, request, factorysessions.ResolvedInvocationInput{}, func() string { return "request" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	invoke := sessionInvokeRequest("selected", request)
+	caller.Token = "changed-token"
+	for _, got := range []*workersessions.CallerIdentity{start.Caller, invoke.Caller} {
+		if got == nil || got == caller || got.Token != "planted-invocation-token" || got.WorkerSessionID != "exact-caller" {
+			t.Fatal("Factory mapping lost detached caller")
+		}
+	}
+	for _, value := range []any{start, invoke} {
+		encoded, err := json.Marshal(value)
+		if err != nil || strings.Contains(string(encoded), "planted-invocation-token") || strings.Contains(string(encoded), "exact-caller") {
+			t.Fatal("Factory input serialized caller authority")
+		}
+	}
+	if sessionInvokeRequest("selected", factorysessions.InvocationRequest{}).Caller != nil {
+		t.Fatal("absent caller acquired authority")
 	}
 }

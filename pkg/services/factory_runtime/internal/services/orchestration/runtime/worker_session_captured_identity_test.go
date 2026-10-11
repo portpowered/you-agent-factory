@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +17,62 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestScopedCapturedOpeningMetadataRespectsPhysicalFences(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"metadata", "legacy", "wrong-attempt", "foreign-scope", "invalid"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			reader := &selectedCapturedIdentityReader{summary: selectedCapturedUsageSummary("worker", 4)}
+			reader.summary.Capture.Catalog.FactorySessionID = "original"
+			opening := workers.SessionPayload{WorkerSessionID: "worker", FactorySessionID: "original", DispatchID: "attempt", SessionMetadata: json.RawMessage(`{"requester":{"kind":"WORKER_SESSION","workerSessionId":"lead"},"correlation":{"workId":"work","factorySessionId":"original"},"labels":["project:example"]}`)}
+			switch name {
+			case "legacy":
+				opening.SessionMetadata = nil
+			case "wrong-attempt":
+				opening.DispatchID = "foreign"
+			case "foreign-scope":
+				opening.FactorySessionID, reader.summary.Capture.Catalog.FactorySessionID = "foreign", "foreign"
+			case "invalid":
+				opening.SessionMetadata = json.RawMessage(`{"requester":{"kind":"OPERATOR"}}`)
+			}
+			payload, err := json.Marshal(opening)
+			if err != nil {
+				t.Fatal(err)
+			}
+			draft, err := json.Marshal(workers.Draft{Kind: workers.KindSession, Phase: workers.PhaseStarted, Payload: payload})
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader.summary.Capture.Opening = events.Record{Payload: draft}
+			service := &recordedWorkerSessionObservation{recordingReader: reader, recordingID: "owned", executionFactorySessionID: "original"}
+			got, err := service.withSelectedCapturedIdentity(t.Context(), workersessions.Observation{WorkerSessionID: "worker", AttemptID: "attempt", State: workersessions.StateRunning})
+			assertScopedCapturedOpeningMetadata(t, name, got, err)
+		})
+	}
+}
+
+func assertScopedCapturedOpeningMetadata(t *testing.T, name string, got workersessions.Observation, err error) {
+	t.Helper()
+	if name == "invalid" {
+		if !errors.Is(err, workersessions.ErrObservationRecordingCorrupt) {
+			t.Fatalf("invalid metadata accepted: %+v %v", got, err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "metadata" {
+		if got.Requester != nil || got.Correlation != nil || got.Labels != nil {
+			t.Fatalf("invented or foreign metadata: %+v", got)
+		}
+		return
+	}
+	if got.Requester == nil || got.Requester.WorkerSessionID != "lead" || got.Correlation == nil || got.Correlation.WorkID != "work" || len(got.Labels) != 1 || got.Labels[0] != "project:example" {
+		t.Fatalf("opening metadata lost: %+v", got)
+	}
+}
 
 type selectedWorkFactsLedger struct {
 	recordings.RuntimeLedger

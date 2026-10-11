@@ -27,6 +27,7 @@ properties:
       - REQUEST_CONFLICT
       - WORKER_SESSION_START_REQUEST_ID_CONFLICT
       - WORKER_SESSION_NOT_STARTABLE
+      - WORKER_SESSION_CALLER_INVALID
       - WORKER_SESSION_START_OPENING_FAILED
       - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
       - WORKER_SESSION_EVENT_CURSOR_INVALID
@@ -95,6 +96,7 @@ properties:
       - A live-change requestId was reused with a different normalized request body.
       - Worker Session start requestId was reused with different normalized inputs.
       - The requested Worker Session identity is already reserved or terminal.
+      - Worker Session caller credentials are invalid or no longer belong to a running owner.
       - The Worker Session opening record could not be published.
       - The Worker Session event topic did not reach the required readiness barrier.
       - The Worker Session event cursor is malformed.

@@ -85,6 +85,50 @@ func TestWorkerSessionConfirmationStateDefaultsUnknownValues(t *testing.T) {
 	}
 }
 
+func TestRequesterMetadataSurvivesShowAndListJSONAndHumanShow(t *testing.T) {
+	t.Parallel()
+	const metadata = `"requester":{"kind":"WORKER_SESSION","workId":"project-work","workerSessionId":"lead/exact"},"correlation":{"factorySessionId":"factory/exact","workId":"lane-work"},"labels":["project:agent-messaging"]`
+	var observation generated.WorkerSessionObservation
+	if err := json.Unmarshal([]byte(`{"workerSessionId":"lane/exact",`+metadata+`}`), &observation); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/worker-sessions" {
+			_ = json.NewEncoder(w).Encode(generated.ListWorkerSessionsResponse{Sessions: []generated.WorkerSessionObservation{observation, {WorkerSessionId: "legacy"}}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(observation)
+	}))
+	defer server.Close()
+	var shown, listed, human bytes.Buffer
+	show := NewShow(testHTTPProtocol(t))
+	config := ShowConfig{Context: t.Context(), Server: server.URL, WorkerSessionID: "lane/exact", OutputFormat: "json", Output: &shown}
+	if err := show(config); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewList(testHTTPProtocol(t), testClock{})(ListConfig{Context: t.Context(), Server: server.URL, OutputFormat: "json", Output: &listed}); err != nil {
+		t.Fatal(err)
+	}
+	for _, output := range []string{shown.String(), listed.String()} {
+		if !strings.Contains(output, metadata) {
+			t.Fatalf("metadata lost: %s", output)
+		}
+	}
+	if !strings.Contains(listed.String(), `"requester":null`) {
+		t.Fatalf("legacy session gained requester: %s", listed.String())
+	}
+	config.OutputFormat, config.Output = "human", &human
+	if err := show(config); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Requester:\tlead/exact (Work: project-work)", "Correlation:\tWork: lane-work; Factory Session: factory/exact", "Labels:\tproject:agent-messaging"} {
+		if !strings.Contains(human.String(), want) {
+			t.Fatalf("human show missing %q: %s", want, human.String())
+		}
+	}
+}
+
 func TestWorkerSessionConfirmationStatePreservesConfirmed(t *testing.T) {
 	session := generated.WorkerSessionObservation{ConfirmationState: generated.CONFIRMED}
 	if got := workerSessionConfirmationState(session); got != generated.CONFIRMED {

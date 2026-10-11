@@ -14,6 +14,7 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // invocationWaiterFallbackInterval bounds one event-driven wait iteration. The
@@ -56,6 +57,19 @@ func (a *invocationAuthority) SubmitWork(ctx context.Context, sessionID string, 
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("Factory Runtime work submission is required")
 	}
 	return ingress.SubmitWorkRequest(ctx, work.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}))
+}
+
+func (a *invocationAuthority) SubmitInvocation(ctx context.Context, sessionID string, request work.SubmitRequest, caller *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error) {
+	runtime, err := runtimebinding.FactoryForSession(a.state, sessionID)
+	if err != nil {
+		return work.WorkRequestSubmitResult{}, nil, err
+	}
+	prepared, release, err := runtime.PrepareInvocation(ctx, request, caller.Clone())
+	if err != nil {
+		return work.WorkRequestSubmitResult{}, release, err
+	}
+	result, err := a.SubmitWork(ctx, sessionID, prepared)
+	return result, release, err
 }
 
 func (a *invocationAuthority) Observe(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {

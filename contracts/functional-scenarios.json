@@ -293,6 +293,18 @@
         {
           "test": "tests/functional/transport/cli/invocation/run_wiring_test.go::TestCLIRunFactoryByPath",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+          "boundary": "cli"
         }
       ]
     },
@@ -326,10 +338,27 @@
       "name": "you server mcp",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryCLICaller",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.server.stop",
@@ -615,7 +644,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
           "boundary": "cli"
         },
         {
@@ -623,7 +652,11 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "cli"
         }
       ]
@@ -637,6 +670,34 @@
       "lane": "long",
       "executionClass": "deterministic",
       "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterRecipeFailureBeforeAdmission",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
         {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
@@ -653,6 +714,10 @@
       "executionClass": "deterministic",
       "evidence": [
         {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
@@ -667,6 +732,38 @@
       "lane": "long",
       "executionClass": "deterministic",
       "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterRecipeFailureBeforeAdmission",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
+        },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
           "boundary": "cli"
@@ -688,11 +785,15 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
           "boundary": "cli"
         },
         {
@@ -700,19 +801,27 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -728,6 +837,30 @@
       "evidence": [
         {
           "test": "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
@@ -769,11 +902,27 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "cli"
         },
         {
           "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CapturedProgressRedactsRequestSecrets",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
           "boundary": "cli"
         }
       ]
@@ -807,7 +956,55 @@
           "boundary": "cli"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterRecipeFailureBeforeAdmission",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestT7DirectStopLeavesFactorySiblingRunning",
+          "boundary": "cli"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestT7DetachedObserverLeavesHostedAttemptReadable",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestRequesterFactoryIndependence",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterProducedContinuationAfterHostRestart",
+          "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "cli"
         }
       ]
@@ -841,7 +1038,7 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
           "boundary": "cli"
         },
         {
@@ -849,7 +1046,7 @@
           "boundary": "cli"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestT7CaptureLossRetainsPrefixAndLiveStop",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -1031,6 +1228,18 @@
         {
           "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
           "boundary": "mcp"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "mcp"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "mcp"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "mcp"
         }
       ]
     },
@@ -1074,20 +1283,46 @@
       "name": "closeFactorySession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/continueWorkerSession",
       "name": "continueWorkerSession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterCompetingHead",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/getCurrentFactoryBySessionId",
@@ -1349,6 +1584,10 @@
           "boundary": "rest"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "rest"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
           "boundary": "rest"
         },
@@ -1380,6 +1619,10 @@
         {
           "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterInterruptedSuccessor",
+          "boundary": "rest"
         }
       ]
     },
@@ -1394,6 +1637,30 @@
       "evidence": [
         {
           "test": "tests/functional/product/customer_journeys/sessions_execution_results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "rest"
         }
       ]
@@ -1540,6 +1807,14 @@
         {
           "test": "tests/functional/work/admission/recovery_manual_move_test.go::TestFailedCascadeCanBeRecoveredByPublicWorkMove",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryGeneratedBatch",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_factory_test.go::TestRequesterFactoryProducingDispatch",
+          "boundary": "rest"
         }
       ]
     },
@@ -1548,10 +1823,35 @@
       "name": "openFactorySession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedInvocationFailureReason",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterPackagedLiveOpen",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/pauseFactorySession",
@@ -1611,19 +1911,7 @@
           "boundary": "rest"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
-          "boundary": "rest"
-        },
-        {
-          "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "rest"
         },
         {
@@ -1639,7 +1927,23 @@
           "boundary": "rest"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
+          "boundary": "rest"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_stop_test.go::TestT7HostedStopAndCompletionKeepSiblingRunning",
           "boundary": "rest"
         }
       ]
@@ -1685,6 +1989,10 @@
       "evidence": [
         {
           "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
           "boundary": "rest"
         }
       ]
@@ -1779,20 +2087,38 @@
       "name": "startDurableFactorySessionAsync",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/startDurableFactorySessionSync",
       "name": "startDurableFactorySessionSync",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestRequesterFactoryHTTPCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterFactoryCallerVariants",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/startWorkerSession",
@@ -1816,11 +2142,23 @@
           "boundary": "rest"
         },
         {
+          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "boundary": "rest"
+        },
+        {
           "test": "tests/functional/workers/invoke_continue/invoke_schema_test.go::TestT7InvokeOutputSchemaParity",
           "boundary": "rest"
         },
         {
-          "test": "tests/functional/workers/invoke_continue/invoke_readiness_test.go::TestT7ReadinessRejectionRecoveryAndAcceptedReplay",
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterContinuationAfterHostRestart",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_identity_test.go::TestRequesterDirectInvokeFromRunningCaller",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
           "boundary": "rest"
         }
       ]
@@ -1845,10 +2183,15 @@
       "name": "streamWorkerSessionEventsByTopLevelWorkerSessionId",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
-      "lane": "short",
+      "status": "covered",
+      "lane": "long",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/invoke_capture_test.go::TestRequesterExecutionTokenPrivacy",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/streamWorkerSessionEventsByWorkerSessionId",
@@ -1889,10 +2232,23 @@
       "name": "terminateFactorySession",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostDefaultsAndRefusals",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterMCPSelectedHostFailures",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/terminateWorkerSession",
@@ -1904,11 +2260,11 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
+          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
           "boundary": "rest"
         },
         {
-          "test": "tests/functional/product/customer_journeys/workers_transports_http_worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+          "test": "tests/functional/transport/mcp/worker_sessions/selected_host_test.go::TestWorkerSessionMCPParity",
           "boundary": "rest"
         }
       ]

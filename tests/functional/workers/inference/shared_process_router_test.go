@@ -274,20 +274,20 @@ func (router *inferenceWorkerRecordingRouter) restartStore(recordingID, workerID
 	return store, nil
 }
 
-func (router *inferenceWorkerRecordingRouter) ValidateWorkerRestartRecipe(ctx context.Context, workerID string, execution workers.WorkstationDispatchRequest) error {
+func (router *inferenceWorkerRecordingRouter) ValidateWorkerRestartRecipe(ctx context.Context, workerID string, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
 	store, err := router.restartStore(execution.Execution.RecordingID, workerID)
 	if err != nil {
 		return err
 	}
-	return store.ValidateWorkerRestartRecipe(ctx, workerID, execution)
+	return store.ValidateWorkerRestartRecipe(ctx, workerID, execution, metadata...)
 }
 
-func (router *inferenceWorkerRecordingRouter) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest) error {
+func (router *inferenceWorkerRecordingRouter) SaveWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget, execution workers.WorkstationDispatchRequest, metadata ...json.RawMessage) error {
 	store, err := router.restartStore(target.RecordingID, target.WorkerSessionID)
 	if err != nil {
 		return err
 	}
-	return store.SaveWorkerRestartRecipe(ctx, target, execution)
+	return store.SaveWorkerRestartRecipe(ctx, target, execution, metadata...)
 }
 
 func (router *inferenceWorkerRecordingRouter) ReadWorkerRestartRecipe(ctx context.Context, target recordings.WorkerControlTarget) (workers.WorkstationDispatchRequest, error) {

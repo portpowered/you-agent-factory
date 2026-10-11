@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"strings"
 	"testing"
 	"time"
 
@@ -998,7 +1000,7 @@ func TestInvocationAPI_UsesOwnerCapabilityAndPreservesTerminalOutcome(t *testing
 		factoryapi.InvocationRequest{
 			RequestId: &requestID, SourceKind: &sourceKind,
 			TimeoutMillis: &timeoutMillis, Content: &content,
-		},
+		}, nil,
 	)
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
@@ -1018,5 +1020,34 @@ func TestInvocationAPI_UsesOwnerCapabilityAndPreservesTerminalOutcome(t *testing
 		result.WorkID != "work-1" || result.WorkName != "task" || result.WorkState != "waiting" ||
 		len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "partial response retained" {
 		t.Fatalf("terminal outcome = %#v, want preserved timeout result", result)
+	}
+}
+
+func TestInvocationAPICallerIsDetachedAndExecutionOnly(t *testing.T) {
+	t.Parallel()
+	owner := &invocationServiceFake{}
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact/caller", Token: "planted-mapping-secret"}
+	adapter := factorysession.NewInvocationAPI(owner)
+	if _, err := adapter.InvokeFactorySession(t.Context(), "selected", factoryapi.InvocationRequest{}, caller); err != nil {
+		t.Fatal(err)
+	}
+	if owner.request.Caller == nil || owner.request.Caller == caller || *owner.request.Caller != *caller {
+		t.Fatal("mapping lost detached caller")
+	}
+	caller.WorkerSessionID, caller.Token = "changed", "changed"
+	if owner.request.Caller.WorkerSessionID != "exact/caller" || owner.request.Caller.Token != "planted-mapping-secret" {
+		t.Fatal("caller mutation changed admitted request")
+	}
+	encoded, err := json.Marshal(owner.request)
+	if err != nil || strings.Contains(string(encoded), "planted-mapping-secret") || strings.Contains(string(encoded), "exact/caller") {
+		t.Fatal("mapping serialized caller credentials")
+	}
+	owner.err = workersessions.ErrCallerInvalid
+	if _, err := adapter.InvokeFactorySession(t.Context(), "selected", factoryapi.InvocationRequest{}, owner.request.Caller); !errors.Is(err, workersessions.ErrCallerInvalid) {
+		t.Fatal("mapping lost typed owner refusal")
+	}
+	owner.err = nil
+	if _, err := adapter.InvokeFactorySession(t.Context(), "selected", factoryapi.InvocationRequest{}, nil); err != nil || owner.request.Caller != nil {
+		t.Fatal("absent caller acquired authority")
 	}
 }

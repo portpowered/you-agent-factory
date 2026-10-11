@@ -46,7 +46,9 @@ func TestWorkerSessionSummaryClosedScopeUsesCapturedFacts(t *testing.T) {
 		RecordingHealth: recordings.WorkerRecordingStatusComplete, TerminalCause: &cause,
 		TokenUsage: &workersessions.TokenUsage{Origin: "SYNTHETIC", InputTokens: &input, OutputTokens: &output, TotalTokens: &total},
 	}}
-	live := &fakeObservationService{getByWorkerErr: workersessions.ErrObservationSessionNotFound}
+	live := &fakeObservationService{getByWorkerResult: workersessions.Observation{
+		WorkerSessionID: "worker-original", FactorySessionID: "factory-original", State: workersessions.StateCompleted,
+	}}
 	adapter := NewAdapter(live, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
 	got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), " factory-original ", " worker-original ")
 	if err != nil {
@@ -73,7 +75,7 @@ func assertClosedCaptureTerminal(t *testing.T, got factoryapi.WorkerSessionObser
 
 func assertClosedCaptureTimingAndScope(t *testing.T, got factoryapi.WorkerSessionObservation, start, end time.Time, live *fakeObservationService, capture *closedScopeCaptureStub) {
 	t.Helper()
-	if got.StartedAt == nil || !got.StartedAt.Equal(start) || got.EndedAt == nil || !got.EndedAt.Equal(end) || live.getByWorkerCalled || capture.request.FactorySessionID != "factory-original" || capture.request.WorkerSessionID != "worker-original" {
+	if got.StartedAt == nil || !got.StartedAt.Equal(start) || got.EndedAt == nil || !got.EndedAt.Equal(end) || !live.getByWorkerCalled || capture.request.FactorySessionID != "factory-original" || capture.request.WorkerSessionID != "worker-original" {
 		t.Fatalf("closed capture timing/scope lost: %+v request=%+v", got, capture.request)
 	}
 }
@@ -84,10 +86,44 @@ func TestWorkerSessionSummaryClosedScopePreservesFailures(t *testing.T) {
 		t.Run(failure.Error(), func(t *testing.T) {
 			t.Parallel()
 			capture := &closedScopeCaptureStub{err: failure}
-			adapter := NewAdapter(&fakeObservationService{}, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
+			adapter := NewAdapter(&fakeObservationService{getByWorkerErr: workersessions.ErrObservationSessionNotFound}, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
 			got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "foreign-or-original", "worker")
 			if !errors.Is(err, failure) || got.WorkerSessionId != "" || capture.request.FactorySessionID != "foreign-or-original" {
 				t.Fatalf("got=%+v err=%v request=%+v", got, err, capture.request)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionSummaryClosedScopeReadsAdmittedSuccessor(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name, scope string
+		err         error
+		wantErr     bool
+	}{
+		{name: "running direct successor", scope: "factory-original"},
+		{name: "foreign scope", scope: "factory-foreign", wantErr: true},
+		{name: "projection failure", err: workersessions.ErrObservationProjectionUnavailable, wantErr: true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			live := &fakeObservationService{getByWorkerResult: workersessions.Observation{
+				WorkerSessionID: "successor", FactorySessionID: cell.scope, Direct: true, State: workersessions.StateRunning,
+				Requester: &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "producer"},
+			}, getByWorkerErr: cell.err}
+			capture := &closedScopeCaptureStub{err: workersessions.ErrObservationProjectionUnavailable}
+			adapter := NewAdapter(live, workServiceStub{}, &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}).WithLogsService(capture)
+			got, err := adapter.GetWorkerSessionObservationByWorkerSessionID(t.Context(), "factory-original", "successor")
+			if cell.wantErr {
+				if err == nil || got.WorkerSessionId != "" {
+					t.Fatal("invalid live owner returned closed-scope facts")
+				}
+			} else if err != nil || got.WorkerSessionId != "successor" || got.State != "RUNNING" || !got.Direct || got.Requester == nil || got.Requester.WorkerSessionId != "producer" {
+				t.Fatalf("admitted successor is not readable: %+v %v", got, err)
+			}
+			if live.getWorkerFactorySessionID != "factory-original" || live.getWorkerSessionID != "successor" || capture.calls != 0 {
+				t.Fatal("closed-scope read lost its exact live address or consulted incomplete capture")
 			}
 		})
 	}

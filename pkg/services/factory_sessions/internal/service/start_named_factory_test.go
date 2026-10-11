@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -104,6 +105,10 @@ func TestStartRejectsInvalidLiveRequestsBeforeOpening(t *testing.T) {
 	}{
 		{"negative wait", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Wait: factorysessions.SessionOperationWait{TimeoutMillis: -1}}, "wait.timeoutMillis"},
 		{"validate and initialize", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, ValidateOnly: true, InitNewFactory: true}, "initNewFactory"},
+		{"invalid packaged name", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/../subagent"}}, "factoryId"},
+		{"conflicting packaged target", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"}, Target: &factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}}, "factoryId"},
+		{"conflicting packaged definition", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"}, Definition: factorysessions.SessionDefinitionSelection{FactoryID: "@you/another"}}, "factoryId"},
+		{"conflicting packaged scaffold", factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationModeLive, Source: factorysessions.Source{Kind: factoryruntime.WorkflowSourceKindFactoryID, FactoryID: "@you/subagent"}, InitNewFactory: true}, "factoryId"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := root.Start(context.Background(), test.request)
@@ -502,5 +507,91 @@ func TestSessionIdentityGeneratedBeforeOpening(t *testing.T) {
 	opening := &RuntimeOpening{generateSessionID: func() string { return "invalid-generated" }}
 	if _, err := opening.sessionIDForStart(factorysessions.SessionStartRequest{ActivationOnly: true}); err == nil {
 		t.Fatal("accepted malformed generated identity")
+	}
+}
+
+func TestFactoryCallerRefusedBeforeOpeningOrInvocation(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"start", "invoke", "compatibility invoke", "async", "sync"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-caller-token"}
+			for _, configured := range []bool{false, true} {
+				root := &Root{Assembly: &legacyservice.Assembly{}}
+				calls := 0
+				if configured {
+					root.callerValidator = func(ctx context.Context, got *workersessions.CallerIdentity) error {
+						calls++
+						if ctx != t.Context() || got == caller || *got != *caller {
+							t.Fatal("caller validation lost detached exact authority")
+						}
+						return workersessions.ErrCallerInvalid
+					}
+				}
+				err := invokeFactoryCallerOperation(t.Context(), root, operation, caller)
+				if !errors.Is(err, workersessions.ErrCallerInvalid) || strings.Contains(err.Error(), caller.Token) {
+					t.Fatalf("%s refusal = %v", operation, err)
+				}
+				if configured && calls != 1 {
+					t.Fatalf("validator calls = %d", calls)
+				}
+			}
+		})
+	}
+}
+
+func invokeFactoryCallerOperation(ctx context.Context, root *Root, operation string, caller *workersessions.CallerIdentity) error {
+	switch operation {
+	case "start":
+		_, err := root.Start(ctx, factorysessions.SessionStartRequest{Caller: caller})
+		return err
+	case "invoke":
+		_, err := root.Invoke(ctx, factorysessions.SessionInvokeRequest{Caller: caller})
+		return err
+	case "compatibility invoke":
+		_, err := root.InvokeFactorySession(ctx, "missing", factorysessions.InvocationRequest{Caller: caller})
+		return err
+	case "async":
+		_, err := root.StartAsync(ctx, factorysessions.StartRequest{Caller: caller})
+		return err
+	default:
+		_, err := root.StartSync(ctx, factorysessions.StartRequest{Caller: caller})
+		return err
+	}
+}
+
+func TestFactoryCallerValidationPreservesDetachedOpeningAndUnattributedStart(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-before-opening"}
+	expected := *caller
+	validations, starts := 0, 0
+	root := &Root{Assembly: &legacyservice.Assembly{}}
+	root.callerValidator = func(_ context.Context, got *workersessions.CallerIdentity) error {
+		validations++
+		caller.Token = "mutated"
+		if got == caller || *got != expected {
+			t.Fatal("validator did not receive the entry snapshot")
+		}
+		got.Token = "validator-local-mutation"
+		return nil
+	}
+	root.start = func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+		starts++
+		if starts == 1 && (request.Caller == caller || *request.Caller != expected) {
+			t.Fatal("opening lost entry snapshot")
+		}
+		if starts == 2 && request.Caller != nil {
+			t.Fatal("unattributed start acquired caller")
+		}
+		return factorysessions.SessionStartResult{}, nil
+	}
+	if _, err := root.Start(t.Context(), factorysessions.SessionStartRequest{Caller: caller}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := root.Start(t.Context(), factorysessions.SessionStartRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if validations != 1 || starts != 2 {
+		t.Fatalf("validations/starts = %d/%d", validations, starts)
 	}
 }

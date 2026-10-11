@@ -382,7 +382,7 @@ func replaySubmissionsFromEvent(event interfaces.FactoryEvent) ([]replaySubmissi
 	if source == "" {
 		source = stringValue(event.Context.Source)
 	}
-	if isWorkerOutputSource(source) {
+	if isWorkerOutputSource(source) || stringValue(event.Context.DispatchID) != "" {
 		return nil, nil
 	}
 	requestID := stringValue(event.Context.RequestID)

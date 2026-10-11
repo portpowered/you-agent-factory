@@ -4,10 +4,12 @@
 package http
 
 import (
+	"context"
 	"io"
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ import (
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
 )
@@ -53,6 +56,24 @@ type Server struct {
 
 type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
 type workAdapter struct{ *workhttp.Adapter }
+
+// Factory caller credentials are decoded from the original headers by the
+// owner adapter; generated parameter values never grant caller authority.
+func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request, _ factoryapi.OpenFactorySessionParams) {
+	s.factorySessionsAdapter.OpenFactorySession(w, r)
+}
+
+func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request, _ factoryapi.StartDurableFactorySessionAsyncParams) {
+	s.factorySessionsAdapter.StartDurableFactorySessionAsync(w, r)
+}
+
+func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request, _ factoryapi.StartDurableFactorySessionSyncParams) {
+	s.factorySessionsAdapter.StartDurableFactorySessionSync(w, r)
+}
+
+func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, id factoryapi.SessionID, _ factoryapi.InvokeFactorySessionBySessionIdParams) {
+	s.factorySessionsAdapter.InvokeFactorySessionBySessionId(w, r, id)
+}
 
 // ShutdownServer acknowledges a loopback administrative request before
 // invoking the cancellation authority. Forwarded headers are deliberately not
@@ -231,7 +252,7 @@ func newServer(
 
 // StartWorkerSession forwards the global asynchronous start operation to the
 // Worker Sessions owner handler.
-func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request, _ factoryapi.StartWorkerSessionParams) {
 	if s.workerSessionsHTTP == nil {
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
@@ -348,7 +369,7 @@ func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionID, params)
+	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionReadID(r, workerSessionID), params)
 }
 
 // ReadWorkerSessionTranscriptByWorkerSessionId forwards top-level transcript
@@ -431,7 +452,7 @@ func (s *Server) GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
 		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	s.workerSessionsHTTP.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w, r, sessionID, workerSessionID)
+	s.workerSessionsHTTP.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w, r, sessionID, workerSessionReadID(r, workerSessionID))
 }
 
 // ReadWorkerSessionTranscriptBySessionId forwards the generated operation to
@@ -503,6 +524,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	r = preserveWorkerSessionReadSelector(r)
 	// Preserve an encoded invocation selector as one route segment. Otherwise
 	// the router cleans a decoded ../escape before Sessions can reject it.
 	const prefix, suffix = "/factory-sessions/", "/invocations"
@@ -518,6 +540,37 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.router.ServeHTTP(w, r)
+}
+
+type encodedWorkerSessionReadKey struct{}
+
+// Runtime child IDs contain a session/dispatch separator. Keep the exact
+// escaped ID in one route segment and decode it once at the read adapter.
+func preserveWorkerSessionReadSelector(r *http.Request) *http.Request {
+	if r.Method != http.MethodGet || r.URL.RawPath == "" {
+		return r
+	}
+	escaped := r.URL.EscapedPath()
+	parts := strings.Split(strings.TrimPrefix(escaped, "/"), "/")
+	topLevel := len(parts) == 2 && parts[0] == "worker-sessions"
+	scoped := len(parts) == 4 && parts[0] == "factory-sessions" && parts[2] == "worker-sessions"
+	if !topLevel && !scoped {
+		return r
+	}
+	request := r.Clone(context.WithValue(r.Context(), encodedWorkerSessionReadKey{}, true))
+	requestURL := *r.URL
+	requestURL.Path, requestURL.RawPath = escaped, ""
+	request.URL = &requestURL
+	return request
+}
+
+func workerSessionReadID(r *http.Request, id factoryapi.WorkerSessionID) factoryapi.WorkerSessionID {
+	if encoded, _ := r.Context().Value(encodedWorkerSessionReadKey{}).(bool); encoded {
+		if decoded, err := url.PathUnescape(string(id)); err == nil {
+			return factoryapi.WorkerSessionID(decoded)
+		}
+	}
+	return id
 }
 
 // GetProviderSessionDetails forwards the generated operation to the Provider
@@ -579,7 +632,17 @@ func (s *Server) handleDisallowedMethod(w http.ResponseWriter, _ *http.Request) 
 	s.writeError(w, http.StatusMethodNotAllowed, "method not allowed", "METHOD_NOT_ALLOWED")
 }
 
-func (s *Server) handleGeneratedParameterError(w http.ResponseWriter, _ *http.Request, err error) {
+func (s *Server) handleGeneratedParameterError(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Method == http.MethodPost && (r.URL.Path == "/worker-sessions" || r.URL.Path == "/factory-sessions" || r.URL.Path == "/factory-sessions/async" || r.URL.Path == "/factory-sessions/sync" || strings.HasSuffix(r.URL.Path, "/invocations")) {
+		if _, callerErr := apisurface.WorkerSessionCallerFromHeaders(r.Header); callerErr != nil {
+			s.writeJSON(w, http.StatusForbidden, factoryapi.ErrorResponse{
+				Message: "Worker Session caller credentials are invalid",
+				Family:  factoryapi.ErrorFamilyBadRequest,
+				Code:    factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID,
+			})
+			return
+		}
+	}
 	s.logger.Debug("invalid generated API parameter", zap.Error(err))
 	s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
 }

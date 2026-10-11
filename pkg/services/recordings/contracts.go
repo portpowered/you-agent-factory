@@ -684,3 +684,9 @@ type CanonicalHistoryReadStats struct {
 	CanonicalEventsCopied uint64
 	FullHistoryReductions uint64
 }
+
+// WorkOriginFacts carries selected immutable Work lineage and associations.
+type WorkOriginFacts = sessionprojectionfacts.WorkOriginFacts
+
+// WorkOriginProjectionReader reads prepared facts in one scoped ledger.
+type WorkOriginProjectionReader = recordingcontracts.WorkOriginProjectionReader

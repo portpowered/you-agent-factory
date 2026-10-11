@@ -77,6 +77,7 @@ func (r *registry) publishExecution(
 	sessionID string,
 	request workers.WorkstationDispatchRequest,
 	supervision *supervision,
+	caller *workersessions.CallerIdentity,
 ) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -92,6 +93,18 @@ func (r *registry) publishExecution(
 	finished := make(chan struct{})
 	dispatchDone := make(chan error, 1)
 	execution := supervision.executor
+	if execution == nil {
+		cancel()
+		return workers.ErrExecuteUnavailable
+	}
+	identity, identityErr := r.bindExecutionIdentityEnvironment(sessionID, caller)
+	if identityErr != nil {
+		cancel()
+		return identityErr
+	}
+	supervision.mu.Lock()
+	supervision.identityEnvironment = identity
+	supervision.mu.Unlock()
 	var progress func(workers.ExecutionCorrelation, workers.ProgressFragment)
 	if supervision.runtimeKey.RuntimeID == "" {
 		progress = r.directAttemptProgress(sessionID, supervision)
@@ -154,6 +167,9 @@ func executeWithService(
 	if supervision.runtimeKey.RuntimeID != "" {
 		executeRequest.Correlation.DispatchID = supervision.runtimeKey.DispatchID
 	}
+	supervision.mu.Lock()
+	executeRequest.Target.Environment.SupervisedEnvironment = append([]string(nil), supervision.identityEnvironment...)
+	supervision.mu.Unlock()
 	if !supervision.admissionAllowed() {
 		return canceledDispatchResult(request)
 	}
@@ -545,6 +561,7 @@ func cloneSessionContinuation(value *workers.ProviderContinuationRef) *workers.P
 }
 
 func (r *registry) completeSupervision(ctx context.Context, id string, supervision *supervision, result workers.WorkstationDispatchResult, dispatchErr error) {
+	result, dispatchErr = r.redactExecutionResult(id, result, dispatchErr)
 	snapshot := supervision.completionSnapshot()
 	if snapshot.forceConfirmed {
 		// Only a confirmed owned tree kill overrides the adapter's signal-exit
@@ -798,6 +815,13 @@ func (r *registry) BeginRuntimeAttempt(
 	if r == nil {
 		return nil, workersessions.ErrStartAdmissionFailed
 	}
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
+	if _, err := r.resolveCallerMetadata(req.Caller, nil); err != nil {
+		return nil, err
+	}
 	execution, resolved, err := prepareRuntimeAttemptExecution(req)
 	if err != nil {
 		return nil, err
@@ -840,7 +864,7 @@ func (r *registry) BeginRuntimeAttempt(
 
 	prepared, err := r.prepareInvocation(
 		context.WithoutCancel(ctx),
-		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
+		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Metadata: req.Metadata, Caller: req.Caller},
 		invocationPreparationOptions{runtimeOwned: true, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID},
 		executor,
 		clock,
@@ -870,7 +894,15 @@ func (r *registry) BeginRuntimeAttempt(
 		}
 		return nil, err
 	}
+	identity, identityErr := r.bindExecutionIdentityEnvironment(req.ID, req.Caller)
+	if identityErr != nil {
+		_ = handle.Complete(ctx, workers.WorkstationDispatchResult{DispatchID: attemptID, TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed}, identityErr)
+		return nil, identityErr
+	}
 	opened = true
+	if req.BindEnvironment != nil {
+		req.BindEnvironment(identity)
+	}
 	handle.bindProviderAttemptControl(ctx, req.BindAttemptControl, req.Execution.Execution.AttemptControlObserver)
 	return workersessions.RuntimeAttempt(handle.Resolve), nil
 }
@@ -1003,7 +1035,7 @@ func (r *registry) prepareRuntimeInvocation(
 	}
 	execution := cloneWorkstationDispatchRequest(req.Execution)
 	execution.Execution.Dispatch.DispatchID = attemptID
-	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry}
+	invoke := workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution, Retry: retry, Metadata: req.Metadata.Clone(), Caller: req.Caller}
 	prepared, err := r.prepareInvocation(context.WithoutCancel(ctx), invoke,
 		invocationPreparationOptions{runtimeKey: key, observationRuntimeID: req.ObservationRuntimeID, observationFactorySessionID: req.ObservationFactorySessionID}, executor, clock, scheduler)
 	if err != nil {

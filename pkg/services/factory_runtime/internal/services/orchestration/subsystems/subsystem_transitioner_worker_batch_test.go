@@ -499,7 +499,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 	now := time.Date(2026, time.April, 18, 0, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(net, logging.NoopLogger{}, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy(), nil)
-	output := `{"request":{"requestId":"metadata-request","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated","workId":"work-generated","workTypeName":"child","payload":"generated"}]},"metadata":{"source":"generator:unit-test","parentLineage":["request-parent","work-parent"]},"submissions":[{"name":"generated","workId":"work-generated","targetState":"complete","executionId":"exec-child","tags":{"runtime":"true"}}]}`
+	output := `{"request":{"requestId":"metadata-request","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated","workId":"work-generated","workTypeName":"child","payload":"generated"}]},"metadata":{"source":"generator:unit-test","producingDispatchID":"forged-dispatch","parentLineage":["request-parent","work-parent"]},"submissions":[{"name":"generated","workId":"work-generated","targetState":"complete","executionId":"exec-child","tags":{"runtime":"true"}}]}`
 	snapshot := workerBatchSnapshot(output)
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -513,6 +513,9 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 		t.Fatalf("generated batches = %d, want 1", len(result.GeneratedBatches))
 	}
 	batch := result.GeneratedBatches[0]
+	if batch.Metadata.ProducingDispatchID != "dispatch-1" {
+		t.Fatalf("producer = %q, want runtime dispatch", batch.Metadata.ProducingDispatchID)
+	}
 	if batch.Metadata.Source != "generator:unit-test" {
 		t.Fatalf("batch source = %q, want generator:unit-test", batch.Metadata.Source)
 	}

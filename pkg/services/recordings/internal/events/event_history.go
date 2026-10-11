@@ -400,12 +400,13 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record work.WorkReques
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	context := interfaces.FactoryEventContext{
-		Tick:      tick,
-		EventTime: eventTime,
-		RequestID: stringPtr(record.RequestID),
-		TraceIDs:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{record.TraceID})),
-		WorkIDs:   stringSlicePtr(workItemIDs(record.WorkItems)),
-		Source:    stringPtrIfNotEmpty(record.Source),
+		Tick:       tick,
+		EventTime:  eventTime,
+		RequestID:  stringPtr(record.RequestID),
+		TraceIDs:   stringSlicePtr(work.CanonicalChainingTraceIDs([]string{record.TraceID})),
+		WorkIDs:    stringSlicePtr(workItemIDs(record.WorkItems)),
+		Source:     stringPtrIfNotEmpty(record.Source),
+		DispatchID: stringPtrIfNotEmpty(record.ProducingDispatchID),
 	}
 	h.appendEvent(domainFactoryEvent(
 		interfaces.FactoryEventTypeWorkRequest,

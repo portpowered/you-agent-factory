@@ -247,6 +247,7 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(requestID, source strin
 		return
 	}
 	record := workdomain.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
+	record.ProducingDispatchID = batch.Metadata.ProducingDispatchID
 	record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
 	e.recordWorkRequest(e.runtimeState.TickCount, record)
 }

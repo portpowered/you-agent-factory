@@ -86,6 +86,10 @@ func capturedTerminalIdentity(page recordings.WorkerCapturedActivityPage, id str
 		json.Unmarshal(draft.Payload, &opening) != nil || opening.WorkerSessionID != id {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
+	metadata, err := decodeSessionMetadata(opening.SessionMetadata)
+	if err != nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
 	result := workersessions.Observation{
 		WorkerSessionID: id, Direct: opening.FactorySessionID == "", FactorySessionID: opening.FactorySessionID,
 		Provider: draft.Provenance.Provider,
@@ -94,6 +98,9 @@ func capturedTerminalIdentity(page recordings.WorkerCapturedActivityPage, id str
 		ConfirmationState: workersessions.ConfirmationStateConfirmed,
 		DurationBasis:     workersessions.DurationBasisUnavailable, Transcript: workersessions.TranscriptAvailabilityUnavailable,
 		RecordingHealth: page.Health, RecordingHealthReason: page.HealthReason,
+	}
+	if metadata != nil {
+		result.Requester, result.Correlation, result.Labels = metadata.Requester, metadata.Correlation, metadata.Labels
 	}
 	if opening.Model != "" {
 		result.Model = &opening.Model

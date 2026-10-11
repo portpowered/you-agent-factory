@@ -74,6 +74,11 @@ func runProjectEscalation(t *testing.T, tc escalationCase) {
 	thoughts := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(wake.fixture.baseURL, wake.sessionID, "/work/"+thoughtsID))
 	assertEscalationOrigin(t, thoughts, wake.ownerID)
 	parent := support.GetJSON[factoryapi.Work](t, support.SessionWorkURL(wake.fixture.baseURL, wake.sessionID, "/work/"+wake.ownerID))
+	// Ordinary escalation creates thoughts with the Project's display name.
+	// That non-Project peer must not make the verified Project target ambiguous.
+	if thoughts.Name != parent.Name || thoughts.WorkTypeName == nil || *thoughts.WorkTypeName != "thoughts" || parent.WorkTypeName == nil || *parent.WorkTypeName != "project" {
+		t.Fatalf("same-name Project/thoughts boundary lost: Project=%+v thoughts=%+v", parent, thoughts)
+	}
 	assertEscalationJSONEqual(t, "Project payload", parent.Payload, payload)
 	payloadJSON, _ := json.Marshal(payload)
 	ctx, cancel := context.WithTimeout(t.Context(), reviewFailureEventTimeout)

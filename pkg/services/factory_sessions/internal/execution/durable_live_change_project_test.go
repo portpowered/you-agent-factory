@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
@@ -9,6 +10,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
 	"testing"
@@ -32,7 +34,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 }
 
 func (s *JavaScriptRuntimeService) childExecutorHooksForRequest(mode, sessionID string, mockWorkers *workers.MockWorkersConfig) factory.JavaScriptRuntimeHooks {
-	return s.childExecutorHooksForStart(mode, sessionID, mockWorkers, nil, nil, nil)
+	return s.childExecutorHooksForStart(mode, sessionID, mockWorkers, nil, nil, nil, nil)
 }
 
 // TestChildWorkerExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest
@@ -147,12 +149,12 @@ func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
 
 func TestDurableChildAttemptStarterIsSelectedPerRequest(t *testing.T) {
 	service := newProcessChildRuntime(&recordingWorkerExecution{})
-	starter := factorysessions.WorkerAttemptStarter(func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+	starter := factorysessions.WorkerAttemptStarter(func(context.Context, *workers.ExecuteRequest, *workersessions.CallerIdentity) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 		return nil, nil
 	})
-	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, starter, nil, nil).
+	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, starter, nil, nil, nil).
 		NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
-	other := service.childExecutorHooksForStart(ChildExecutorModeLive, "other", nil, nil, nil, nil).
+	other := service.childExecutorHooksForStart(ChildExecutorModeLive, "other", nil, nil, nil, nil, nil).
 		NewChildExecutor("other-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
 	if selected.attemptStarter == nil || other.attemptStarter != nil {
 		t.Fatalf("per-request attempt starters: selected = %v, other = %v", selected.attemptStarter != nil, other.attemptStarter != nil)
@@ -164,8 +166,8 @@ func TestDurableChildProgressPublisherIsSelectedPerRequest(t *testing.T) {
 	var selectedFragments []workers.ProgressFragment
 	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, nil, nil, func(fragment workers.ProgressFragment) {
 		selectedFragments = append(selectedFragments, fragment)
-	}).NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
-	other := service.childExecutorHooksForStart(ChildExecutorModeLive, "other", nil, nil, nil, nil).
+	}, nil).NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+	other := service.childExecutorHooksForStart(ChildExecutorModeLive, "other", nil, nil, nil, nil, nil).
 		NewChildExecutor("other-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
 
 	selected.publish("selected-dispatch", workers.ProgressFragment{Kind: workers.ResponseFragmentKind, Payload: "selected text"})
@@ -621,5 +623,114 @@ func TestChildWorkerExecutor_CompletionResolvesBeforeRetryAndOutput(t *testing.T
 				t.Fatalf("completion failure lost at child boundary: %v", err)
 			}
 		})
+	}
+}
+
+// The workflow executor owns only this invocation's detached credentials.
+// Its controlled admission callback represents the Worker Sessions owner fence.
+func TestDurableChildCallerForwardingAndRefusal(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"healthy", "owner-lost", "absent", "missing-admission"} {
+		t.Run(mode, func(t *testing.T) { t.Parallel(); testDurableChildCaller(t, mode) })
+	}
+}
+
+func testDurableChildCaller(t *testing.T, mode string) {
+	t.Helper()
+	worker := &recordingWorkerExecution{result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}}
+	launches := 0
+	worker.onExecute = func(workers.ExecuteRequest) { launches++ }
+	service := newProcessChildRuntime(worker)
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-invocation-token"}
+	if mode == "absent" {
+		caller = nil
+	}
+	calls := 0
+	starter := factorysessions.WorkerAttemptStarter(func(_ context.Context, req *workers.ExecuteRequest, got *workersessions.CallerIdentity) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
+		calls++
+		assertDurableChildCaller(t, mode, got, req)
+		if mode == "owner-lost" {
+			return nil, workersessions.ErrCallerInvalid
+		}
+		return nil, nil
+	})
+	if mode == "missing-admission" {
+		starter = nil
+	}
+	hooks := service.childExecutorHooksForStart(ChildExecutorModeLive, "parent", nil, starter, nil, nil, caller)
+	if caller != nil {
+		caller.WorkerSessionID = "mutated-caller"
+		caller.Token = "mutated-token"
+	}
+	executor := hooks.NewChildExecutor("child", newChildRecordSink(), factory.DefaultJavaScriptPolicy())
+	_, err := executor.Execute(t.Context(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
+	refused := mode == "owner-lost" || mode == "missing-admission"
+	if refused {
+		if !errors.Is(err, workersessions.ErrCallerInvalid) || launches != 0 {
+			t.Fatalf("refusal err=%v launches=%d", err, launches)
+		}
+	} else if err != nil || launches != 1 {
+		t.Fatalf("execution err=%v launches=%d", err, launches)
+	}
+	wantCalls := 1
+	if mode == "missing-admission" {
+		wantCalls = 0
+	}
+	if calls != wantCalls {
+		t.Fatalf("admission calls=%d want=%d", calls, wantCalls)
+	}
+}
+
+func assertDurableChildCaller(t *testing.T, mode string, got *workersessions.CallerIdentity, req *workers.ExecuteRequest) {
+	t.Helper()
+	if mode == "absent" {
+		if got != nil {
+			t.Fatal("absent caller acquired authority")
+		}
+	} else {
+		if got == nil || got.WorkerSessionID != "exact-caller" || got.Token != "planted-invocation-token" {
+			t.Fatal("admission lost detached caller")
+		}
+		got.Token = "admission-mutated-token"
+	}
+	encoded, err := json.Marshal(req)
+	if err != nil || strings.Contains(string(encoded), "planted-invocation-token") || strings.Contains(string(encoded), "exact-caller") {
+		t.Fatal("caller leaked into Workers execution payload")
+	}
+}
+
+func TestDurableStartCallerDetachedAndExcludedFromReplay(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-invocation-token"}
+	request := StartRequest{RequestID: "request", Caller: caller, Source: Source{Kind: factory.WorkflowSourceKindInlineWorkflow, InlineWorkflow: &InlineWorkflowSource{InlineSource: "export default () => ({ok:true})"}}}
+	normalized, hash, err := normalizeStartTuple(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caller.Token = "changed-token"
+	if normalized.Caller == caller || normalized.Caller.Token != "planted-invocation-token" {
+		t.Fatal("normalized caller was not detached")
+	}
+	other, otherHash, err := normalizeStartTuple(request)
+	if err != nil || hash != otherHash {
+		t.Fatalf("credential changed replay identity: %v", err)
+	}
+	if other.Caller.Token != "changed-token" {
+		t.Fatal("new invocation lost its caller value")
+	}
+	retained := cloneStartRequest(normalized)
+	if retained.Caller != nil || cloneStartRequestPtr(retained).Caller != nil {
+		t.Fatal("retained replay restored caller authority")
+	}
+	for _, value := range []any{normalized, retained} {
+		encoded, err := json.Marshal(value)
+		if err != nil || strings.Contains(string(encoded), "planted-invocation-token") || strings.Contains(string(encoded), "exact-caller") {
+			t.Fatal("serialized start leaked caller authority")
+		}
+	}
+	request.Caller = nil
+	absent, err := NormalizeStartRequest(request)
+	if err != nil || absent.Caller != nil {
+		t.Fatalf("absent caller = %#v, %v", absent.Caller, err)
 	}
 }

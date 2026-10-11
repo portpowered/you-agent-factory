@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 const externalConsumerProofFactoryImportPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -271,6 +273,10 @@ func checkpointProofDiagnosticsText(diagnostics []error) string {
 type externalConsumerPeer struct{}
 
 var _ factory.Service = (*externalConsumerPeer)(nil)
+
+func (externalConsumerPeer) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
+	return request, nil, nil
+}
 
 func (externalConsumerPeer) ControlPause(context.Context, factory.PauseRequest) (factory.PauseResult, error) {
 	return factory.PauseResult{Outcome: factory.ControlOutcomeAccepted}, nil

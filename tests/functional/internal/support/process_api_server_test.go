@@ -2,6 +2,8 @@ package support
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -102,9 +104,11 @@ func TestProcessAPIServerWaitForURLReturnsDynamicURLAfterStart(t *testing.T) {
 	server := NewProcessAPIServer()
 	ctx, cancel := context.WithCancel(t.Context())
 	startDone := make(chan error, 1)
+	bound := make(chan platformhttpserver.Binding, 1)
 	go func() {
 		startDone <- server.Start(ctx, platformhttpserver.StartRequest{
 			Handler: http.NotFoundHandler(),
+			OnBound: func(binding platformhttpserver.Binding) { bound <- binding },
 		})
 	}()
 
@@ -114,6 +118,10 @@ func TestProcessAPIServerWaitForURLReturnsDynamicURLAfterStart(t *testing.T) {
 	}
 	if !strings.HasPrefix(baseURL, "http://") {
 		t.Fatalf("WaitForBaseURL() = %q, want httptest HTTP URL", baseURL)
+	}
+	binding := <-bound
+	if observed := "http://" + net.JoinHostPort(binding.Host, fmt.Sprint(binding.Port)); observed != baseURL {
+		t.Fatalf("reported binding = %q, want actual endpoint %q", observed, baseURL)
 	}
 
 	cancel()

@@ -208,6 +208,10 @@ type foldHostedRuntimeStub struct {
 
 var _ factoryruntime.Service = (*foldHostedRuntimeStub)(nil)
 
+func (*foldHostedRuntimeStub) PrepareInvocation(_ context.Context, request factoryruntime.InvocationWork, _ *factoryruntime.InvocationCaller) (factoryruntime.InvocationWork, func() error, error) {
+	return request, nil, nil
+}
+
 func newFoldHostedRuntimeStub(state interfaces.FactoryState) *foldHostedRuntimeStub {
 	return &foldHostedRuntimeStub{
 		factoryState: state,

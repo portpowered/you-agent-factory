@@ -35,6 +35,8 @@ type invokeContinueStartedProcess struct {
 	apiStopped    <-chan struct{}
 	apiStarts     *atomic.Int32
 	processBuilds *atomic.Int32
+	ackStore      *interruptPhaseAckStore
+	lateStarts    *requesterLateStartBoundary
 }
 
 type invokeContinueRecordingDirectory string
@@ -123,13 +125,16 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
+	if err := appendRequesterMCPScenarios(rootDir, &setup); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	for _, test := range remoteInterruptParityCases() {
 		runner := testutil.NewProviderCommandRunner()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "parity-"+test.name, runner, runner, nil, nil, nil, nil); err != nil {
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
-	for _, name := range []string{"recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race"} {
+	for _, name := range []string{"requester-cli-parent", "requester-http-parent", "requester-batch-lane", "requester-factory-lane", "requester-recipe-parent-start", "requester-recipe-parent-continue", "requester-privacy-success", "requester-privacy-failure", "requester-parent", "published-direct", "t7-detach", "t7-degraded", "t7-secrets", "t7-factory", "t7-factory-target", "t7-stop-cancel", "t7-stop-terminate", "t7-stop-race", "t7-peer-cancel", "t7-peer-terminate", "t7-peer-race", "recording-echo", "recording-other", "recording-equal", "recording-snapshot", "recording-final-only", "recording-factory", "recording-failure"} {
 		gated := &t7GatedProviderRunner{}
 		gated.reset()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, gated, gated, nil, nil, nil, gated.reset); err != nil {
@@ -147,8 +152,17 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t7-unreachable", unreachable, unreachable, nil, nil, nil, unreachable.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	for _, name := range []string{"t7-ready-local", "t7-ready-remote", "t7-ready-http", "t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-local-document-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
-		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput("t7-thread-"+name, t7ObservationReport)})
+	for _, name := range []string{"requester-cli-child", "requester-http-child", "requester-batch-lead", "requester-factory-lead", "requester-recipe-child-start", "requester-recipe-child-continue", "requester-child", "t7-ready-local", "t7-ready-remote", "t7-ready-http", "t7-local", "t7-remote", "t7-http", "t7-settings-local-document", "t7-settings-local-overrides", "t7-settings-local-positional", "t7-settings-local-stdin", "t7-settings-local-document-stdin", "t7-settings-remote-document", "t7-settings-remote-overrides", "t7-settings-http-document"} {
+		output := directCodexSessionOutput("t7-thread-"+name, t7ObservationReport)
+		// Keep the scenario's actual tags (including _last_output) stable across
+		// Work visits, so M2 can require identical recomputed labels.
+		if name == "requester-factory-lead" {
+			output = directCodexOutputWithoutSession("Requester lane COMPLETE")
+		}
+		if name == "requester-batch-lead" {
+			output = directCodexOutputWithoutSession(`{"completion":"COMPLETE","request":{"requestId":"requester-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"batch-lane","workId":"batch-lane","workTypeName":"task","payload":"lane input","tags":{"project":"requester-project","_last_output":"Requester lane COMPLETE"}}]},"metadata":{"source":"forged-source","producingDispatchID":"forged-dispatch","parentLineage":["forged-parent"]}}`)
+		}
+		runner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: output})
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, runner.Reset); err != nil {
 			return invokeContinueScenarioSetup{}, err
 		}
@@ -197,6 +211,17 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		Stdout: directCodexSessionOutput("generated-file-thread", "generated-file output COMPLETE"),
 	})
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t19-generated-file", generatedRunner, generatedRunner, nil, nil, nil, nil); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	packagedRunner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("packaged-live-thread", "packaged live output COMPLETE"),
+	})
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-packaged-live", packagedRunner, packagedRunner, nil, nil, nil, packagedRunner.Reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	authFailure := platformprocess.CommandResult{Stderr: []byte("401 Unauthorized: controlled authentication failure"), ExitCode: 1}
+	authRunner := newInvokeContinueResettableProviderCommandRunner(authFailure)
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-packaged-auth-failure", authRunner, authRunner, nil, nil, nil, authRunner.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
 	streamingRunner := newWSRFT015StreamingProviderRunner()
@@ -311,6 +336,10 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 	writeS8CodexRollout(t, homeDir, s8InterruptProviderSessionB, rollout, s8OutputB)
 	for _, name := range []string{
 		"manager-interrupt",
+		"requester-interrupt-provider",
+		"requester-interrupt-recorded",
+		"requester-interrupt-ack-input",
+		"requester-interrupt-ack-source",
 		"interrupt-mode-provider",
 		"interrupt-mode-recorded",
 		"interrupt-mode-empty",
@@ -413,6 +442,7 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 	processBuilds := &atomic.Int32{}
 	processBuilds.Add(1)
 	ackStore := &interruptPhaseAckStore{}
+	lateStarts := &requesterLateStartBoundary{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Merge(serviceedges.Edges{
 		WorkerRecordingWriter: ackStore,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) {
@@ -424,6 +454,7 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		ProviderCommandRunner: route,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
+			request.Handler = lateStarts.handler(request.Handler)
 			err := api.Start(ctx, request)
 			apiStopOnce.Do(func() { close(apiStopped) })
 			return err
@@ -440,6 +471,9 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--server", "http://127.0.0.1:1", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = invokeContinueEnvironment(homeDir)
+	// Omitted subagent selections resolve on this selected host, independently
+	// of the MCP client's profile or ambient operator configuration.
+	inputs.Input.Env = append(inputs.Input.Env, "YOU_DEFAULT_WORKER_MODEL_PROVIDER=codex", "YOU_DEFAULT_WORKER_MODEL=requester-host-default")
 	inputs.Input.WorkingDirectory = hostDir
 	command := startInvokeContinuePackageCommand(process, inputs)
 	baseURL, err := api.WaitForBaseURL(invokeContinuePackageFixtureTimeout)
@@ -450,5 +484,5 @@ func startInvokeContinuePackageProcessWithEdges(t *testing.T, hostDir, homeDir s
 		cancel()
 		return invokeContinueStartedProcess{}, fmt.Errorf("wait for package fixture API: %w; command result: %v", err, commandErr)
 	}
-	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds}, nil
+	return invokeContinueStartedProcess{process: process, command: command, baseURL: baseURL, apiStopped: apiStopped, apiStarts: apiStarts, processBuilds: processBuilds, ackStore: ackStore, lateStarts: lateStarts}, nil
 }

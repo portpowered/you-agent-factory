@@ -6,6 +6,7 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"time"
 )
@@ -626,6 +627,8 @@ type Source struct {
 // StartRequest is the normalized durable session execution request shared by async
 // and sync start across API, CLI, MCP, and UI.
 type StartRequest struct {
+	// Caller belongs only to the active invocation; replay snapshots discard it.
+	Caller          *workersessions.CallerIdentity `json:"-"`
 	RequestID       string
 	Source          Source
 	Args            map[string]any
@@ -652,7 +655,7 @@ type StartRequest struct {
 // the request concurrently with admission. Completion returns the authoritative
 // result and acknowledgement error before output publication or retry admission.
 // It is never transport input.
-type WorkerAttemptStarter func(context.Context, *workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
+type WorkerAttemptStarter func(context.Context, *workers.ExecuteRequest, *workersessions.CallerIdentity) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 
 // SyncOutcome reports how a sync start wait ended.
 type SyncOutcome string

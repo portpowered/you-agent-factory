@@ -41,9 +41,13 @@ func (r *registry) freezeInterruptInput(ctx context.Context, plan interruptPlan)
 	if _, err := encodeInterruptInput(plan); err != nil {
 		return plan, err
 	}
-	_, metadata, direct := r.loadObservationState(plan.sourceAddressOrID())
+	session, metadata, direct := r.loadObservationState(plan.sourceAddressOrID())
 	if direct && metadata.direct && r.logs != nil {
-		if err := r.restart.ValidateWorkerRestartRecipe(ctx, plan.request.SuccessorWorkerSessionID, interruptSuccessorExecution(plan)); err != nil {
+		facts, err := encodeSessionMetadata(session.Metadata)
+		if err != nil {
+			return plan, err
+		}
+		if err := r.restart.ValidateWorkerRestartRecipe(ctx, plan.request.SuccessorWorkerSessionID, interruptSuccessorExecution(plan), facts); err != nil {
 			return plan, err
 		}
 	}

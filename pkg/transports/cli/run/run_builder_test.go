@@ -362,7 +362,7 @@ func (o testInvocationOperation) InvokeFactory(
 		cancel()
 		return factorysessions.FactoryInvocationOutcome{}, err
 	}
-	result, err := runner.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, generatedTestInvocationRequest(request))
+	result, err := runner.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, generatedTestInvocationRequest(request), nil)
 	if source, ok := runner.(interface {
 		GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
 	}); ok && consume != nil {

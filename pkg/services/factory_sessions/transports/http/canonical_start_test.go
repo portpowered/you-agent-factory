@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -143,5 +146,104 @@ func TestDurableStartRejectsAmbiguousExplicitHostedSessions(t *testing.T) {
 	handler.StartDurableFactorySessionAsync(recorder, httptest.NewRequest(http.MethodPost, "/factory-sessions/async", bytes.NewBufferString(`{"requestId":"durable-1","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`)))
 	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "current Factory Session is ambiguous") {
 		t.Fatalf("status = %d, body = %s, want actionable ambiguous selection", recorder.Code, recorder.Body.String())
+	}
+}
+
+// This adapter proves header translation and refusal, with owner admission
+// controlled separately from the live-owner tests.
+func TestFactoryHTTPStartCaller(t *testing.T) {
+	t.Parallel()
+	for _, route := range []string{"open", "async", "sync"} {
+		for _, variant := range []string{"valid", "absent", "partial", "malformed", "owner-refused"} {
+			t.Run(route+"/"+variant, func(t *testing.T) {
+				t.Parallel()
+				runFactoryHTTPStartCaller(t, route, variant)
+			})
+		}
+	}
+}
+
+func runFactoryHTTPStartCaller(t *testing.T, route, variant string) {
+	t.Helper()
+
+	calls := 0
+	token := strings.Repeat("A", 43)
+	root := factoryHTTPCallerStartRoot(t, variant, token, &calls)
+	handler := factorysessionshttp.NewLifecycleHandler(root, root, root, testRequestPreparation{}, zap.NewNop())
+	body := `{"requestId":"selected-request","source":{"kind":"FACTORY_ID","factoryId":"factory-alpha"}}`
+	if route == "open" {
+		body = `{"folderPath":"/workspace"}`
+	}
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", strings.NewReader(body))
+	if variant != "absent" {
+		req.Header.Set("X-You-Worker-Session-Id", "exact/caller")
+	}
+	if variant != "absent" && variant != "partial" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if variant == "malformed" {
+		req.Header.Add("X-You-Worker-Session-Id", "peer")
+	}
+	recorder := httptest.NewRecorder()
+	switch route {
+	case "open":
+		handler.OpenFactorySession(recorder, req)
+	case "async":
+		handler.StartDurableFactorySessionAsync(recorder, req)
+	case "sync":
+		handler.StartDurableFactorySessionSync(recorder, req)
+	}
+	assertFactoryHTTPCallerStartResponse(t, recorder, variant, token, calls)
+}
+
+func factoryHTTPCallerStartRoot(t *testing.T, variant, token string, calls *int) *httpSessionsRootFake {
+	t.Helper()
+
+	root := &httpSessionsRootFake{onStart: func(_ context.Context, req factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+		(*calls)++
+		if variant == "absent" {
+			if req.Caller != nil {
+				t.Fatal("absent credentials acquired caller")
+			}
+		} else if req.Caller == nil || req.Caller.WorkerSessionID != "exact/caller" || req.Caller.Token != token {
+			t.Fatal("caller pair changed at owner boundary")
+		}
+		encoded, err := json.Marshal(req)
+		if err != nil || strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "exact/caller") {
+			t.Fatal("start serialized credentials")
+		}
+		if variant == "owner-refused" {
+			return factorysessions.SessionStartResult{}, fmt.Errorf("owner refusal: %w", workersessions.ErrCallerInvalid)
+		}
+		return factorysessions.SessionStartResult{
+			Live:  &factorysessions.SessionOpenResult{SessionID: "selected"},
+			Async: &factorysessions.AsyncStartResult{SessionID: "selected", Status: "RUNNING"},
+			Sync:  &factorysessions.SyncStartResult{AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "selected", Status: "SUCCEEDED"}, SyncOutcome: "COMPLETED"},
+		}, nil
+	}}
+	return root
+}
+
+func assertFactoryHTTPCallerStartResponse(t *testing.T, recorder *httptest.ResponseRecorder, variant, token string, calls int) {
+	t.Helper()
+
+	wantStatus, wantCalls := http.StatusOK, 1
+	if variant == "partial" || variant == "malformed" {
+		wantStatus, wantCalls = http.StatusForbidden, 0
+	}
+	if variant == "owner-refused" {
+		wantStatus = http.StatusForbidden
+	}
+	if recorder.Code != wantStatus || calls != wantCalls {
+		t.Fatalf("status=%d calls=%d; want %d/%d", recorder.Code, calls, wantStatus, wantCalls)
+	}
+	if strings.Contains(recorder.Body.String(), token) || strings.Contains(recorder.Body.String(), "exact/caller") {
+		t.Fatal("response disclosed credentials")
+	}
+	if wantStatus == http.StatusForbidden {
+		var response factoryapi.ErrorResponse
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || response.Code != factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID {
+			t.Fatal("caller refusal lost typed code")
+		}
 	}
 }

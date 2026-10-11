@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -75,6 +76,7 @@ type (
 type InvocationAuthority interface {
 	FactoryConfig(string) (*factorydefinitions.FactoryConfig, error)
 	SubmitWork(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	SubmitInvocation(context.Context, string, work.SubmitRequest, *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error)
 	Observe(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitSession(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
 }
@@ -129,12 +131,16 @@ func (o *SessionOwner) Invoke(
 	ctx context.Context,
 	sessionID string,
 	request InvocationRequest,
-) (FactoryInvocationResult, error) {
+) (result FactoryInvocationResult, invocationErr error) {
+	request.Caller = request.Caller.Clone()
 	prepared, err := o.prepareInvocation(ctx, sessionID, request)
 	if err != nil {
 		return FactoryInvocationResult{}, err
 	}
-	submitResult, terminal, err := o.submitInvocation(ctx, sessionID, request, prepared)
+	submitResult, release, terminal, err := o.submitInvocation(ctx, sessionID, request, prepared)
+	if release != nil {
+		defer func() { invocationErr = errors.Join(invocationErr, release()) }()
+	}
 	if terminal != nil || err != nil {
 		if terminal != nil {
 			return *terminal, err
@@ -198,24 +204,32 @@ func (o *SessionOwner) submitInvocation(
 	sessionID string,
 	request InvocationRequest,
 	prepared invocationPreparation,
-) (work.WorkRequestSubmitResult, *FactoryInvocationResult, error) {
+) (work.WorkRequestSubmitResult, func() error, *FactoryInvocationResult, error) {
 	submissionContextErr := contextError(ctx)
 	if submissionContextErr != nil {
-		return work.WorkRequestSubmitResult{}, nil, submissionContextErr
+		return work.WorkRequestSubmitResult{}, nil, nil, submissionContextErr
 	}
-	submitResult, err := o.authority.SubmitWork(ctx, sessionID, work.SubmitRequest{
+	submission := work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          prepared.workTypeName,
 		Content:             prepared.resolved.Content,
 		InvocationArguments: work.RuntimeInvocationArguments(prepared.factoryConfig.InvocationSignature, prepared.resolved.NormalizedArguments),
-	})
+	}
+	var submitResult work.WorkRequestSubmitResult
+	var release func() error
+	var err error
+	if request.Caller != nil {
+		submitResult, release, err = o.authority.SubmitInvocation(ctx, sessionID, submission, request.Caller)
+	} else {
+		submitResult, err = o.authority.SubmitWork(ctx, sessionID, submission)
+	}
 	if submissionContextErr == nil {
 		if contextErr := contextError(ctx); contextErr != nil {
 			result, waitErr := o.waitErrorResult(sessionID, SessionInvocationWaitInput{
 				RequestID: trimmedStringValue(request.RequestID), InputSource: prepared.resolved.Source,
 				FactoryConfig: prepared.factoryConfig, CancelOnTimeout: request.CancelOnTimeout,
 			}, contextErr)
-			return work.WorkRequestSubmitResult{}, &result, waitErr
+			return work.WorkRequestSubmitResult{}, release, &result, waitErr
 		}
 	}
 	if err != nil {
@@ -223,9 +237,9 @@ func (o *SessionOwner) submitInvocation(
 			o.telemetry.SubmissionFailure(prepared.factoryConfig, prepared.resolved.Source, err)
 			o.telemetry.LogSubmissionFailure(sessionID, prepared.resolved.Source, prepared.factoryConfig, err)
 		}
-		return work.WorkRequestSubmitResult{}, nil, err
+		return work.WorkRequestSubmitResult{}, release, nil, err
 	}
-	return submitResult, nil, nil
+	return submitResult, release, nil, nil
 }
 
 // InvokeFactorySession preserves the compatibility-shaped private capability

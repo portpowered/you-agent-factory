@@ -111,7 +111,7 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 	request := detachedTargetRequest()
 
-	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 	if err != nil {
 		t.Fatalf("BeginWorkerAttempt() error = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *
 	observerCalls := 0
 	request.Input.AttemptControlObserver = func(providers.AttemptControl) { observerCalls++ }
 
-	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 	request.Input.AttemptControlObserver(&projectedAttemptControl{})
 	if observerCalls != 1 {
 		t.Fatal("failed admission replaced the original observer")
@@ -217,7 +217,7 @@ func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
 			}
 
 			request := detachedTargetRequest()
-			terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+			terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 			if err != nil {
 				t.Fatalf("BeginWorkerAttempt() error = %v", err)
 			}
@@ -253,7 +253,7 @@ func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *
 	}
 	request := detachedTargetRequest()
 
-	if _, err := f.BeginWorkerAttempt(context.Background(), &request); err != nil {
+	if _, err := f.BeginWorkerAttempt(context.Background(), &request, nil); err != nil {
 		t.Fatalf("BeginWorkerAttempt() error = %v", err)
 	}
 	associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
@@ -979,7 +979,7 @@ func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *te
 	request := detachedTargetRequest()
 	request.Input.Work = []workers.WorkInput{{Kind: string(workers.DataTypeWork), WorkID: "source", WorkTypeID: "task"}}
 	request.Input.AttemptControlObserver = func(control providers.AttemptControl) { forwarded = control }
-	terminal, err := f.BeginWorkerAttempt(context.Background(), &request)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), &request, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1000,9 +1000,198 @@ func TestBeginWorkerAttemptBindsExecutingRequestAndFreezesTerminalIdentity(t *te
 func TestBeginWorkerAttemptRejectsNilRequest(t *testing.T) {
 	t.Parallel()
 	f := &factoryImpl{}
-	terminal, err := f.BeginWorkerAttempt(context.Background(), nil)
+	terminal, err := f.BeginWorkerAttempt(context.Background(), nil, nil)
 	if terminal != nil || !errors.Is(err, workers.ErrInvalidExecuteRequest) {
 		t.Fatalf("terminal present = %v, error = %v; want invalid request", terminal != nil, err)
+	}
+}
+
+func TestBeginWorkerAttemptForwardsDetachedCallerOnlyToAdmission(t *testing.T) {
+	t.Parallel()
+	for _, refused := range []bool{false, true} {
+		t.Run(map[bool]string{false: "admitted", true: "refused"}[refused], func(t *testing.T) {
+			t.Parallel()
+			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+			if refused {
+				sessions.beginErr = workersessions.ErrCallerInvalid
+			}
+			f := &factoryImpl{
+				cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
+				eventHistory: ledger,
+			}
+			request := detachedTargetRequest()
+			before := request.Clone()
+			token := strings.Repeat("A", 43)
+			caller := workersessions.CallerIdentity{WorkerSessionID: "exact/caller", Token: token}
+			mutatedDuringPreparation := false
+			sessions.onGet = func() {
+				mutatedDuringPreparation = true
+				caller.WorkerSessionID, caller.Token = "changed", "changed"
+			}
+			complete, err := f.BeginWorkerAttempt(t.Context(), &request, &caller)
+			caller.WorkerSessionID, caller.Token = "changed", "changed"
+			if !mutatedDuringPreparation {
+				t.Fatal("preparation did not exercise caller detachment")
+			}
+			got := sessions.request.Caller
+			if got == nil || got.WorkerSessionID != "exact/caller" || got.Token != token {
+				t.Fatal("admission lost the detached exact caller")
+			}
+			if refused {
+				if !errors.Is(err, workersessions.ErrCallerInvalid) || complete != nil {
+					t.Fatalf("refused admission = %v, callback present = %v", err, complete != nil)
+				}
+				if !reflect.DeepEqual(before, request.Clone()) || len(ledger.DispatchWorkerSessionAssociationsSnapshot()) != 0 {
+					t.Fatal("refused admission changed execution or published an association")
+				}
+			} else if err != nil || complete == nil || len(ledger.DispatchWorkerSessionAssociationsSnapshot()) != 1 {
+				t.Fatalf("admitted opening = %v, callback present = %v", err, complete != nil)
+			}
+			assertCallerAbsentFromPublishedAdmission(t, token, request, sessions.request, ledger.Events)
+		})
+	}
+}
+
+func assertCallerAbsentFromPublishedAdmission(t *testing.T, token string, values ...any) {
+	t.Helper()
+	for _, value := range values {
+		encoded, err := json.Marshal(value)
+		if err != nil || strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "exact/caller") {
+			t.Fatal("caller credentials entered execution or published admission facts")
+		}
+	}
+}
+
+func TestInvocationCallerScopeDetachesAndRefusesReleasedOrConflictingWork(t *testing.T) {
+	t.Parallel()
+	cfg := &runtimeConfig{}
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	original := *caller
+	release, err := cfg.retainInvocationCaller("source", caller)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caller.WorkerSessionID, caller.Token = "changed", "changed"
+	inputs := []workers.WorkInput{{WorkID: "source", Kind: string(workers.DataTypeWork)}}
+	first := cfg.invocationCaller(inputs)
+	if first == nil || *first != original {
+		t.Fatal("invocation caller was not detached")
+	}
+	first.Token = "changed again"
+	if got := cfg.invocationCaller(inputs); got == nil || *got != original {
+		t.Fatal("dispatch mutated retained authority")
+	}
+	if _, err := cfg.retainInvocationCaller("source", caller); !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatal("another invocation replaced retained authority")
+	}
+	if cfg.invocationCaller([]workers.WorkInput{{WorkID: "peer"}}) != nil || cfg.invocationCaller([]workers.WorkInput{{WorkID: "source", Kind: string(workers.DataTypeResource)}}) != nil {
+		t.Fatal("authority crossed Work or resource scope")
+	}
+	if got := cfg.invocationCaller(append(inputs, workers.WorkInput{WorkID: "peer"})); got == nil || got.Token != "" {
+		t.Fatal("mixed Work inputs borrowed one invocation's authority")
+	}
+	assertInvocationScopeReleasedWithoutRefusal(t, release)
+	assertInvocationScopeReleasedWithoutRefusal(t, release)
+	if got := cfg.invocationCaller(inputs); got == nil || got.WorkerSessionID != "" || got.Token != "" {
+		t.Fatal("released pending invocation kept credentials or became unattributed")
+	}
+	if _, err := cfg.retainInvocationCaller("source", caller); !errors.Is(err, work.ErrWorkRequestConflict) {
+		t.Fatal("released Work acquired new caller authority")
+	}
+}
+
+func assertInvocationScopeReleasedWithoutRefusal(t *testing.T, release func() error) {
+	t.Helper()
+	if err := release(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestInvocationCallerScopeReportsOnlyItsAdmissionRefusal(t *testing.T) {
+	t.Parallel()
+	cfg := &runtimeConfig{}
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "caller", Token: strings.Repeat("A", 43)}
+	releases := make(map[string]func() error)
+	for _, workID := range []string{"refused", "peer", "resource"} {
+		release, err := cfg.retainInvocationCaller(workID, caller)
+		if err != nil {
+			t.Fatal(err)
+		}
+		releases[workID] = release
+	}
+	cfg.refuseInvocationCaller([]workers.WorkInput{
+		{WorkID: "refused", Kind: string(workers.DataTypeWork)},
+		{WorkID: "resource", Kind: string(workers.DataTypeResource)},
+		{WorkID: "unattributed", Kind: string(workers.DataTypeWork)},
+	})
+	for workID, release := range releases {
+		for range 2 {
+			err := release()
+			if (workID == "refused" && !errors.Is(err, workersessions.ErrCallerInvalid)) || (workID != "refused" && err != nil) {
+				t.Fatalf("%s scope release error = %v", workID, err)
+			}
+		}
+		if got := cfg.invocationCaller([]workers.WorkInput{{WorkID: workID}}); got == nil || got.Token != "" || got.WorkerSessionID != "" {
+			t.Fatal("scope completion retained credentials or removed its late-dispatch denial")
+		}
+	}
+}
+
+type invocationCallerValidationService struct {
+	workersessions.Service
+	validate func(*workersessions.CallerIdentity) error
+}
+
+func (s invocationCallerValidationService) ValidateCaller(_ context.Context, caller *workersessions.CallerIdentity) error {
+	return s.validate(caller)
+}
+
+func TestPrepareInvocationCallerValidatesBeforeRetainingAuthority(t *testing.T) {
+	t.Parallel()
+	for _, refused := range []bool{false, true} {
+		t.Run(map[bool]string{false: "running", true: "owner lost during preparation"}[refused], func(t *testing.T) {
+			t.Parallel()
+			caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: strings.Repeat("A", 43)}
+			original := *caller
+			f := &factoryImpl{cfg: &runtimeConfig{
+				workRequestIDs: func() string { return "child-work" },
+				workerSessions: invocationCallerValidationService{validate: func(got *workersessions.CallerIdentity) error {
+					if got == caller || *got != original {
+						t.Fatal("caller was not detached before owner validation")
+					}
+					caller.Token = "mutated"
+					if refused {
+						return workersessions.ErrCallerInvalid
+					}
+					return nil
+				}},
+			}}
+			request, release, err := f.PrepareInvocation(t.Context(), work.SubmitRequest{RequestID: "request", WorkTypeID: "task"}, caller)
+			inputs := []workers.WorkInput{{WorkID: "child-work"}}
+			if refused {
+				if !errors.Is(err, workersessions.ErrCallerInvalid) || release != nil || request.WorkID != "" || f.cfg.invocationCaller(inputs) != nil {
+					t.Fatal("invalid caller acquired Work or execution authority")
+				}
+				return
+			}
+			if err != nil || release == nil || request.WorkID != "child-work" || request.RequestID != "request" || request.Name != "work-1" {
+				t.Fatal("prepared invocation changed ordinary request facts")
+			}
+			defer assertInvocationScopeReleasedWithoutRefusal(t, release)
+			assertRetainedInvocationCaller(t, f.cfg, inputs, original, request)
+		})
+	}
+}
+
+func assertRetainedInvocationCaller(t *testing.T, cfg *runtimeConfig, inputs []workers.WorkInput, original workersessions.CallerIdentity, request work.SubmitRequest) {
+	t.Helper()
+	if got := cfg.invocationCaller(inputs); got == nil || *got != original {
+		t.Fatal("preparation lost invocation-local caller")
+	}
+	encoded, err := json.Marshal(request)
+	if err != nil || strings.Contains(string(encoded), original.Token) {
+		t.Fatal("caller token entered prepared Work")
 	}
 }
 

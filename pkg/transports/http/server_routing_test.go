@@ -3,9 +3,12 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"github.com/gorilla/mux"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -206,4 +209,51 @@ func (root *serverRecordingsRoot) QueryHistoricalRecording(
 			Payload:       `{}`,
 		},
 	}, nil
+}
+
+// The protocol router keeps opaque Runtime child IDs as one segment and the
+// read boundary decodes exactly once, including literal percent sequences.
+func TestWorkerSessionReadRoutesPreserveOpaqueIdentity(t *testing.T) {
+	t.Parallel()
+	for _, prefix := range []string{"/worker-sessions/", "/factory-sessions/selected/worker-sessions/"} {
+		for _, id := range []string{"source/dispatch", "literal%2Fid", "ordinary"} {
+			t.Run(prefix+id, func(t *testing.T) {
+				t.Parallel()
+				router := mux.NewRouter()
+				router.HandleFunc(prefix+"{id}", func(w http.ResponseWriter, r *http.Request) {
+					actual := workerSessionReadID(r, factoryapi.WorkerSessionID(mux.Vars(r)["id"]))
+					if string(actual) != id {
+						t.Fatal("route changed opaque Worker Session ID")
+					}
+					w.WriteHeader(http.StatusNoContent)
+				})
+				server := &Server{router: router}
+				recorder := httptest.NewRecorder()
+				server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, prefix+url.PathEscape(id), nil))
+				if recorder.Code != http.StatusNoContent {
+					t.Fatalf("encoded Worker Session route status=%d", recorder.Code)
+				}
+			})
+		}
+	}
+}
+
+func TestFactoryCallerMalformedHeaderHasTypedRefusal(t *testing.T) {
+	t.Parallel()
+	for _, route := range []string{"/factory-sessions", "/factory-sessions/async", "/factory-sessions/sync", "/factory-sessions/selected/invocations"} {
+		t.Run(route, func(t *testing.T) {
+			t.Parallel()
+			server := newLiveSessionTestServer(nil)
+			req := httptest.NewRequest(http.MethodPost, route, strings.NewReader(`{}`))
+			req.Header.Set("X-You-Worker-Session-Id", "")
+			token := strings.Repeat("A", 43)
+			req.Header.Set("Authorization", "Bearer "+token)
+			recorder := httptest.NewRecorder()
+			server.Handler().ServeHTTP(recorder, req)
+			assertJSONError(t, recorder, http.StatusForbidden, "WORKER_SESSION_CALLER_INVALID", "Worker Session caller credentials are invalid")
+			if strings.Contains(recorder.Body.String(), token) {
+				t.Fatal("generated parameter refusal disclosed token")
+			}
+		})
+	}
 }

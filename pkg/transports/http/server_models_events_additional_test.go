@@ -114,7 +114,7 @@ func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t 
 		{
 			name: "start",
 			call: func(recorder *httptest.ResponseRecorder) {
-				srv.StartWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+				srv.StartWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.StartWorkerSessionParams{})
 			},
 		},
 		{
@@ -856,5 +856,26 @@ func TestServer_ListModels_RoutesThroughInjectedModelsService(t *testing.T) {
 	response := decodeJSONResponse[factoryapi.ListModelsResponse](t, rec)
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("models = %#v, want one OMNIVOICE summary", response.Results)
+	}
+}
+
+func TestGeneratedWorkerCallerHeaderRefusalIsTypedAndSafe(t *testing.T) {
+	t.Parallel()
+	server := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	request := httptest.NewRequest(http.MethodPost, "/worker-sessions", strings.NewReader("{}"))
+	request.Header.Add("X-You-Worker-Session-Id", "caller")
+	request.Header.Add("X-You-Worker-Session-Id", "peer")
+	request.Header.Set("Authorization", "Bearer "+strings.Repeat("A", 43))
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusForbidden || response.Code != factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID {
+		t.Fatal("generated route lost typed credential refusal")
+	}
+	if strings.Contains(recorder.Body.String(), strings.Repeat("A", 43)) || strings.Contains(recorder.Body.String(), "peer") {
+		t.Fatal("generated route disclosed credentials")
 	}
 }

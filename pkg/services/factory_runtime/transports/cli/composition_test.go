@@ -66,3 +66,7 @@ func TestBindServiceSupportsStatelessPresentationMethods(t *testing.T) {
 func (stubRuntimeRoot) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
 	return factoryruntime.InvokeWorkerResult{}, nil
 }
+
+func (stubRuntimeRoot) PrepareInvocation(_ context.Context, request factoryruntime.InvocationWork, _ *factoryruntime.InvocationCaller) (factoryruntime.InvocationWork, func() error, error) {
+	return request, nil, nil
+}

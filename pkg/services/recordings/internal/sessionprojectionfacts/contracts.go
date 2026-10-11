@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // SessionProjectionFacts contains the event-derived facts needed by live
@@ -52,4 +53,14 @@ type WorkerSessionAssociationFacts struct {
 	Model           *string
 	ReasoningEffort *string
 	AssociatedAt    time.Time
+}
+
+// WorkOriginFacts selects immutable payload ancestry and exact dispatch
+// associations from one ledger. Consumers retain policy ownership.
+type WorkOriginFacts struct {
+	InitialSnapshot              *work.WorkPayloadSnapshot
+	ParentSnapshotsByID          map[string]work.WorkPayloadSnapshot
+	WorkerSessionIDsByDispatchID map[string]string
+	WorkerSessionID              string
+	RelatedWorkIDs               []string
 }

@@ -3,6 +3,8 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/services/costs"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
@@ -148,14 +151,37 @@ func provideHTTPRuntimeBindingWithMetrics(
 	costsHandler := costshttp.NewHandler(costshttp.NewAdapter(costsQuery, costshttp.RuntimePaths, metricsScopeResolver), logger)
 	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(metricsQuery, metricsScopeResolver, factoryvisualizationhttp.MetricsRoot), logger)
 	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, workService, logs, fleet, fleetSources, attribution, logger)
+	endpointOwner, ok := logs.(interface {
+		ExecutionEndpointBinding() workersessions.ExecutionEndpointBinding
+	})
+	if !ok {
+		return nil, errors.New("construct HTTP runtime binding: Worker Sessions execution endpoint binding is required")
+	}
+	endpointBinding := endpointOwner.ExecutionEndpointBinding()
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
 				return nil, err
 			}
 		}
-		return newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, workerSessionsHandler, logger)
+		handler, err := newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, workerSessionsHandler, logger)
+		if err != nil {
+			return nil, err
+		}
+		return workerExecutionEndpointHandler{Handler: handler, bind: endpointBinding}, nil
 	}, nil
+}
+
+// Only a host exposing the canonical Worker Sessions admission routes may
+// advertise an execution endpoint. Workflow-only hosts retain their own shell.
+type workerExecutionEndpointHandler struct {
+	http.Handler
+	bind workersessions.ExecutionEndpointBinding
+}
+
+func (handler workerExecutionEndpointHandler) ObserveHostBinding(binding platformhttpserver.Binding) func() {
+	endpoint := "http://" + net.JoinHostPort(binding.Host, fmt.Sprint(binding.Port))
+	return handler.bind(endpoint)
 }
 
 func newHTTPRuntimeHandlerWithMetrics(

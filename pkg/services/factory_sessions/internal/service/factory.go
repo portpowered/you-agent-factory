@@ -12,6 +12,7 @@ import (
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // WorkerCommandRunnerAdapter is a composition-only identity adapter for the
@@ -41,6 +42,7 @@ type ScriptCommandRunner interface {
 // Root owns the process-scoped Factory Sessions state and fixed collaborators.
 // Its Assembly and live-change coordinator are injected during construction.
 type Root struct {
+	callerValidator   workersessions.CallerValidator
 	start             func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
 	inspectHistorical func(context.Context, factorysessions.SessionStartRequest) (HistoricalApplicationInspection, bool, error)
 	durable           durableexecution.Service
@@ -63,13 +65,14 @@ func NewRoot(
 	recordingsService recordings.Service,
 	modelInvocation modelinvocation.RuntimeModelInvocationOperation,
 	generateSessionID factorysessions.SessionIDGenerator,
+	callerValidator workersessions.CallerValidator,
 ) (*Root, error) {
 	concrete, err := requireRootAssembly(assembly, liveChangeCoordinator)
 	if err != nil {
 		return nil, err
 	}
 	root := &Root{
-		start: start, inspectHistorical: inspectHistorical, durable: durable,
+		callerValidator: callerValidator, start: start, inspectHistorical: inspectHistorical, durable: durable,
 		Assembly:                       concrete,
 		liveChangeCoordinator:          liveChangeCoordinator,
 		modelInvocation:                modelInvocation,
@@ -99,4 +102,14 @@ func selectsHistoricalReplayInspection(input recordings.LoadReplayInputResult) b
 	// return a legacy artifact without the newer framing metadata. Production
 	// path loaders always identify V1 versus V2 above.
 	return legacyReplayArtifactHasCanonicalEventShape(*input.Legacy)
+}
+
+func (r *Root) validateCaller(ctx context.Context, caller *workersessions.CallerIdentity) error {
+	if caller == nil {
+		return nil
+	}
+	if r.callerValidator == nil {
+		return workersessions.ErrCallerInvalid
+	}
+	return r.callerValidator(ctx, caller.Clone())
 }

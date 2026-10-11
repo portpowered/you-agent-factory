@@ -16,6 +16,28 @@ import (
 // Factory Session opened after HTTP binding is still part of the fleet view.
 type ObservationServiceCatalog func(context.Context) ([]workersessions.Service, error)
 
+// NewDirectFleetObservationSource adds process-owned direct sessions without
+// reintroducing runtime attempts outside the live Factory Session catalog.
+// Exact reads and explicit history retain the underlying owner's capabilities.
+func NewDirectFleetObservationSource(owner workersessions.Service) (workersessions.Service, error) {
+	registry, ok := owner.(*registry)
+	if !ok || registry == nil {
+		return nil, workersessions.ErrObservationProjectionUnavailable
+	}
+	return directFleetObservationSource{registry: registry}, nil
+}
+
+type directFleetObservationSource struct {
+	*registry
+}
+
+func (s directFleetObservationSource) ListWorkerSessionObservations(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error) {
+	if req.History != "" {
+		return s.registry.ListWorkerSessionObservations(ctx, req)
+	}
+	return s.listWorkerSessionObservations(ctx, req, true)
+}
+
 // FleetObservationService merges runtime-owned Worker Session registries into
 // one deterministic, bounded identity collection. It intentionally exposes
 // only the top-level list capability; lifecycle and Work-scoped operations

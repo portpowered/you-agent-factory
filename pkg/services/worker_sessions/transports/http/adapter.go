@@ -203,6 +203,7 @@ func (a *Adapter) WithTopLevelObservationService(service topLevelObservationServ
 func (a *Adapter) StartWorkerSession(
 	ctx context.Context,
 	request factoryapi.WorkerSessionStartRequest,
+	caller *workersessions.CallerIdentity,
 ) (factoryapi.WorkerSessionStartResponse, error) {
 	if a == nil || a.starter == nil {
 		return factoryapi.WorkerSessionStartResponse{}, errors.New("Worker Sessions start service is unavailable")
@@ -213,6 +214,10 @@ func (a *Adapter) StartWorkerSession(
 	start, err := WorkerSessionStartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.WorkerSessionStartResponse{}, err
+	}
+	if caller != nil {
+		identity := *caller
+		start.Caller = &identity
 	}
 	starter := a.starter
 	if hostID, selected := RuntimeHostSession(ctx); selected {

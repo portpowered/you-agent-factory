@@ -15,11 +15,11 @@ func (unavailableWorkerControlStore) ReadWorkerContinuationInput(context.Context
 	return nil, recordings.ErrWorkerRecordingPersistence
 }
 
-func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return recordings.ErrMissingWorkerRestartInputStore
 }
 
-func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return recordings.ErrInvalidRecordingRedactionRequest
 }
 

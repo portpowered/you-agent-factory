@@ -36,6 +36,11 @@ properties:
   message:
     type: string
     description: Human-readable failure summary when status is not `COMPLETED`.
+  failureReason:
+    $ref: '../events/WorkFailureType.yaml'
+    description: >-
+      Recognized failure category selected by the invocation owner. Absent for
+      successful invocations and failures without a recognized category.
   sessionId:
     type: string
     description: Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
