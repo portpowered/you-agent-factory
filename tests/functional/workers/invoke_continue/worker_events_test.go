@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"reflect"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -101,8 +103,80 @@ func TestWorkerEventsDirectIdleFollowAndObserverDetach(t *testing.T) {
 	if !strings.Contains(output, "events-later-target") {
 		t.Fatal("finite CLI stream omitted captured provider progress")
 	}
+	assertWorkerEventsFiniteMCP(t, ctx, host, home, dir, endpoint)
+	assertWorkerEventsCommandIdle(t, peer)
 	peer.releaseProgress()
 	t19AwaitSignal(t, ctx, peer.joined, "peer provider joined")
+}
+
+// The existing finite MCP view must match public SSE frames and its bounded
+// truncation meaning while another provider execution remains idle/alive.
+func assertWorkerEventsFiniteMCP(t *testing.T, ctx context.Context, host invokeContinueStartedProcess, home, dir, endpoint string) {
+	t.Helper()
+	frames := readWorkerEventsFinite(t, ctx, endpoint+"?replayOnly=true")
+	mcpCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	input := support.FakeInputs(mcpCtx, []string{"you", "--server", host.baseURL, "server", "mcp", "--project-root", dir})
+	input.Input.Env, input.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	stdinRead, stdinWrite := io.Pipe()
+	stdoutRead, stdoutWrite := io.Pipe()
+	input.Input.Stdin, input.Input.Stdout = stdinRead, stdoutWrite
+	done := make(chan error, 1)
+	go func() {
+		err := host.process.Execute(input.Input)
+		_ = stdinRead.CloseWithError(err)
+		_ = stdoutWrite.CloseWithError(err)
+		done <- err
+	}()
+	defer func() {
+		cancel()
+		_ = stdinWrite.Close()
+		_ = stdoutRead.Close()
+		select {
+		case err := <-done:
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
+				t.Errorf("finite MCP process: %v", err)
+			}
+		case <-ctx.Done():
+			t.Error("finite MCP process did not join")
+		}
+	}()
+	client := mcp.NewClient(&mcp.Implementation{Name: "worker-events-finite", Version: "test"}, nil)
+	session, err := client.Connect(mcpCtx, &mcp.IOTransport{Reader: stdoutRead, Writer: stdinWrite}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	for _, limit := range []int{1, 1000} {
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{
+			"action": "READ", "workerSessionId": "events-target", "view": "events", "limit": limit,
+		}})
+		if err != nil || result.IsError {
+			t.Fatalf("finite MCP events: %v %+v", err, result)
+		}
+		var envelope struct {
+			Result struct {
+				Events struct {
+					Events    []api.WorkerSessionEvent `json:"events"`
+					Truncated bool                     `json:"truncated"`
+				} `json:"events"`
+			} `json:"result"`
+		}
+		if len(result.Content) != 1 {
+			t.Fatalf("finite MCP content count: %d", len(result.Content))
+		}
+		content, ok := result.Content[0].(*mcp.TextContent)
+		if !ok || json.Unmarshal([]byte(content.Text), &envelope) != nil {
+			t.Fatalf("finite MCP envelope: %+v", result.Content)
+		}
+		want := frames
+		if limit == 1 {
+			want = frames[:1]
+		}
+		if !reflect.DeepEqual(envelope.Result.Events.Events, want) || envelope.Result.Events.Truncated != (limit == 1) {
+			t.Fatalf("finite MCP changed frames/truncation: %s", content.Text)
+		}
+	}
 }
 
 func assertWorkerEventsCLIComplete(t *testing.T, ctx context.Context, command *support.ProcessCommand, writer *s8SignalWriter) {
@@ -115,6 +189,102 @@ func assertWorkerEventsCLIComplete(t *testing.T, ctx context.Context, command *s
 	if command.Err() != nil || !strings.Contains(string(writer.bytes()), "events-later-target") {
 		t.Fatalf("CLI follow lost later progress: %v %s", command.Err(), writer.bytes())
 	}
+}
+
+// A one-record page forces retained replay to cross a page boundary. The
+// provider advances only after both the finite snapshot and cursor follower
+// have established, so later activity cannot change the finite replay head.
+func TestWorkerEventsPagedFixedHeadAndReconnect(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	root, dir := t.TempDir(), t.TempDir()
+	hostDir, home, err := prepareInvokeContinuePackageRoot(t, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := newWorkerEventsRunner("target")
+	runner.initial = directCodexSessionOutput("events-thread-target", "events-prefix-target")
+	defer runner.releaseProgress()
+	route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+	host := startContinuationRestartHost(t, root, hostDir, home, route)
+	invokeWorkerEventsDirect(t, host, home, dir, "events-target")
+	t19AwaitSignal(t, ctx, runner.ready, "retained provider prefix")
+	endpoint := host.baseURL + "/worker-sessions/events-target/events"
+	baseline := readWorkerEventsFinite(t, ctx, endpoint+"?replayOnly=true&limit=1")
+	prefix := assertWorkerEventsActivePrefix(t, baseline)
+	head := prefix[len(prefix)-1].Event.Position
+	fixed := openWorkerEventsDirect(t, ctx, endpoint+"?replayOnly=true&limit=1")
+	defer fixed.Body.Close()
+	follow := openWorkerEventsDirect(t, ctx, endpoint+"?after_position="+strconv.FormatInt(head, 10))
+	defer follow.Body.Close()
+	runner.releaseProgress()
+	frames, err := drainWorkerEventsDirect(fixed)
+	if err != nil {
+		t.Fatalf("fixed replay EOF: %v", err)
+	}
+	got := assertWorkerEventsActivePrefix(t, frames)
+	if !reflect.DeepEqual(got, prefix) {
+		t.Fatal("head advancement changed the pinned prefix, cursors or stored times")
+	}
+	suffix, err := drainWorkerEventsDirect(follow)
+	if err != nil {
+		t.Fatalf("reconnected follower EOF: %v", err)
+	}
+	var combined []api.WorkerSessionEvent
+	combined = append(combined, prefix...)
+	for _, frame := range suffix {
+		if frame.Event.Position > 0 && frame.Event.Position <= head {
+			t.Fatal("reconnect duplicated an acknowledged prefix record")
+		}
+		combined = append(combined, frame)
+	}
+	records := assertWorkerEventsDirectRecords(t, combined, "events-target")
+	ended := readWorkerEventsFinite(t, ctx, endpoint+"?replayOnly=true&limit=1")
+	endedRecords := assertWorkerEventsDirectRecords(t, ended, "events-target")
+	if len(endedRecords) != len(records) {
+		t.Fatal("reconnect missed records at the retained/live boundary")
+	}
+	for i := range records {
+		if !reflect.DeepEqual(records[i].Event.Payload, endedRecords[i].Event.Payload) || !reflect.DeepEqual(records[i].Event.Cursor, endedRecords[i].Event.Cursor) {
+			t.Fatal("reconnect changed captured content or cursors")
+		}
+	}
+}
+
+func readWorkerEventsFinite(t *testing.T, ctx context.Context, endpoint string) []api.WorkerSessionEvent {
+	t.Helper()
+	response := openWorkerEventsDirect(t, ctx, endpoint)
+	defer response.Body.Close()
+	frames, err := drainWorkerEventsDirect(response)
+	if err != nil {
+		t.Fatalf("finite replay EOF: %v", err)
+	}
+	return frames
+}
+
+func assertWorkerEventsActivePrefix(t *testing.T, frames []api.WorkerSessionEvent) []api.WorkerSessionEvent {
+	t.Helper()
+	var records []api.WorkerSessionEvent
+	var summary *api.WorkerSessionReplaySummary
+	for _, frame := range frames {
+		if frame.WorkerSessionId != "events-target" || frame.FactorySessionId != nil || len(frame.WorkIds) != 0 || frame.Delivery == api.WorkerSessionEventDeliverySourceFailure {
+			t.Fatalf("active prefix identity/failure: %+v", frame)
+		}
+		if frame.ReplaySummary != nil {
+			summary = frame.ReplaySummary
+		}
+		if frame.Event.Position > 0 {
+			if frame.Event.Position != int64(len(records)+1) {
+				t.Fatal("paged prefix omitted or duplicated a position")
+			}
+			records = append(records, frame)
+		}
+	}
+	if len(records) < 2 || summary == nil || summary.Complete || summary.EventsEmitted != int64(len(records)) {
+		t.Fatalf("active paged prefix/completion: records=%d summary=%+v", len(records), summary)
+	}
+	return records
 }
 
 // Canonical IDs select only the host's private profile. A foreign ID never
@@ -295,6 +465,7 @@ func assertWorkerEventsDirectDenial(t *testing.T, ctx context.Context, endpoint 
 
 type workerEventsRunner struct {
 	id                     string
+	initial                []byte
 	ready, release, joined chan struct{}
 }
 
@@ -317,6 +488,7 @@ func (runner *workerEventsRunner) Run(ctx context.Context, request platformproce
 func (runner *workerEventsRunner) RunStreaming(ctx context.Context, _ platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
 	defer close(runner.joined)
 	emitWSRFT015CodexOutput(observe, []byte(fmt.Sprintf("{\"type\":\"thread.started\",\"thread_id\":%q}\n", "events-thread-"+runner.id)))
+	emitWSRFT015CodexOutput(observe, runner.initial)
 	close(runner.ready)
 	select {
 	case <-ctx.Done():
