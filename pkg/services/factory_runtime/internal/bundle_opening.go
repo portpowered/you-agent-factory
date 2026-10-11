@@ -80,6 +80,7 @@ type runtimeResourceOpening func(
 	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
+	progressPublisher workers.ProgressPublisher,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error)
@@ -206,6 +207,7 @@ func (opening *BundleOpening) Open(
 		workerServiceWithProgress,
 		runtimeWorkerSessionBoundary{Service: opening.workerSessions, opener: attempts, execution: workerServiceWithProgress, clock: spec.Clock, scheduler: opening.workerAttemptScheduler, runtimeID: spec.RuntimeInstanceID},
 		attempts,
+		providerSessionProgress,
 		dispatchCompleted,
 		mockWorkersConfig,
 	)
@@ -216,6 +218,5 @@ func (opening *BundleOpening) Open(
 		return bundle, err
 	}
 	setReplayEvents(bundle.Factory, spec.ReplayEvents)
-	setBundleProgressPublisher(bundle, providerSessionProgress)
 	return bundle, nil
 }

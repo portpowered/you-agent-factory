@@ -47,6 +47,7 @@ type engineOpening interface {
 		statelessService workers.Service,
 		workerSessionsService workersessions.Service,
 		workerAttempts factory.WorkerAttemptOpener,
+		progressPublisher workers.ProgressPublisher,
 		runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 		invocationFileReader interfaces.FileReader,
 		workflowContext *factory_context.FactoryContext,
@@ -177,6 +178,7 @@ func (f *RuntimeFactory) Build(
 	workerService workers.Service,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
+	progressPublisher workers.ProgressPublisher,
 	dispatchCompleted func(string),
 	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (result *factoryhost.Bundle, buildErr error) {
@@ -334,6 +336,7 @@ func (f *RuntimeFactory) Build(
 		mockWorkersConfig,
 		workerSessions,
 		workerAttempts,
+		progressPublisher,
 	)
 	if err != nil {
 		return nil, err
@@ -395,6 +398,7 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	workerSessions workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
+	progressPublisher workers.ProgressPublisher,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, sessionID, strings.TrimSpace(backendScopeID),
@@ -416,6 +420,7 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 		workerService,
 		workerSessions,
 		workerAttempts,
+		progressPublisher,
 		loadedFactoryCfg,
 		invocationFileReader(f.inputFiles),
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), canonicalSessionID),

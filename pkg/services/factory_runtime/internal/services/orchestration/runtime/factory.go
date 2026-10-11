@@ -225,6 +225,7 @@ func (opening *EngineOpening) Open(
 	statelessService workers.Service,
 	workerSessionsService workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
+	progressPublisher workers.ProgressPublisher,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	invocationFileReader interfaces.FileReader,
 	workflowContext *factory_context.FactoryContext,
@@ -266,6 +267,7 @@ func (opening *EngineOpening) Open(
 		promptSourceReader:                 opening.promptSources,
 		workerSessions:                     workerSessionsService,
 		workerAttempts:                     workerAttempts,
+		progressPublisher:                  progressPublisher,
 		attemptCapacity:                    defaultRuntimeAttemptCapacity,
 		newID:                              opening.newID,
 		runtimeConfig:                      runtimeDefinitions,
@@ -1113,14 +1115,6 @@ func lifecycleControlStatusFromWorldState(worldState *interfaces.FactoryWorldSta
 		return strings.TrimSpace(worldState.SessionBracket.LifecycleControlStatus)
 	}
 	return ""
-}
-
-// SetProgressPublisher installs the Runtime-owned observation bridge.
-func (f *factoryImpl) SetProgressPublisher(publisher workers.ProgressPublisher) {
-	if f == nil || f.cfg == nil {
-		return
-	}
-	f.cfg.progressPublisher = publisher
 }
 
 // RuntimeProgressPublisher exposes the already-bound runtime observation
