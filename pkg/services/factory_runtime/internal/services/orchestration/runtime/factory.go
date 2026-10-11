@@ -626,6 +626,12 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 		stopReason = dispatchplanning.RuntimeStopReasonCancelled
 	}
 	stopErr := f.stopDispatchRuntime(ctx, stopReason)
+	if stopErr == nil {
+		// Join is the boundary at which cancellation results become authoritative.
+		// The engine loop has exited, so completion can reconcile without admitting
+		// another dispatch or racing the run's final recording response.
+		stopErr = f.engine.ReconcileJoinedResults(context.WithoutCancel(ctx))
+	}
 
 	f.mu.Lock()
 	previousState = f.state
