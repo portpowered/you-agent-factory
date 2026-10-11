@@ -8,7 +8,6 @@ package http
 
 import (
 	"context"
-	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -94,9 +93,6 @@ func (a *Adapter) invokeListWork(
 	sessionID string,
 	options work.ListOptions,
 ) (work.ListResult, error) {
-	if a == nil || a.root == nil {
-		return work.ListResult{}, errors.New("work service is required")
-	}
 	return a.root.ListWork(ctx, sessionID, options)
 }
 
@@ -106,9 +102,6 @@ func (a *Adapter) invokeGetWork(
 	sessionID string,
 	workID string,
 ) (work.ReadModel, error) {
-	if a == nil || a.root == nil {
-		return work.ReadModel{}, errors.New("work service is required")
-	}
 	return a.root.GetWork(ctx, sessionID, workID)
 }
 
@@ -117,9 +110,6 @@ func (a *Adapter) invokeStageContent(
 	ctx context.Context,
 	request work.StageContentRequest,
 ) (work.StageContentResult, error) {
-	if a == nil || a.root == nil {
-		return work.StageContentResult{}, errors.New("work service is required")
-	}
 	return a.root.StageContent(ctx, request)
 }
 
@@ -130,9 +120,6 @@ func (a *Adapter) invokeSubmitWorkRequestForSession(
 	sessionID string,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	if a == nil || a.root == nil {
-		return work.WorkRequestSubmitResult{}, errors.New("work service is required")
-	}
 	return a.root.SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
@@ -142,9 +129,6 @@ func (a *Adapter) invokePrepareWorkRequest(
 	request work.WorkRequest,
 	canonicalJSON []byte,
 ) (work.WorkRequest, error) {
-	if a == nil || a.root == nil {
-		return work.WorkRequest{}, errors.New("work service is required")
-	}
 	defaultWorkTypeID := ""
 	var err error
 	if a.defaultWorkType != nil {
@@ -167,8 +151,5 @@ func (a *Adapter) invokeMoveWorkAndRead(
 	stateName string,
 	requestID string,
 ) (work.ReadModel, error) {
-	if a == nil || a.root == nil {
-		return work.ReadModel{}, errors.New("work service is required")
-	}
 	return a.root.MoveWorkAndRead(ctx, sessionID, workID, stateName, requestID)
 }

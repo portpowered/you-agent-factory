@@ -10,6 +10,7 @@ import (
 	requestwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/request_preparation/wire"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	statewire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
 
 type InvocationInputPolicy = invocationreturnpolicy.InvocationInputPreparation
@@ -50,4 +51,10 @@ func NewRuntimeSessionResolver(runtimes work.RuntimeResolver) RuntimeSessionReso
 }
 func NewStateAccess(sessions RuntimeSessionResolver, snapshots SnapshotReader, durability work.CompletedFlushSequenceReader) StateAccess {
 	return statewire.NewService(sessions, snapshots, durability)
+}
+
+type ListRequestPolicy = stateaccessquery.ListRequestPreparation
+
+func NewListRequestPolicy() ListRequestPolicy {
+	return stateaccessquery.NewListRequestPreparation()
 }

@@ -17,10 +17,6 @@ func FactoryLayout(
 	path string,
 	expand factorydefinitions.FactoryLayoutExpander,
 ) (string, factorydefinitions.LayoutExpansionReport, error) {
-	if expand == nil {
-		return "", factorydefinitions.LayoutExpansionReport{},
-			fmt.Errorf("Factory Definitions layout expander is required")
-	}
 	if err := ctx.Err(); err != nil {
 		return "", factorydefinitions.LayoutExpansionReport{}, err
 	}

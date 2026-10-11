@@ -14,6 +14,7 @@ import (
 // Construction does not choose filesystem adapters or execute layout operations.
 func NewService(
 	validator factorydefinitions.Validator,
+	validateDefinition factorydefinitions.DefinitionValidationOperation,
 	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
 	decodeFactory factorydefinitions.FactoryConfigJSONDecoder,
 	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
@@ -28,6 +29,9 @@ func NewService(
 ) (authoringlayout.Service, error) {
 	if validator == nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: validator is required")
+	}
+	if validateDefinition == nil {
+		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: validation operation is required")
 	}
 	if mapInput == nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: payload mapper is required")
@@ -64,6 +68,7 @@ func NewService(
 	}
 	service := authoringlayoutservice.New(
 		validator,
+		validateDefinition,
 		mapInput,
 		decodeFactory,
 		normalizeAuthored,
@@ -76,8 +81,5 @@ func NewService(
 		requireDefinitionDir,
 		directories,
 	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Factory Definitions authoring_layout: implementation rejected its dependencies")
-	}
 	return service, nil
 }

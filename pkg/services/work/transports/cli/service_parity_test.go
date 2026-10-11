@@ -12,6 +12,7 @@ import (
 
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli"
+	workpolicy "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -101,7 +102,7 @@ func TestConstructedService_ListVerboseDiagnosticsOnHTTPFailure(t *testing.T) {
 func TestConstructedService_ListValidationFailurePreservesStateTypeMessage(t *testing.T) {
 	t.Parallel()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.List(workcli.ListConfig{
 		Context:   context.Background(),
@@ -132,7 +133,7 @@ func TestConstructedService_ShowHumanOutputPreservesAcceptedSummary(t *testing.T
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: context.Background(),
@@ -177,7 +178,7 @@ func TestConstructedService_ShowJSONOutputEmitsWorkObject(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: context.Background(),
@@ -213,7 +214,7 @@ func TestConstructedService_ShowNotFoundPreservesExitRelevantError(t *testing.T)
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: context.Background(),
@@ -254,7 +255,7 @@ func TestConstructedService_MoveHumanOutputPreservesMoveSummary(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.Move(workcli.MoveConfig{
 		Context:   context.Background(),
@@ -297,7 +298,7 @@ func TestConstructedService_MoveJSONOutputEmitsStableEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.Move(workcli.MoveConfig{
 		Context:   context.Background(),
@@ -341,7 +342,7 @@ func TestConstructedService_MoveHTTPRejectionPreservesDiagnosticsAndError(t *tes
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := service.Move(workcli.MoveConfig{
@@ -376,7 +377,7 @@ func TestConstructedService_VisualizeFailureLeavesOutputEmpty(t *testing.T) {
 	operation := func(workdomain.VisualizationRequest) (string, error) {
 		return "", want
 	}
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), operation)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), operation)
 	var out bytes.Buffer
 	err := service.Visualize(workcli.VisualizeConfig{
 		BatchFile: "batch.json",
@@ -396,7 +397,7 @@ func TestConstructedService_ShowHonorsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: ctx,

@@ -13,9 +13,6 @@ func Import(
 	payload []byte,
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 ) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
-	if decodeSnapshot == nil {
-		return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
-	}
 	trimmed := bytes.TrimSpace(payload)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
 		return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload

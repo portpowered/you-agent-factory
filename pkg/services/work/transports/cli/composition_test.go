@@ -14,6 +14,7 @@ import (
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli"
 	transportworkcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
+	workpolicy "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -63,7 +64,7 @@ func TestBindServiceDelegatesThroughAdapterService(t *testing.T) {
 		return "graph TD\n", nil
 	}
 	service := workcli.BindService(workcli.Config{
-		ListPrepare: workdomain.NewListRequestPreparation(),
+		ListPrepare: workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()),
 		Visualize:   operation,
 	})
 	if service == nil {
@@ -129,7 +130,7 @@ func testHTTPErrorServer(t *testing.T) string {
 func TestBindListMatchesFreeFunctionFacade(t *testing.T) {
 	t.Parallel()
 
-	prepare := workdomain.NewListRequestPreparation()
+	prepare := workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy())
 	transport := testHTTPProtocol(t)
 	operation := workcli.BindList(transport, prepare)
 	server := testHTTPErrorServer(t)
@@ -153,7 +154,7 @@ func TestBindListMatchesFreeFunctionFacade(t *testing.T) {
 func TestBindListMatchesTransportCompositionFacade(t *testing.T) {
 	t.Parallel()
 
-	prepare := workdomain.NewListRequestPreparation()
+	prepare := workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy())
 	transport := testHTTPProtocol(t)
 	bound := workcli.BindList(transport, prepare)
 	facade := transportworkcli.NewList(transport, prepare)

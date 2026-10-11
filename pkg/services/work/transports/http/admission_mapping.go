@@ -376,9 +376,6 @@ func submitWorkContentFromAPI(
 	if req.Items == nil {
 		return contentcontract.PartsFromGenerated(req.Content), nil
 	}
-	if root == nil {
-		return nil, fmt.Errorf("work service is required")
-	}
 	items, err := stagedSubmissionItemsFromGenerated(*req.Items)
 	if err != nil {
 		return nil, err

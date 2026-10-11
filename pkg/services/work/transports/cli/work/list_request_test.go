@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	workservice "github.com/portpowered/infinite-you/pkg/services/work"
+	workpolicy "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 type listRequestPreparationFunc func(context.Context, workservice.ListOptions) (workservice.PreparedListRequest, error)
@@ -30,7 +31,7 @@ func TestList_TerminalityFlagsRejectBeforeHTTP(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t), workservice.NewListRequestPreparation())(ListConfig{
+	err := NewList(testHTTPProtocol(t), workservice.NewListRequestPreparation(workpolicy.NewListRequestPolicy()))(ListConfig{
 		Context:     context.Background(),
 		Server:      server.URL,
 		Terminal:    true,

@@ -11,7 +11,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -262,13 +264,16 @@ func prepareSaveDefinition(t *testing.T, process support.Process, env []string, 
 		t.Fatal(err)
 	}
 	root := t.TempDir()
+	if name == "save-corrupt-replace" {
+		root = filepath.Join(root, "factory")
+	}
 	support.CreateAndActivateNamedFactoryAtRootWithProcess(t, process, env, dir, root, name, source)
 	return selectedDefinition{name, root}
 }
 
 func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process, env []string, baseURL string, cell selectedDefinition) {
 	t.Helper()
-	id := openDefinitionsNamedSession(t, baseURL, cell.root, cell.name)
+	id, witness := definitionSaveSession(t, process, env, baseURL, cell)
 	closed := false
 	t.Cleanup(func() {
 		if !closed {
@@ -287,6 +292,7 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 		t.Fatal(err)
 	}
 	assertDefinitionInvocation(t, baseURL, id, "definition-before")
+	witness.capture(t, baseURL)
 	if cell.name == "save-missing" {
 		assertMissingDefinitionKeepsOwner(t, baseURL, cell.root)
 	} else {
@@ -312,6 +318,7 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 		t.Fatal("failed definition request changed active readback")
 	}
 	assertDefinitionInvocation(t, baseURL, id, want)
+	witness.assertAfter(t, baseURL)
 	if cell.name == "save-success" {
 		fresh := openDefinitionsNamedSession(t, baseURL, cell.root, "accepted-update")
 		t.Cleanup(func() { closeDefinitionsFactorySession(t, baseURL, fresh) })
@@ -325,6 +332,7 @@ func assertSavedDefinitionSessionIsolation(t *testing.T, process support.Process
 		return
 	}
 	closed = true
+	witness.assertDurable(t)
 	body, _, status := definitionsHTTPRequest(t, http.MethodGet, endpoint, nil)
 	assertDefinitionsHTTPError(t, body, status, http.StatusNotFound, "NOT_FOUND")
 	payload, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: before})
@@ -358,8 +366,130 @@ func selectSaveTarget(updated *factoryapi.Factory, before factoryapi.Factory, ce
 	} else if cell == "save-corrupt-create" {
 		updated.Name = "corrupt-write"
 	} else if cell == "save-corrupt-replace" {
-		updated.Name = before.Name
+		updated.Name = cell
 		updated.Version.Logical++
 		updated.Version.Physical = updated.Version.Physical.Add(1)
 	}
+}
+
+func assertDefinitionCursorRetained(t *testing.T, baseURL, id string, before []factoryapi.FactoryEvent, cursor support.FactoryEventReadCursor) {
+	t.Helper()
+	after := support.GetFactoryEventsForSessionAt(t, baseURL, id)
+	if len(after) <= len(before) {
+		t.Fatal("useful Work did not append history after save")
+	}
+	for i, event := range before {
+		if after[i].Id != event.Id || support.ReconnectSequenceForFactoryEvent(after[i]) != support.ReconnectSequenceForFactoryEvent(event) {
+			t.Fatal("save changed retained cursor history")
+		}
+	}
+	tail := support.GetFactoryEventsAfterForSessionAt(t, baseURL, id, cursor)
+	if len(tail) != len(after)-len(before) {
+		t.Fatalf("reconnect tail=%d, want %d", len(tail), len(after)-len(before))
+	}
+	for i, event := range tail {
+		if event.Id != after[len(before)+i].Id || support.ReconnectSequenceForFactoryEvent(event) <= *cursor.AfterSequence {
+			t.Fatal("reconnect lost event identity/order")
+		}
+	}
+}
+func assertDefinitionRecordedCursor(t *testing.T, path string, cursor support.FactoryEventReadCursor) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recording factoryapi.FactoryRecording
+	if err := json.Unmarshal(raw, &recording); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range recording.Events {
+		if event.Id == cursor.AfterEventID {
+			found = true
+			if support.ReconnectSequenceForFactoryEvent(event) != *cursor.AfterSequence {
+				t.Fatal("durable history changed cursor sequence")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("durable history lost the pre-save cursor")
+	}
+}
+
+func startRecordedDefinitionSession(t *testing.T, process support.Process, env []string, baseURL string, cell selectedDefinition) (string, *support.ProcessCommand, string) {
+	t.Helper()
+	id := uuid.NewString()
+	artifact := filepath.Join(t.TempDir(), "__factory_session_id__.json")
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--named", cell.name, "--session", id, "--record", artifact, "--continuously", "--quiet"})
+	inputs.Input.Env, inputs.Input.WorkingDirectory = env, filepath.Dir(cell.root)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	t.Cleanup(func() { command.Stop(t) })
+	_, err := support.WaitForObservation(10*time.Second, func() (int, error) {
+		select {
+		case <-command.Done():
+			return 0, command.Err()
+		default:
+		}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/factory-sessions/"+id+"/factory", nil)
+		if err != nil {
+			return 0, err
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return 0, err
+		}
+		if err := response.Body.Close(); err != nil {
+			return 0, err
+		}
+		return response.StatusCode, nil
+	}, func(status int) bool { return status == http.StatusOK })
+	if err != nil {
+		t.Fatalf("recorded session not ready: %v", err)
+	}
+	return id, command, strings.ReplaceAll(artifact, "__factory_session_id__", id)
+}
+
+type definitionSaveCursorWitness struct {
+	id       string
+	command  *support.ProcessCommand
+	artifact string
+	history  []factoryapi.FactoryEvent
+	cursor   support.FactoryEventReadCursor
+}
+
+func definitionSaveSession(t *testing.T, process support.Process, env []string, baseURL string, cell selectedDefinition) (string, *definitionSaveCursorWitness) {
+	t.Helper()
+	if cell.name != "save-corrupt-replace" {
+		return openDefinitionsNamedSession(t, baseURL, cell.root, cell.name), nil
+	}
+	id, command, artifact := startRecordedDefinitionSession(t, process, env, baseURL, cell)
+	return id, &definitionSaveCursorWitness{id: id, command: command, artifact: artifact}
+}
+func (w *definitionSaveCursorWitness) capture(t *testing.T, baseURL string) {
+	t.Helper()
+	if w == nil {
+		return
+	}
+	w.history = support.GetFactoryEventsForSessionAt(t, baseURL, w.id)
+	if len(w.history) == 0 {
+		t.Fatal("initial Work produced no cursor")
+	}
+	pivot := w.history[len(w.history)-1]
+	sequence := support.ReconnectSequenceForFactoryEvent(pivot)
+	w.cursor = support.FactoryEventReadCursor{AfterEventID: pivot.Id, AfterSequence: &sequence}
+}
+func (w *definitionSaveCursorWitness) assertAfter(t *testing.T, baseURL string) {
+	t.Helper()
+	if w != nil {
+		assertDefinitionCursorRetained(t, baseURL, w.id, w.history, w.cursor)
+	}
+}
+func (w *definitionSaveCursorWitness) assertDurable(t *testing.T) {
+	t.Helper()
+	if w == nil {
+		return
+	}
+	w.command.Stop(t)
+	assertDefinitionRecordedCursor(t, w.artifact, w.cursor)
 }

@@ -1,6 +1,7 @@
 package work
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -8,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
 
 func TestResolveTextInput_PositionalOnly(t *testing.T) {
@@ -358,5 +361,68 @@ func TestValidateContentURL(t *testing.T) {
 	}
 	if err := ValidateContentURL("ftp://example.com/a.png"); err == nil {
 		t.Fatal("ValidateContentURL accepted unsupported scheme")
+	}
+}
+
+// The mapping adapter is isolated from the query policy by its injected role.
+type controlledListPreparation struct {
+	prepare func(context.Context, stateaccessquery.ListOptions) (stateaccessquery.PreparedListRequest, error)
+}
+
+func (p controlledListPreparation) PrepareListRequest(ctx context.Context, options stateaccessquery.ListOptions) (stateaccessquery.PreparedListRequest, error) {
+	return p.prepare(ctx, options)
+}
+func TestListRequestPreparationMapsDetachedResults(t *testing.T) {
+	t.Parallel()
+	parentContext := t.Context()
+	role := NewListRequestPreparation(controlledListPreparation{prepare: func(ctx context.Context, options stateaccessquery.ListOptions) (stateaccessquery.PreparedListRequest, error) {
+		if ctx != parentContext || options.Name != "selected" || !options.Counts {
+			t.Fatal("request mapping changed")
+		}
+		options.MaxResults = 7
+		return stateaccessquery.PreparedListRequest{Options: options, FilterSummary: "name"}, nil
+	}})
+	first, err := role.PrepareListRequest(t.Context(), ListOptions{Name: "selected", Counts: true})
+	if err != nil || first.Options.MaxResults != 7 || first.FilterSummary != "name" {
+		t.Fatalf("prepared = %#v, %v", first, err)
+	}
+	first.Options.Name = "mutated"
+	second, err := role.PrepareListRequest(t.Context(), ListOptions{Name: "selected", Counts: true})
+	if err != nil || second.Options.Name != "selected" {
+		t.Fatalf("repeated result = %#v, %v", second, err)
+	}
+	for i := 0; i < 3; i++ {
+		t.Run(string(rune('a'+i)), func(t *testing.T) {
+			t.Parallel()
+			got, err := role.PrepareListRequest(parentContext, ListOptions{Name: "selected", Counts: true})
+			if err != nil || got.Options.Name != "selected" || got.Options.MaxResults != 7 {
+				t.Fatalf("concurrent result = %#v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestListRequestPreparationPreservesTypedErrors(t *testing.T) {
+	t.Parallel()
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, &stateaccessquery.ValidationError{Field: "state.type", Message: "invalid state type"}} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			role := NewListRequestPreparation(controlledListPreparation{prepare: func(context.Context, stateaccessquery.ListOptions) (stateaccessquery.PreparedListRequest, error) {
+				return stateaccessquery.PreparedListRequest{}, cause
+			}})
+			result, err := role.PrepareListRequest(t.Context(), ListOptions{})
+			if result != (PreparedListRequest{}) {
+				t.Fatalf("error returned result: %#v", result)
+			}
+			var inner *stateaccessquery.ValidationError
+			if errors.As(cause, &inner) {
+				var mapped *ValidationError
+				if !errors.As(err, &mapped) || mapped.Field != inner.Field || mapped.Message != inner.Message {
+					t.Fatalf("mapped error = %v", err)
+				}
+			} else if !errors.Is(err, cause) {
+				t.Fatalf("cause lost: %v", err)
+			}
+		})
 	}
 }

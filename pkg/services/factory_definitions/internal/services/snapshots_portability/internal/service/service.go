@@ -37,14 +37,6 @@ func New(
 	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
 ) *Service {
-	if loadCanonical == nil ||
-		captureLoaded == nil ||
-		preparePortable == nil ||
-		decodeSnapshot == nil ||
-		materializePortableFiles == nil ||
-		validateMaterializeWrites == nil {
-		return nil
-	}
 	return &Service{
 		loadCanonical:             loadCanonical,
 		captureLoaded:             captureLoaded,
@@ -59,9 +51,6 @@ func (s *Service) CaptureFactorySnapshot(
 	ctx context.Context,
 	request factorydefinitions.CaptureFactorySnapshotRequest,
 ) (factorydefinitions.CaptureFactorySnapshotResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.CaptureFactorySnapshotResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.CaptureFactorySnapshotResult{}, err
 	}
@@ -110,9 +99,6 @@ func (s *Service) PrepareFactorySnapshotImport(
 	ctx context.Context,
 	request factorydefinitions.PrepareFactorySnapshotImportRequest,
 ) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.PrepareFactorySnapshotImportResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.PrepareFactorySnapshotImportResult{}, err
 	}
@@ -123,9 +109,6 @@ func (s *Service) MaterializeFactorySnapshot(
 	ctx context.Context,
 	request factorydefinitions.MaterializeFactorySnapshotRequest,
 ) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.MaterializeFactorySnapshotResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, err
 	}
@@ -154,26 +137,4 @@ func invalidSnapshotPayloadErr(err error) error {
 		return factorydefinitions.ErrInvalidFactorySnapshotPayload
 	}
 	return err
-}
-
-func (s *Service) requirePorts() error {
-	if s == nil || s.loadCanonical == nil {
-		return fmt.Errorf("canonical Factory loader is required")
-	}
-	if s.captureLoaded == nil {
-		return fmt.Errorf("loaded Factory snapshot capturer is required")
-	}
-	if s.preparePortable == nil {
-		return fmt.Errorf("portable Factory config preparer is required")
-	}
-	if s.decodeSnapshot == nil {
-		return fmt.Errorf("Factory snapshot JSON decoder is required")
-	}
-	if s.materializePortableFiles == nil {
-		return fmt.Errorf("portable bundled-files materializer is required")
-	}
-	if s.validateMaterializeWrites == nil {
-		return fmt.Errorf("portable bundled-file writes validator is required")
-	}
-	return nil
 }

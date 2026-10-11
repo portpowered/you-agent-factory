@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
@@ -428,14 +429,21 @@ func TestCanceledSnapshotOperationsDoNotInvokePorts(t *testing.T) {
 			return nil, nil
 		},
 		func(string, *factorydefinitions.FactoryConfig) error { unexpected(); return nil })
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	_, captureErr := svc.CaptureFactorySnapshot(ctx, factorydefinitions.CaptureFactorySnapshotRequest{})
-	_, importErr := svc.PrepareFactorySnapshotImport(ctx, factorydefinitions.PrepareFactorySnapshotImportRequest{})
-	_, writeErr := svc.MaterializeFactorySnapshot(ctx, factorydefinitions.MaterializeFactorySnapshotRequest{})
-	for _, err := range []error{captureErr, importErr, writeErr} {
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("error = %v", err)
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		ctx, cancel := context.WithCancel(t.Context())
+		if errors.Is(cause, context.DeadlineExceeded) {
+			cancel()
+			ctx, cancel = context.WithDeadline(t.Context(), time.Time{})
+		}
+		cancel()
+
+		_, captureErr := svc.CaptureFactorySnapshot(ctx, factorydefinitions.CaptureFactorySnapshotRequest{})
+		_, importErr := svc.PrepareFactorySnapshotImport(ctx, factorydefinitions.PrepareFactorySnapshotImportRequest{})
+		_, writeErr := svc.MaterializeFactorySnapshot(ctx, factorydefinitions.MaterializeFactorySnapshotRequest{})
+		for _, err := range []error{captureErr, importErr, writeErr} {
+			if !errors.Is(err, cause) {
+				t.Fatalf("error = %v", err)
+			}
 		}
 	}
 }
