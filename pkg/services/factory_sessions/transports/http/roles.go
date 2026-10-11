@@ -58,6 +58,9 @@ func NewAuthoringHandler(current apisurface.CurrentFactoryReader, definitions ap
 func NewInvocationHandler(invocation apisurface.InvocationAPI, logger *zap.Logger) *InvocationHandler {
 	return &InvocationHandler{responseWriter{logger}, invocation}
 }
+
+// NewObservationHandler binds the required completed status role and the
+// session observation roles supplied by canonical Wire.
 func NewObservationHandler(root sessionResponseOperations, live apisurface.LiveSessionAPI, status apisurface.FactoryStatusAPI, requests RequestPreparation, logger *zap.Logger) *ObservationHandler {
 	return &ObservationHandler{responseWriter{logger}, root, live, status, requests}
 }
