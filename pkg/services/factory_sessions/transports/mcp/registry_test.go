@@ -90,33 +90,28 @@ func TestDiscoverTools_EachToolHasSchemasDescriptionsAndStableFields(t *testing.
 	}
 }
 
-func TestSubagentToolDocumentsTextResultContract(t *testing.T) {
+func TestSubagentToolDocumentsAdmissionContract(t *testing.T) {
 	tool, ok := mcpfactorysession.ToolByName(mcpfactorysession.ToolSubagent)
 	if !ok {
 		t.Fatal("you.subagent tool is missing")
 	}
-	if !strings.Contains(tool.Description, "closed before return") || !strings.Contains(tool.Description, "log correlation, not you.factory_session.get") {
-		t.Fatalf("you.subagent description omits closed-session guidance: %q", tool.Description)
-	}
 	properties := tool.OutputSchema["properties"].(map[string]any)
-	result := properties["result"].(map[string]any)
-	resultProperties := result["properties"].(map[string]any)
-	for _, field := range []string{"sessionId", "status", "text"} {
-		if _, exists := resultProperties[field]; !exists {
-			t.Errorf("you.subagent result schema is missing %q", field)
+	result := properties["result"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"requestId", "workerSessionId", "accepted", "state", "eventTopic"} {
+		if _, exists := result[field]; !exists {
+			t.Errorf("missing result field %s", field)
 		}
 	}
-	sessionID := resultProperties["sessionId"].(map[string]any)
-	description := sessionID["description"].(string)
-	if !strings.Contains(description, "closed before this result returns") || !strings.Contains(description, "log correlation, not you.factory_session.get") {
-		t.Fatalf("you.subagent result.sessionId description omits closed-session guidance: %q", description)
+	if _, exists := result["sessionId"]; exists {
+		t.Fatal("START exposes Factory Session result")
 	}
-	if _, exists := resultProperties["syncOutcome"]; exists {
-		t.Fatal("you.subagent result schema exposes the sync execution response")
+	want := []string{"result.requestId", "result.workerSessionId", "result.accepted", "result.state", "result.eventTopic"}
+	if !slices.Equal(tool.SuccessStableFields, want) {
+		t.Fatalf("stable fields=%v", tool.SuccessStableFields)
 	}
-	wantStableFields := []string{"result.sessionId", "result.status", "result.text"}
-	if !slices.Equal(tool.SuccessStableFields, wantStableFields) {
-		t.Fatalf("success stable fields = %#v, want %#v", tool.SuccessStableFields, wantStableFields)
+	action := tool.InputSchema["properties"].(map[string]any)["action"].(map[string]any)
+	if action["default"] != "START" {
+		t.Fatalf("default=%v", action)
 	}
 }
 

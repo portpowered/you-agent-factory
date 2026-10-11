@@ -48,6 +48,7 @@ func responseFailure(response *http.Response, err error, id string) *toolError {
 	}
 	failure.Message = "Selected host rejected the Worker Session request"
 	readSafeFailureDetails(response, failure, id)
+	setStartFailureGuidance(failure)
 	// A lost capture is permanently unavailable, even though the HTTP contract
 	// reports it as 500. Denials and transient failures retain status semantics.
 	upstreamCode := failure.Details["upstreamCode"]
@@ -121,6 +122,8 @@ func safeFailureBody(body io.Reader) []byte {
 var safeUpstreamCodes = []string{
 	"UNSUPPORTED",
 	"PROVIDER_UNSUPPORTED",
+	"WORKER_SESSION_CALLER_INVALID", "WORKER_SESSION_START_REQUEST_ID_CONFLICT", "WORKER_SESSION_NOT_STARTABLE",
+	"SUBAGENT_ROUTE_INVALID", "SUBAGENT_PROVIDER_INVALID", "PROVIDER_UNAVAILABLE", "SUBAGENT_PROVIDER_INPUT_INVALID", "SUBAGENT_PROVIDER_AUTHENTICATION", "SUBAGENT_PROVIDER_UNAVAILABLE",
 	"WORKER_SESSION_NOT_FOUND", "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
 	"WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT", "WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED", "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED",
 }
@@ -224,4 +227,20 @@ func decodeReplay(response *http.Response, err error, id string, limit int) (any
 		return nil, malformedResponse(id)
 	}
 	return page, nil
+}
+
+// Guidance comes from reviewed public codes, never arbitrary upstream text.
+func setStartFailureGuidance(failure *toolError) {
+	switch failure.Details["upstreamCode"] {
+	case "SUBAGENT_ROUTE_INVALID":
+		failure.Message = "Configure defaults.subagent with a concrete provider and model, or supply both for START"
+	case "SUBAGENT_PROVIDER_INVALID":
+		failure.Message = "Select an available concrete subagent provider"
+	case "PROVIDER_UNAVAILABLE", "SUBAGENT_PROVIDER_UNAVAILABLE":
+		failure.Message = "Check the selected subagent provider configuration and prerequisites; no alternate provider was selected"
+	case "SUBAGENT_PROVIDER_INPUT_INVALID":
+		failure.Message = "Check the selected provider, model and reasoning effort"
+	case "SUBAGENT_PROVIDER_AUTHENTICATION":
+		failure.Message = "Configure authentication for the selected subagent provider"
+	}
 }

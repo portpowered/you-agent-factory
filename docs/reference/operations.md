@@ -632,6 +632,47 @@ For older captures without an available name, `workName` is null while the
 associated Work ID remains visible. A missing name does not change capture
 health or an available provider fact.
 
+### Start a direct Worker Session
+
+Use a running host for asynchronous subagents:
+
+```sh
+you --server http://localhost:7437 --json worker-sessions start 'Inspect the repository'
+you --server http://localhost:7437 worker-sessions start --provider codex --model gpt-6-luna --reasoning-effort low 'Inspect the repository'
+```
+
+START returns the admitted Worker Session ID while the provider continues on
+the selected host. A fresh `worker-sessions show` or `read` command can inspect
+that ID after the caller exits. Omitted IDs are generated; use `--request-id`
+and `--worker-session-id` to replay the same request. Positional text or
+non-terminal stdin supplies the prompt. `--working-root` selects an absolute
+directory on the host; `--timeout-millis` sets an optional execution duration.
+Omission sets no execution deadline. No Factory Session is created per START.
+
+`POST /worker-sessions` accepts a prompt with caller-selected request and Worker
+Session IDs. The host resolves omitted provider and model values from
+`defaults.subagent`. Generic worker defaults do not supply this route.
+
+```json
+{
+  "requestId": "direct-prompt-request",
+  "workerSessionId": "direct-prompt-session",
+  "prompt": "Reply with a short acknowledgment."
+}
+```
+
+Optional `provider`, `model`, and `reasoningEffort` values override the dedicated
+route. A different provider requires an explicit model. `workingRoot` must be
+an absolute directory path on the selected host. `timeoutMillis` selects a
+positive execution duration; omission sets no execution deadline.
+
+The prompt form cannot include `execution` or `retry`. The existing resolved
+execution form remains available and does not use subagent defaults. A successful
+202 response returns the admitted `workerSessionId` for subsequent reads and
+controls. Provider completion remains asynchronous. Reusing the same request
+and session IDs with identical inputs returns the same session. Changed inputs
+return a conflict.
+
 ### Invoke and inspect a direct Worker Session
 
 An execution document supplies the base settings for `worker-sessions invoke`.

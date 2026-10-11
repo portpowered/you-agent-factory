@@ -236,6 +236,7 @@ func TestConfigureFacadeMatchesConstructedService(t *testing.T) {
 }
 
 type fakeSettingsRoot struct {
+	operatorsettings.Service
 	documents map[string]operatorsettings.Document
 }
 

@@ -8,3 +8,18 @@ properties:
   workerModel:
     type: string
     description: Default worker model name.
+  subagent:
+    type: object
+    additionalProperties: false
+    description: File-only subagent route, independent of generic worker defaults.
+    required: [provider, model]
+    properties:
+      provider:
+        type: string
+        minLength: 1
+      model:
+        type: string
+        minLength: 1
+      reasoningEffort:
+        type: string
+        minLength: 1

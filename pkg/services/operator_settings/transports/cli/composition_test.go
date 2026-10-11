@@ -147,6 +147,7 @@ func TestBindResolveOperatorDefaultsMatchesAdapterService(t *testing.T) {
 }
 
 type compositionSettingsRoot struct {
+	operatorsettings.Service
 	documents    map[string]operatorsettings.Document
 	configureErr error
 	resolveErr   error

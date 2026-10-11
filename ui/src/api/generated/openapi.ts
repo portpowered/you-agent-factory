@@ -1696,17 +1696,30 @@ export interface components {
       /** @description Bounded pagination context for top-level Worker Session observation queries. */
       paginationContext?: components["schemas"]["PaginationContext"];
     };
-    /** @description One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload. */
+    /** @description Start one direct Worker Session with a prompt or a resolved execution. The prompt form uses dedicated subagent defaults and optional route overrides. The resolved form supplies its own execution and does not use those defaults. */
     WorkerSessionStartRequest: {
       /** @description Required caller idempotency key for this asynchronous start. */
       requestId: string;
       /** @description Stable Worker Session identity to reserve and return. */
       workerSessionId: string;
       /** @description Already-resolved Workers route and execution input. */
-      execution: components["schemas"]["WorkerSessionResolvedExecution"];
+      execution?: components["schemas"]["WorkerSessionResolvedExecution"];
       /** @description Bounded total attempt budget; omitted means one attempt. */
       retry?: components["schemas"]["WorkerSessionStartRetryPolicy"];
-    };
+      /** @description Prompt for a direct subagent. Cannot be combined with execution or retry. */
+      prompt?: string;
+      /** @description Concrete provider override. A different provider requires an explicit model. */
+      provider?: string;
+      model?: string;
+      reasoningEffort?: string;
+      /** @description Absolute working directory for the provider execution. */
+      workingRoot?: string;
+      /**
+       * Format: int64
+       * @description Execution duration in milliseconds. Omission sets no execution deadline.
+       */
+      timeoutMillis?: number;
+    } & (unknown | unknown);
     /** @description Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous. */
     WorkerSessionStartResponse: {
       /** @description Caller idempotency key echoed for correlation. */
@@ -7381,6 +7394,12 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+      /** @description File-only subagent route, independent of generic worker defaults. */
+      subagent?: {
+        provider: string;
+        model: string;
+        reasoningEffort?: string;
+      };
     } & {
       [key: string]: unknown;
     };

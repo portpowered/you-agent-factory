@@ -1320,9 +1320,6 @@ pkg/services/operator_settings/transports/http/resolve_effective_mapping.go: unr
 pkg/services/operator_settings/transports/http/resolve_effective_operations.go: unreachable func: Adapter.ResolveEffective
 pkg/services/operator_settings/transports/mcp/client.go: unreachable func: BindToolOperation
 pkg/services/operator_settings/transports/mcp/client.go: unreachable func: CallTool
-pkg/services/operator_settings/transports/mcp/configure_subagents.go: unreachable func: ConfigureSubagentsTool
-pkg/services/operator_settings/transports/mcp/configure_subagents.go: unreachable func: addACPProvider
-pkg/services/operator_settings/transports/mcp/configure_subagents.go: unreachable func: setSubagentDefaults
 pkg/services/operator_settings/transports/mcp/registry.go: unreachable func: DiscoverTools
 pkg/services/operator_settings/transports/mcp/registry.go: unreachable func: IsCanonicalToolHandlerRegistered
 pkg/services/operator_settings/transports/mcp/registry.go: unreachable func: ToolByName

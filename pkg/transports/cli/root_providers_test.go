@@ -19,6 +19,41 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestWorkerSessionsStartInputs(t *testing.T) {
+	t.Parallel()
+	for _, timeout := range []string{"", "12345"} {
+		t.Run("deadline"+timeout, func(t *testing.T) {
+			t.Parallel()
+			called := false
+			factory := withTestInjectedPlatformRoles(CommandFactory{
+				InvokeWorkerSession: func(config workersessionscli.InvokeConfig) error {
+					called = true
+					if !config.PromptStart || config.Server != "http://selected.test:7437" || config.Provider != "codex" || config.Model != "opaque-model" || config.WorkingRoot != "host-root" || strings.Join(config.Prompt, " ") != "inspect code" || config.LookupEnv == nil {
+						t.Fatalf("start config = %#v", config)
+					}
+					if (config.TimeoutMillis == nil) != (timeout == "") || timeout != "" && *config.TimeoutMillis != 12345 {
+						t.Fatalf("deadline = %v", config.TimeoutMillis)
+					}
+					return nil
+				},
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+			})
+			root := factory.NewCommand(context.Background(), nil, func(string) (string, bool) { return "", false }, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			args := []string{"--server", "http://selected.test:7437", "worker-sessions", "start", "--provider", "codex", "--model", "opaque-model", "--working-root", "host-root"}
+			if timeout != "" {
+				args = append(args, "--timeout-millis", timeout)
+			}
+			root.SetArgs(append(args, "inspect", "code"))
+			if err := root.Execute(); err != nil || !called {
+				t.Fatalf("start dispatch: %v, called=%t", err, called)
+			}
+		})
+	}
+}
+
 func TestRunCallerEnvironment(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

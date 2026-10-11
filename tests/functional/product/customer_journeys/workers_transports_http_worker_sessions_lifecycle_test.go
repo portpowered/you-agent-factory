@@ -404,7 +404,7 @@ func directWorkerSessionPayload(requestID, sessionID, dispatchID string) factory
 	return factoryapi.WorkerSessionStartRequest{
 		RequestId:       requestID,
 		WorkerSessionId: sessionID,
-		Execution: factoryapi.WorkerSessionResolvedExecution{
+		Execution: &factoryapi.WorkerSessionResolvedExecution{
 			WorkstationName: "process",
 			WorkerType:      functionalStringPtr("processor"),
 			RunnerId:        functionalStringPtr("codex"),

@@ -26,6 +26,11 @@ type Service interface {
 	// baseline conflicts fail with ErrResolutionConflict.
 	ResolveEffective(ResolveEffectiveRequest) (ResolveEffectiveResult, error)
 
+	// ResolveSubagentRoute applies per-call overrides to the dedicated file
+	// default. It never inherits generic worker defaults or persists settings.
+	// Missing or incomplete routes fail with ErrResolutionInvalidInput.
+	ResolveSubagentRoute(context.Context, string, SubagentRouteUpdate) (SubagentRoute, error)
+
 	// DefaultConfigPath returns the service-owned operator configuration path
 	// for one home directory.
 	DefaultConfigPath(string) string

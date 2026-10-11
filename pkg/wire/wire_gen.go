@@ -884,7 +884,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	wireWorkerSessionControlRouter := provideHTTPWorkerSessionController(workersessionsService, v233)
 	v234 := provideWorkerWorkAttributionReader(edges2, v149, v141, v209, v134)
 	sessionScopeResolver := provideHTTPWorkerSessionScope(v209)
-	adapter6 := provideHTTPWorkerSessionsAdapter(workersessionsService, wireWorkerSessionControlRouter, workService, v234, sessionScopeResolver)
+	adapter6 := provideHTTPWorkerSessionsAdapter(workersessionsService, wireWorkerSessionControlRouter, workService, v234, sessionScopeResolver, operatorsettingsService, service, homeDirectoryResolver)
 	v235 := wire10.NewFleetHistory(v233, v181, source, loggingLogger, v184, workersessionsService)
 	v236 := wire10.NewFleetObservationService(v233, v235)
 	handler3 := provideHTTPWorkerSessionsHandler(adapter6, v236, workersessionsService, logger)
@@ -990,10 +990,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	recordingsInspection := provideMCPInspection(recordingsService)
 	factorysessionProviderIdentityResolver := provideMCPProviderIdentityResolver(service)
 	toolOperation := provideMCPToolOperation(recordingsInspection, v212, workflowPreviewOperation, v209, v13, factorysessionProviderIdentityResolver)
-	hostTransport := provideMCPHostTransport()
-	wireMcpHostOperation := provideMCPHostOperation(hostTransport, v13, factorysessionProviderIdentityResolver)
-	wireMcpProviderConfiguration := provideMCPProviderConfiguration(operatorsettingsService, service, homeDirectoryResolver)
-	serverToolOperation := provideMCPDispatch(workersessionmcpAdapter, toolOperation, wireMcpHostOperation, wireMcpProviderConfiguration)
+	serverToolOperation := provideMCPDispatch(workersessionmcpAdapter, toolOperation, v13)
 	options, err := provideMCPServerOptions(operatorsettingsService, service, fileSystem, homeDirectoryResolver)
 	if err != nil {
 		return nil, err
@@ -1484,9 +1481,6 @@ var BundleSet = wire14.NewSet(
 	provideInvocationOperation,
 	provideMCPWorkerHostClient,
 	provideMCPWorkerAdapter,
-	provideMCPHostTransport,
-	provideMCPHostOperation,
-	provideMCPProviderConfiguration,
 	provideMCPInspection,
 	provideMCPToolOperation,
 	provideMCPDispatch,

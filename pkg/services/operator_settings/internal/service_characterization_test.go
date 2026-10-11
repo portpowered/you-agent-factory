@@ -256,6 +256,7 @@ func (fake *resolutionPeerFake) canonicalizeProvider(raw string) (string, bool) 
 }
 
 type servicePeerFake struct {
+	operatorsettings.Service
 	document   *documentPeerFake
 	resolution *resolutionPeerFake
 }

@@ -11,6 +11,7 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 		BackendScopeID: strings.TrimSpace(config.BackendScopeID),
 		Defaults: operatorsettings.DocumentDefaults{
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
+			Subagent:            config.Defaults.Subagent.Clone(),
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
 		Messaging:  config.Messaging.Clone(),
@@ -58,6 +59,7 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 		BackendScopeID: document.BackendScopeID,
 		Defaults: operatorsettings.Defaults{
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
+			Subagent:            document.Defaults.Subagent.Clone(),
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
 		Messaging:  document.Messaging.Clone(),

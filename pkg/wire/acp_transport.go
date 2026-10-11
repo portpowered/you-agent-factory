@@ -289,14 +289,6 @@ type wireTranscriptClock runtimeArtifactClock
 
 func (c wireTranscriptClock) Now() time.Time { return c() }
 
-func configureMCPProviders(ctx context.Context, settings operatorsettings.Service, providerService providers.Service, homeDirectory factorysessions.HomeDirectoryResolver) error {
-	home, err := resolveMCPHomeDirectory(ctx, homeDirectory)
-	if err != nil {
-		return err
-	}
-	return configureMCPProvidersAtHome(ctx, settings, providerService, home)
-}
-
 func configureMCPProvidersAtHome(ctx context.Context, settings operatorsettings.Service, providerService providers.Service, home string) error {
 	if settings == nil || providerService == nil {
 		return fmt.Errorf("operator settings and Providers services are required")

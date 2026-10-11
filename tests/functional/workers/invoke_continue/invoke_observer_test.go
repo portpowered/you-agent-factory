@@ -24,6 +24,69 @@ type t7GatedProviderRunner struct {
 	stopped  chan struct{}
 }
 
+// A direct Worker Session uses no per-start Factory Session. This scenario
+// reuses the package's immutable host and has its own held-open external effect.
+func TestSubagentDirectStart(t *testing.T) {
+	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.start", "rest/startWorkerSession", "cli/you.worker-sessions.show")
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "sam-direct-start")
+	defer scenario.close(t)
+	runner := scenario.providerRunner.(*t7GatedProviderRunner)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	id := scenarioScopedID(scenario, "direct-worker")
+	document := map[string]any{"requestId": id + "-request", "workerSessionId": id,
+		"prompt": "held-open direct START prompt", "provider": "codex", "model": "exact-start-model",
+		"reasoningEffort": "high", "workingRoot": scenario.workingDirectory}
+	caller, detach := context.WithCancel(ctx)
+	status, body := t7HTTP(t, caller, http.MethodPost, fixture.baseURL+"/worker-sessions", document)
+	detach()
+	if status != http.StatusAccepted || !strings.Contains(body, `"workerSessionId":"`+id+`"`) || !strings.Contains(body, `"accepted":true`) {
+		t.Fatalf("prompt admission = %d %s", status, body)
+	}
+	t19AwaitSignal(t, ctx, runner.started, "direct provider remains active after response")
+	show := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "show", "--worker-session-id", id)
+	if err := fixture.process.Execute(show.Input); err != nil || !strings.Contains(show.Stdout(), `"state":"RUNNING"`) {
+		t.Fatalf("fresh selected-host read = %v: %s %s", err, show.Stdout(), show.Stderr())
+	}
+	assertSubagentHTTPReplayAndRoute(t, ctx, fixture.baseURL, document, runner)
+	// CLI START replays the same identity on the selected host. It must return
+	// while the external provider is still held open, without requiring --remote.
+	start := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "--json", "worker-sessions", "start",
+		"--request-id", id + "-request", "--worker-session-id", id, "--provider", "codex", "--model", "exact-start-model",
+		"--reasoning-effort", "high", "--working-root", scenario.workingDirectory, "held-open direct START prompt"})
+	start.Input.Env, start.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
+	if err := fixture.process.Execute(start.Input); err != nil || !strings.Contains(start.Stdout(), `"workerSessionId":"`+id+`"`) || runner.CallCount() != 1 {
+		t.Fatalf("selected-host CLI replay: %v %s %s", err, start.Stdout(), start.Stderr())
+	}
+	// Missing dedicated defaults cannot inherit the host's generic codex default.
+	document = map[string]any{"requestId": id + "-missing-request", "workerSessionId": id + "-missing", "prompt": "no fallback"}
+	status, body = t7HTTP(t, ctx, http.MethodPost, fixture.baseURL+"/worker-sessions", document)
+	if status != http.StatusBadRequest || !strings.Contains(body, "SUBAGENT_ROUTE_INVALID") || runner.CallCount() != 1 {
+		t.Fatalf("missing default fell back: %d %s", status, body)
+	}
+}
+
+func assertSubagentHTTPReplayAndRoute(t *testing.T, ctx context.Context, baseURL string, document map[string]any, runner *t7GatedProviderRunner) {
+	t.Helper()
+	status, body := t7HTTP(t, ctx, http.MethodPost, baseURL+"/worker-sessions", document)
+	if status != http.StatusAccepted || runner.CallCount() != 1 {
+		t.Fatalf("exact replay launched again: %d %s, calls=%d", status, body, runner.CallCount())
+	}
+	document["prompt"] = "conflicting prompt"
+	status, body = t7HTTP(t, ctx, http.MethodPost, baseURL+"/worker-sessions", document)
+	if status != http.StatusConflict || !strings.Contains(body, "WORKER_SESSION_START_REQUEST_ID_CONFLICT") || runner.CallCount() != 1 {
+		t.Fatalf("conflicting request = %d %s, calls=%d", status, body, runner.CallCount())
+	}
+	command := runner.Requests()[0]
+	args := strings.Join(command.Args, " ")
+	if !strings.Contains(args, "exact-start-model") || !strings.Contains(args, "high") || !strings.Contains(args+string(command.Stdin), "held-open direct START prompt") {
+		t.Fatalf("selected provider lost prompt/model/effort: %+v", command)
+	}
+}
+
 func (r *t7GatedProviderRunner) reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -21,6 +21,7 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 		{id: "you.worker-sessions.show", handlerID: "you.worker-sessions.show.handler"},
 		{id: "you.worker-sessions.read", handlerID: "you.worker-sessions.read.handler"},
 		{id: "you.worker-sessions.stream", handlerID: "you.worker-sessions.stream.handler"},
+		{id: "you.worker-sessions.start", handlerID: "you.worker-sessions.start.handler"},
 		{id: "you.worker-sessions.invoke", handlerID: "you.worker-sessions.invoke.handler"},
 		{id: "you.worker-sessions.continue", handlerID: "you.worker-sessions.continue.handler"},
 		{id: "you.worker-sessions.interrupt", handlerID: "you.worker-sessions.interrupt.handler"},
@@ -51,11 +52,11 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 	if workerSessions.Name() != "worker-sessions" || workerSessions.Parent() != nil {
 		t.Fatalf("worker-sessions command = name %q parent %v, want detached root", workerSessions.Name(), workerSessions.Parent())
 	}
-	if len(workerSessions.Commands()) != 11 {
-		t.Fatalf("worker-sessions child count = %d, want 11", len(workerSessions.Commands()))
+	if len(workerSessions.Commands()) != 12 {
+		t.Fatalf("worker-sessions child count = %d, want 12", len(workerSessions.Commands()))
 	}
 
-	for _, command := range []string{"invoke", "continue", "interrupt", "pause", "resume", "cancel", "terminate", "list", "show", "read", "stream"} {
+	for _, command := range []string{"start", "invoke", "continue", "interrupt", "pause", "resume", "cancel", "terminate", "list", "show", "read", "stream"} {
 		leaf, err := findCommandByPath(workerSessions, "worker-sessions "+command)
 		if err != nil {
 			t.Fatalf("FindCommandByPath(%s) error = %v", command, err)
@@ -174,6 +175,7 @@ func workerSessionsRegistry(t *testing.T) *commandregistry.Registry {
 	t.Helper()
 	registry := commandregistry.NewRegistry()
 	for _, handlerID := range []string{
+		"you.worker-sessions.start.handler",
 		"you.worker-sessions.invoke.handler",
 		"you.worker-sessions.continue.handler",
 		"you.worker-sessions.list.handler",
@@ -200,6 +202,7 @@ func workerSessionsResolvedOnlyRegistry(t *testing.T) *commandregistry.Registry 
 		t.Fatalf("RegisterResolved() error = %v", err)
 	}
 	for _, handlerID := range []string{
+		"you.worker-sessions.start.handler",
 		"you.worker-sessions.invoke.handler",
 		"you.worker-sessions.continue.handler",
 		"you.worker-sessions.interrupt.handler",

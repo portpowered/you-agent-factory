@@ -557,7 +557,7 @@ func selectedMCPIntent(ctx context.Context) (processcontract.MCPIntent, error) {
 }
 
 func provideMCPWorkerHostClient() (*httpclient.Client, error) {
-	return httpclient.NewClient("http://mcp.invalid", httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second}), httpclient.WithRequestEditorFn(func(ctx context.Context, request *http.Request) error {
+	return httpclient.NewClient("http://mcp.invalid", httpclient.WithHTTPClient(&http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}), httpclient.WithRequestEditorFn(func(ctx context.Context, request *http.Request) error {
 		intent, err := selectedMCPIntent(ctx)
 		if err != nil {
 			return err
@@ -567,28 +567,16 @@ func provideMCPWorkerHostClient() (*httpclient.Client, error) {
 			return err
 		}
 		request.URL = endpoint
+		if intent.WorkerSessionID != "" || intent.WorkerSessionToken != "" {
+			request.Header.Set("X-You-Worker-Session-Id", intent.WorkerSessionID)
+			request.Header.Set("Authorization", "Bearer "+intent.WorkerSessionToken)
+		}
 		return nil
 	}))
 }
 
 func provideMCPWorkerAdapter(client *httpclient.Client) (*workersessionmcp.Adapter, error) {
 	return workersessionwire.NewMCPAdapter(client)
-}
-
-type mcpHostOperation func(context.Context, string, string, factorysessionmcp.SubagentInput) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult]
-
-func provideMCPHostTransport() factorysessionmcp.HostTransport {
-	return &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-}
-
-func provideMCPHostOperation(transport factorysessionmcp.HostTransport, generateID factorysessions.SessionIDGenerator, resolve factorysessionmcp.ProviderIdentityResolver) mcpHostOperation {
-	return factorysessionmcp.NewHostOperation(transport, generateID, resolve)
-}
-
-type mcpProviderConfiguration func(context.Context) error
-
-func provideMCPProviderConfiguration(settings operatorsettings.Service, providers providers.Service, home factorysessions.HomeDirectoryResolver) mcpProviderConfiguration {
-	return func(ctx context.Context) error { return configureMCPProviders(ctx, settings, providers, home) }
 }
 
 func provideMCPInspection(recordings recordings.Service) factorysessionmcp.RecordingsInspection {
@@ -605,7 +593,7 @@ func provideMCPToolOperation(inspection factorysessionmcp.RecordingsInspection, 
 	}
 }
 
-func provideMCPDispatch(worker *workersessionmcp.Adapter, tools factorysessionmcp.ToolOperation, host mcpHostOperation, configure mcpProviderConfiguration) mcpserver.ToolOperation {
+func provideMCPDispatch(worker *workersessionmcp.Adapter, tools factorysessionmcp.ToolOperation, generateID factorysessions.SessionIDGenerator) mcpserver.ToolOperation {
 	return func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
 		if name != factorysessionmcp.ToolSubagent {
 			return tools(ctx, name, raw)
@@ -615,17 +603,7 @@ func provideMCPDispatch(worker *workersessionmcp.Adapter, tools factorysessionmc
 			return nil, err
 		}
 		return worker.Subagent(ctx, raw, func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
-			if failure, err := factorysessionmcp.ValidateSubagentArguments(input); failure != nil || err != nil {
-				return failure, err
-			}
-			if err := configure(ctx); err != nil {
-				return nil, err
-			}
-			// Caller credentials are detached protocol values, never tool arguments.
-			run := factorysessionmcp.BindSubagentOperation(func(ctx context.Context, request factorysessionmcp.SubagentInput) factorysessionmcp.ToolResponse[factorysessionmcp.SubagentResult] {
-				return host(ctx, intent.ServerURL, intent.ProjectRoot, request)
-			}, intent.WorkerSessionID, intent.WorkerSessionToken)
-			return run(ctx, input)
+			return worker.Start(ctx, input, intent.ProjectRoot, generateID)
 		})
 	}
 }

@@ -152,6 +152,14 @@
       ]
     },
     {
+      "test": "tests/functional/transport/mcp/worker_sessions/subagent_route_test.go::TestSubagentRouteDefaults",
+      "stableIds": [
+        "cli/you.worker-sessions.invoke",
+        "mcp/mcp.tool.you.subagent",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/work/admission/batch_contract_batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
       "stableIds": [
         "cli/you.submit.batch"
@@ -283,6 +291,14 @@
         "cli/you.worker-sessions.list",
         "cli/you.worker-sessions.show",
         "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestSubagentDirectStart",
+      "stableIds": [
+        "cli/you.worker-sessions.show",
+        "cli/you.worker-sessions.start",
+        "rest/startWorkerSession"
       ]
     },
     {
@@ -439,10 +455,7 @@
       "stableIds": [
         "cli/you.server.mcp",
         "mcp/mcp.tool.you.subagent",
-        "rest/closeFactorySession",
-        "rest/invokeFactorySessionBySessionId",
-        "rest/openFactorySession",
-        "rest/terminateFactorySession"
+        "rest/startWorkerSession"
       ]
     },
     {
@@ -450,10 +463,7 @@
       "stableIds": [
         "cli/you.server.mcp",
         "mcp/mcp.tool.you.subagent",
-        "rest/closeFactorySession",
-        "rest/invokeFactorySessionBySessionId",
-        "rest/openFactorySession",
-        "rest/terminateFactorySession"
+        "rest/startWorkerSession"
       ]
     },
     {
@@ -469,6 +479,23 @@
         "rest/openFactorySession",
         "rest/startWorkerSession",
         "rest/terminateFactorySession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
+      "stableIds": [
+        "cli/you.init",
+        "cli/you.worker-sessions.start",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
+      "stableIds": [
+        "cli/you.worker-sessions.start",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/startWorkerSession"
       ]
     },
     {

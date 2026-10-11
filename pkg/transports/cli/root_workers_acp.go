@@ -176,6 +176,9 @@ func productionWorkerSessionsCommand(
 		}
 		return executeGeneratedWorkerSessionsInvokeWithValues(cmd, resolvedWorkerSessionPrompt(values, "you.worker-sessions.invoke.arg.0", nil), resolvedGlobals, resolvedDiagnostics, invoke, options.LocalWorkerSessions, values)
 	}))
+	register("you.worker-sessions.start.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsStart(cmd, resolvedGlobals, resolvedDiagnostics, options, values)
+	}))
 	register("you.worker-sessions.continue.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
 		return executeGeneratedWorkerSessionsContinueWithValues(cmd, nil, resolvedGlobals, resolvedDiagnostics, options.ContinueWorkerSession, options.LocalWorkerSessions, values)
 	}))
