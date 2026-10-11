@@ -192,7 +192,7 @@ func newEngineFixture() *engineFixture {
 }
 
 func engineIdentity(id string) Identity {
-	return Identity{Chain: id + "-chain", Work: id + "-work", Observation: workersessions.Observation{WorkerSessionID: id, FactorySessionID: "factory", State: workersessions.StateRunning}}
+	return Identity{Chain: id + "-chain", Work: id + "-work", Observation: workersessions.Observation{WorkerSessionID: id, FactorySessionID: "factory", State: workersessions.StateRunning, Direct: true}}
 }
 
 func engineRequest(id, body string) agentmessages.SendRequest {
@@ -851,6 +851,45 @@ func TestEngineDedupWindowAndEndedRecipient(t *testing.T) {
 	second, err := f.engine.Send(context.Background(), engineRequest("second", "question"), f.caller, "")
 	if err != nil || first.MessageID == second.MessageID || len(f.ledger.entries) != 2 {
 		t.Fatalf("dedup boundary = %+v, %v", second, err)
+	}
+}
+
+func TestTerminalRecipientCapabilitySnapshotDoesNotDiscardDelivery(t *testing.T) {
+	t.Parallel()
+	for _, rejected := range []bool{false, true} {
+		t.Run(fmt.Sprint(rejected), func(t *testing.T) {
+			t.Parallel()
+			f := newEngineFixture()
+			ended := f.authority.recipients["lead"]
+			ended.Observation.State = workersessions.StateCompleted
+			ended.Observation.ProviderSessionAvailable = true
+			ended.Observation.Revivable = false // publication has not finished yet
+			f.authority.recipients["lead"] = ended
+			calls := 0
+			f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+				calls++
+				if rejected {
+					return workersessions.ContinueResult{}, workersessions.ErrContinuationProviderSessionInvalid
+				}
+				return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+					SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+			}
+			request := engineRequest("terminal", "retained question")
+			message, err := f.engine.Send(t.Context(), request, f.caller, "")
+			if err != nil || calls != 1 || message.Status != agentmessages.Queued || message.RevivedWorkerSessionID != "" {
+				t.Fatal("capability snapshot suppressed admission or guessed delivery", err)
+			}
+			want := "REVIVE_PENDING"
+			if rejected {
+				want = "REVIVE_UNSUPPORTED"
+			}
+			if message.Reason != want {
+				t.Fatal("authoritative admission outcome was lost")
+			}
+			if retry, err := f.engine.Send(t.Context(), request, f.caller, ""); err != nil || retry != message || calls != 1 {
+				t.Fatal("terminal delivery retry duplicated continuation", err)
+			}
+		})
 	}
 }
 

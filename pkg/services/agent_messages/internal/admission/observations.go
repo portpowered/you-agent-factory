@@ -105,7 +105,11 @@ func (e *Engine) observeRecipient(ctx context.Context, entry store.Entry, recipi
 		defer life.observers.Done()
 		defer cancel()
 		defer e.forgetDeliveryObserver(life, key, observer)
-		topic := workersessions.Topic(recipient.Observation.WorkerSessionID)
+		scope := recipient.Observation.FactorySessionID
+		if recipient.Observation.Direct {
+			scope = ""
+		}
+		topic := workersessions.Topic(recipient.Observation.WorkerSessionID, scope)
 		e.watchRecipient(ctx, entry, topic, key, observer)
 	}()
 }

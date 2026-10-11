@@ -370,7 +370,8 @@ func TestPendingReviveAllowsInboxAndOtherAdmissions(t *testing.T) {
 	if queued.Status != "QUEUED" || queued.RevivedWorkerSessionId != nil || queued.Reason != nil {
 		t.Fatal("pending chain branched")
 	}
-	if other := f.cliSend(t, otherLane, "other-lead", "--request-id", "unrelated", "--body", "independent inbox"); other.Status != "QUEUED" {
+	other := f.cliSend(t, otherLane, "other-lead", "--request-id", "unrelated", "--body", "independent inbox")
+	if other.Status != "QUEUED" {
 		t.Fatal("unrelated admission failed")
 	}
 	clock.SetTick(60)
@@ -381,15 +382,29 @@ func TestPendingReviveAllowsInboxAndOtherAdmissions(t *testing.T) {
 	}
 	assertReviveWaitsForAdmission(t, result, revival)
 	gate.unblock.Do(func() { close(gate.release) })
-	assertExpiredReviveOutcome(t, f, lead, revival, result, before)
+	head := assertExpiredReviveOutcome(t, f, lead, revival, result, before)
 	close(revival.release)
+	f.waitEndedWorker(t, head)
+	// Ending these recipients now delivers the unread asks. Join both direct
+	// successors before closing the host or removing its recording directory.
+	assertCompletedQueuedRevive(t, f, revival, queued, lead)
 	for _, id := range []string{"lane", "other-lane", "other-lead"} {
 		f.endWorker(t, id)
 	}
+	assertCompletedQueuedRevive(t, f, revival, other, otherLead)
 	f.server.Close(t)
 }
 
-func assertExpiredReviveOutcome(t *testing.T, f *fixture, lead map[string]string, revival *workerGate, result <-chan api.AgentMessage, before map[string][]api.FactoryEvent) {
+func assertCompletedQueuedRevive(t *testing.T, f *fixture, revival *workerGate, message api.AgentMessage, recipient map[string]string) {
+	t.Helper()
+	pending := "REVIVE_PENDING"
+	message.Reason = &pending
+	final := f.awaitDeliveryOutcome(t, nil, message)
+	head := assertReviveAdmission(t, f, revival, final, recipient)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+}
+
+func assertExpiredReviveOutcome(t *testing.T, f *fixture, lead map[string]string, revival *workerGate, result <-chan api.AgentMessage, before map[string][]api.FactoryEvent) string {
 	t.Helper()
 	var message api.AgentMessage
 	select {
@@ -415,6 +430,7 @@ func assertExpiredReviveOutcome(t *testing.T, f *fixture, lead map[string]string
 		t.Fatal("pending retries or sends branched continuation")
 	default:
 	}
+	return *message.RevivedWorkerSessionId
 }
 
 func TestHeadEndDeliversOrderedBatchWithoutAnotherSend(t *testing.T) {
@@ -852,6 +868,15 @@ func TestEndedRecipientRevivesOnceThroughCLIAndHTTP(t *testing.T) {
 }
 
 func TestFactoryOriginRecipientRevivesWithoutAnotherWorkResult(t *testing.T) {
+	exerciseFactoryRecipientRevival(t, false)
+}
+
+func TestFactoryOriginRecipientDeliversUnreadAskOnEnd(t *testing.T) {
+	exerciseFactoryRecipientRevival(t, true)
+}
+
+func exerciseFactoryRecipientRevival(t *testing.T, onEnd bool) {
+	t.Helper()
 	t.Parallel()
 	factory := &workerGate{started: make(chan map[string]string, 1), release: make(chan struct{})}
 	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
@@ -867,20 +892,28 @@ func TestFactoryOriginRecipientRevivesWithoutAnotherWorkResult(t *testing.T) {
 	}
 	id := lead["YOU_WORKER_SESSION_ID"]
 	lane := f.invoke(t, "lane", lead)
+	var message api.AgentMessage
+	if onEnd {
+		message = f.cliSend(t, lane, id, "--request-id", "factory-ask", "--body", "declared private delivery", "--body-secret")
+		if message.Status != "QUEUED" || message.RevivedWorkerSessionId != nil {
+			t.Fatal("running Factory recipient was revived early")
+		}
+	}
 	close(factory.release)
 	f.waitEndedWorker(t, id)
 	before := messageFactoryStreams(t, f, id, "lane")
-	message := f.cliSend(t, lane, id, "--request-id", "factory-ask", "--body", "declared private delivery", "--body-secret")
+	if onEnd {
+		pending := "REVIVE_PENDING"
+		message.Reason = &pending
+		message = f.awaitDeliveryOutcome(t, lane, message)
+	} else {
+		message = f.cliSend(t, lane, id, "--request-id", "factory-ask", "--body", "declared private delivery", "--body-secret")
+	}
 	if message.Body == "declared private delivery" || message.BodyRedactionCount != 1 {
 		t.Fatal("declared secret entered delivery input")
 	}
 	successor := assertReviveAdmission(t, f, revival, message, lead)
-	status, raw := f.request(t, http.MethodGet, "/worker-sessions/"+successor["YOU_WORKER_SESSION_ID"], nil, nil)
-	var observation api.WorkerSessionObservation
-	if status != http.StatusOK || json.Unmarshal(raw, &observation) != nil || !observation.Direct ||
-		observation.Correlation == nil || observation.Correlation.WorkId == nil || *observation.Correlation.WorkId != lead["YOU_WORK_ID"] {
-		t.Fatal("Factory successor lost direct execution or original Work correlation")
-	}
+	assertFactorySuccessorOrigin(t, f, successor, lead)
 	close(revival.release)
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
 	if after := messageFactoryStreams(t, f, id, "lane"); !reflect.DeepEqual(before, after) {
@@ -891,6 +924,16 @@ func TestFactoryOriginRecipientRevivesWithoutAnotherWorkResult(t *testing.T) {
 	assertPrivateArtifacts(t, f.home, private)
 	assertPrivateArtifacts(t, f.dir, private)
 	assertPrivateStreamDiagnostics(t, logs, private...)
+}
+
+func assertFactorySuccessorOrigin(t *testing.T, f *fixture, successor, lead map[string]string) {
+	t.Helper()
+	status, raw := f.request(t, http.MethodGet, "/worker-sessions/"+successor["YOU_WORKER_SESSION_ID"], nil, nil)
+	var observation api.WorkerSessionObservation
+	if status != http.StatusOK || json.Unmarshal(raw, &observation) != nil || !observation.Direct ||
+		observation.Correlation == nil || observation.Correlation.WorkId == nil || *observation.Correlation.WorkId != lead["YOU_WORK_ID"] {
+		t.Fatal("Factory successor lost direct execution or original Work correlation")
+	}
 }
 
 func assertReviveAdmission(t *testing.T, f *fixture, revival *workerGate, message api.AgentMessage, lead map[string]string) map[string]string {

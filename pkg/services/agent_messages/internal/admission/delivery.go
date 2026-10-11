@@ -41,7 +41,7 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 		}
 		return e.deliveryReason(ctx, entry, reason)
 	}
-	if !recipient.Observation.Revivable {
+	if !continuationCandidate(recipient.Observation) {
 		return e.deliveryReason(ctx, entry, "REVIVE_UNSUPPORTED")
 	}
 	entries, sequence, err := e.ledger.Entries()
@@ -71,6 +71,14 @@ func (e *Engine) deliver(ctx context.Context, caller *workersessions.CallerIdent
 		e.observeDelivery(ctx, intent)
 	}
 	return message, err
+}
+
+func continuationCandidate(recipient workersessions.Observation) bool {
+	// Terminal state can precede capture finalization. Revivable is a
+	// nonblocking capability snapshot, so its temporary false value must not
+	// discard end delivery when an exact provider association is present.
+	// Continue joins the owned publication and authoritatively validates it.
+	return recipient.Revivable || recipient.ProviderSessionAvailable
 }
 
 // The caller holds e.mu. Restore it before returning, including on panic, so
