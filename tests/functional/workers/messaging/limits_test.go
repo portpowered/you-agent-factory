@@ -32,7 +32,9 @@ func TestRecipientChainReviveLimitCountsConfirmedSuccessors(t *testing.T) {
 	// Every controlled resume completes; the public terminal stream gates the
 	// next send against the ended head rather than racing its lifecycle.
 	close(revival.release)
-	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{}, nil, revival, "lead", "lane")
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", effects, nil, revival, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
 	f.endWorker(t, "lead")
@@ -63,6 +65,77 @@ func TestRecipientChainReviveLimitCountsConfirmedSuccessors(t *testing.T) {
 		t.Fatal("chain revive quota changed Factory Events")
 	}
 	f.endWorker(t, "lane")
+	f.server.Close(t)
+	assertReconstructedReviveQuota(t, f, limited, clock, effects)
+}
+
+// Reconstruction is the owned behavior here, so only this cohort replaces the
+// root graph. Fresh server-minted sender authority must retain the old chain's
+// successful revive volume without making archived execution tokens valid.
+func assertReconstructedReviveQuota(t *testing.T, first *fixture, limited api.AgentMessage, clock *platformclock.Deterministic, effects serviceedges.Edges) {
+	t.Helper()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	close(revival.release)
+	f := startHostRunner(t, first.home, first.dir, "", effects, nil, revival, "lane-next")
+	lane := f.continueCaller(t, "lane", "lane-next")
+	before := f.server.GetFactoryEvents(t)
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 7 || !reflect.DeepEqual(page.Messages[6], limited) {
+		t.Fatal("reconstruction lost accepted revives or the limited ask")
+	}
+	start := make(chan struct{})
+	results := make(chan api.AgentMessage, 2)
+	for _, id := range []string{"after-restart-a", "after-restart-b"} {
+		go func() {
+			<-start
+			request := map[string]any{"requestId": id, "to": map[string]string{"workerSessionId": "lead"}, "body": id}
+			queued := f.sendRaw(t, request, lane)
+			assertConcurrentReplay(t, f, request, lane, queued.MessageId)
+			results <- queued
+		}()
+	}
+	close(start)
+	for range 2 {
+		queued := <-results
+		if queued.Status != "QUEUED" || queued.Reason == nil || *queued.Reason != "REVIVE_LIMIT" || queued.RevivedWorkerSessionId != nil {
+			t.Fatal("restart or concurrent asks reset confirmed chain revive volume")
+		}
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("reconstructed quota or retries started a provider")
+	default:
+	}
+	assertReviveQuotaWindowRelease(t, f, revival, lane, limited, clock, before)
+	f.endWorker(t, "lane-next")
+}
+
+func assertReviveQuotaWindowRelease(t *testing.T, f *fixture, revival *workerGate, lane map[string]string, limited api.AgentMessage, clock *platformclock.Deterministic, before []api.FactoryEvent) {
+	t.Helper()
+	// The window excludes successful admissions at its exact one-hour boundary.
+	// The clock edge changes timestamps only; completion remains stream-driven.
+	clock.SetTick(3600)
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 9 {
+		t.Fatal("concurrent asks or retries lost messages or created duplicates")
+	}
+	last := f.cliSend(t, lane, "lead", "--request-id", "after-window", "--body", "ask after window")
+	batch := last
+	batch.Body = limited.Body + "\n\n" + page.Messages[7].Body + "\n\n" + page.Messages[8].Body + "\n\n" + last.Body
+	assertReviveAdmission(t, f, revival, batch, nil)
+	f.waitEndedWorker(t, *last.RevivedWorkerSessionId)
+	page = readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 10 {
+		t.Fatal("window release invented or lost messages")
+	}
+	for _, message := range page.Messages[6:] {
+		if message.Status != "DELIVERED_REVIVE" || message.Reason != nil || message.RevivedWorkerSessionId == nil || *message.RevivedWorkerSessionId != *last.RevivedWorkerSessionId {
+			t.Fatal("window release lost ordered shared delivery")
+		}
+	}
+	if after := f.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+		t.Fatal("reconstructed quota or ordered batch changed Factory Events")
+	}
 }
 
 func TestConfiguredLimitsPrivacyAndConcurrentReplay(t *testing.T) {

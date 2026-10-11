@@ -198,6 +198,26 @@ func (f *fixture) invoke(t *testing.T, id string, caller map[string]string) map[
 	return f.invokeProject(t, id, "", caller)
 }
 
+func (f *fixture) continueCaller(t *testing.T, source, successor string) map[string]string {
+	t.Helper()
+	status, raw := f.request(t, http.MethodPost, "/worker-sessions/"+source+"/continue", map[string]any{
+		"resolveHead": true, "requestId": successor + "-visit", "successorWorkerSessionId": successor, "followUpInput": "authorized later visit",
+	}, nil)
+	if status != http.StatusAccepted {
+		t.Fatalf("sender continuation after restart: %d %s", status, raw)
+	}
+	select {
+	case caller := <-f.runner.workers[successor].started:
+		if caller["YOU_WORKER_SESSION_ID"] != successor || caller["YOU_WORKER_SESSION_TOKEN"] == "" {
+			t.Fatal("new sender lacks genuine execution credentials")
+		}
+		return caller
+	case <-time.After(15 * time.Second):
+		t.Fatal("new sender did not start")
+	}
+	return nil
+}
+
 func (f *fixture) invokeProject(t *testing.T, id, project string, caller map[string]string) map[string]string {
 	t.Helper()
 	session := support.OpenFactorySessionAt(t, f.server.URL(), f.dir).Session.Id
