@@ -1,6 +1,7 @@
 package mock
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,7 +33,7 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 	var native atomic.Int32
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: publishedDirectMockFactory(t), WaitForServiceModeRuntime: true,
-		Env:  sharedWorkersMockEnvironment(t, publishedDirectMockHome(t)),
+		Env:  finalCaptureEnvironment(t),
 		Args: []string{"--with-mock-workers"}, DeniedProcessAttempts: &native,
 		Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied,
 			ProvidersStdioPipeFactory: func() (platformprocess.StdioChannel, error) { native.Add(1); return nil, errors.New("ACP denied") },
@@ -104,7 +105,7 @@ func runTopologyOnlyMockConfig(t *testing.T, host *support.FunctionalAPIServer, 
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	inputs := support.FakeInputs(ctx, args)
-	inputs.Input.WorkingDirectory, inputs.Input.Env = dir, sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	inputs.Input.WorkingDirectory, inputs.Input.Env = dir, finalCaptureEnvironment(t)
 	joined := make(chan struct{})
 	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
 	t.Cleanup(func() {
@@ -148,7 +149,7 @@ func runTypedEmptyMockAcceptance(t *testing.T, host *support.FunctionalAPIServer
 	inputs := support.FakeInputs(ctx, []string{"you", "run", "--session=" + id, "--dir", dir,
 		"--with-mock-workers=" + path, "--continuously", "--quiet", "--no-record"})
 	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	inputs.Input.Env = finalCaptureEnvironment(t)
 	joined := make(chan struct{})
 	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
 	t.Cleanup(func() {
@@ -266,7 +267,7 @@ func runMatchedMockRejection(t *testing.T, host *support.FunctionalAPIServer, mo
 	ctx, cancel := context.WithCancel(t.Context())
 	inputs := support.FakeInputs(ctx, args)
 	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	inputs.Input.Env = finalCaptureEnvironment(t)
 	done := make(chan error, 1)
 	joined := make(chan struct{})
 	go func() { defer close(joined); done <- host.Execute(t, inputs.Input) }()
@@ -371,7 +372,10 @@ func assertMatchedMockTerminalDispatches(t *testing.T, dispatches []support.Disp
 func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, name string, rendezvous func(*testing.T)) {
 	dir := declaredResultFactory(t)
 	id := uuid.NewString()
-	marker := name + "-" + id
+	// Workers' default execution environment can still include the host's
+	// GIT_TERMINAL_PROMPT=0, classified as sensitive by Providers. Keep this
+	// known-output fixture clear of that value; secret behavior has its own cell.
+	marker := name + "-" + strings.ReplaceAll(id, "0", "Z")
 	gate := support.NewMockWorkerGate(t)
 	body := json.RawMessage(`{"decision":"ACCEPTED","output":"` + marker + `"}`)
 	businessFailure := strings.HasPrefix(name, "F-M2")
@@ -383,6 +387,19 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 		marker = "mock worker accepted"
 	}
 	path := declaredResultConfig(t, dir, name, body, gate)
+	if !strings.HasPrefix(name, "F-M4") {
+		// Compare capture to the actual authored provider fixture, including
+		// opaque fields added by this scenario's configuration writer.
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var configured workers.MockWorkersConfig
+		if err := json.Unmarshal(data, &configured); err != nil {
+			t.Fatal(err)
+		}
+		body = configured.MockWorkers[0].ResultBody
+	}
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "target", WorkTypeID: "task", TraceID: id, Payload: []byte(marker)})
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "sibling", WorkTypeID: "task", TraceID: id + "-sibling", Payload: []byte("sibling input")})
 	ctx, cancel := context.WithCancel(t.Context())
@@ -394,7 +411,7 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 	}
 	inputs := support.FakeInputs(ctx, args)
 	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = sharedWorkersMockEnvironment(t, publishedDirectMockHome(t))
+	inputs.Input.Env = finalCaptureEnvironment(t)
 	if strings.HasPrefix(name, "F-M4") {
 		assertDeclaredSessionAbsent(t, host, id)
 	}
@@ -432,7 +449,7 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 	assertDeclaredWork(t, listed, businessFailure)
 	events := support.GetFactoryEventsForSessionAt(t, host.URL(), id)
 	assertDeclaredDispatch(t, events, businessFailure, marker)
-	assertDeclaredCapture(t, host, workerID, id, marker, name)
+	assertDeclaredCapture(t, host, workerID, id, marker, name, body)
 	assertDeclaredSiblingCapture(t, host, base, workerID, marker)
 	if strings.HasPrefix(name, "F-M5") {
 		cancel()
@@ -534,7 +551,7 @@ func assertDeclaredDispatch(t *testing.T, events []factoryapi.FactoryEvent, fail
 	}
 }
 
-func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, workerID, sessionID, marker, name string) {
+func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, workerID, sessionID, marker, name string, body json.RawMessage) {
 	t.Helper()
 	observation, err := support.WaitForObservation(5*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
 		return support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+workerID), nil
@@ -556,9 +573,61 @@ func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, work
 	if !strings.Contains(string(data), marker) || page.Health != "COMPLETE" {
 		t.Fatalf("captured logs = %s, health=%s", data, page.Health)
 	}
+	completed := 0
+	var encodedBody bytes.Buffer
+	if len(body) > 0 {
+		// The declarative JSON configuration writer compacts resultBody; those
+		// encoded bytes are the actual provider fixture, not its source spacing.
+		if err := json.Compact(&encodedBody, body); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, event := range page.Events {
+		raw, err := json.Marshal(event.Event.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var draft workers.Draft
+		if err := json.Unmarshal(raw, &draft); err != nil {
+			t.Fatal(err)
+		}
+		if draft.Kind == workers.KindMessage && draft.Phase == workers.PhaseCompleted {
+			var payload workers.MessagePayload
+			if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Role == "assistant" {
+				completed++
+				if len(body) > 0 && (len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != encodedBody.String()) {
+					t.Fatalf("native envelope changed: got %+v, want %s", payload, encodedBody.String())
+				}
+			}
+		}
+	}
+	if completed != 1 {
+		t.Fatalf("completed assistant messages = %d, want exactly one: %s", completed, data)
+	}
 	if strings.HasPrefix(name, "F-M7") || strings.HasPrefix(name, "F-M8") {
 		assertRecordingOptionalUsage(t, observation.TokenUsage, page, name)
 	}
+}
+
+// Native capture redacts declared environment secrets. These declarative
+// scenarios must not inherit credentials or short sensitive host flags that
+// happen to occur inside their known output. Each invocation owns all paths.
+func finalCaptureEnvironment(t *testing.T) []string {
+	t.Helper()
+	home := publishedDirectMockHome(t)
+	env := []string{"HOME=" + home, "USERPROFILE=" + home, "YOU_NO_BROWSER_OPEN=1"}
+	for _, key := range []string{"SystemRoot", "WINDIR", "PATH", "PATHEXT", "COMSPEC"} {
+		if value := os.Getenv(key); value != "" {
+			env = append(env, key+"="+value)
+		}
+	}
+	for _, key := range []string{"APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "TEMP", "TMP"} {
+		env = append(env, key+"="+t.TempDir())
+	}
+	return env
 }
 
 func assertRecordingOptionalUsage(t *testing.T, usage *factoryapi.ProviderSessionTokenUsage, page factoryapi.WorkerSessionLogPage, name string) {
