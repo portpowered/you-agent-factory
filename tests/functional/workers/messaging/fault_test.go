@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -213,5 +214,58 @@ func TestFailedReplyWritePreservesParentAndRetryAuthority(t *testing.T) {
 	assertRepliedParent(t, second, parent.MessageId, reply.MessageId)
 	if page := readPage(t, second, "/messages?threadId="+parent.ThreadId, nil); len(page.Messages) != 2 {
 		t.Fatal("reconstruction lost atomic reply or retained a failed attempt")
+	}
+}
+
+func TestReadOnlyRetentionStorePreservesInboxAndFactoryWork(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory mode bits do not revoke Windows write access; hosted Linux proves the real filesystem refusal")
+	}
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+	home, dir := t.TempDir(), t.TempDir()
+	settings := `{"messaging":{"retentionDays":1,"limits":{"defaultExpirySeconds":60}}}`
+	f := startHostEffects(t, home, dir, settings, effects, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	old := f.cliSend(t, lane, "lead", "--request-id", "old", "--body", "settled before retention")
+	clock.SetTick(60)
+	if page := readPage(t, f, "/messages?threadId="+old.ThreadId, lane); len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("retention fixture did not durably settle its old message")
+	}
+	clock.SetTick(23 * 60 * 60)
+	recent := f.cliSend(t, lane, "lead", "--request-id", "recent", "--body", "retain through refusal")
+	f.server.Close(t)
+	path := filepath.Join(home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeDir := filepath.Dir(path)
+	if err := os.Chmod(storeDir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(storeDir, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	clock.SetTick(25 * 60 * 60)
+	second := startHostEffects(t, home, dir, settings, serviceedges.Merge(healthyProviderEffects(), effects))
+	assertError(t, second, http.MethodGet, "/messages", nil, nil, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	assertHealthyWork(t, second)
+	second.server.Close(t)
+	preserved, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, preserved) {
+		t.Fatal("failed retention replaced the committed journal")
+	}
+	if err := os.Chmod(storeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	third := startHostEffects(t, home, dir, settings, effects)
+	assertError(t, third, http.MethodGet, "/messages/"+old.MessageId, nil, nil, http.StatusNotFound, "MESSAGE_NOT_FOUND")
+	if page := readPage(t, third, "/messages", nil); len(page.Messages) != 1 || page.Messages[0].MessageId != recent.MessageId || page.Messages[0].BodySha256 != recent.BodySha256 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("retention retry lost the surviving committed message")
 	}
 }

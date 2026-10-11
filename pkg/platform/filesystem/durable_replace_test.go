@@ -16,12 +16,18 @@ type stagedReplacement struct {
 	syncErr  error
 	closeErr error
 	closed   bool
+	closes   int
+	syncs    int
 }
 
 func (file *stagedReplacement) Write([]byte) (int, error) { return file.written, file.writeErr }
-func (file *stagedReplacement) Sync() error               { return file.syncErr }
+func (file *stagedReplacement) Sync() error {
+	file.syncs++
+	return file.syncErr
+}
 func (file *stagedReplacement) Close() error {
 	file.closed = true
+	file.closes++
 	return file.closeErr
 }
 
@@ -46,6 +52,12 @@ func TestDurableReplacementStagingFailuresRefusePublication(t *testing.T) {
 			}
 			if !test.file.closed {
 				t.Fatal("failed staging leaked its descriptor")
+			}
+			if test.file.closes != 1 {
+				t.Fatal("staging did not close its descriptor exactly once")
+			}
+			if (test.file.writeErr != nil || test.file.written != 2) && test.file.syncs != 0 {
+				t.Fatal("failed or incomplete bytes were flushed")
 			}
 		})
 	}
