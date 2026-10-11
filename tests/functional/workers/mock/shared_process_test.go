@@ -65,6 +65,7 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "ExpectedArtifacts", run: testExpectedArtifactsEnforceThroughSharedProcess},
 		{name: "MockUsage", run: testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess},
 		{name: "MockUsageCapture", run: testMockUsageCapture},
+		{name: "MockUsagePrivacy", run: testMockUsagePrivacy},
 		{name: "MockUsageBusinessInvalid", run: testMockUsageBusinessInvalid},
 		{name: "MockUsageNativePassthrough", run: testMockUsageNativePassthrough},
 		{name: "JavaScriptLiveCapacity", run: testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren},

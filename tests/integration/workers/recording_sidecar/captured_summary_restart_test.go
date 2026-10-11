@@ -517,9 +517,13 @@ type capturedSummaryArtifactSnapshot struct {
 // calls. Factory execution exits idle with code zero despite failed Work.
 func TestCapturedSummaryCleanIdleRestart(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"direct", "factory-artifact-rejection"} {
+	for _, name := range []string{"direct", "factory-artifact-rejection", "mock-usage"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			if name == "mock-usage" {
+				runMockUsageRestart(t)
+				return
+			}
 			runCapturedSummaryCleanIdleRestart(t, name)
 		})
 	}

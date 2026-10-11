@@ -25,6 +25,123 @@ import (
 
 const mockUsageWorkID = "mock-usage-costs"
 
+// Both Factory Sessions are admitted before waiting, so peer ownership is
+// exercised on the same host. A second isolated profile is necessary to prove
+// that knowing the canonical ID does not grant access to captured usage.
+func testMockUsagePrivacy(t *testing.T, fixture *sharedWorkersMockFixture) {
+	type attempt struct {
+		dir         string
+		session     *sharedWorkersMockSession
+		observation factoryapi.WorkerSessionObservation
+		logs        string
+	}
+	var attempts []attempt
+	for _, provider := range []modelprovider.Provider{modelprovider.ProviderClaude, modelprovider.ProviderCodex} {
+		dir := testutil.CopyFixtureDir(t, support.AgentFactoryPath(t, "examples/simple-tasks"))
+		support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(provider, "privacy-execution-model"))
+		support.ClearSeedInputs(t, dir)
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "mock-usage-capture", WorkTypeID: "story", Payload: []byte(`{"title":"private usage"}`)})
+		fixture.useCommandRunnersFor(t, dir, nil, nil)
+		attempts = append(attempts, attempt{dir: dir, session: fixture.openSession(t, dir)})
+	}
+	for index := range attempts {
+		owned := &attempts[index]
+		defer owned.session.closeAndAssertGone(t)
+		listed, _ := owned.session.terminalObservations(t, 15*time.Second)
+		id, row := usageWorkerSession(t, fixture.server.URL(), owned.session.id, singleMockUsageWork(t, listed))
+		owned.observation = row
+		owned.logs = executeMockUsageCLI(t, fixture, owned.dir, "--json", "--server", fixture.server.URL(), "worker-sessions", "read", "--worker-session-id", id, "--view", "logs")
+		assertCapturedMockUsage(t, owned.logs, *row.Provider, "gpt-5-codex", "MOCK_USAGE_FACTORY_OK", 22)
+	}
+	foreign := newSharedWorkersMockFixture(t)
+	for index, owned := range attempts {
+		peer := attempts[1-index]
+		id := owned.observation.WorkerSessionId
+		assertMockUsagePeerCursor(t, fixture.server, owned.dir, nil, id, peer.observation.WorkerSessionId)
+		assertMockUsageScopedDenial(t, fixture.server, owned.dir, id, peer.session.id)
+		assertMockUsageForeignProfile(t, foreign.server, foreign.hostDir, id)
+		// Denied reads must leave the original committed history unchanged.
+		after := executeMockUsageCLI(t, fixture, owned.dir, "--json", "--server", fixture.server.URL(), "worker-sessions", "read", "--worker-session-id", id, "--view", "logs")
+		if after != owned.logs {
+			t.Fatal("peer/profile reads changed original captured history")
+		}
+		assertMockUsageReadParity(t, fixture.server, owned.dir, nil, owned.observation, after)
+	}
+}
+
+func assertMockUsageScopedDenial(t *testing.T, server *support.FunctionalAPIServer, dir, id, scope string) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", server.URL(), "worker-sessions", "show", "--worker-session-id", id, "--session", scope})
+	inputs.Input.WorkingDirectory = dir
+	if err := server.Execute(t, inputs.Input); err == nil || inputs.Stdout() != "" {
+		t.Fatalf("foreign scope CLI disclosed session: %v %s", err, inputs.Stdout())
+	}
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(inputs.Stderr()), &failure); err != nil || failure.Code != "WORKER_SESSION_NOT_FOUND" {
+		t.Fatalf("foreign scope CLI error: %s %v", inputs.Stderr(), err)
+	}
+	assertMockUsageHTTPNotFound(t, server, "/factory-sessions/"+url.PathEscape(scope)+"/worker-sessions/"+url.PathEscape(id), factoryapi.ErrorResponseCodeNOTFOUND)
+}
+
+func assertMockUsageHTTPNotFound(t *testing.T, server *support.FunctionalAPIServer, path string, code factoryapi.ErrorResponseCode) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL()+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var failure factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&failure); err != nil || response.StatusCode != http.StatusNotFound || failure.Code != code {
+		t.Fatalf("foreign session HTTP %s want %s: %d %+v %v", path, code, response.StatusCode, failure, err)
+	}
+}
+
+func assertMockUsageForeignProfile(t *testing.T, server *support.FunctionalAPIServer, dir, id string) {
+	t.Helper()
+	connection, ctx := mockUsageMCP(t, server, dir, nil)
+	for _, view := range []string{"summary", "logs"} {
+		code := factoryapi.ErrorResponseCode("WORKER_SESSION_NOT_FOUND")
+		command := "read"
+		args := []string{"--view", view}
+		path := "/worker-sessions/" + url.PathEscape(id) + "/logs"
+		if view == "summary" {
+			command, args, path = "show", nil, "/worker-sessions/"+url.PathEscape(id)
+			code = factoryapi.ErrorResponseCodeNOTFOUND
+		}
+		cliArgs := append([]string{"you", "--json", "--server", server.URL(), "worker-sessions", command, "--worker-session-id", id}, args...)
+		input := support.FakeInputs(ctx, cliArgs)
+		input.Input.WorkingDirectory = dir
+		if err := server.Execute(t, input.Input); err == nil || input.Stdout() != "" {
+			t.Fatalf("foreign profile CLI disclosed history: %v %s", err, input.Stdout())
+		}
+		var failure factoryapi.ErrorResponse
+		if err := json.Unmarshal([]byte(input.Stderr()), &failure); err != nil || failure.Code != "WORKER_SESSION_NOT_FOUND" {
+			t.Fatalf("foreign profile CLI error: %s %v", input.Stderr(), err)
+		}
+		assertMockUsageHTTPNotFound(t, server, path, code)
+		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": id, "view": view}})
+		if err != nil || !result.IsError {
+			t.Fatalf("foreign profile MCP disclosed history: %+v %v", result, err)
+		}
+		encoded, err := json.Marshal(result.StructuredContent)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var diagnostic struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(encoded, &diagnostic); err != nil || diagnostic.Error.Code != "worker_session.not_found" {
+			t.Fatalf("foreign profile MCP error: %s %v", encoded, err)
+		}
+	}
+}
+
 func testMockUsageBusinessInvalid(t *testing.T, fixture *sharedWorkersMockFixture) {
 	dir := declaredResultFactory(t)
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "mock-usage-business", WorkTypeID: "task", Payload: []byte(`{"title":"invalid business output"}`)})
