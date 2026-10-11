@@ -324,9 +324,12 @@ func TestWorkerWorkAttributionCommittedOpeningNames(t *testing.T) {
 	t.Parallel()
 	for _, cell := range []struct {
 		name, catalog, metadata, prepared, want string
-		foreign, missingAttempt                 bool
+		foreign, missingAttempt, multiWork      bool
 		wantErr                                 error
 	}{
+		{name: "multi-Work catalog", multiWork: true, catalog: "Primary", metadata: `{"labels":["tag:_work_name=Primary","tag:_work_name=Peer"]}`, want: "Primary"},
+		{name: "multi-Work legacy ambiguous", multiWork: true, metadata: `{"labels":["tag:_work_name=Primary","tag:_work_name=Peer"]}`},
+		{name: "multi-Work legacy singular", multiWork: true, metadata: `{"labels":["tag:_work_name=Peer"]}`},
 		{name: "legacy", metadata: `{"labels":["tag:_work_name=Original"]}`, want: "Original"},
 		{name: "matching witnesses", catalog: "Original", metadata: `{"labels":["tag:_work_name=Original","tag:_work_name=Original"]}`, want: "Original"},
 		{name: "absent", metadata: `{"labels":["tag:other=Peer","_work_name=Peer"]}`},
@@ -352,6 +355,9 @@ func TestWorkerWorkAttributionCommittedOpeningNames(t *testing.T) {
 				t.Fatal(err)
 			}
 			opening.AttemptID = "attempt"
+			if cell.multiWork {
+				opening.WorkIDs = []string{"work", "peer"}
+			}
 			if cell.missingAttempt {
 				opening.AttemptID = ""
 			}

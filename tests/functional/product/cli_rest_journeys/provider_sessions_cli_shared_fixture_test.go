@@ -76,6 +76,9 @@ type workerSessionsCLIAPIServer struct {
 	readMu     sync.Mutex
 	readGate   *workerSessionReadGate
 	listFaults map[string]http.Handler
+	// Global requests observe every selected Worker, including synthetic faults.
+	// Exclude only injected mandatory-read failures; normal peer lifecycles overlap.
+	globalObservation sync.RWMutex
 }
 
 // A single scenario owns this marker and the received/drained signals. Peers
@@ -100,6 +103,10 @@ func (server *workerSessionsCLIAPIServer) start(
 	server.starts.Add(1)
 	handler := request.Handler
 	request.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/worker-sessions" {
+			server.globalObservation.RLock()
+			defer server.globalObservation.RUnlock()
+		}
 		server.readMu.Lock()
 		gate := server.readGate
 		fault := server.listFaults[r.URL.Path+"?workId="+r.URL.Query().Get("workId")]
@@ -217,7 +224,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 
 	runner, fleetGate := newWorkerSessionsCLISharedRouteRunner(t, homeDir)
 	api := newWorkerSessionsCLIAPIServer()
-	captureReads := &workerSessionCaptureReads{faults: make(map[string]workerSessionCaptureFault)}
+	captureReads := &workerSessionCaptureReads{faults: make(map[string]workerSessionCaptureFault), globalObservation: &api.globalObservation}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		WorkerRecordingWriter:        captureReads,
 		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { captureReads.WorkerRecordingStore = store },
@@ -614,9 +621,10 @@ func resetprovidersessionscli5State() {
 // and commit operations retain the real Wire-built durable implementation.
 type workerSessionCaptureReads struct {
 	recordings.WorkerRecordingStore
-	mu            sync.Mutex
-	faults        map[string]workerSessionCaptureFault
-	summaryFaults map[string]*workerSessionSummaryFault
+	mu                sync.Mutex
+	faults            map[string]workerSessionCaptureFault
+	summaryFaults     map[string]*workerSessionSummaryFault
+	globalObservation *sync.RWMutex
 }
 
 func (reads *workerSessionCaptureReads) ReadWorkerCapturedActivity(ctx context.Context, request recordings.WorkerCapturedActivityRequest) (recordings.WorkerCapturedActivityPage, error) {
@@ -707,6 +715,7 @@ func (store *workerSessionCaptureReads) CurrentWorkerRecordingHealth(ctx context
 
 func (store *workerSessionCaptureReads) summaryFault(t *testing.T, id string, err error) (*workerSessionSummaryFault, func()) {
 	t.Helper()
+	store.globalObservation.Lock()
 	fault := &workerSessionSummaryFault{err: err, reached: make(chan struct{}, 2), drained: make(chan struct{}, 2)}
 	fault.healthOnly = errors.Is(err, recordings.ErrMissingWorkerRecordingReader)
 	store.mu.Lock()
@@ -715,10 +724,14 @@ func (store *workerSessionCaptureReads) summaryFault(t *testing.T, id string, er
 	}
 	store.summaryFaults[id] = fault
 	store.mu.Unlock()
+	var clearOnce sync.Once
 	clear := func() {
-		store.mu.Lock()
-		delete(store.summaryFaults, id)
-		store.mu.Unlock()
+		clearOnce.Do(func() {
+			store.mu.Lock()
+			delete(store.summaryFaults, id)
+			store.mu.Unlock()
+			store.globalObservation.Unlock()
+		})
 	}
 	t.Cleanup(clear)
 	return fault, clear

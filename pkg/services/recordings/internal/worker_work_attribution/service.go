@@ -202,6 +202,12 @@ func capturedWorkName(catalogName string, opening workers.SessionPayload) (strin
 	if json.Unmarshal(opening.SessionMetadata, &metadata) != nil {
 		return "", recordings.ErrInvalidProjectionInput
 	}
+	// Multi-Work labels describe every input without associating each name
+	// with a Work ID. Only the catalog names the validated primary Work.
+	// Legacy aggregate labels cannot supply or contradict that exact fact.
+	if len(opening.WorkIDs) != 1 {
+		return catalogName, nil
+	}
 	names := make(map[string]string)
 	if catalogName != "" {
 		names["work"] = catalogName
