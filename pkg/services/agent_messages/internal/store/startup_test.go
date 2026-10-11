@@ -4,19 +4,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 )
 
 type startupJournal struct {
+	path      string
+	bindErr   error
 	calls     int
 	now       time.Time
 	retention time.Duration
 	err       error
+}
+
+func (j *startupJournal) Bind(path string) error {
+	if j.bindErr != nil {
+		return j.bindErr
+	}
+	j.path = path
+	return nil
 }
 
 func (j *startupJournal) Activate(now time.Time, retention time.Duration) error {
@@ -113,5 +125,64 @@ func TestStartupDisabledAndCanceledDoNotTouchStore(t *testing.T) {
 	s = NewStartup(false, j, clock, DefaultRetention, logging.NoopLogger{})
 	if err := s.Start(context.Background()); err != nil || j.calls != 0 || clockCalls != 0 {
 		t.Fatalf("disabled messaging touched store: %v", err)
+	}
+}
+
+func TestStartupSelectsExplicitProfileOnce(t *testing.T) {
+	t.Parallel()
+	path, err := filepath.Abs(filepath.Join("profile-a", "messages.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &startupJournal{}
+	s := NewStartup(true, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := s.StartAt(ctx, path); !errors.Is(err, context.Canceled) || j.path != "" {
+		t.Fatal("cancellation consumed profile selection", err)
+	}
+	for range 2 {
+		if err := s.StartAt(context.Background(), path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if j.path != path || j.calls != 1 {
+		t.Fatal("startup did not retain the selected profile")
+	}
+	other := filepath.Join(filepath.Dir(path), "other.jsonl")
+	if err := s.StartAt(context.Background(), other); !errors.Is(err, agentmessages.ErrBadRequest) || j.path != path || j.calls != 1 {
+		t.Fatal("startup accepted a different profile", err)
+	}
+}
+
+func TestStartupRejectsInvalidOrConflictingSelectionBeforeActivation(t *testing.T) {
+	t.Parallel()
+	path, err := filepath.Abs("messages.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &startupJournal{bindErr: agentmessages.ErrBadRequest}
+	s := NewStartup(true, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
+	for _, invalid := range []string{"", "relative/messages.jsonl", path} {
+		if err := s.StartAt(context.Background(), invalid); !errors.Is(err, agentmessages.ErrBadRequest) || j.calls != 0 || j.path != "" {
+			t.Fatal("invalid selection activated a profile", err)
+		}
+	}
+	j.bindErr = nil
+	if err := s.StartAt(context.Background(), path); err != nil || j.calls != 1 {
+		t.Fatal("selection rejection prevented a valid later start", err)
+	}
+}
+
+func TestStartupDisabledProfileSkipsStoreAndClock(t *testing.T) {
+	t.Parallel()
+	path, err := filepath.Abs("messages.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := &startupJournal{bindErr: errors.New("must not bind")}
+	s := NewStartup(false, j, func() time.Time { t.Error("disabled startup read clock"); return time.Time{} }, DefaultRetention, logging.NoopLogger{})
+	if err := s.StartAt(context.Background(), path); err != nil || j.calls != 0 || j.path != "" {
+		t.Fatal("disabled startup touched the journal", err)
 	}
 }

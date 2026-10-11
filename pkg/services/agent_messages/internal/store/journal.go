@@ -49,7 +49,27 @@ type Journal struct {
 type requestKey struct{ sender, request string }
 
 func New(files FileSystem, path string) *Journal {
+	if path != "" {
+		path = filepath.Clean(path)
+	}
 	return &Journal{fs: files, path: path}
+}
+
+// Bind selects an explicit journal path after the application has selected its
+// profile. It performs no IO and never changes an already selected identity,
+// including one whose activation failed. One journal cannot serve two profiles.
+func (j *Journal) Bind(path string) error {
+	if path == "" || !filepath.IsAbs(path) {
+		return agentmessages.ErrBadRequest
+	}
+	path = filepath.Clean(path)
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.path != "" && j.path != path {
+		return agentmessages.ErrBadRequest
+	}
+	j.path = path
+	return nil
 }
 
 // Open reconstructs the complete committed journal without modifying bytes.
@@ -86,6 +106,9 @@ func (j *Journal) Activate(now time.Time, retention time.Duration) error {
 func (j *Journal) open() error {
 	if j.opened || j.fault != nil {
 		return j.fault
+	}
+	if j.path == "" || !filepath.IsAbs(j.path) || j.fs == nil {
+		return ErrUnavailable
 	}
 	data, err := j.fs.ReadFile(j.path)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

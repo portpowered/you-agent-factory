@@ -31,7 +31,9 @@ type (
 )
 
 func NewJournal(files agentmessages.StoreFileSystem, path string) (*Journal, error) {
-	if files == nil || strings.TrimSpace(path) == "" || !filepath.IsAbs(path) {
+	// An empty path defers selection to Startup.StartAt. Construction occurs
+	// before invocation profile selection and never discovers ambient home.
+	if files == nil || (path != "" && (strings.TrimSpace(path) == "" || !filepath.IsAbs(path))) {
 		return nil, agentmessages.ErrBadRequest
 	}
 	return store.New(files, path), nil

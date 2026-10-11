@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -161,5 +162,103 @@ func TestActivationKeepsReadsBehindRetentionPublication(t *testing.T) {
 		if entry.Message.MessageID == "dropped" {
 			t.Fatal("read exposed a record deleted during activation")
 		}
+	}
+}
+
+func TestDeferredProfileSelectionReconstructsWithoutCrossingProfiles(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "selected", "messages.jsonl")
+	other := filepath.Join(root, "other", "messages.jsonl")
+	files := filesystem.Local{}
+	tx, now := retentionFixture()
+	mustCommit(t, newTestJournal(t, files, path), tx)
+	mustCommit(t, newTestJournal(t, files, other), sentTransaction("other-profile", 1))
+	j := New(files, "")
+	if err := j.Open(); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("unbound journal discovered a path", err)
+	}
+	for _, invalid := range []string{"", "relative/messages.jsonl"} {
+		if err := j.Bind(invalid); !errors.Is(err, agentmessages.ErrBadRequest) {
+			t.Fatal("journal accepted an implicit profile", err)
+		}
+	}
+	if err := j.Bind(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Activate(now, DefaultRetention); err != nil {
+		t.Fatal(err)
+	}
+	assertMatches(t, j, Filter{}, 10, "parent", "reply", "pending", "boundary")
+	assertRequestRecovered(t, j, tx.Requests[len(tx.Requests)-1])
+	if err := j.Bind(other); !errors.Is(err, agentmessages.ErrBadRequest) {
+		t.Fatal("active journal switched profiles", err)
+	}
+	if err := j.Bind(filepath.Join(root, "selected", ".", "messages.jsonl")); err != nil {
+		t.Fatal("same canonical profile was rejected", err)
+	}
+	mustCommit(t, j, sentTransaction("next", 11))
+	rebuilt := newTestJournal(t, files, path)
+	assertMatches(t, rebuilt, Filter{}, 11, "parent", "reply", "pending", "boundary", "next")
+	assertMatches(t, newTestJournal(t, files, other), Filter{}, 1, "other-profile")
+}
+
+func TestFailedProfileRemainsSelected(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "corrupt.jsonl")
+	before := []byte("private malformed journal\n")
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	j := New(filesystem.Local{}, "")
+	if err := j.Bind(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Activate(time.Unix(1, 0), DefaultRetention); !errors.Is(err, ErrCorrupt) {
+		t.Fatal(err)
+	}
+	if err := j.Bind(filepath.Join(root, "empty.jsonl")); !errors.Is(err, agentmessages.ErrBadRequest) {
+		t.Fatal("corruption was bypassed by switching profiles", err)
+	}
+	if _, _, err := j.Entries(); !errors.Is(err, ErrCorrupt) || !bytes.Equal(before, readBytes(t, path)) {
+		t.Fatal("rejected selection changed quarantined bytes or readiness", err)
+	}
+}
+
+func TestConcurrentProfileSelectionAdmitsExactlyOneIdentity(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	paths := []string{filepath.Join(root, "first.jsonl"), filepath.Join(root, "second.jsonl")}
+	// Binding has no filesystem effects. Concurrent selectors compete for one
+	// identity before any activation, rather than replacing each other's path.
+	j := New(nil, "")
+	results := make(chan string, len(paths))
+	var callers sync.WaitGroup
+	for _, path := range paths {
+		callers.Add(1)
+		go func() {
+			defer callers.Done()
+			if err := j.Bind(path); err == nil {
+				results <- path
+			} else if !errors.Is(err, agentmessages.ErrBadRequest) {
+				t.Errorf("unexpected selection error: %v", err)
+			}
+		}()
+	}
+	callers.Wait()
+	close(results)
+	winners := []string{}
+	for path := range results {
+		winners = append(winners, path)
+	}
+	if len(winners) != 1 {
+		t.Fatalf("accepted %d profile identities", len(winners))
+	}
+	if err := j.Bind(winners[0]); err != nil {
+		t.Fatal("winning identity was not retained", err)
+	}
+	if _, _, err := j.Entries(); !errors.Is(err, ErrUnavailable) {
+		t.Fatal("binding exposed an unactivated journal", err)
 	}
 }
