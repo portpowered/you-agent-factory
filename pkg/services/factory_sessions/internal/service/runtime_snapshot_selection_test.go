@@ -213,7 +213,7 @@ func TestRuntimeSnapshotSelectionResolverUnavailablePreservesDomainError(t *test
 			}
 			result, err := selector.Resolve(t.Context(), factorydefinitions.RuntimeSelection{Directory: "/factory"}, recording, replay, resume, "session")
 			var diagnostic *factorydefinitions.RuntimeSnapshotResolutionError
-			if err != cause || !errors.Is(err, factorydefinitions.ErrRuntimeSnapshotResolverUnavailable) || !errors.As(err, &diagnostic) || diagnostic.Diagnostic != cause.Diagnostic || !reflect.DeepEqual(result, activationSnapshotResolution{}) {
+			if !errors.Is(err, cause) || !errors.Is(err, factorydefinitions.ErrRuntimeSnapshotResolverUnavailable) || !errors.As(err, &diagnostic) || diagnostic.Diagnostic != cause.Diagnostic || !reflect.DeepEqual(result, activationSnapshotResolution{}) {
 				t.Fatalf("selected domain error lost: result=%#v error=%v", result, err)
 			}
 		})
