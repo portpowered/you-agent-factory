@@ -59,7 +59,7 @@ func sanitizeCapturedProgress(progress providers.ExecuteProgress, request provid
 	if progress.Metadata != nil {
 		metadata := make(map[string]string, len(progress.Metadata))
 		for key, value := range progress.Metadata {
-			if safe, ok := sanitizeToolSummary(key, value, redact); ok {
+			if safe, ok := sanitizeToolSummary(key, value, redact, containsCapturedPrivateTerm); ok {
 				metadata[key] = safe
 			} else if containsSensitiveMetadataTerm(key) {
 				metadata[key] = redactedValue
@@ -212,7 +212,7 @@ func sanitizeMetadata(
 		redact := func(value string) string {
 			return sanitizeDiagnosticText(value, maxDiagnosticRunes, request, extraSecrets...)
 		}
-		if safe, ok := sanitizeToolSummary(safeKey, metadata[key], redact); ok {
+		if safe, ok := sanitizeToolSummary(safeKey, metadata[key], redact, containsSensitiveMetadataTerm); ok {
 			if len([]rune(safe)) > maxDiagnosticRunes {
 				safe = `"<redacted>"`
 			}
@@ -235,9 +235,8 @@ func sanitizeMetadata(
 
 // Redact typed summaries before encoding, so escaped secrets and sensitive
 // nested keys cannot bypass policy or turn the published summary into invalid
-// JSON. Classification still hides command/output values, preserving only
-// nonsensitive structured facts such as status and numeric exit codes.
-func sanitizeToolSummary(key, value string, redact func(string) string) (string, bool) {
+// JSON. Capture and diagnostics supply distinct field classification policies.
+func sanitizeToolSummary(key, value string, redact func(string) string, private func(string) bool) (string, bool) {
 	if key != "raw_input" && key != "raw_output" {
 		return "", false
 	}
@@ -245,14 +244,14 @@ func sanitizeToolSummary(key, value string, redact func(string) string) (string,
 	decoder := json.NewDecoder(strings.NewReader(value))
 	decoder.UseNumber()
 	if !json.Valid([]byte(value)) || decoder.Decode(&summary) != nil {
-		return "", false
+		return `"<redacted>"`, true
 	}
-	summary = redactToolValue(summary, redact, containsSensitiveMetadataTerm(key))
+	summary = redactToolValue(summary, redact, private, private(key))
 	encoded, err := json.Marshal(summary)
 	return string(encoded), err == nil
 }
 
-func redactToolValue(value any, redact func(string) string, sensitive bool) any {
+func redactToolValue(value any, redact func(string) string, private func(string) bool, sensitive bool) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
@@ -264,15 +263,15 @@ func redactToolValue(value any, redact func(string) string, sensitive bool) any 
 				continue
 			}
 			privateKey := strings.ToLower(strings.ReplaceAll(key, "_", ""))
-			if containsSensitiveMetadataTerm(key) || strings.Contains(privateKey, "privatereasoning") || strings.Contains(privateKey, "encryptedcontent") {
+			if private(key) || strings.Contains(privateKey, "privatereasoning") || strings.Contains(privateKey, "encryptedcontent") {
 				typed[key] = redactedValue
 			} else {
-				typed[key] = redactToolValue(child, redact, false)
+				typed[key] = redactToolValue(child, redact, private, false)
 			}
 		}
 	case []any:
 		for index, child := range typed {
-			typed[index] = redactToolValue(child, redact, sensitive)
+			typed[index] = redactToolValue(child, redact, private, sensitive)
 		}
 	case string:
 		if sensitive {
@@ -376,4 +375,14 @@ func boundedRunes(value string, limit int) string {
 		return value
 	}
 	return string(runes[:limit])
+}
+
+// Captured tool bodies are customer content. Only credential and private
+// reasoning fields are classified wholesale; command/output names are benign.
+func containsCapturedPrivateTerm(key string) bool {
+	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(key))
+	if _, allowed := allowedSensitiveMetadataKeys[strings.ToLower(key)]; allowed {
+		return false
+	}
+	return containsCredentialEnvironmentTerm(key) || strings.Contains(normalized, "privatereasoning") || strings.Contains(normalized, "encryptedcontent")
 }

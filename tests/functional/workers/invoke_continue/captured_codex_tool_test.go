@@ -21,9 +21,9 @@ import (
 // this protects captured public values without claiming real provider emission.
 func capturedCodexToolOutput() []byte {
 	return []byte(`{"type":"thread.started","thread_id":"captured-tools-thread"}
-{"type":"item.started","item":{"id":"success","type":"command_execution","command":"private-command","status":"in_progress"}}
-{"type":"item.completed","item":{"id":"success","type":"command_execution","aggregated_output":"private-output","exit_code":0,"status":"completed"}}
-{"type":"item.completed","item":{"id":"failure","type":"command_execution","aggregated_output":"private-denial","exit_code":1,"status":"failed"}}
+{"type":"item.started","item":{"id":"success","type":"command_execution","command":"benign-command","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"success","type":"command_execution","aggregated_output":"benign-output","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"failure","type":"command_execution","aggregated_output":"benign-denial","exit_code":1,"status":"failed"}}
 {"type":"item.started","item":{"id":"mcp","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"visible"},"status":"in_progress"}}
 {"type":"item.completed","item":{"id":"mcp","type":"mcp_tool_call","result":{"value":"visible"},"status":"completed"}}
 {"type":"item.started","item":{"id":"collab","type":"collab_tool_call","arguments":{"task":"visible"},"status":"in_progress"}}
@@ -102,9 +102,9 @@ func assertCapturedCodexToolReads(t *testing.T, ctx context.Context, fixture *in
 		if json.Unmarshal(mcpBody, httpValue) != nil || !reflect.DeepEqual(cli, httpValue) {
 			t.Fatalf("MCP tool facts differ for %s", view)
 		}
-		for _, private := range []string{"private-command", "private-output", "private-denial"} {
-			if strings.Contains(body, private) {
-				t.Fatal("sensitive tool summary leaked")
+		for _, benign := range []string{"benign-command", "benign-output", "benign-denial"} {
+			if !strings.Contains(body, benign) {
+				t.Fatal("benign tool content lost")
 			}
 		}
 		if view == "logs" {
@@ -530,6 +530,12 @@ func assertCapturedCodexTranscriptCall(t *testing.T, entry api.ProviderSessionTr
 	if *entry.Name != names[*entry.CallId] {
 		t.Fatalf("native tool identity/name lost: id=%q name=%q", *entry.CallId, *entry.Name)
 	}
+	if *entry.CallId == "success" {
+		var arguments map[string]any
+		if entry.Arguments == nil || json.Unmarshal([]byte(*entry.Arguments), &arguments) != nil || arguments["command"] != "benign-command" {
+			t.Fatal("command arguments changed")
+		}
+	}
 	if (*entry.CallId == "mcp" || *entry.CallId == "collab") && (entry.Arguments == nil || !strings.Contains(*entry.Arguments, "visible")) {
 		t.Fatal("opening arguments lost on completion")
 	}
@@ -547,6 +553,13 @@ func assertCapturedCodexTranscriptOutput(t *testing.T, entry api.ProviderSession
 	code, status := float64(0), "completed"
 	if *entry.CallId == "failure" {
 		code, status = 1, "failed"
+	}
+	output := "benign-output"
+	if *entry.CallId == "failure" {
+		output = "benign-denial"
+	}
+	if result["aggregated_output"] != output {
+		t.Fatal("command output changed")
 	}
 	if result["exit_code"] != code || result["status"] != status || entry.Status == nil || *entry.Status != status {
 		t.Fatal("tool outcome lost or misreported")
@@ -584,9 +597,15 @@ func assertCapturedCodexToolLogs(t *testing.T, logs api.WorkerSessionLogPage) {
 
 func assertCapturedCodexToolLogResult(t *testing.T, payload workers.ToolPayload, index int, status string) {
 	t.Helper()
+	if index == 0 {
+		var arguments map[string]any
+		if json.Unmarshal(payload.ArgumentsSummary, &arguments) != nil || arguments["command"] != "benign-command" {
+			t.Fatal("captured command changed")
+		}
+	}
 	if index == 1 || index == 2 {
 		var result map[string]any
-		if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != status {
+		if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != status || result["aggregated_output"] != []string{"benign-output", "benign-denial"}[index-1] {
 			t.Fatal("command result lost explicit zero or failure")
 		}
 	}
