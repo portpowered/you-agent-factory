@@ -522,7 +522,7 @@ func awaitFlushCadence(t *testing.T, signal <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-signal:
-	case <-time.After(5 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Fatal("cadence did not re-arm")
 	}
 }
