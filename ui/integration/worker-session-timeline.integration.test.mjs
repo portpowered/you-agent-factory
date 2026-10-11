@@ -7,6 +7,7 @@ import {
   browserScenarioTimeoutMs,
   expectNoBrowserErrors,
   loadReplayLines,
+  resolvedDefaultFactorySessionID,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
@@ -290,6 +291,27 @@ async function installWorkerSessionRoutes(
     observations: [],
     events: [],
   };
+  await page.route("**/messages?**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ messages: [] }),
+      headers: { "Access-Control-Allow-Origin": "*" },
+    }),
+  );
+  await page.route("**/worker-sessions/*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.startsWith("/factory-sessions/")) return route.fallback();
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify({
+        ...workerSessionObservation,
+        factorySessionId: "~default",
+      }),
+    });
+  });
 
   await page.route(
     "**/factory-sessions/**/worker-sessions**",
@@ -857,3 +879,342 @@ describe("Worker Session timeline browser integration", () => {
     browserScenarioTimeoutMs,
   );
 });
+
+function agentMessage(overrides = {}) {
+  return {
+    messageId: "msg-question",
+    threadId: "msg-question",
+    from: {
+      principal: "WORKER",
+      workerSessionId: "lead",
+      factorySessionId: "lead-factory",
+    },
+    to: {
+      kind: "WORKER_SESSION",
+      workerSessionId: workerSessionID,
+      factorySessionId: resolvedDefaultFactorySessionID,
+    },
+    body: "[redacted] Can I continue?",
+    bodySha256: "normalized-hash",
+    bodyRedactionCount: 1,
+    delivery: "QUEUE",
+    ifEnded: "HOLD",
+    replyIfEnded: "REVIVE",
+    status: "QUEUED",
+    reason: "REVIVE_PENDING",
+    hop: 0,
+    sentAt: "2026-10-11T12:00:00Z",
+    expiresAt: "2026-10-12T12:00:00Z",
+    ...overrides,
+  };
+}
+
+async function installMessageJourney(page) {
+  const requests = [];
+  const follows = [];
+  const question = agentMessage();
+  const reply = agentMessage({
+    messageId: "msg-reply",
+    inReplyTo: "msg-question",
+    body: "Continue with the approved change.",
+    status: "DELIVERED_REVIVE",
+    revivedWorkerSessionId: "confirmed-successor",
+    to: { ...question.to, deliveredWorkerSessionId: "confirmed-successor" },
+    reason: null,
+  });
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  let retained = [question, reply];
+  await page.route("**/messages?**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    requests.push({
+      method: request.method(),
+      url: url.toString(),
+      headers: request.headers(),
+    });
+    if (url.searchParams.get("follow") === "true") {
+      await new Promise((resolve) =>
+        follows.push(async (body) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "text/event-stream",
+            headers: cors,
+            body,
+          });
+          resolve();
+        }),
+      );
+      return;
+    }
+    let rows = retained;
+    const statuses = url.searchParams.getAll("status");
+    if (statuses.length)
+      rows = rows.filter((row) => statuses.includes(row.status));
+    if (url.searchParams.get("threadId"))
+      rows = rows.filter(
+        (row) => row.threadId === url.searchParams.get("threadId"),
+      );
+    if (url.searchParams.get("fromWorkerSessionId"))
+      rows = rows.filter(
+        (row) =>
+          row.from.workerSessionId ===
+          url.searchParams.get("fromWorkerSessionId"),
+      );
+    if (url.searchParams.get("toWorkerSessionId"))
+      rows = rows.filter(
+        (row) =>
+          row.to.workerSessionId === url.searchParams.get("toWorkerSessionId"),
+      );
+    const paged = !url.searchParams.get("threadId") && !statuses.length;
+    const second = url.searchParams.has("nextToken");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: cors,
+      body: JSON.stringify({
+        messages: paged ? [rows[second ? 1 : 0]].filter(Boolean) : rows,
+        nextToken: paged && !second && rows.length > 1 ? "page-two" : null,
+      }),
+    });
+  });
+  await page.route("**/worker-sessions/*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.startsWith("/factory-sessions/")) return route.fallback();
+    if (url.pathname.endsWith("/events"))
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        headers: cors,
+        body: workerSessionStreamBody("work-wsr-007-001").replaceAll(
+          workerSessionID,
+          "confirmed-successor",
+        ),
+      });
+    const successor = url.pathname.endsWith("confirmed-successor");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: cors,
+      body: JSON.stringify(
+        successor
+          ? {
+              ...workerSessionObservation,
+              workerSessionId: "confirmed-successor",
+              direct: true,
+              predecessorWorkerSessionId: workerSessionID,
+            }
+          : {
+              ...workerSessionObservation,
+              factorySessionId: resolvedDefaultFactorySessionID,
+              successorWorkerSessionId: "confirmed-successor",
+            },
+      ),
+    });
+  });
+  return {
+    requests,
+    follows,
+    question,
+    reply,
+    setRetained: (rows) => {
+      retained = rows;
+    },
+  };
+}
+
+function assertReadOnlyMessageRequests(expect, requests) {
+  expect(requests.length).toBeGreaterThan(0);
+  for (const request of requests) {
+    expect(request.method).toBe("GET");
+    const params = new URL(request.url).searchParams;
+    for (const forbidden of ["markRead", "toMe", "operator", "after_sequence"])
+      expect(params.has(forbidden)).toBe(false);
+    expect(request.headers.authorization).toBeUndefined();
+    expect(request.headers.cookie).toBeUndefined();
+    if (params.has("follow")) {
+      expect(params.has("status")).toBe(false);
+      expect(params.has("nextToken")).toBe(false);
+    }
+  }
+}
+
+it(
+  "AM-T9 inbox works without a Work selection, pages, filters and opens the exact confirmed successor by keyboard",
+  async ({ expect, openBrowserPage, preview }) => {
+    const server = await startFactoryApiServer({
+      apiPort: preview.apiPort,
+      currentFactory: { name: "Message Browser Factory" },
+      eventLines: await loadReplayLines("event-stream-replay.jsonl"),
+    });
+    const browser = await openBrowserPage({ artifactLabel: "message-inbox" });
+    try {
+      const page = browser.page;
+      await installWorkerSessionRoutes(page);
+      const fixture = await installMessageJourney(page);
+      await page.goto(preview.previewURL, { waitUntil: "domcontentloaded" });
+      const card = page.locator(
+        '[data-bento-card-id="worker-session-timeline"]',
+      );
+      const opener = card.getByRole("button", {
+        name: "Message inbox",
+        exact: true,
+      });
+      await opener.waitFor({ timeout: uiInteractionTimeoutMs });
+      await opener.focus();
+      await page.keyboard.press("Enter");
+      const dialog = page.getByRole("dialog", { name: "Message inbox" });
+      await dialog
+        .getByText(fixture.question.body, { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      await dialog.getByRole("button", { name: "Next", exact: true }).click();
+      await dialog
+        .getByText(fixture.reply.body, { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      expect(
+        await dialog.getByText(fixture.question.body, { exact: true }).count(),
+      ).toBe(0);
+      await dialog
+        .getByRole("button", { name: "Previous", exact: true })
+        .click();
+      await dialog
+        .getByText(fixture.question.body, { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      await dialog.getByRole("combobox", { name: "Status" }).click();
+      await page.getByRole("option", { name: "Queued", exact: true }).click();
+      await dialog.getByRole("button", { name: "Apply filters" }).click();
+      await dialog
+        .getByRole("button", { name: "Open thread msg-question" })
+        .click();
+      await dialog
+        .getByText(fixture.reply.body, { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      for (const viewport of [
+        { width: 1280, height: 800 },
+        { width: 768, height: 1024 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await assertNoPageOverflow(page, expect);
+        expect(
+          await dialog.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth,
+          ),
+        ).toBe(true);
+      }
+      const successor = dialog.getByRole("button", {
+        name: "Open revived Worker Session confirmed-successor",
+      });
+      await successor.focus();
+      expect(
+        await successor.evaluate(
+          (element) => element === document.activeElement,
+        ),
+      ).toBe(true);
+      await page.keyboard.press("Enter");
+      await expect
+        .poll(
+          () =>
+            card
+              .locator(
+                '[data-worker-session-timeline-worker-session-id="confirmed-successor"]',
+              )
+              .count(),
+          { timeout: uiInteractionTimeoutMs },
+        )
+        .toBe(1);
+      expect(await dialog.count()).toBe(0);
+      assertReadOnlyMessageRequests(expect, fixture.requests);
+      expectNoBrowserErrors(browser.pageErrors, browser.consoleErrors, expect);
+    } finally {
+      await browser.close();
+      await server.stop();
+    }
+  },
+  browserScenarioTimeoutMs,
+);
+
+it(
+  "AM-T9 detail observes a status transition, keeps Factory history intact and reconciles retained pages after a stream gap",
+  async ({ expect, openBrowserPage, preview }) => {
+    const server = await startFactoryApiServer({
+      apiPort: preview.apiPort,
+      currentFactory: { name: "Message Browser Factory" },
+      eventLines: await loadReplayLines("event-stream-replay.jsonl"),
+    });
+    const browser = await openBrowserPage({
+      artifactLabel: "message-thread-gap",
+    });
+    try {
+      const page = browser.page;
+      const timelineRequests = await installWorkerSessionRoutes(page);
+      const fixture = await installMessageJourney(page);
+      await page.goto(preview.previewURL, { waitUntil: "domcontentloaded" });
+      await selectReplayWork(page, expect);
+      const card = page.locator(
+        '[data-bento-card-id="worker-session-timeline"]',
+      );
+      const panel = card.getByRole("region", {
+        name: "Messages",
+        exact: true,
+      });
+      await panel
+        .getByText(fixture.question.body, { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      const timeline = card.locator(
+        'section[aria-label="Worker Session timeline"]',
+      );
+      await expect
+        .poll(
+          () =>
+            timeline
+              .locator("li[data-worker-session-timeline-entry-position]")
+              .count(),
+          { timeout: uiInteractionTimeoutMs },
+        )
+        .toBe(4);
+      const before = await timeline
+        .locator("li[data-worker-session-timeline-entry-position]")
+        .count();
+      await expect
+        .poll(() => fixture.follows.length, {
+          timeout: uiInteractionTimeoutMs,
+        })
+        .toBeGreaterThan(0);
+      const updated = { ...fixture.question, status: "READ" };
+      fixture.setRetained([updated, fixture.reply]);
+      await fixture.follows.at(-1)(
+        `event: message\ndata: ${JSON.stringify({ recordId: "read-txn", sequence: 8, kind: "READ", message: updated })}\n\nevent: error\ndata: {"code":"MESSAGE_STREAM_GAP"}\n\n`,
+      );
+      await panel
+        .getByText("Read", { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      await panel
+        .getByRole("button", { name: "Retry" })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      const subscriptions = fixture.follows.length;
+      await panel.getByRole("button", { name: "Retry" }).click();
+      await expect
+        .poll(() => fixture.follows.length, {
+          timeout: uiInteractionTimeoutMs,
+        })
+        .toBeGreaterThan(subscriptions);
+      await panel
+        .getByText("Read", { exact: true })
+        .waitFor({ timeout: uiInteractionTimeoutMs });
+      expect(
+        await timeline
+          .locator("li[data-worker-session-timeline-entry-position]")
+          .count(),
+      ).toBe(before);
+      expect(
+        timelineRequests.events.every((url) => !url.includes("messages")),
+      ).toBe(true);
+      assertReadOnlyMessageRequests(expect, fixture.requests);
+      expectNoBrowserErrors(browser.pageErrors, browser.consoleErrors, expect);
+    } finally {
+      await browser.close();
+      await server.stop();
+    }
+  },
+  browserScenarioTimeoutMs,
+);

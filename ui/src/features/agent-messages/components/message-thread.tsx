@@ -167,8 +167,15 @@ export function MessageThreadContent({
                   ]
                 : state.messages.length === 0
                   ? copy.empty
-                  : copy.stale}
+                  : state.newData
+                    ? copy.newData
+                    : state.live
+                      ? copy.live
+                      : copy.stale}
           </Text>
+          {state.busy && state.messages.length ? (
+            <Text>{copy.stale}</Text>
+          ) : null}
           {state.error ? (
             <DashboardActionButton type="button" onClick={state.refresh}>
               {copy.retry}

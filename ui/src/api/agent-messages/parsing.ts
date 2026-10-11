@@ -2,11 +2,13 @@ import {
   AgentMessageDelivery,
   AgentMessageDeliveryStatus,
   AgentMessageIfEnded,
+  AgentMessageObservationKind,
   AgentMessageReplyIfEnded,
 } from "../generated/openapi";
 import { isAPIRecord } from "../transport";
 import {
   type AgentMessage,
+  type AgentMessageObservation,
   type AgentMessagePage,
   MessageReadError,
   type MessageWorkerIdentity,
@@ -80,6 +82,24 @@ export function parseAgentMessagePage(value: unknown): AgentMessagePage {
   return {
     messages: value.messages.map(parseAgentMessage),
     nextToken: value.nextToken as string | null | undefined,
+  };
+}
+
+export function parseAgentMessageObservation(
+  value: unknown,
+): AgentMessageObservation {
+  if (
+    !isAPIRecord(value) ||
+    !text(value.recordId) ||
+    !integer(value.sequence) ||
+    !member(value.kind, AgentMessageObservationKind)
+  )
+    throw new MessageReadError("invalid");
+  return {
+    recordId: value.recordId,
+    sequence: value.sequence as number,
+    kind: value.kind as AgentMessageObservation["kind"],
+    message: parseAgentMessage(value.message),
   };
 }
 

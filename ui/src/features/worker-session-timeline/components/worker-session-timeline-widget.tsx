@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 import type { MessageWorkerIdentity } from "../../../api/agent-messages/types";
 import { factoryAPIURL } from "../../../api/baseUrl";
 import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
+import { MessageInboxDialog } from "../../agent-messages/components/message-inbox-dialog";
 import { MessageThread } from "../../agent-messages/components/message-thread";
 import { getAgentMessageMessages } from "../../agent-messages/messages/agent-messages";
 import { DashboardWidgetFrame } from "../../bento/components/dashboard-widget-frame/dashboard-widget-frame";
@@ -45,8 +46,6 @@ export function WorkerSessionTimelineWidget({
   });
   const selectedWorkerSessionID =
     workerSessionID ?? targetState.selectedWorkerSessionID;
-  const targetIsReady =
-    workerSessionID !== null || targetState.selectedWorkerSessionID !== null;
   const scopeKey = JSON.stringify([
     factoryAPIURL(""),
     factorySessionID,
@@ -63,11 +62,20 @@ export function WorkerSessionTimelineWidget({
   const displayedFactorySessionID = inspectedIdentity
     ? (inspectedIdentity.factorySessionId ?? null)
     : factorySessionID;
+  const targetIsReady = displayedWorkerSessionID !== null;
 
   return (
     <DashboardWidgetFrame
       bodyScroll={false}
-      headerAction={headerAction}
+      headerAction={
+        <>
+          {headerAction}
+          <MessageInboxDialog
+            locale={locale}
+            onNavigate={(identity) => setInspected({ scopeKey, identity })}
+          />
+        </>
+      }
       title={messages.timelineTitle}
       widgetId={widgetId}
     >

@@ -47,18 +47,23 @@ async function read(
 }
 
 export async function listAgentMessages(options: MessageListOptions) {
+  const query = messageQuery(options);
+  if (options.nextToken) query.set("nextToken", options.nextToken);
+  return parseAgentMessagePage(await read(options, `/messages?${query}`));
+}
+
+export function messageQuery(options: import("./types").MessageFilters) {
   const query = new URLSearchParams({ maxResults: "100" });
   for (const key of [
     "factorySessionId",
     "toWorkerSessionId",
     "fromWorkerSessionId",
     "threadId",
-    "nextToken",
   ] as const) {
     if (options[key]) query.set(key, options[key]);
   }
   for (const status of options.status ?? []) query.append("status", status);
-  return parseAgentMessagePage(await read(options, `/messages?${query}`));
+  return query;
 }
 
 export async function readMessageWorkerIdentity(

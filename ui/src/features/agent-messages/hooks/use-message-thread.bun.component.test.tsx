@@ -7,8 +7,21 @@ import type {
   MessageWorkerIdentity,
 } from "../../../api/agent-messages/types";
 import { MessageReadError } from "../../../api/agent-messages/types";
-import { messageFixture } from "../lib/testing/message-fixture";
+import { messageFixture as baseMessageFixture } from "../lib/testing/message-fixture";
 import { useMessageThread } from "./use-message-thread";
+
+function messageFixture(
+  overrides: Parameters<typeof baseMessageFixture>[0] = {},
+) {
+  return baseMessageFixture({
+    to: {
+      kind: "WORKER_SESSION",
+      workerSessionId: "worker",
+      factorySessionId: "factory-a",
+    },
+    ...overrides,
+  });
+}
 
 function wrapper() {
   const client = new QueryClient({
@@ -50,6 +63,7 @@ describe("message thread query ownership", () => {
           factorySessionID: "factory-a",
           workerSessionID: "worker",
           readIdentity,
+          follow: async () => {},
           list,
         }),
       { wrapper: wrapper() },
@@ -98,8 +112,8 @@ describe("message thread cancellation and recovery", () => {
         messages: [
           messageFixture({
             messageId: "new-host",
-            from: {
-              principal: "WORKER",
+            to: {
+              kind: "WORKER_SESSION",
               workerSessionId: "worker",
               factorySessionId: "factory-b",
             },
@@ -114,6 +128,7 @@ describe("message thread cancellation and recovery", () => {
           factorySessionID,
           workerSessionID: "worker",
           readIdentity,
+          follow: async () => {},
           list,
         }),
       {
@@ -150,6 +165,7 @@ describe("message thread cancellation and recovery", () => {
           factorySessionID: "factory-a",
           workerSessionID: "worker",
           readIdentity,
+          follow: async () => {},
           list,
         }),
       { wrapper: wrapper() },
@@ -181,6 +197,7 @@ describe("message thread cancellation and recovery", () => {
           workerSessionID: "worker",
           enabled: false,
           readIdentity,
+          follow: async () => {},
           list,
         }),
       { wrapper: wrapper() },

@@ -3,6 +3,8 @@ import type { components } from "../generated/openapi";
 export type AgentMessage = components["schemas"]["AgentMessage"];
 export type AgentMessagePage =
   components["schemas"]["AgentMessageListResponse"];
+export type AgentMessageObservation =
+  components["schemas"]["AgentMessageObservation"];
 export type MessageWorkerIdentity = Pick<
   components["schemas"]["WorkerSessionObservation"],
   | "workerSessionId"
@@ -37,6 +39,7 @@ export type MessageReadFailure =
   | "unavailable"
   | "invalid"
   | "expired-page"
+  | "gap"
   | "error";
 
 export class MessageReadError extends Error {

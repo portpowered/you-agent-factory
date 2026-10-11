@@ -27,6 +27,8 @@ function state(
     threadId: null,
     sent: false,
     busy: false,
+    live: false,
+    newData: false,
     unavailable: false,
     error: null,
     previousAvailable: false,
@@ -167,7 +169,12 @@ describe("message thread recovery and localization", () => {
     const delivered = messageFixture({
       status: "DELIVERED_REVIVE",
       revivedWorkerSessionId: "revived",
-      to: { ...messageFixture().to, deliveredWorkerSessionId: "revived" },
+      to: {
+        kind: "WORKER_SESSION",
+        workerSessionId: "worker",
+        factorySessionId: "factory-a",
+        deliveredWorkerSessionId: "revived",
+      },
     });
     render(
       <QueryClientProvider client={client}>
@@ -176,6 +183,7 @@ describe("message thread recovery and localization", () => {
           factorySessionID="factory-a"
           workerSessionID="worker"
           list={async () => ({ messages: [delivered] })}
+          follow={async () => {}}
           readIdentity={async (options) => {
             if (options.workerSessionId !== "worker")
               throw new Error("private provider path and credential");

@@ -6,6 +6,18 @@ import { resolveLocalizedMessages } from "../../../i18n/messages";
 
 const en = {
   title: "Messages",
+  inbox: "Message inbox",
+  inboxDescription:
+    "Observe worker messages on the selected host. Viewing messages does not mark them read.",
+  close: "Close inbox",
+  apply: "Apply filters",
+  recipientFilter: "Recipient Worker Session",
+  senderFilter: "Sender Worker Session",
+  threadFilter: "Thread ID",
+  statusFilter: "Status",
+  allStatuses: "All statuses",
+  newData: "New messages are available. Refresh to start a new page walk.",
+  live: "Observing message updates.",
   received: "Received",
   sent: "Sent",
   refresh: "Refresh",
@@ -45,6 +57,7 @@ const en = {
     REVIVE_LIMIT: "Revival limit reached",
   } as Record<string, string>,
   failures: {
+    gap: "Message updates were interrupted. Retry to reload retained messages.",
     disabled: "Messaging is disabled on this host.",
     denied: "Messages are not available to this observer.",
     unavailable: "The message service or exact Worker Session is unavailable.",
@@ -55,6 +68,18 @@ const en = {
 };
 const es: typeof en = {
   title: "Mensajes",
+  inbox: "Bandeja de mensajes",
+  inboxDescription:
+    "Observe mensajes de Workers en el host seleccionado. Ver mensajes no los marca como leídos.",
+  close: "Cerrar bandeja",
+  apply: "Aplicar filtros",
+  recipientFilter: "Sesión de Worker destinataria",
+  senderFilter: "Sesión de Worker remitente",
+  threadFilter: "ID del hilo",
+  statusFilter: "Estado",
+  allStatuses: "Todos los estados",
+  newData: "Hay mensajes nuevos. Actualice para iniciar una nueva paginación.",
+  live: "Observando actualizaciones de mensajes.",
   received: "Recibidos",
   sent: "Enviados",
   refresh: "Actualizar",
@@ -94,6 +119,7 @@ const es: typeof en = {
     REVIVE_LIMIT: "Límite de reactivación alcanzado",
   },
   failures: {
+    gap: "Se interrumpieron las actualizaciones. Reintente para cargar los mensajes retenidos.",
     disabled: "Los mensajes están desactivados en este host.",
     denied: "Los mensajes no están disponibles para este observador.",
     unavailable:
@@ -106,6 +132,18 @@ const es: typeof en = {
 
 const zh: typeof en = {
   title: "消息",
+  inbox: "消息收件箱",
+  inboxDescription:
+    "查看所选主机上的 Worker 消息。查看消息不会将其标记为已读。",
+  close: "关闭收件箱",
+  apply: "应用筛选",
+  recipientFilter: "接收方 Worker 会话",
+  senderFilter: "发送方 Worker 会话",
+  threadFilter: "消息串 ID",
+  statusFilter: "状态",
+  allStatuses: "所有状态",
+  newData: "有新消息。刷新以重新分页。",
+  live: "正在观察消息更新。",
   received: "收到",
   sent: "已发送",
   refresh: "刷新",
@@ -144,6 +182,7 @@ const zh: typeof en = {
     REVIVE_LIMIT: "已达到恢复限制",
   },
   failures: {
+    gap: "消息更新已中断。请重试以重新加载保留的消息。",
     disabled: "此主机已禁用消息功能。",
     denied: "此观察者无法查看消息。",
     unavailable: "消息服务或指定 Worker 会话不可用。",

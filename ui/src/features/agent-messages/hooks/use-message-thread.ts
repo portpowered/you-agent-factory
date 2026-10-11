@@ -1,16 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { listAgentMessages } from "../../../api/agent-messages/api";
-import {
-  MessageReadError,
-  type MessageWorkerIdentity,
-} from "../../../api/agent-messages/types";
+import type { MessageWorkerIdentity } from "../../../api/agent-messages/types";
 import { factoryAPIURL } from "../../../api/baseUrl";
 import { scopedMessagePage } from "../lib/message-scope";
 import {
   type MessageIdentityReader,
   readMessageScope,
 } from "../lib/read-message-scope";
+import { type MessageFeedOptions, useMessageFeed } from "./use-message-feed";
 
 export interface MessageThreadOptions {
   factorySessionID: string | null;
@@ -19,6 +17,7 @@ export interface MessageThreadOptions {
   origin?: string;
   readIdentity?: MessageIdentityReader;
   list?: typeof listAgentMessages;
+  follow?: MessageFeedOptions["follow"];
 }
 
 export function useMessageThread({
@@ -28,6 +27,7 @@ export function useMessageThread({
   origin = factoryAPIURL("").replace(/\/$/, ""),
   readIdentity,
   list = listAgentMessages,
+  follow,
 }: MessageThreadOptions) {
   const scopeKey = JSON.stringify([origin, factorySessionID, workerSessionID]);
   const [selection, setSelection] = useState({
@@ -35,7 +35,6 @@ export function useMessageThread({
     member: 0,
     sent: false,
     threadId: null as string | null,
-    cursors: [undefined] as (string | undefined)[],
   });
   const current =
     selection.scopeKey === scopeKey
@@ -45,7 +44,6 @@ export function useMessageThread({
           member: 0,
           sent: false,
           threadId: null,
-          cursors: [undefined],
         };
   const active = enabled && workerSessionID !== null;
   const scope = useQuery({
@@ -70,71 +68,44 @@ export function useMessageThread({
       ),
   });
   const identity = scope.data?.[current.member];
-  const page = useQuery({
-    queryKey: [
-      "agent-message-thread",
-      scopeKey,
-      identity?.workerSessionId,
-      identity?.factorySessionId,
-      JSON.stringify(scope.data),
-      current.member,
-      current.sent,
-      current.threadId,
-      current.cursors.at(-1),
-    ],
+  const page = useMessageFeed({
+    origin,
+    scopeKey,
     enabled: active && identity !== undefined,
-    retry: false,
-    refetchOnWindowFocus: false,
-    queryFn: async ({ signal }) => {
-      if (!identity) throw new MessageReadError("unavailable");
-      const result = await list({
-        origin,
-        signal,
-        nextToken: current.cursors.at(-1),
-        ...(current.threadId
-          ? { threadId: current.threadId }
-          : current.sent
-            ? { fromWorkerSessionId: identity.workerSessionId }
-            : {
-                toWorkerSessionId: identity.workerSessionId,
-                factorySessionId: identity.factorySessionId,
-              }),
-      });
-      return {
-        ...result,
-        messages: scopedMessagePage(result.messages, scope.data ?? []),
-      };
-    },
+    list,
+    follow,
+    filters: current.threadId
+      ? { threadId: current.threadId }
+      : current.sent
+        ? { fromWorkerSessionId: identity?.workerSessionId }
+        : {
+            toWorkerSessionId: identity?.workerSessionId,
+            factorySessionId: identity?.factorySessionId ?? undefined,
+          },
   });
   const select = (patch: Partial<typeof selection>) =>
-    setSelection({ ...current, ...patch, cursors: [undefined] });
+    setSelection({ ...current, ...patch });
   return {
     identities: scope.data ?? [],
     identity,
-    messages: page.data?.messages ?? [],
+    messages: scopedMessagePage(page.messages, scope.data ?? []),
     threadId: current.threadId,
     sent: current.sent,
-    busy: active && (scope.isFetching || page.isFetching),
+    busy: active && (scope.isFetching || page.busy),
     unavailable: !active,
     error: scope.error ?? page.error,
-    previousAvailable: current.cursors.length > 1,
-    nextAvailable: Boolean(page.data?.nextToken),
+    previousAvailable: page.previousAvailable,
+    nextAvailable: page.nextAvailable,
+    live: page.live,
+    newData: page.newData,
     setMember: (member: number) => select({ member, threadId: null }),
     setSent: (sent: boolean) => select({ sent, threadId: null }),
     setThread: (threadId: string | null) => select({ threadId }),
-    previous: () =>
-      setSelection({ ...current, cursors: current.cursors.slice(0, -1) }),
-    next: () => {
-      if (page.data?.nextToken)
-        setSelection({
-          ...current,
-          cursors: [...current.cursors, page.data.nextToken],
-        });
-    },
+    previous: page.previous,
+    next: page.next,
     refresh: () => {
-      select({});
       if (scope.isError) void scope.refetch();
-      else if (current.cursors.length === 1) void page.refetch();
+      page.refresh();
     },
   };
 }
