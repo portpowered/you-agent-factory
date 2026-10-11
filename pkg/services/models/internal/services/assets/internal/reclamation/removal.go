@@ -18,7 +18,7 @@ func (s *Service) RemoveManagedTree(ctx context.Context, directory string) error
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("%w: read managed cache revision: %v", models.ErrModelCacheRemovalFailed, err)
+		return fmt.Errorf("%w: read managed cache revision: %w", models.ErrModelCacheRemovalFailed, err)
 	}
 	for _, entry := range entries {
 		if err := s.checkContext(ctx); err != nil {
@@ -54,7 +54,7 @@ func (s *Service) removeManagedEntry(
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("%w: inspect managed cache entry: %v", models.ErrModelCacheRemovalFailed, err)
+		return fmt.Errorf("%w: inspect managed cache entry: %w", models.ErrModelCacheRemovalFailed, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		return s.removeManagedPath(child)
@@ -67,7 +67,7 @@ func (s *Service) removeManagedEntry(
 
 func (s *Service) removeManagedPath(path string) error {
 	if err := s.removePath(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%w: remove managed cache path: %v", models.ErrModelCacheRemovalFailed, err)
+		return fmt.Errorf("%w: remove managed cache path: %w", models.ErrModelCacheRemovalFailed, err)
 	}
 	return nil
 }
@@ -81,7 +81,7 @@ func (s *Service) VerifyManagedPathRemoved(ctx context.Context, parent, child st
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("%w: verify managed cache removal: %v", models.ErrModelCacheRemovalFailed, err)
+		return fmt.Errorf("%w: verify managed cache removal: %w", models.ErrModelCacheRemovalFailed, err)
 	}
 	for _, entry := range entries {
 		if entry != nil && entry.Name() == child {

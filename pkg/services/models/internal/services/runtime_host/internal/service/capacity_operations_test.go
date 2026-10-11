@@ -48,14 +48,20 @@ func TestRuntimeHostAcceptedDependenciesCapacityRefusalThenReleasedStopPreserves
 	state.mu.Lock()
 	delete(state.capacityHolders, selectedKey)
 	state.mu.Unlock()
-	if result, err := host.StopModelHost(t.Context(), request); err != nil || result.Outcome != models.HostStopStopped {
-		t.Fatalf("released stop = %#v, %v", result, err)
-	}
+	result, err := host.StopModelHost(t.Context(), request)
+	assertCapacityStopOutcome(t, result, err, models.HostStopStopped)
 	if result, err := host.StopModelHost(t.Context(), request); err != nil || result.Outcome != models.HostStopAlreadyStopped || selectedProcess.stops != 1 {
 		t.Fatalf("repeated stop = %#v, %v, stops=%d", result, err, selectedProcess.stops)
 	}
 	if endpoint, err := host.InvocationEndpoint(t.Context(), peer, "llm"); err != nil || endpoint != "peer" || peerProcess.stops != 0 {
 		t.Fatalf("peer endpoint=%s err=%v stops=%d", endpoint, err, peerProcess.stops)
+	}
+}
+
+func assertCapacityStopOutcome(t *testing.T, result models.StopModelHostResult, err error, want models.HostStopOutcome) {
+	t.Helper()
+	if err != nil || result.Outcome != want {
+		t.Fatalf("released stop = %#v, %v, want %s", result, err, want)
 	}
 }
 
@@ -98,9 +104,11 @@ func TestRuntimeHostAcceptedDependenciesSelectedIdleSchedulerPreservesActivePeer
 		t.Fatalf("release scheduled duration=%s stops=%d", clock.duration, selectedProcess.stops.Load())
 	}
 	clock.timer.events <- clock.Now().Add(time.Minute)
+	// The injected timer drives cleanup and the stopped channel observes it.
+	// This generous ceiling only bounds a failure on a loaded host.
 	select {
 	case <-selectedProcess.stopped:
-	case <-time.After(5 * time.Second): // Failure ceiling; the supplied timer drives cleanup.
+	case <-time.After(30 * time.Second):
 		t.Fatal("selected scheduler did not stop its process")
 	}
 	state.mu.Lock()

@@ -78,11 +78,7 @@ func TestRuntimeHostAcceptedDependenciesFailedStartRetriesAndClosingScopePreserv
 			t.Error(err)
 		}
 		for _, process := range launcher.processes {
-			select {
-			case <-process.waited:
-			case <-time.After(5 * time.Second):
-				t.Error("owned process did not join")
-			}
+			assertAcceptedProcessJoined(t, process)
 		}
 	})
 	request := models.EnsureModelHostRequest{Scope: selected, Name: "OMNIVOICE_Q4_K_M"}
@@ -98,11 +94,7 @@ func TestRuntimeHostAcceptedDependenciesFailedStartRetriesAndClosingScopePreserv
 	if err := host.CloseRuntimeScope(t.Context(), selected); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-launcher.processes[0].waited:
-	case <-time.After(5 * time.Second):
-		t.Fatal("selected process was not joined")
-	}
+	assertAcceptedProcessJoined(t, launcher.processes[0])
 	select {
 	case <-launcher.processes[1].stopped:
 		t.Fatal("peer stopped with selected scope")
@@ -114,6 +106,17 @@ func TestRuntimeHostAcceptedDependenciesFailedStartRetriesAndClosingScopePreserv
 	}
 	if len(launcher.processes) != 2 {
 		t.Fatalf("peer was relaunched: %d processes", len(launcher.processes))
+	}
+}
+
+func assertAcceptedProcessJoined(t *testing.T, process *controlledManagedProcess) {
+	t.Helper()
+	// Wait completion is the observer; this generous ceiling only bounds failure
+	// on a loaded host and does not drive process shutdown or synchronization.
+	select {
+	case <-process.waited:
+	case <-time.After(30 * time.Second):
+		t.Error("owned process did not join")
 	}
 }
 

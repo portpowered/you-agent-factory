@@ -100,6 +100,13 @@ func (effects *fixedLeafHostEffects) assertConfiguration(t *testing.T, scope mod
 		t.Fatalf("selected host spec = %#v, want %s command/backend/endpoint for scope %s", spec, name, scope.String())
 	}
 	cache := filepath.Join(home, ".agent-factory", "models")
+	assertFixedLeafHostAssetPaths(t, spec, cache)
+	assertFixedLeafHostArguments(t, spec)
+	assertFixedLeafHostAssetContents(t, spec)
+}
+
+func assertFixedLeafHostAssetPaths(t *testing.T, spec serviceedges.HostProcessStartSpec, cache string) {
+	t.Helper()
 	if len(spec.ModelFiles) != 1 || len(spec.BackendFiles) != 1 || spec.ModelPath != spec.ModelFiles[0] ||
 		!pathWithinLocalAIRoot(cache, spec.ModelPath) || !pathWithinLocalAIRoot(cache, spec.BackendFiles[0]) {
 		t.Fatalf("selected host asset paths = %#v, want verified model/backend below %s", spec, cache)
@@ -107,10 +114,18 @@ func (effects *fixedLeafHostEffects) assertConfiguration(t *testing.T, scope mod
 	if !strings.Contains(filepath.ToSlash(spec.ModelPath), strings.SplitN(story004EmbedSource, "@", 2)[1]) {
 		t.Fatalf("host model path = %s, want the selected pinned revision", spec.ModelPath)
 	}
+}
+
+func assertFixedLeafHostArguments(t *testing.T, spec serviceedges.HostProcessStartSpec) {
+	t.Helper()
 	if len(spec.Args) != 5 || spec.Args[0] != "serve" || spec.Args[1] != "--cache-path" ||
 		spec.Args[2] != filepath.Dir(spec.ModelPath) || spec.Args[3] != "--backend-cache-path" || spec.Args[4] != filepath.Dir(spec.BackendFiles[0]) {
 		t.Fatalf("selected host launch arguments = %#v, want exact selected model/backend cache paths", spec.Args)
 	}
+}
+
+func assertFixedLeafHostAssetContents(t *testing.T, spec serviceedges.HostProcessStartSpec) {
+	t.Helper()
 	for _, asset := range []struct{ path, body string }{{spec.ModelPath, "joined built-in tts fixture"}, {spec.BackendFiles[0], "fixed-leaf-embedding-backend"}} {
 		if body, err := os.ReadFile(asset.path); err != nil || string(body) != asset.body {
 			t.Fatalf("selected host asset %s = %q, %v, want %q", asset.path, body, err, asset.body)

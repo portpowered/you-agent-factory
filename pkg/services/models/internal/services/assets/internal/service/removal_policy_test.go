@@ -30,14 +30,7 @@ func TestRemoveModelAssetsCompletedPolicyControlsRemovalOutcome(t *testing.T) {
 			result, err := assets.removeManagedModelTarget(t.Context(), models.RemoveModelAssetsRequest{Name: "selected"}, models.RemoveModelAssetsResult{}, target, nil)
 			wantErr := errors.Join(test.measureErr, test.removeErr, test.verifyErr)
 			if wantErr != nil {
-				if err == nil || result.BytesRemoved != 0 || result.Outcome == models.AssetRemovalRemoved {
-					t.Fatalf("failed policy returned success: %#v, %v", result, err)
-				}
-				for _, cause := range []error{test.measureErr, test.removeErr, test.verifyErr} {
-					if cause != nil && !errors.Is(err, cause) {
-						t.Fatalf("lost cause %v: %v", cause, err)
-					}
-				}
+				assertCompletedRemovalFailure(t, result, err, test.measureErr, test.removeErr, test.verifyErr)
 				return
 			}
 			if err != nil || result.BytesRemoved != 17 || result.Outcome != models.AssetRemovalRemoved || result.ModelName != target.modelName || result.Revision != target.revision {
@@ -47,6 +40,18 @@ func TestRemoveModelAssetsCompletedPolicyControlsRemovalOutcome(t *testing.T) {
 				t.Fatalf("wrong selected policy inputs: %#v", policy)
 			}
 		})
+	}
+}
+
+func assertCompletedRemovalFailure(t *testing.T, result models.RemoveModelAssetsResult, err error, causes ...error) {
+	t.Helper()
+	if err == nil || result.BytesRemoved != 0 || result.Outcome == models.AssetRemovalRemoved {
+		t.Fatalf("failed policy returned success: %#v, %v", result, err)
+	}
+	for _, cause := range causes {
+		if cause != nil && !errors.Is(err, cause) {
+			t.Fatalf("lost cause %v: %v", cause, err)
+		}
 	}
 }
 

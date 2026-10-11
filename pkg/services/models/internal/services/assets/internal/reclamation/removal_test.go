@@ -93,6 +93,39 @@ func TestCacheReclamationUnknownSourceCannotAuthorizeRemoval(t *testing.T) {
 	}
 }
 
+func TestCacheReclamationRemovalFailuresPreserveClassificationAndCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("selected filesystem failure")
+	for _, operation := range []string{"read revision", "inspect entry", "remove path", "verify removal"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			policy := New(func(string) ([]os.DirEntry, error) { return nil, cause }, nil, nil, nil,
+				func(string) error { return cause }, nil, unknownSources{}, reclamationContextError)
+			var err error
+			switch operation {
+			case "read revision":
+				err = policy.RemoveManagedTree(t.Context(), "selected")
+			case "inspect entry":
+				err = policy.removeManagedEntry(t.Context(), "selected", failedRemovalEntry{cause: cause})
+			case "remove path":
+				err = policy.removeManagedPath("selected")
+			case "verify removal":
+				err = policy.VerifyManagedPathRemoved(t.Context(), "selected", "revision")
+			}
+			if !errors.Is(err, models.ErrModelCacheRemovalFailed) || !errors.Is(err, cause) {
+				t.Fatalf("%s error = %v, want removal classification and filesystem cause", operation, err)
+			}
+		})
+	}
+}
+
+type failedRemovalEntry struct{ cause error }
+
+func (failedRemovalEntry) Name() string                     { return "model" }
+func (failedRemovalEntry) IsDir() bool                      { return false }
+func (failedRemovalEntry) Type() os.FileMode                { return 0 }
+func (entry failedRemovalEntry) Info() (os.FileInfo, error) { return nil, entry.cause }
+
 func TestCacheReclamationReleasesEveryAcquiredLockAfterFailure(t *testing.T) {
 	t.Parallel()
 	policy := removalPolicy(os.Remove)
