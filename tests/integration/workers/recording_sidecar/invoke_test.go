@@ -240,7 +240,17 @@ process.stdin.on('end', () => {
  const progress = process.env.T7_SHIM_READY ? 'history-restart partial' : 't7-artifact-progress';
  if (process.env.T7_SHIM_READY) fs.writeFileSync(process.env.T7_SHIM_READY, String(process.pid));
  console.log(JSON.stringify({type:'item.completed', item:{id:'progress', type:'command_execution', command:'synthetic inspection', aggregated_output:progress, exit_code:0}}));
- if (process.env.T7_SHIM_COMPLETE === '1') {
+ if (process.env.WSV_SHIM_RELEASE) {
+  const parent = process.ppid;
+  const timer = setInterval(() => {
+   if (process.platform === 'win32') { try { process.kill(parent, 0); } catch { process.exit(0); } }
+   if (!fs.existsSync(process.env.WSV_SHIM_RELEASE)) return;
+   clearInterval(timer);
+   console.log(JSON.stringify({type:'thread.started', thread_id:'t7-artifact-thread'}));
+   console.log(JSON.stringify({type:'item.completed', item:{id:'final', type:'agent_message', text:'WSV_LATER_PROGRESS'}}));
+   console.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:3, output_tokens:2}}));
+  }, 10);
+ } else if (process.env.T7_SHIM_COMPLETE === '1') {
   console.log(JSON.stringify({type:'thread.started', thread_id:'t7-artifact-thread'}));
   console.log(JSON.stringify({type:'item.completed', item:{id:'final', type:'agent_message', text:'history-restart COMPLETE'}}));
   console.log(JSON.stringify({type:'turn.completed', usage:{input_tokens:3, output_tokens:2}}));

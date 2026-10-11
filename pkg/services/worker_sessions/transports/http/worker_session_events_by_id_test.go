@@ -8,13 +8,69 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+type gatedStreamWork struct {
+	workServiceStub
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (s gatedStreamWork) ListWork(ctx context.Context, _ string, _ work.ListOptions) (work.ListResult, error) {
+	close(s.entered)
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+	}
+	return work.ListResult{}, ctx.Err()
+}
+
+func TestWorkerEventsSetupDoesNotWaitForWorkNameEnrichment(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	workReader := gatedStreamWork{entered: make(chan struct{}), release: make(chan struct{})}
+	defer close(workReader.release)
+	service := &fakeObservationService{
+		getByWorkerResult: workersessions.Observation{
+			WorkerSessionID: "worker", FactorySessionID: "factory", WorkIDs: []string{"work"}, State: workersessions.StateRunning,
+		},
+		streamByWorkerSubscription: &fakeObservationSubscription{},
+	}
+	adapter := NewAdapter(service, workReader)
+	done := make(chan error, 1)
+	go func() {
+		observation, subscription, err := adapter.StreamTopLevelWorkerSessionEvents(ctx, "worker", false, nil)
+		if err == nil {
+			subscription.Close()
+			if observation.WorkerSessionId != "worker" || observation.FactorySessionId == nil || *observation.FactorySessionId != "factory" || len(observation.WorkIds) != 1 || observation.WorkIds[0] != "work" {
+				err = errors.New("stream lost its execution identity")
+			}
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-workReader.entered:
+		cancel()
+		<-done
+		t.Fatal("event setup waited for optional Work names before acquiring its subscription")
+	case <-ctx.Done():
+		<-done
+		t.Fatal(ctx.Err())
+	}
+}
 
 func TestStreamWorkerSessionEventsByWorkerSessionIDWritesProviderNeutralReplay(t *testing.T) {
 	replayOnly := true

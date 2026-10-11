@@ -20,6 +20,43 @@ type replayCaptureReader struct {
 	snapshot recordings.WorkerRecordingSnapshot
 }
 
+func TestReplayObservationSubscriptionCloseCancelsBlockedPage(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	topic := workersessions.Topic("worker")
+	entered := make(chan struct{})
+	reader := &observationEventReaderFake{readFunc: func(readContext context.Context, request events.ReadRequest) (events.ReadResult, error) {
+		if request.From.Position == 0 {
+			return replayProgressResult(topic, 2, 1), nil
+		}
+		close(entered)
+		<-readContext.Done()
+		return events.ReadResult{}, readContext.Err()
+	}}
+	stream, err := newReplayObservationSubscription(ctx, reader, topic, workersessions.StateRunning, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	if delivery := stream.Next(ctx); delivery.Kind != workersessions.ObservationDeliveryRecord {
+		t.Fatalf("prefix = %+v", delivery)
+	}
+	done := make(chan workersessions.ObservationDelivery, 1)
+	go func() { done <- stream.Next(ctx) }()
+	<-entered
+	stream.Close()
+	select {
+	case delivery := <-done:
+		if delivery.Kind != workersessions.ObservationDeliveryClosed {
+			t.Fatalf("closed replay = %+v", delivery)
+		}
+	case <-ctx.Done():
+		<-done
+		t.Fatal("Close did not release the replay's blocked page read")
+	}
+}
+
 // Prepare selected peer facts from the component fixture, independently of
 // LoadWorkerRecording. Production readers maintain metadata slots at append.
 func (f replayCaptureReader) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {

@@ -123,40 +123,7 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 // WSR-FT-012: race-safe durable/live follow and Provider-reference parity.
 func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 	t.Parallel()
-	release := make(chan struct{})
-	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-012-worker-id-follow")
-	sessionID := uuid.NewString()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--session", sessionID},
-		ProviderOverride:          support.BlockingInferenceProvider(release),
-	})
-	workID := submitWSRFT011Work(t, server.URL(), sessionID, "live-follow")
-	workerID := waitForWSRFT012WorkerID(t, server.URL(), sessionID, workID)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	started := make(chan error, 1)
-	streamDone := make(chan wsrft012StreamResult, 1)
-	go func() {
-		events, err := readWSRFT012LiveStream(ctx, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, nil), started)
-		streamDone <- wsrft012StreamResult{events: events, err: err}
-	}()
-	if err := <-started; err != nil {
-		t.Fatalf("start live Worker-ID follow: %v", err)
-	}
-	close(release)
-	stream := <-streamDone
-	if stream.err != nil {
-		t.Fatalf("read live Worker-ID follow: %v", stream.err)
-	}
-	liveRecords := assertWSRFT012Live(t, stream.events, workerID)
-	replayedRecords := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, url.Values{
-		"replayOnly": []string{"true"},
-	})), workerID)
-	assertWSRFT011SameRecords(t, liveRecords, replayedRecords)
-	server.Stop(t)
+	assertWorkerEventsIdleFactoryFollow(t)
 
 	providerServer, providerFactorySession, providerWorkerID, providerSession := startWSRFT012ProviderServer(t)
 	// Recording confirmation advances after execution ends. Observe its final
@@ -215,6 +182,60 @@ func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 		"rest/streamWorkerSessionEventsBySessionId",
 		"sse/streamWorkerSessionEventsBySessionId",
 	)
+}
+
+func assertWorkerEventsIdleFactoryFollow(t *testing.T) {
+	t.Helper()
+	release := make(chan struct{})
+	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-012-worker-id-follow")
+	sessionID := uuid.NewString()
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--session", sessionID},
+		ProviderOverride:          support.BlockingInferenceProvider(release),
+	})
+	workID := submitWSRFT011Work(t, server.URL(), sessionID, "live-follow")
+	workerID := waitForWSRFT012WorkerID(t, server.URL(), sessionID, workID)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	started := make(chan error, 1)
+	streamDone := make(chan wsrft012StreamResult, 1)
+	go func() {
+		events, err := readWSRFT012LiveStream(ctx, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, nil), started)
+		streamDone <- wsrft012StreamResult{events: events, err: err}
+	}()
+	if err := <-started; err != nil {
+		t.Fatalf("start live Worker-ID follow: %v", err)
+	}
+	topLevel := fmt.Sprintf("%s/worker-sessions/%s/events", server.URL(), url.PathEscape(workerID))
+	otherObserver := startWorkerEventsFollower(t, ctx, topLevel)
+	assertWorkerEventsIdleReplay(t, topLevel, workerID)
+	// Disconnect a third observer while both surviving readers and the Worker
+	// still await the same gated provider output.
+	detachedContext, detach := context.WithCancel(ctx)
+	detached := startWorkerEventsFollower(t, detachedContext, topLevel)
+	detach()
+	if result := <-detached; result.err == nil {
+		t.Fatal("disconnected observer unexpectedly completed before provider release")
+	}
+	close(release)
+	stream := <-streamDone
+	if stream.err != nil {
+		t.Fatalf("read live Worker-ID follow: %v", stream.err)
+	}
+	liveRecords := assertWSRFT012Live(t, stream.events, workerID)
+	other := <-otherObserver
+	if other.err != nil {
+		t.Fatalf("surviving top-level observer: %v", other.err)
+	}
+	assertWSRFT011SameRecords(t, liveRecords, assertWSRFT012Live(t, other.events, workerID))
+	replayedRecords := assertWSRFT011Replay(t, readWSRFT011Events(t, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, url.Values{
+		"replayOnly": []string{"true"},
+	})), workerID)
+	assertWSRFT011SameRecords(t, liveRecords, replayedRecords)
+	server.Stop(t)
 }
 
 type wsrft012StreamResult struct {
@@ -360,11 +381,49 @@ func decodeWSRFT011Events(reader io.Reader) ([]factoryapi.WorkerSessionEvent, er
 			return nil, err
 		}
 		events = append(events, event)
-		if event.ReplaySummary != nil && event.ReplaySummary.Complete {
-			return events, nil
-		}
 	}
 	return events, scanner.Err()
+}
+
+func startWorkerEventsFollower(t *testing.T, ctx context.Context, endpoint string) <-chan wsrft012StreamResult {
+	t.Helper()
+	started := make(chan error, 1)
+	done := make(chan wsrft012StreamResult, 1)
+	go func() {
+		events, err := readWSRFT012LiveStream(ctx, endpoint, started)
+		done <- wsrft012StreamResult{events: events, err: err}
+	}()
+	if err := <-started; err != nil {
+		t.Fatalf("establish idle event stream: %v", err)
+	}
+	return done
+}
+
+func assertWorkerEventsIdleReplay(t *testing.T, endpoint, workerID string) {
+	t.Helper()
+	prefix := readWSRFT011Events(t, endpoint+"?replayOnly=true")
+	var head int64
+	var summary *factoryapi.WorkerSessionReplaySummary
+	for _, frame := range prefix {
+		if frame.WorkerSessionId != workerID || frame.Delivery == factoryapi.WorkerSessionEventDeliverySourceFailure {
+			t.Fatalf("idle replay identity or failure: %+v", frame)
+		}
+		if frame.Event.Position > head {
+			head = frame.Event.Position
+		}
+		if frame.ReplaySummary != nil {
+			summary = frame.ReplaySummary
+		}
+	}
+	if head == 0 {
+		t.Fatal("admitted Worker lacks opening record")
+	}
+	empty := readWSRFT011Events(t, endpoint+"?replayOnly=true&after_position="+strconv.FormatInt(head, 10))
+	// Factory replay reports capture completeness independently of execution
+	// success. A cursor changes the emitted suffix, not the capture's health.
+	if summary == nil || len(empty) != 1 || empty[0].ReplaySummary == nil || empty[0].ReplaySummary.Complete != summary.Complete || empty[0].ReplaySummary.Reason != summary.Reason || empty[0].ReplaySummary.EventsEmitted != 0 {
+		t.Fatalf("empty suffix changed capture completeness or failed to finish: %+v", empty)
+	}
 }
 
 func assertWSRFT011Replay(t *testing.T, events []factoryapi.WorkerSessionEvent, workerID string) []factoryapi.WorkerSessionEvent {
