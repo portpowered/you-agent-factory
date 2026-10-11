@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +43,66 @@ func TestWorkerEventsFiniteReplayRestart(t *testing.T) {
 		t.Fatal("restart changed event content, identities, cursors or stored timestamps")
 	}
 	restarted.stop(t, f.ctx, f.binary, f.project, f.env)
+	assertWorkerEventsArtifactDamagedSource(t, f, after)
+}
+
+// A stopped-host filesystem fault is a real artifact edge, not a reader fake.
+// A torn tail keeps the accepted prefix with degraded completion; completing
+// that malformed line instead makes setup fail with the existing typed error.
+func assertWorkerEventsArtifactDamagedSource(t *testing.T, f invokeArtifactFixture, want []api.WorkerSessionEvent) {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(f.project, ".you-agent-factory", "worker-recordings", "*.worker.jsonl"))
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("private capture fixture: %v %v", paths, err)
+	}
+	appendWorkerEventsArtifactFault(t, paths[0], "private damaged capture")
+	degraded := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
+	for _, query := range []string{"?replayOnly=true&limit=1", "?limit=1"} {
+		frames := readWorkerEventsArtifact(t, f.ctx, degraded.url, query)
+		if !reflect.DeepEqual(workerEventsArtifactRecords(frames), workerEventsArtifactRecords(want)) {
+			t.Fatal("damaged tail changed accepted records or stored timestamps")
+		}
+		last := frames[len(frames)-1]
+		if last.ReplaySummary == nil || last.ReplaySummary.Complete || last.ReplaySummary.Reason != "capture-DEGRADED" || last.ReplaySummary.EventsEmitted != int64(len(workerEventsArtifactRecords(want))) {
+			t.Fatalf("damaged tail fabricated completion: %+v", last)
+		}
+		for _, frame := range frames {
+			if frame.Delivery == api.WorkerSessionEventDeliveryTerminalReplay || frame.Delivery == api.WorkerSessionEventDeliverySourceFailure {
+				t.Fatalf("damaged tail lost truthful incomplete replay: %+v", frame)
+			}
+		}
+	}
+	degraded.stop(t, f.ctx, f.binary, f.project, f.env)
+	appendWorkerEventsArtifactFault(t, paths[0], "\n")
+	failed := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
+	request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, failed.url+"/worker-sessions/t7-artifact-session/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	var diagnostic api.ErrorResponse
+	if readErr != nil || json.Unmarshal(body, &diagnostic) != nil || response.StatusCode != http.StatusInternalServerError || diagnostic.Code != api.ErrorResponseCodePROJECTIONUNAVAILABLE || response.Header.Get("Content-Type") == "text/event-stream" || strings.Contains(string(body), "private damaged capture") {
+		t.Fatalf("corrupt source setup concealed failure: status=%d body=%s error=%v", response.StatusCode, body, readErr)
+	}
+	failed.stop(t, f.ctx, f.binary, f.project, f.env)
+}
+
+func appendWorkerEventsArtifactFault(t *testing.T, path, suffix string) {
+	t.Helper()
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, writeErr := file.WriteString(suffix)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		t.Fatalf("capture filesystem fixture: %v %v", writeErr, closeErr)
+	}
 }
 
 func TestWorkerEventsIdleFollowSocketDetach(t *testing.T) {
