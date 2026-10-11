@@ -14,11 +14,11 @@ import (
 )
 
 func injectedLifecycle(host lifecycle.Host, filesystem definitions.VersionFileSystem) *lifecycle.Service {
-	disabled := definitions.UnimplementedService{}
+	unused := unusedDefinitionsOwner{}
 	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		host, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
-		disabled, disabled, filesystem, disabled.ListEffectiveFactories,
-		definitions.UnimplementedService{},
+		host, lifecycle.StubActivationGateway(), unused, unused, unused, unused,
+		unused, unused, filesystem, unused.ListEffectiveFactories,
+		unusedDefinitionsOwner{},
 	)
 }
 
@@ -222,11 +222,11 @@ func TestStaleSaveRejectsBeforePersistenceOrActivation(t *testing.T) {
 			host := staleSaveHost{versionHost: &versionHost{source: versionSource{config: &definitions.FactoryConfig{Version: &current}}}, snapshot: snapshot, root: "root"}
 			// The injected ports fail the test if a rejected save reaches an effect.
 			host.Host = forbiddenPersistence{t: t}
-			disabled := definitions.UnimplementedService{}
+			unused := unusedDefinitionsOwner{}
 			gateway := staleActivation{DefinitionActivationGateway: lifecycle.StubActivationGateway(), t: t}
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-				host, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories,
-				definitions.UnimplementedService{},
+				host, gateway, unused, unused, unused, unused, unused, unused, nil, unused.ListEffectiveFactories,
+				unusedDefinitionsOwner{},
 			)
 			got, err := service.Save(context.Background(), "session", definitions.SaveModeReplaceCurrent, definitions.EditableFactory{Snapshot: snapshot, Version: submitted})
 			if !errors.Is(err, definitions.ErrFactoryVersionStale) || got.Snapshot != nil {

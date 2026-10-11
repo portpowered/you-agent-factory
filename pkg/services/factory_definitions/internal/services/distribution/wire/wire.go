@@ -27,14 +27,9 @@ func NewService(
 	if packagedInstaller.Install == nil {
 		return nil, fmt.Errorf("construct Factory Definitions distribution: packaged Factory installer is required")
 	}
-	service := distributionserviceimpl.New(
-		packagedCatalog,
-		packagedInstaller,
-		scaffoldInitializer,
-		scaffoldFactoryNameResolver,
-	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Factory Definitions distribution: implementation rejected its dependencies")
+	scaffold := distributionservice.ScaffoldOperation(distributionserviceimpl.DisabledScaffold{}.CreateFactoryScaffold)
+	if scaffoldInitializer != nil && scaffoldFactoryNameResolver != nil {
+		scaffold = distributionserviceimpl.NewScaffold(scaffoldInitializer, scaffoldFactoryNameResolver).CreateFactoryScaffold
 	}
-	return service, nil
+	return distributionserviceimpl.New(packagedCatalog, packagedInstaller, scaffold), nil
 }
