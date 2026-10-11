@@ -92,8 +92,8 @@ func TestNamedActivationGatesLookupAndSwapAndRetainsSelectedSession(t *testing.T
 			case "swap":
 				gateway.swapError, wantError = cause, cause
 			}
-			disabled := definitions.UnimplementedService{}
-			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(host, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories, disabled)
+			unused := unusedDefinitionsOwner{}
+			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(host, gateway, unused, unused, unused, unused, unused, unused, nil, unused.ListEffectiveFactories, unused)
 			if host.lookupCalls != 0 || gateway.swapCalls != 0 {
 				t.Fatal("construction performed activation effects")
 			}
@@ -277,8 +277,8 @@ func TestNamedReadAndActivationPreserveMissingDefinitionClassification(t *testin
 	}
 	gateway := &activationGateway{t: t, session: &definitions.DefinitionSession{ID: "selected"}}
 	activation := &activationHost{t: t, lookupError: definitions.ErrNamedFactoryNotFound}
-	disabled := definitions.UnimplementedService{}
-	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(activation, gateway, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories, disabled)
+	unused := unusedDefinitionsOwner{}
+	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(activation, gateway, unused, unused, unused, unused, unused, unused, nil, unused.ListEffectiveFactories, unused)
 	if err := service.ActivateNamedFactory(t.Context(), "alpha"); !errors.Is(err, definitions.ErrNamedFactoryNotFound) || gateway.swapCalls != 0 {
 		t.Fatalf("missing named activation = %v, swaps %d", err, gateway.swapCalls)
 	}

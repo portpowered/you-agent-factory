@@ -10,115 +10,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func TestUnimplementedService_CatalogTypedOutcomes(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	var unimplemented factorydefinitions.UnimplementedService
-
-	if _, err := unimplemented.ListEffectiveFactories(ctx, factorydefinitions.ListEffectiveFactoriesRequest{}); err == nil {
-		t.Fatal("ListEffectiveFactories: expected collaborator-required error")
-	}
-	if _, err := unimplemented.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{}); err == nil {
-		t.Fatal("ListNamedFactories: expected collaborator-required error")
-	}
-	if _, err := unimplemented.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{Name: "missing"}); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
-		t.Fatalf("GetNamedFactory: got %v, want ErrNamedFactoryNotFound", err)
-	}
-	if _, err := unimplemented.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{Name: "missing"}); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
-		t.Fatalf("ResolveNamedFactory: got %v, want ErrNamedFactoryNotFound", err)
-	}
-	if _, err := unimplemented.DeleteNamedFactory(ctx, factorydefinitions.DeleteNamedFactoryRequest{Name: "missing"}); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
-		t.Fatalf("DeleteNamedFactory: got %v, want ErrNamedFactoryNotFound", err)
-	}
-	if _, err := unimplemented.GetCurrentFactoryPointer(ctx, factorydefinitions.GetCurrentFactoryPointerRequest{}); !errors.Is(err, factorydefinitions.ErrCurrentFactoryNotFound) {
-		t.Fatalf("GetCurrentFactoryPointer: got %v, want ErrCurrentFactoryNotFound", err)
-	}
-	if _, err := unimplemented.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{Name: "alpha"}); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
-		t.Fatalf("SetCurrentFactoryPointer: got %v, want ErrNamedFactoryNotFound", err)
-	}
-}
-
-func TestUnimplementedService_AuthoringTypedOutcomes(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	var unimplemented factorydefinitions.UnimplementedService
-
-	if _, err := unimplemented.PrepareFactoryLayout(ctx, factorydefinitions.PrepareFactoryLayoutRequest{}); !errors.Is(err, factorydefinitions.ErrMalformedFactoryLayoutPayload) {
-		t.Fatalf("PrepareFactoryLayout: got %v, want ErrMalformedFactoryLayoutPayload", err)
-	}
-	if _, err := unimplemented.FlattenFactoryLayout(ctx, factorydefinitions.FlattenFactoryLayoutRequest{}); err == nil {
-		t.Fatal("FlattenFactoryLayout: expected collaborator-required error")
-	}
-	if _, err := unimplemented.ExpandFactoryLayout(ctx, factorydefinitions.ExpandFactoryLayoutRequest{}); err == nil {
-		t.Fatal("ExpandFactoryLayout: expected collaborator-required error")
-	}
-
-	_, createErr := unimplemented.CreateNamedFactory(ctx, factorydefinitions.CreateNamedFactoryRequest{Name: "alpha"})
-	assertAtomicWriteFailure(t, createErr, true)
-	_, replaceErr := unimplemented.ReplaceNamedFactory(ctx, factorydefinitions.ReplaceNamedFactoryRequest{Name: "alpha"})
-	assertAtomicWriteFailure(t, replaceErr, true)
-}
-
-func TestUnimplementedService_CompileValidateTypedOutcomes(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	var unimplemented factorydefinitions.UnimplementedService
-
-	if _, err := unimplemented.CompileEffectiveFactorySource(ctx, factorydefinitions.CompileEffectiveFactorySourceRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidAuthoredFactorySource) {
-		t.Fatalf("CompileEffectiveFactorySource: got %v, want ErrInvalidAuthoredFactorySource", err)
-	}
-	if _, err := unimplemented.ValidateStructuralFactoryDefinition(ctx, factorydefinitions.ValidateStructuralFactoryDefinitionRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactoryDefinitionPayload) {
-		t.Fatalf("ValidateStructuralFactoryDefinition: got %v, want ErrInvalidFactoryDefinitionPayload", err)
-	}
-	if _, err := unimplemented.ValidateEffectiveFactoryDefinition(ctx, factorydefinitions.ValidateEffectiveFactoryDefinitionRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactoryDefinitionPayload) {
-		t.Fatalf("ValidateEffectiveFactoryDefinition: got %v, want ErrInvalidFactoryDefinitionPayload", err)
-	}
-}
-
-func TestUnimplementedService_SnapshotDistributeTypedOutcomes(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	var unimplemented factorydefinitions.UnimplementedService
-
-	if _, err := unimplemented.CaptureFactorySnapshot(ctx, factorydefinitions.CaptureFactorySnapshotRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
-		t.Fatalf("CaptureFactorySnapshot: got %v, want ErrInvalidFactorySnapshotPayload", err)
-	}
-	if _, err := unimplemented.PrepareFactorySnapshotImport(ctx, factorydefinitions.PrepareFactorySnapshotImportRequest{}); !errors.Is(err, factorydefinitions.ErrInvalidFactorySnapshotPayload) {
-		t.Fatalf("PrepareFactorySnapshotImport: got %v, want ErrInvalidFactorySnapshotPayload", err)
-	}
-	if _, err := unimplemented.MaterializeFactorySnapshot(ctx, factorydefinitions.MaterializeFactorySnapshotRequest{}); !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
-		t.Fatalf("MaterializeFactorySnapshot: got %v, want ErrUnsafeFactorySnapshotMaterialize", err)
-	}
-	_, runtimeSnapshotErr := unimplemented.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{})
-	var resolutionErr *factorydefinitions.RuntimeSnapshotResolutionError
-	if !errors.As(runtimeSnapshotErr, &resolutionErr) {
-		t.Fatalf("ResolveRuntimeSnapshot: got %T, want RuntimeSnapshotResolutionError", runtimeSnapshotErr)
-	}
-	if resolutionErr.Diagnostic.Code != factorydefinitions.RuntimeSnapshotDiagnosticUnavailable {
-		t.Fatalf("ResolveRuntimeSnapshot diagnostic = %#v, want unavailable", resolutionErr.Diagnostic)
-	}
-	if !errors.Is(runtimeSnapshotErr, factorydefinitions.ErrRuntimeSnapshotResolverUnavailable) {
-		t.Fatalf("ResolveRuntimeSnapshot: got %v, want ErrRuntimeSnapshotResolverUnavailable", runtimeSnapshotErr)
-	}
-
-	if _, err := unimplemented.ListBuiltInPackagedFactories(ctx, factorydefinitions.ListBuiltInPackagedFactoriesRequest{}); err == nil {
-		t.Fatal("ListBuiltInPackagedFactories: expected collaborator-required error")
-	}
-	if _, err := unimplemented.ResolveBuiltInPackagedFactory(ctx, factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/missing"}); !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
-		t.Fatalf("ResolveBuiltInPackagedFactory: got %v, want ErrUnknownPackagedFactoryIdentity", err)
-	}
-	if _, err := unimplemented.InstallPackagedFactory(ctx, factorydefinitions.InstallPackagedFactoryRequest{Name: "@you/missing"}); !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
-		t.Fatalf("InstallPackagedFactory: got %v, want ErrUnknownPackagedFactoryIdentity", err)
-	}
-	if _, err := unimplemented.CreateFactoryScaffold(ctx, factorydefinitions.CreateFactoryScaffoldRequest{}); !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
-		t.Fatalf("CreateFactoryScaffold: got %v, want ErrFactoryDistributeFailed", err)
-	}
-}
-
 func TestAtomicFactoryWriteFailure_ErrorUnwrapIs(t *testing.T) {
 	t.Parallel()
 
@@ -209,26 +100,6 @@ func TestFactoryDefinitionValidationFailure_ErrorUnwrapIs(t *testing.T) {
 	bare := &factorydefinitions.FactoryDefinitionValidationFailure{}
 	if bare.Error() != factorydefinitions.ErrFactoryDefinitionValidationFailed.Error() {
 		t.Fatalf("bare Error: got %q", bare.Error())
-	}
-}
-
-func assertAtomicWriteFailure(t *testing.T, err error, wantPreserved bool) {
-	t.Helper()
-	if err == nil {
-		t.Fatal("expected AtomicFactoryWriteFailure")
-	}
-	if !errors.Is(err, factorydefinitions.ErrAtomicFactoryWriteFailed) {
-		t.Fatalf("got %v, want ErrAtomicFactoryWriteFailed", err)
-	}
-	var failure *factorydefinitions.AtomicFactoryWriteFailure
-	if !errors.As(err, &failure) {
-		t.Fatalf("got %T, want *AtomicFactoryWriteFailure", err)
-	}
-	if failure.PreviousPreserved != wantPreserved {
-		t.Fatalf("PreviousPreserved=%v, want %v", failure.PreviousPreserved, wantPreserved)
-	}
-	if failure.Error() == "" {
-		t.Fatal("expected non-empty Error()")
 	}
 }
 
@@ -328,5 +199,11 @@ func (fakeDefinitionsPeer) ResolveRuntimeSnapshot(
 	ctx context.Context,
 	request factorydefinitions.ResolveRuntimeSnapshotRequest,
 ) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
-	return factorydefinitions.UnimplementedService{}.ResolveRuntimeSnapshot(ctx, request)
+	return factorydefinitions.ResolveRuntimeSnapshotResult{}, &factorydefinitions.RuntimeSnapshotResolutionError{
+		Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{
+			Code:    factorydefinitions.RuntimeSnapshotDiagnosticUnavailable,
+			Message: "test snapshot resolver unavailable",
+		},
+		Cause: factorydefinitions.ErrRuntimeSnapshotResolverUnavailable,
+	}
 }

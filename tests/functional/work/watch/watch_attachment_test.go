@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -20,6 +21,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -27,9 +30,11 @@ import (
 
 func TestJoinedSessionCancelRecordedReadbackAndFlushFault(t *testing.T) {
 	ensureWatchFixture(t)
-	for _, fault := range []bool{false, true} {
-		t.Run(fmt.Sprintf("recording flush fault=%t", fault), func(t *testing.T) {
+	for _, mode := range []string{"recording flush fault=false", "recording flush fault=true", "successful recorded completion"} {
+		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
+			fault := mode == "recording flush fault=true"
+			completed := mode == "successful recorded completion"
 			session := uuid.NewString()
 			config := observationFactoryConfig(true, "complete")
 			config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
@@ -42,6 +47,13 @@ func TestJoinedSessionCancelRecordedReadbackAndFlushFault(t *testing.T) {
 			path := strings.ReplaceAll(selectedPath, "__factory_session_id__", session)
 			host, running := startWatchHost(t, observationWatchProcess, dir, "--session", session, "--record", selectedPath)
 			selected := attachLiveObservation(t, host, session, command, false)
+			sessions := observationWatchProcess.FactorySessions().(factorysessions.Service)
+			diagnostics, err := sessions.(interface {
+				ApplicationDiagnostics(string) (runtimeartifact.Diagnostics, error)
+			}).ApplicationDiagnostics(session)
+			if err != nil || diagnostics.Path == "" {
+				t.Fatalf("selected runtime diagnostics=%+v error=%v", diagnostics, err)
+			}
 			peer := newLiveObservation(t, host, true, false, "complete")
 			primary := startObservationInvocation(t, selected)
 			selected.awaitCommand(t)
@@ -53,11 +65,13 @@ func TestJoinedSessionCancelRecordedReadbackAndFlushFault(t *testing.T) {
 				observationRecordingFailures.Store(filepath.Clean(path), cause)
 				t.Cleanup(func() { observationRecordingFailures.Delete(filepath.Clean(path)) })
 			}
-			cancelJoinedObservation(t, selected, releaseJoin)
-			outcome := awaitObservationInvocation(t, primary)
-			if outcome.Status != factoryapi.InvocationTerminalStatusFailed || outcome.ErrorCode == nil || *outcome.ErrorCode != "INVOCATION_INTERRUPTED" || outcome.PrimaryResult != nil {
-				t.Fatalf("canceled recorded invocation=%+v", outcome)
+			if completed {
+				close(command.release)
+			} else {
+				cancelJoinedObservation(t, selected, releaseJoin)
 			}
+			outcome := awaitObservationInvocation(t, primary)
+			assertWatchRecordedInvocation(t, selected, outcome, completed)
 			peerWork := peer.submit(t, "peer-after-recording-cancel")
 			peer.awaitCommand(t)
 			close(peer.command.release)
@@ -72,17 +86,138 @@ func TestJoinedSessionCancelRecordedReadbackAndFlushFault(t *testing.T) {
 				t.Fatal("recorded host did not join after public stop")
 			}
 			if fault {
+				running.AcceptError()
+			}
+			assertWatchLogLifetime(t, session, diagnostics.Path, completed)
+			if fault {
 				if !errors.Is(running.Err(), cause) {
 					t.Fatalf("recording flush lost original cause: %v", running.Err())
 				}
-				running.AcceptError()
-				return // A failed flush is never evidence of durable cancellation.
+				assertWatchFlushFaultRecovery(t, sessions, session, path)
+				return
 			}
 			if running.Err() != nil {
 				t.Fatalf("recorded host shutdown=%v", running.Err())
 			}
-			assertCanceledRecordingReadback(t, session, path)
+			if completed {
+				assertWatchRecordingFacts(t, session, path, true)
+			} else {
+				assertCanceledRecordingReadback(t, session, path)
+			}
 		})
+	}
+}
+
+func assertWatchRecordedInvocation(t *testing.T, selected *liveObservation, outcome factoryapi.InvocationResponse, completed bool) {
+	t.Helper()
+	if completed {
+		if outcome.Status != factoryapi.InvocationTerminalStatusCompleted || outcome.PrimaryResult == nil {
+			t.Fatalf("successful recorded invocation=%+v", outcome)
+		}
+		return
+	}
+	if outcome.Status != factoryapi.InvocationTerminalStatusFailed || outcome.ErrorCode == nil || *outcome.ErrorCode != "INVOCATION_INTERRUPTED" || outcome.PrimaryResult != nil {
+		t.Fatalf("canceled recorded invocation=%+v", outcome)
+	}
+	works := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(selected.host.endpoint, selected.session, "/work"))
+	if len(works.Results) != 1 || works.Results[0].WorkId == nil {
+		t.Fatalf("canceled Work=%+v", works)
+	}
+	assertJoinedObservationState(t, selected, *works.Results[0].WorkId)
+}
+
+func assertWatchFlushFaultRecovery(t *testing.T, sessions factorysessions.Service, session, path string) {
+	t.Helper()
+	// Inspect the last published useful facts without claiming that the
+	// canceled response survived the deliberately failed final write.
+	assertWatchRecordingFacts(t, session, path, false)
+	observationRecordingFailures.Delete(filepath.Clean(path))
+	_, err := sessions.Control(t.Context(), factorysessions.SessionControlRequest{
+		SessionID: session, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose,
+	})
+	if err != nil && !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("public cleanup retry=%v", err)
+	}
+	// A fresh host on the same process must remain eligible after the
+	// failed recording's cleanup, without borrowing its facts or sink.
+	fresh := startSelectedWatchHost(t, observationWatchProcess)
+	retry := newLiveObservation(t, fresh, true, false, "complete")
+	retry.submit(t, "fresh-after-flush-failure")
+	retry.awaitCommand(t)
+	close(retry.command.release)
+	retry.finish(t)
+	fresh.execute(t, "server", "stop")
+	select {
+	case <-fresh.done:
+	case <-time.After(selectedWatchCeiling):
+		t.Fatal("fresh host did not join")
+	}
+}
+
+func assertWatchRecordingFacts(t *testing.T, session, path string, finalized bool) {
+	t.Helper()
+	history, err := observationRecordings.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: recordings.RecordingID(session),
+			Artifact: recordings.RecordingArtifactReference(path), Scope: recordings.CanonicalEventScope{FactorySessionID: session}},
+	})
+	if err != nil || len(history.Events) == 0 {
+		t.Fatalf("retained useful recording facts=%+v error=%v", history, err)
+	}
+	for index, event := range history.Events {
+		if index > 0 && event.Sequence <= history.Events[index-1].Sequence {
+			t.Fatal("retained recording facts lost order")
+		}
+	}
+	if finalized && (history.Status.State != recordings.RecordingFinalized || len(history.Dispatches) != 1) {
+		t.Fatalf("completed recording facts=%+v", history)
+	}
+}
+
+func assertWatchLogLifetime(t *testing.T, session, path string, completed bool) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal := "factory session invocation failed"
+	if completed {
+		terminal = "factory session invocation completed"
+	}
+	want := map[string]bool{"factory started": false, "factory session invocation submitted": false, terminal: false}
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatal(err)
+		}
+		message, _ := record["msg"].(string)
+		if _, required := want[message]; required {
+			if record["session_id"] != session || record["runtime_instance_id"] == nil || record["runtime_instance_id"] == "" {
+				t.Fatalf("unattributed selected diagnostic=%+v", record)
+			}
+			want[message] = true
+		}
+	}
+	for message, found := range want {
+		if !found {
+			t.Fatalf("selected sink missing %q", message)
+		}
+	}
+	assertWatchTransportDiagnostic(t, session, completed)
+}
+
+func assertWatchTransportDiagnostic(t *testing.T, session string, completed bool) {
+	t.Helper()
+	found := false
+	for _, entry := range observationLogs.FilterMessage("API server error").All() {
+		if entry.ContextMap()["session_id"] == session {
+			found = true
+		}
+	}
+	if !completed && !found {
+		t.Fatalf("missing joined API diagnostic for %s", session)
 	}
 }
 

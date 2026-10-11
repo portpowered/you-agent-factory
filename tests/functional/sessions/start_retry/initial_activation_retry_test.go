@@ -99,6 +99,9 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
 		newInitialOpeningProviderScenario(t), newInitialOpeningProviderScenario(t),
 	}
+	// Matches the noncredential CAPTURE_ENVIRONMENT in the cleared child runner.
+	// Retain VALIDATION_ENVIRONMENT=1 too; the longer UUID makes causality exact.
+	canceledWork[1].candidateID = "8528a10f-6314-48ba-8230-542a4cf660f9"
 	canceledWorkGate := &selectedProviderGate{paths: make(map[string]string),
 		entered: make(chan platformprocess.CommandRequest, len(canceledWork)), release: make(chan struct{})}
 	for _, scenario := range canceledWork {

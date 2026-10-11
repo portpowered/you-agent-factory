@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	distributionserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/service"
 )
 
 // The canonical root currently disables scaffold creation. Preserve its public
@@ -32,10 +33,7 @@ func TestUnavailableScaffoldPrecedesRequestAndContextValidation(t *testing.T) {
 					return factorydefinitions.PackagedFactoryInstallResult{}, nil
 				},
 			}
-			svc := newDistributionServiceWithScaffold(t, unusedScaffoldCatalog(t), installer, nil, func(string) (string, error) {
-				effects++
-				return "factory", nil
-			})
+			svc := distributionserviceimpl.New(unusedScaffoldCatalog(t), installer, distributionserviceimpl.DisabledScaffold{}.CreateFactoryScaffold)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if test.canceled {

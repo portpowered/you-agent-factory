@@ -211,8 +211,8 @@ func newSaveFixture(t *testing.T, name string, existing bool) (*saveHost, *lifec
 	host := &saveHost{t: t, ctx: t.Context(), session: &definitions.DefinitionSession{ID: "selected", FolderPath: "root"}, name: name, current: snapshot,
 		version: definitions.FactoryVersion{Logical: 1, Physical: time.Unix(100, 0)}, existing: existing,
 		prepared: &definitions.PreparedFactoryLayoutPayload{Config: &definitions.FactoryConfig{Name: name}, Canonical: []byte(`{"name":"` + name + `"}`)}}
-	disabled := definitions.UnimplementedService{}
-	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(host, saveGateway{host: host}, disabled, disabled, disabled, disabled, disabled, disabled, nil, disabled.ListEffectiveFactories, disabled)
+	unused := unusedDefinitionsOwner{}
+	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(host, saveGateway{host: host}, unused, unused, unused, unused, unused, unused, nil, unused.ListEffectiveFactories, unused)
 	if len(host.events) != 0 {
 		t.Fatal("construction performed effects")
 	}

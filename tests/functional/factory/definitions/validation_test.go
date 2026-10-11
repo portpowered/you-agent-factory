@@ -193,6 +193,9 @@ func TestDefinitionsHTTPPackagedCatalog(t *testing.T) {
 	if len(catalog.Factories) == 0 {
 		t.Fatal("built-in catalog is empty")
 	}
+	if host.provider.CallCount() != 0 {
+		t.Fatal("catalog discovery executed a provider command")
+	}
 	previous := ""
 	for _, entry := range catalog.Factories {
 		if entry.Name <= previous || entry.Project == "" || entry.Slug == "" || len(entry.Json) == 0 || entry.Yaml == "" || len(entry.Examples) == 0 {

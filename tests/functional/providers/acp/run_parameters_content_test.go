@@ -89,13 +89,24 @@ type stableResponseEvent struct {
 func assertGoldenResponseStream(t *testing.T, events []factoryapi.FactoryResponseEvent) {
 	t.Helper()
 	var lines []string
+	var completedMessages int
 	for _, event := range events {
-		if event.Provenance.Provider != "cursor" {
+		if event.Provenance.Provider != "cursor" && event.Provenance.Provider != "agent-run" {
 			continue
 		}
 		itemID := ""
 		if event.ItemId != nil {
 			itemID = *event.ItemId
+		}
+		if event.Kind == "MESSAGE" && event.Phase == "COMPLETED" {
+			completedMessages++
+			assertGoldenFinalMessage(t, event)
+			// The fallback identity is dispatch-scoped, so pin its relation to
+			// this execution before normalizing the generated ID for the golden.
+			if event.DispatchId == nil || itemID != *event.DispatchId+"-final-message" {
+				t.Fatalf("ACP final message identity = %q, dispatch = %v", itemID, event.DispatchId)
+			}
+			itemID = "dispatch-final-message"
 		}
 		stable := stableResponseEvent{
 			Kind: string(event.Kind), Phase: string(event.Phase), Provider: event.Provenance.Provider,
@@ -107,6 +118,9 @@ func assertGoldenResponseStream(t *testing.T, events []factoryapi.FactoryRespons
 		}
 		lines = append(lines, string(encoded))
 	}
+	if completedMessages != 1 {
+		t.Fatalf("ACP completed assistant messages = %d, want exactly one", completedMessages)
+	}
 	got := strings.Join(lines, "\n") + "\n"
 	want, err := os.ReadFile(filepath.Join("testdata", "json_golden", "expected", "response_stream.ndjson"))
 	if err != nil {
@@ -114,5 +128,24 @@ func assertGoldenResponseStream(t *testing.T, events []factoryapi.FactoryRespons
 	}
 	if got != string(want) {
 		t.Fatalf("ACP response stream differs from golden\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func assertGoldenFinalMessage(t *testing.T, event factoryapi.FactoryResponseEvent) {
+	t.Helper()
+	// This ACP fixture returns accumulated text without a native completed
+	// message. Workers publishes one truthful fallback; filtering on cursor
+	// alone would discard it and incorrectly report missing terminal output.
+	if event.Provenance.Provider != "agent-run" || event.Provenance.NativeEventType != "agent_final_response" ||
+		event.Provenance.Delivery != "SYNTHESIZED" || event.Provenance.Fidelity != "FINAL_ONLY" || event.Provenance.Representation != "SNAPSHOT" {
+		t.Fatalf("ACP final fallback provenance = %+v", event.Provenance)
+	}
+	payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
+	if err != nil || payload.Role != "assistant" || len(payload.ContentBlocks) != 1 {
+		t.Fatalf("ACP final message payload = %+v, error = %v", payload, err)
+	}
+	text, err := payload.ContentBlocks[0].AsFactoryResponseEventTextContentBlock()
+	if err != nil || text.Text != "The capital of France is Paris. golden ACP COMPLETE" {
+		t.Fatalf("ACP final text = %+v, error = %v", text, err)
 	}
 }

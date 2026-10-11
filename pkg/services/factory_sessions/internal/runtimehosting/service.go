@@ -52,8 +52,9 @@ func (service *Service) Run(
 	if runtime == nil {
 		return errors.New("host Factory Session runtime: lifecycle runtime is required")
 	}
+	startupLogger := logger
 	if hosted := runtime.CurrentRuntimeBundle(); hosted != nil {
-		logger = hosted.RuntimeLogger()
+		startupLogger = hosted.RuntimeLogger()
 	}
 
 	// Keep the transport alive while cancellation is unwound through the
@@ -68,10 +69,12 @@ func (service *Service) Run(
 	}()
 
 	bound := make(chan platformhttpserver.Binding, 1)
+	// The supplied session logger outlives the transport join. The runtime
+	// sink can already be closed by StopLifecycle while HTTP still drains.
 	apiExit := service.startAPI(transportCtx, &transport, handler, request, logger, bound)
 	serviceMode := runtimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
 	binding, err := service.waitForStartupReadability(
-		ctx, serviceMode, request.WorkFile, apiExit, request.Port, bound,
+		ctx, serviceMode, request.WorkFile, apiExit, request.Port, bound, startupLogger, logger,
 	)
 	if err != nil {
 		return runtime.FailStartup(err)
@@ -86,7 +89,7 @@ func (service *Service) Run(
 	if observer != nil {
 		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
-	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
+	logStartup(startupLogger, runtime.CurrentRuntimeBundle(), request)
 	if err := runtime.WaitForRuntime(ctx); err != nil {
 		if !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("factory run: %w", err)
@@ -98,6 +101,16 @@ func (service *Service) Run(
 		}
 	}
 	return nil
+}
+
+func (service *Service) logStartupFailure(startupLogger, transportLogger *zap.Logger, err error) {
+	if startupLogger == nil || startupLogger == transportLogger || platformhttpserver.IsBindError(err) {
+		return
+	}
+	// The selected runtime sink is still owned here. Preserve the startup
+	// diagnostic before FailStartup releases it; later transport failures use
+	// the supplied logger through the transport join instead.
+	startupLogger.Error("API server error", zap.String("cause", logging.SafeErrorCause(err)))
 }
 
 func (service *Service) startAPI(
@@ -144,6 +157,7 @@ func (service *Service) waitForStartupReadability(
 	apiExit <-chan error,
 	port int,
 	bound <-chan platformhttpserver.Binding,
+	startupLogger, transportLogger *zap.Logger,
 ) (platformhttpserver.Binding, error) {
 	if port <= 0 {
 		return platformhttpserver.Binding{}, nil
@@ -155,6 +169,7 @@ func (service *Service) waitForStartupReadability(
 	select {
 	case binding = <-bound:
 	case err := <-apiExit:
+		service.logStartupFailure(startupLogger, transportLogger, err)
 		return platformhttpserver.Binding{}, factoryruntime.StartupReadinessError(err)
 	case <-ctx.Done():
 		return platformhttpserver.Binding{}, ctx.Err()
@@ -169,6 +184,7 @@ func (service *Service) waitForStartupReadability(
 	case <-timer.C:
 		return binding, nil
 	case err := <-apiExit:
+		service.logStartupFailure(startupLogger, transportLogger, err)
 		return platformhttpserver.Binding{}, factoryruntime.StartupReadinessError(err)
 	case <-ctx.Done():
 		return platformhttpserver.Binding{}, ctx.Err()

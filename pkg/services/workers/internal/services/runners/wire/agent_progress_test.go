@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"sync"
@@ -56,6 +57,11 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 		t.Fatalf("Execute() error = %v", err)
 	}
 	observedOrder = append(observedOrder, "terminal:"+result.Content)
+	payload, err := json.Marshal(workers.MessagePayload{Role: "assistant",
+		ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "fixture output"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	want := []workers.ProgressFragment{
 		{
@@ -86,6 +92,13 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Type:       "message.completed",
 			Payload:    "fixture output",
 			Provider:   string(providers.IDCodex),
+			CanonicalDraft: workers.Draft{
+				Kind: workers.KindMessage, Phase: workers.PhaseCompleted, DispatchID: "dispatch-agent-1",
+				ItemID: "dispatch-agent-1-final-message", Payload: payload,
+				Provenance: workers.Provenance{Provider: "agent-run", NativeEventType: "agent_final_response",
+					Delivery: workers.DeliverySynthesized, Representation: workers.RepresentationSnapshot,
+					Fidelity: workers.FidelityFinalOnly},
+			},
 			Continuation: (&providers.SessionMetadata{
 				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
 			}).ContinuationRef(),

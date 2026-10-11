@@ -391,6 +391,11 @@ func TestExecuteNativeLifecycleDoesNotSynthesizeCompletion(t *testing.T) {
 		fragments[1].Type != "message.completed" {
 		t.Fatalf("native lifecycle fragments = %#v, want native lifecycle and ordered message progress", fragments)
 	}
+	draft, ok := fragments[1].CanonicalDraft.(workers.Draft)
+	if !ok || draft.Provenance.Delivery != workers.DeliverySynthesized ||
+		draft.Provenance.Fidelity != workers.FidelityFinalOnly || draft.Provenance.Provider != "agent-run" {
+		t.Fatalf("content-only fallback provenance = %+v, want truthful synthesized final-only", fragments[1])
+	}
 }
 
 func TestMergeDecisionEnvelopeDiagnosticsCopiesOwnerLayers(t *testing.T) {

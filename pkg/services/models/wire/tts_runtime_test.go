@@ -21,7 +21,7 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 	tempDir := t.TempDir()
 	transport := &ttsRouteTransport{audio: ttsRouteWAV()}
 	genericCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			genericCalls++
 			return []models.InferenceContent{{Name: "generic", Content: "must not run"}}, nil, nil
@@ -37,7 +37,7 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 		TTSRemoveFile:  os.Remove,
 	})
 	if err != nil {
-		t.Fatalf("inferenceRuntime() error = %v", err)
+		t.Fatalf("invocationFixture() error = %v", err)
 	}
 	operation, ok := (models.GenericOperationCatalog{}).GenericOperationContract(models.OperationTTS)
 	if !ok {
@@ -98,14 +98,14 @@ func TestInferenceRuntimeFailsClosedWhenPrivateTTSDependenciesAreMissing(t *test
 	t.Parallel()
 
 	genericCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			genericCalls++
 			return []models.InferenceContent{{Name: "generic"}}, nil, nil
 		},
 	})
 	if err != nil {
-		t.Fatalf("inferenceRuntime() error = %v", err)
+		t.Fatalf("invocationFixture() error = %v", err)
 	}
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{
 		Operation: models.OperationTTS,
@@ -127,7 +127,7 @@ func TestInferenceRuntimePrivateTTSReleasesAndRecoversExactlyOnce(t *testing.T) 
 	transport := &ttsRouteTransport{audio: ttsRouteWAV(), failFirst: true}
 	var mu sync.Mutex
 	removed := make([]string, 0, 2)
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Dialer:           transport,
 		TTSTempDirectory: func() string { return tempDir },
 		TTSCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
@@ -144,7 +144,7 @@ func TestInferenceRuntimePrivateTTSReleasesAndRecoversExactlyOnce(t *testing.T) 
 		},
 	})
 	if err != nil {
-		t.Fatalf("inferenceRuntime() error = %v", err)
+		t.Fatalf("invocationFixture() error = %v", err)
 	}
 	request := inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{
 		Operation: models.OperationTTS,
