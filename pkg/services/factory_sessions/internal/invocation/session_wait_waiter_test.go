@@ -8,7 +8,67 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestSessionOwnerWait_JoinedCancelResolvesRetryablePrimary(t *testing.T) {
+	observation := stoppedSessionInvocationObservation()
+	request := observation.WorldState.WorkRequestsByID["request-1"]
+	request.TraceID = "invocation-trace"
+	observation.WorldState.WorkRequestsByID["request-1"] = request
+	root := observation.WorldState.WorkRequestsByID["request-1"].WorkItems[0]
+	observation.WorldState.WorkItemsByID[root.ID] = root
+	observation.ActiveWork = true
+	observation.WorldState.CompletedDispatches = []interfaces.FactoryWorldDispatchCompletion{{
+		DispatchID: "joined-dispatch", WorkItemIDs: []string{root.ID}, TraceIDs: []string{observation.WorldState.WorkRequestsByID["request-1"].TraceID},
+		Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeCanceled), Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}},
+	}}
+	result := waitForSessionOwnerObservation(t, observation, nil)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
+	assertSessionOwnerEqual(t, "code", result.ErrorCode, string(work.PrimaryResultErrorCodeInterrupted))
+	assertSessionOwnerEqual(t, "Work", result.WorkID, root.ID)
+	assertSessionOwnerEqual(t, "dispatch", result.DispatchID, "joined-dispatch")
+	if len(result.PrimaryResult) != 0 || observation.WorldState.WorkItemsByID[root.ID].State != root.State {
+		t.Fatal("interruption changed retryable Work or fabricated primary content")
+	}
+}
+
+func TestSessionOwnerWait_JoinedCancelIgnoresPeersAndSupersededAttempts(t *testing.T) {
+	for _, name := range []string{"unrelated Work", "prior invocation trace", "active retry", "accepted retry", "superseded", "uncorrelated cancellation"} {
+		t.Run(name, func(t *testing.T) {
+			observation := stoppedSessionInvocationObservation()
+			request := observation.WorldState.WorkRequestsByID["request-1"]
+			request.TraceID = "invocation-trace"
+			observation.WorldState.WorkRequestsByID["request-1"] = request
+			root := observation.WorldState.WorkRequestsByID["request-1"].WorkItems[0]
+			completion := interfaces.FactoryWorldDispatchCompletion{
+				DispatchID: "old-dispatch", WorkItemIDs: []string{root.ID}, TraceIDs: []string{observation.WorldState.WorkRequestsByID["request-1"].TraceID},
+				Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeCanceled), Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}},
+			}
+			switch name {
+			case "unrelated Work":
+				completion.WorkItemIDs = []string{"peer"}
+				completion.TraceIDs = []string{"peer-trace"}
+			case "prior invocation trace":
+				completion.TraceIDs = []string{"old-invocation-trace"}
+			case "active retry":
+				observation.WorldState.ActiveDispatches = map[string]interfaces.FactoryWorldDispatch{"retry": {WorkItemIDs: []string{root.ID}, TraceIDs: completion.TraceIDs}}
+			case "superseded":
+				completion.Result.Cancellation.Reason = workers.DispatchCancellationReasonSuperseded
+			case "uncorrelated cancellation":
+				completion.Result.Cancellation = nil
+			}
+			observation.WorldState.CompletedDispatches = []interfaces.FactoryWorldDispatchCompletion{completion}
+			if name == "accepted retry" {
+				observation.WorldState.CompletedDispatches = append(observation.WorldState.CompletedDispatches, interfaces.FactoryWorldDispatchCompletion{DispatchID: "retry", WorkItemIDs: []string{root.ID}, TraceIDs: completion.TraceIDs, Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)}})
+			}
+			if got := joinedInvocationInterruption("session", SessionInvocationWaitInput{RequestID: "request-1"}, observation.WorldState); got != nil {
+				t.Fatalf("stale or unrelated cancellation resolved invocation: %+v", got)
+			}
+		})
+	}
+}
 
 func TestSessionOwnerWait_WaitSessionWaiterIsPreferredAndReleasedOnce(t *testing.T) {
 	observations := 0

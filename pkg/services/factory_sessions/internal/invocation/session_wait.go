@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // A timed-out invocation still owes its Factory Session a cancel-on-timeout
@@ -129,6 +130,9 @@ func (o *SessionOwner) resolveObservation(
 	if classified, ok := work.ClassifyInvocationControlState(sessionID, observation.FactoryState, selectionInput); ok {
 		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
+	if classified := joinedInvocationInterruption(sessionID, input, observation.WorldState); classified != nil {
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
+	}
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
 		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
@@ -145,6 +149,63 @@ func (o *SessionOwner) resolveObservation(
 		return FactoryInvocationResult{}, false, nil
 	}
 	return o.resolveStoppedInvocation(sessionID, input, selectionInput, primaryErr, packaged), true, nil
+}
+
+// A canceled Petri dispatch keeps its Work active and retryable. Its canonical
+// completion nevertheless resolves the invocation that submitted that Work.
+// Read the existing selected-generation projection, never the recording or a
+// control acknowledgement. A newer scoped attempt supersedes an old cancel.
+func joinedInvocationInterruption(sessionID string, input SessionInvocationWaitInput, state interfaces.FactoryWorldState) *work.PrimaryResultError {
+	request, exists := state.WorkRequestsByID[input.RequestID]
+	if !exists {
+		return nil
+	}
+	rootIDs := make(map[string]bool, len(request.WorkItems))
+	for _, item := range request.WorkItems {
+		rootIDs[item.ID] = true
+	}
+	matches := func(ids, traces []string) bool {
+		for _, trace := range traces {
+			if request.TraceID != "" && trace == request.TraceID {
+				return true
+			}
+		}
+		if request.TraceID == "" {
+			for _, id := range ids {
+				if rootIDs[id] {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, dispatch := range state.ActiveDispatches {
+		if matches(dispatch.WorkItemIDs, dispatch.TraceIDs) {
+			return nil
+		}
+	}
+	for i := len(state.CompletedDispatches) - 1; i >= 0; i-- {
+		dispatch := state.CompletedDispatches[i]
+		if !matches(dispatch.WorkItemIDs, dispatch.TraceIDs) {
+			continue
+		}
+		if dispatch.Result.Outcome != string(workers.OutcomeCanceled) || dispatch.Result.Cancellation == nil || dispatch.Result.Cancellation.Reason != workers.DispatchCancellationReasonCanceled {
+			return nil
+		}
+		failure := &work.PrimaryResultError{
+			Code: work.PrimaryResultErrorCodeInterrupted, RequestID: input.RequestID,
+			Message: "invocation interrupted before a primary result was available",
+		}
+		failure.Context.SessionID, failure.Context.DispatchID = sessionID, dispatch.DispatchID
+		for _, id := range dispatch.WorkItemIDs {
+			if item, ok := state.WorkItemsByID[id]; ok {
+				failure.Context.WorkID, failure.Context.WorkName, failure.Context.WorkState = id, item.DisplayName, item.State
+				break
+			}
+		}
+		return failure
+	}
+	return nil
 }
 
 func (o *SessionOwner) canceledObservationResult(

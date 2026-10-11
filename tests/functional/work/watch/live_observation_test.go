@@ -282,9 +282,16 @@ func runUnstructuredFollow(t *testing.T, a *liveObservation, aWork string) {
 	assertExpectedWatchCancellationDiagnostic(t, a.diagnostics.String())
 }
 
-func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follow bool) *liveObservation {
+func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follow bool, destination ...string) *liveObservation {
 	t.Helper()
-	config := observationFactoryConfig(structured, "review")
+	state := "review"
+	if len(destination) != 0 {
+		state = destination[0]
+	}
+	config := observationFactoryConfig(structured, state)
+	if len(destination) != 0 {
+		config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
+	}
 	dir := support.ScaffoldFactory(t, config)
 	command := &observationCommand{arrived: make(chan struct{}), release: make(chan struct{}), result: support.NewStaticSuccessCommandRunner(observationOutput(structured))}
 	observationCommands.routes.Store(filepath.Clean(dir), command)
