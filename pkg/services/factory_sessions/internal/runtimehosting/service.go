@@ -52,8 +52,9 @@ func (service *Service) Run(
 	if runtime == nil {
 		return errors.New("host Factory Session runtime: lifecycle runtime is required")
 	}
+	startupLogger := logger
 	if hosted := runtime.CurrentRuntimeBundle(); hosted != nil {
-		logger = hosted.RuntimeLogger()
+		startupLogger = hosted.RuntimeLogger()
 	}
 
 	// Keep the transport alive while cancellation is unwound through the
@@ -68,6 +69,8 @@ func (service *Service) Run(
 	}()
 
 	bound := make(chan platformhttpserver.Binding, 1)
+	// The supplied session logger outlives the transport join. The runtime
+	// sink can already be closed by StopLifecycle while HTTP still drains.
 	apiExit := service.startAPI(transportCtx, &transport, handler, request, logger, bound)
 	serviceMode := runtimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
 	binding, err := service.waitForStartupReadability(
@@ -86,7 +89,7 @@ func (service *Service) Run(
 	if observer != nil {
 		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
-	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
+	logStartup(startupLogger, runtime.CurrentRuntimeBundle(), request)
 	if err := runtime.WaitForRuntime(ctx); err != nil {
 		if !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("factory run: %w", err)
