@@ -205,6 +205,11 @@ func startCancelDaemon(t *testing.T, ctx context.Context, binaryPath string, fix
 	if fixture.mockPath != "" {
 		args = append(args, "--with-mock-workers="+fixture.mockPath)
 	}
+	return startCancelCommand(t, ctx, binaryPath, fixture, args)
+}
+
+func startCancelCommand(t *testing.T, ctx context.Context, binaryPath string, fixture cancelFixture, args []string) *cancelDaemon {
+	t.Helper()
 	command := exec.CommandContext(ctx, binaryPath, args...)
 	command.Dir = fixture.factoryDir
 	command.Env = append([]string(nil), fixture.environment...)

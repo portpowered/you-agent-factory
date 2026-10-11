@@ -585,7 +585,11 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 // mutated is true if any mutations were applied (another tick may be needed).
 // shouldTerminate is true if the TerminationCheck subsystem signaled completion.
 func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
-	paused := e.automaticTicksPaused != nil && e.automaticTicksPaused()
+	return e.tickPhases(ctx, false)
+}
+
+func (e *FactoryEngine) tickPhases(ctx context.Context, completionOnly bool) (bool, bool, error) {
+	paused := completionOnly || (e.automaticTicksPaused != nil && e.automaticTicksPaused())
 	hasResults, err := e.pausedTickHasResults(ctx, paused)
 	if err != nil {
 		return false, false, err

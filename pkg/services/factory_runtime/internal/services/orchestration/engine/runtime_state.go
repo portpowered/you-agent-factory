@@ -264,6 +264,21 @@ func (e *FactoryEngine) Tick(ctx context.Context) error {
 	return err
 }
 
+// ReconcileJoinedResults applies the normal completion phases after execution
+// has stopped and all owned attempts have joined. Scheduling and submission
+// stay fenced; only correlated results can retire dispatches and restore claims.
+func (e *FactoryEngine) ReconcileJoinedResults(ctx context.Context) error {
+	release, err := e.AcquireResourceCapacityAdmission(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	_, _, err = e.tickPhases(ctx, true)
+	return err
+}
+
 // TickN executes n ticks sequentially. For testing.
 func (e *FactoryEngine) TickN(ctx context.Context, n int) error {
 	for i := range n {

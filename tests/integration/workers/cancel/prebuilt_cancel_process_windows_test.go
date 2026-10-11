@@ -156,6 +156,60 @@ func processPIDPresent(pid int) (bool, error) {
 	return true, nil
 }
 
+// Retain the actual process objects before cancellation. A numeric PID opened
+// after the join can already identify an unrelated process on a busy host.
+func retainJoinedCancelTree(t *testing.T, tree workerProcessTree) func() {
+	t.Helper()
+	handles := make(map[int]windows.Handle, len(tree.PIDs))
+	t.Cleanup(func() {
+		for _, handle := range handles {
+			if t.Failed() {
+				// Failure cleanup targets only the retained fixture process object.
+				_ = windows.TerminateProcess(handle, 1)
+				status, err := windows.WaitForSingleObject(handle, 5000)
+				if err != nil || status != uint32(windows.WAIT_OBJECT_0) {
+					t.Errorf("failed fixture cleanup did not join retained process: status=%d error=%v", status, err)
+				}
+			}
+			_ = windows.CloseHandle(handle)
+		}
+	})
+	for _, pid := range tree.PIDs {
+		handle, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_TERMINATE|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+		if err != nil {
+			t.Fatalf("retain matched process %d before cancellation: %v", pid, err)
+		}
+		handles[pid] = handle
+		var created, exited, kernel, user windows.Filetime
+		_ = windows.GetProcessTimes(handle, &created, &exited, &kernel, &user)
+		image := make([]uint16, 1024)
+		size := uint32(len(image))
+		_ = windows.QueryFullProcessImageName(handle, 0, &image[0], &size)
+		t.Logf("retained tree root=%d child=%d grandchild=%d PID=%d created=%d image=%s", tree.RootPID, tree.ChildPID, tree.GrandchildPID, pid, created.Nanoseconds(), windows.UTF16ToString(image[:size]))
+		status, err := windows.WaitForSingleObject(handle, 0)
+		if err != nil || status != uint32(windows.WAIT_TIMEOUT) {
+			t.Fatalf("matched process %d was not live before cancellation: status=%d error=%v", pid, status, err)
+		}
+	}
+	return func() {
+		t.Helper()
+		for pid, handle := range handles {
+			status, err := windows.WaitForSingleObject(handle, 0)
+			if err == nil && status == uint32(windows.WAIT_TIMEOUT) {
+				// Console hosts can finish asynchronous OS teardown after the
+				// worker exits. Join the retained object, without killing it or
+				// treating the caller's exit as proof that descendants exited.
+				t.Logf("joining retained process %d after caller/Work completion", pid)
+				status, err = windows.WaitForSingleObject(handle, 5000)
+			}
+			if err != nil || status != uint32(windows.WAIT_OBJECT_0) {
+				t.Fatalf("joined cancellation left retained process %d alive: status=%d error=%v", pid, status, err)
+			}
+		}
+		t.Logf("matched process objects exited: PIDs=%v", tree.PIDs)
+	}
+}
+
 func cleanupCancelProcessTree(tree workerProcessTree) {
 	if tree.RootPID > 0 {
 		_ = exec.Command("taskkill", "/PID", strconv.Itoa(tree.RootPID), "/T", "/F").Run()

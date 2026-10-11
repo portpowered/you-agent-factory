@@ -170,6 +170,11 @@ func consumeWatchStream(cfg WatchConfig, reducer *watchReducer, stream watchEven
 		if completed && retainedRemaining == 0 && !cfg.Follow {
 			return watchStreamResult{completed: true}
 		}
+		if retainedRemaining == 0 && !cfg.Follow {
+			if err := reducer.UnfinishedError(); err != nil {
+				return watchStreamResult{err: err}
+			}
+		}
 	}
 }
 
