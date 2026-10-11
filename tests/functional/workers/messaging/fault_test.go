@@ -730,7 +730,7 @@ func TestStartupDeliversUnreadMessagesWithoutAnotherSend(t *testing.T) {
 }
 
 // Replacing the graph is necessary to select a different immutable profile
-// policy. Both inactive hosts retain the exact inbox; later re-enabling must
+// policy. Inactive hosts retain the exact inbox; later re-enabling must
 // deliver the existing REVIVE messages without a new send.
 func assertInactiveStartupPreservesUnread(t *testing.T, first *fixture, revival *workerGate, messageID string) {
 	t.Helper()
@@ -739,10 +739,15 @@ func assertInactiveStartupPreservesUnread(t *testing.T, first *fixture, revival 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, cell := range []struct{ name, settings, code string }{
-		{"disabled", `{"messaging":{"enabled":false}}`, "MESSAGING_DISABLED"},
-		{"quarantined", `{"messaging":{"limits":{"defaultExpirySeconds":59}}}`, "MESSAGE_STORE_UNAVAILABLE"},
+	for _, cell := range []struct{ name, settings, code, tail string }{
+		{"disabled", `{"messaging":{"enabled":false}}`, "MESSAGING_DISABLED", ""},
+		{"quarantined", `{"messaging":{"limits":{"defaultExpirySeconds":59}}}`, "MESSAGE_STORE_UNAVAILABLE", ""},
+		{"corrupt", `{"messaging":{"enabled":true}}`, "MESSAGE_STORE_CORRUPT", "invalid retained tail\n"},
 	} {
+		expected := append(bytes.Clone(before), cell.tail...)
+		if err := os.WriteFile(path, expected, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		f := startHostRunner(t, first.home, first.dir, cell.settings, serviceedges.Edges{}, nil, revival, cell.name)
 		caller := f.invoke(t, cell.name, nil)
 		for _, route := range []string{"/messages", "/messages/" + messageID, "/messages?follow=true"} {
@@ -759,9 +764,14 @@ func assertInactiveStartupPreservesUnread(t *testing.T, first *fixture, revival 
 		default:
 		}
 		after, err := os.ReadFile(path)
-		if err != nil || !bytes.Equal(before, after) {
+		if err != nil || !bytes.Equal(expected, after) {
 			t.Fatalf("%s startup changed or erased the retained inbox", cell.name)
 		}
+	}
+	// The fixture removes only its injected corruption after the owning host
+	// joins. Product activation must never repair the customer's journal.
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -782,4 +792,99 @@ func assertStartupDeliverySelection(t *testing.T, page api.AgentMessageListRespo
 			t.Fatal("startup did not share exactly one confirmed successor")
 		}
 	}
+}
+
+// The policy-free filesystem edge refuses the retention replacement before
+// publication. This controlled refusal runs on Windows as well as Linux; the
+// read-only directory journey above separately owns real Linux permissions.
+type refusedRetentionFileSystem struct {
+	platformfilesystem.Local
+}
+
+func (refusedRetentionFileSystem) ReplaceDurable(string, []byte) error {
+	return fs.ErrPermission
+}
+
+func TestUnwritableStartupRetainsUnreadRevivalUntilRecovery(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+	settings := `{"messaging":{"enabled":true,"retentionDays":1}}`
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	first, lead, expired, unread := prepareRetentionRevival(t, settings, clock, effects, revival)
+	path := filepath.Join(first.home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.SetTick(25 * 60 * 60)
+	refused := serviceedges.Merge(effects, serviceedges.Edges{AgentMessageStoreFileSystem: refusedRetentionFileSystem{}})
+	second := startHostRunner(t, first.home, first.dir, settings, refused, nil, revival, "healthy")
+	caller := second.invoke(t, "healthy", nil)
+	for _, route := range []string{"/messages", "/messages/" + unread.MessageId, "/messages?follow=true"} {
+		assertError(t, second, http.MethodGet, route, nil, nil, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	}
+	assertError(t, second, http.MethodPost, "/messages", map[string]any{"requestId": "refused-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "refused startup send"}, caller, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	second.endWorker(t, "healthy")
+	second.server.Close(t)
+	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(before, after) {
+		t.Fatal("unwritable activation changed the committed inbox")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("quarantined startup continued the unread recipient")
+	default:
+	}
+	third := startHostRunner(t, first.home, first.dir, settings, effects, nil, revival)
+	pending := "REVIVE_PENDING"
+	unread.Reason = &pending
+	final := third.awaitDeliveryOutcome(t, nil, unread)
+	head := assertReviveAdmission(t, third, revival, final, lead)
+	assertError(t, third, http.MethodGet, "/messages/"+expired.MessageId, nil, nil, http.StatusNotFound, "MESSAGE_NOT_FOUND")
+	page := readPage(t, third, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], final) {
+		t.Fatal("recovered retention lost or changed the unread message")
+	}
+	beforeEvents := third.server.GetFactoryEvents(t)
+	close(revival.release)
+	third.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	if after := third.server.GetFactoryEvents(t); !reflect.DeepEqual(beforeEvents, after) {
+		t.Fatal("recovered direct delivery changed canonical Factory Events")
+	}
+	third.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("retention recovery duplicated continuation")
+	default:
+	}
+}
+
+func prepareRetentionRevival(t *testing.T, settings string, clock *platformclock.Deterministic, effects serviceedges.Edges, revival *workerGate) (*fixture, map[string]string, api.AgentMessage, api.AgentMessage) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, kind: "REVIVE_INTENT"}
+	effects = serviceedges.Merge(effects, serviceedges.Edges{AgentMessageStoreFileSystem: gate})
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), settings, effects, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	expired := f.cliSend(t, lane, "lead", "--request-id", "old", "--body", "expired before retention", "--expires", "1m")
+	clock.SetTick(60)
+	if page := readPage(t, f, "/messages?threadId="+expired.ThreadId, lane); len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("old message did not durably expire")
+	}
+	clock.SetTick(23 * 60 * 60)
+	unread := f.cliSend(t, lane, "lead", "--request-id", "unread", "--body", "survives unwritable retention")
+	f.endWorker(t, "lead")
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("recipient end did not reach the intent flush")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	if page := readPage(t, f, "/messages?threadId="+unread.ThreadId, nil); len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("failed intent did not preserve unread input")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	return f, lead, expired, unread
 }

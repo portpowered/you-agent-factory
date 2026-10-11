@@ -84,6 +84,12 @@ func (e *Engine) followIdentity(ctx context.Context, request agentmessages.ListR
 func (e *Engine) followSubscription(ctx context.Context, limit int) (events.Subscription, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	// The empty ID cannot select a message, but its constant-time lookup
+	// checks writable readiness without copying the inbox. A quarantined
+	// journal must refuse follow before exposing an idle Events subscription.
+	if _, _, _, err := e.ledger.LookupMessage(""); err != nil {
+		return nil, err
+	}
 	if e.events == nil {
 		return nil, agentmessages.ErrStreamUnavailable
 	}

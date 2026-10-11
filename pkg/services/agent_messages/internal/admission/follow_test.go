@@ -7,9 +7,36 @@ import (
 	"testing"
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
+	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+type unavailableFollowLedger struct {
+	Ledger
+	fault error
+}
+
+func (l unavailableFollowLedger) LookupMessage(string) (store.Entry, bool, uint64, error) {
+	return store.Entry{}, false, 0, l.fault
+}
+
+func TestFollowRefusesQuarantinedStoreBeforeSubscription(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []error{agentmessages.ErrStoreCorrupt, agentmessages.ErrStoreUnavailable} {
+		f := newEngineFixture()
+		stream := newFollowStream()
+		f.engine.events = stream
+		f.engine.ledger = unavailableFollowLedger{Ledger: f.ledger, fault: fault}
+		err := f.engine.Follow(t.Context(), agentmessages.ListRequest{}, func(agentmessages.Observation) error {
+			t.Fatal("quarantined store published an observation")
+			return nil
+		})
+		if !errors.Is(err, fault) || stream.registered != nil {
+			t.Fatalf("quarantined follow: error=%v subscribed=%t", err, stream.registered != nil)
+		}
+	}
+}
 
 // The coordinator consumes a controlled Events port. Real stream attachment,
 // process reconstruction and CLI/HTTP follow belong to public functional proof.
