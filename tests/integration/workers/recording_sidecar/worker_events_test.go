@@ -26,44 +26,51 @@ func TestUnavailableTerminalReadsRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeRecordingIntegrityJSON(t, f.document, map[string]any{
-		"requestId": "unavailable-script-request", "workerSessionId": "unavailable-script",
-		"execution": map[string]any{"workstationName": "direct", "workingDirectory": f.project, "workerType": "script", "runnerId": "script", "command": node, "args": []string{"-e", `console.log("owned script output")`}, "dispatch": map[string]any{"dispatchId": "script-attempt", "workstationName": "direct", "workerType": "script"}},
-	})
+	factory := writeCleanupFactory(t, f.project, node, filepath.Join(f.project, "ready"), filepath.Join(f.project, "release"))
+	if err := os.WriteFile(filepath.Join(f.project, "worker.cjs"), []byte("console.log('owned script output COMPLETE');"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	historyCLI(t, f.ctx, f.binary, f.project, f.env, "run", "--dir", factory, "--quiet")
+	removeHistorySeeds(t, factory)
 	host := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
-	f.cli(t, host.url, "invoke", "--execution", f.document)
-	before := assertUnavailableArtifactReads(t, f, host.url)
+	var listed api.ListWorkerSessionsResponse
+	readSummaryArtifactHTTP(t, f, host.url, "/worker-sessions?history=archived", &listed)
+	if len(listed.Sessions) != 1 {
+		t.Fatalf("script Worker count=%d", len(listed.Sessions))
+	}
+	id := listed.Sessions[0].WorkerSessionId
+	before := assertUnavailableArtifactReads(t, f, host.url, id)
 	host.stop(t, f.ctx, f.binary, f.project, f.env)
 	reopened := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
-	after := assertUnavailableArtifactReads(t, f, reopened.url)
+	after := assertUnavailableArtifactReads(t, f, reopened.url, id)
 	if !reflect.DeepEqual(before.Events, after.Events) || before.Health != after.Health {
 		t.Fatal("restart changed retained script history/health")
 	}
 	reopened.stop(t, f.ctx, f.binary, f.project, f.env)
 }
 
-func assertUnavailableArtifactReads(t *testing.T, f invokeArtifactFixture, server string) api.WorkerSessionLogPage {
+func assertUnavailableArtifactReads(t *testing.T, f invokeArtifactFixture, server, id string) api.WorkerSessionLogPage {
 	t.Helper()
 	var row api.WorkerSessionObservation
-	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/unavailable-script", &row)
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id, &row)
 	if row.State != "COMPLETED" || row.ProviderSession != nil || row.Transcript != "UNAVAILABLE" {
 		t.Fatalf("script identity=%+v", row)
 	}
-	assertUnavailableArtifactTranscript(t, f, server)
+	assertUnavailableArtifactTranscript(t, f, server, id)
 	var page api.WorkerSessionLogPage
-	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/unavailable-script/logs", &page)
+	readSummaryArtifactHTTP(t, f, server, "/worker-sessions/"+id+"/logs", &page)
 	if page.Health != api.COMPLETE || page.NextToken != nil || len(page.Events) < 2 {
 		t.Fatalf("retained script logs=%+v", page)
 	}
-	assertUnavailableArtifactStreams(t, f, server, page)
+	assertUnavailableArtifactStreams(t, f, server, id, page)
 
 	return page
 }
 
-func assertUnavailableArtifactTranscript(t *testing.T, f invokeArtifactFixture, server string) {
+func assertUnavailableArtifactTranscript(t *testing.T, f invokeArtifactFixture, server, id string) {
 	t.Helper()
 	started := time.Now()
-	request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/unavailable-script/transcript", nil)
+	request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/"+id+"/transcript", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +85,7 @@ func assertUnavailableArtifactTranscript(t *testing.T, f invokeArtifactFixture, 
 		t.Fatalf("HTTP unavailable: status=%d code=%s elapsed=%s err=%v", response.StatusCode, diagnostic.Code, time.Since(started), decodeErr)
 	}
 	started = time.Now()
-	command := exec.CommandContext(f.ctx, f.binary, "--remote", "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", "unavailable-script")
+	command := exec.CommandContext(f.ctx, f.binary, "--remote", "--server", server, "--json", "worker-sessions", "read", "--worker-session-id", id)
 	command.Dir, command.Env = f.project, f.env
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
@@ -87,10 +94,10 @@ func assertUnavailableArtifactTranscript(t *testing.T, f invokeArtifactFixture, 
 	}
 }
 
-func assertUnavailableArtifactStreams(t *testing.T, f invokeArtifactFixture, server string, page api.WorkerSessionLogPage) {
+func assertUnavailableArtifactStreams(t *testing.T, f invokeArtifactFixture, server, id string, page api.WorkerSessionLogPage) {
 	t.Helper()
 	for _, query := range []string{"", "?replayOnly=true"} {
-		request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/unavailable-script/events"+query, nil)
+		request, err := http.NewRequestWithContext(f.ctx, http.MethodGet, server+"/worker-sessions/"+id+"/events"+query, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +112,7 @@ func assertUnavailableArtifactStreams(t *testing.T, f invokeArtifactFixture, ser
 		if response.StatusCode != http.StatusOK || headers > time.Second || time.Since(started) > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
 			t.Fatalf("finite script stream headers=%s EOF=%s status=%d", headers, time.Since(started), response.StatusCode)
 		}
-		assertWorkerEventsArtifactTerminal(t, frames)
+		assertWorkerEventsArtifactTerminal(t, frames, id)
 		if len(workerEventsArtifactRecords(frames)) != len(page.Events) {
 			t.Fatal("terminal stream lost retained script records")
 		}
@@ -123,9 +130,9 @@ func TestWorkerEventsFiniteReplayRestart(t *testing.T) {
 	host := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
 	f.cli(t, host.url, "invoke", "--execution", f.document)
 	before := readWorkerEventsArtifact(t, f.ctx, host.url, "?replayOnly=true")
-	assertWorkerEventsArtifactTerminal(t, before)
+	assertWorkerEventsArtifactTerminal(t, before, "t7-artifact-session")
 	ordinary := readWorkerEventsArtifact(t, f.ctx, host.url, "")
-	assertWorkerEventsArtifactTerminal(t, ordinary)
+	assertWorkerEventsArtifactTerminal(t, ordinary, "t7-artifact-session")
 	host.stop(t, f.ctx, f.binary, f.project, f.env)
 	for _, name := range []string{".codex", ".cursor", ".claude"} {
 		if err := os.WriteFile(filepath.Join(f.home, name), []byte("no provider files"), 0o600); err != nil {
@@ -134,7 +141,7 @@ func TestWorkerEventsFiniteReplayRestart(t *testing.T) {
 	}
 	restarted := startHistoryHost(t, f.ctx, f.binary, f.project, f.env)
 	after := readWorkerEventsArtifact(t, f.ctx, restarted.url, "?replayOnly=true")
-	assertWorkerEventsArtifactTerminal(t, after)
+	assertWorkerEventsArtifactTerminal(t, after, "t7-artifact-session")
 	// Delivery kind and summary placement can differ between retained Events
 	// and archived capture; compare the exact customer event records.
 	if !reflect.DeepEqual(workerEventsArtifactRecords(before), workerEventsArtifactRecords(after)) {
@@ -220,7 +227,7 @@ func TestWorkerEventsIdleFollowSocketDetach(t *testing.T) {
 		t.Fatal(err)
 	}
 	frames := drainWorkerEventsArtifact(t, second)
-	assertWorkerEventsArtifactTerminal(t, frames)
+	assertWorkerEventsArtifactTerminal(t, frames, "t7-artifact-session")
 	found := false
 	for _, frame := range frames {
 		payload, _ := json.Marshal(frame.Event.Payload)
@@ -286,12 +293,12 @@ func workerEventsArtifactRecords(frames []api.WorkerSessionEvent) []api.WorkerSe
 	return records
 }
 
-func assertWorkerEventsArtifactTerminal(t *testing.T, frames []api.WorkerSessionEvent) {
+func assertWorkerEventsArtifactTerminal(t *testing.T, frames []api.WorkerSessionEvent, id string) {
 	t.Helper()
 	var position int64
 	terminal := false
 	for _, frame := range frames {
-		if frame.WorkerSessionId != "t7-artifact-session" || frame.Delivery == api.WorkerSessionEventDeliverySourceFailure {
+		if frame.WorkerSessionId != id || frame.Delivery == api.WorkerSessionEventDeliverySourceFailure {
 			t.Fatalf("stream identity/failure: %+v", frame)
 		}
 		if frame.Event.Position > 0 {
