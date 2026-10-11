@@ -69,18 +69,7 @@ func TestCodexRejectedOutputObservedBeforeFailure(t *testing.T) {
 	if err == nil || result.Content != "" {
 		t.Fatalf("rejection returned accepted content: %q %v", result.Content, err)
 	}
-	var output []string
-	for _, fact := range progress {
-		if fact.Detail == "PRIVATE ordinary output" || fact.Detail == "PRIVATE ordinary stderr" {
-			output = append(output, fact.Detail)
-		}
-		if fact.Phase == "run.completed" || fact.Phase == "message.completed" {
-			t.Fatalf("false completion: %+v", fact)
-		}
-	}
-	if len(output) != 2 || output[0] != "PRIVATE ordinary output" || output[1] != "PRIVATE ordinary stderr" {
-		t.Fatalf("ordered once-only output: %#v", output)
-	}
+	assertRejectedProgress(t, progress)
 }
 
 func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
@@ -247,4 +236,20 @@ func (stub codexCommandRunnerStub) RunStreaming(ctx context.Context, request pro
 
 func (stub codexCommandRunnerStub) commandEffect() providerservice.CommandRunner {
 	return providerservice.CommandRunner{Run: stub.Run, RunStreaming: stub.RunStreaming}
+}
+
+func assertRejectedProgress(t *testing.T, progress []providers.ExecuteProgress) {
+	t.Helper()
+	var output []string
+	for _, fact := range progress {
+		if fact.Detail == "PRIVATE ordinary output" || fact.Detail == "PRIVATE ordinary stderr" {
+			output = append(output, fact.Detail)
+		}
+		if fact.Phase == "run.completed" || fact.Phase == "message.completed" {
+			t.Fatalf("false completion: %+v", fact)
+		}
+	}
+	if len(output) != 2 || output[0] != "PRIVATE ordinary output" || output[1] != "PRIVATE ordinary stderr" {
+		t.Fatalf("ordered once-only output: %#v", output)
+	}
 }

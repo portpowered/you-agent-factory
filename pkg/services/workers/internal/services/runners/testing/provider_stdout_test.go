@@ -146,27 +146,32 @@ func TestMockRejectResultPreservesDeclaredStreams(t *testing.T) {
 					}
 					return
 				}
-				var texts []string
-				for _, line := range strings.Split(strings.TrimSpace(string(result.Stdout)), "\n") {
-					var record map[string]any
-					if err := json.Unmarshal([]byte(line), &record); err != nil {
-						t.Fatal(err)
-					}
-					if record["type"] == "item.updated" {
-						texts = append(texts, record["item"].(map[string]any)["text"].(string))
-					}
-					if record["type"] == "stream_event" {
-						block := record["event"].(map[string]any)["content_block"].(map[string]any)
-						texts = append(texts, block["text"].(string))
-					}
-					if record["type"] == "item.completed" || record["is_error"] == false {
-						t.Fatalf("rejection supplied a successful result: %s", line)
-					}
-				}
-				if streams.stdout == "" && len(texts) != 0 || streams.stdout != "" && (len(texts) != 1 || texts[0] != streams.stdout) {
-					t.Fatalf("declared stdout = %#v, want one %q when nonempty", texts, streams.stdout)
-				}
+				assertRejectedStructuredStdout(t, result.Stdout, streams.stdout)
 			})
 		}
+	}
+}
+
+func assertRejectedStructuredStdout(t *testing.T, stdout []byte, want string) {
+	t.Helper()
+	var texts []string
+	for _, line := range strings.Split(strings.TrimSpace(string(stdout)), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatal(err)
+		}
+		if record["type"] == "item.updated" {
+			texts = append(texts, record["item"].(map[string]any)["text"].(string))
+		}
+		if record["type"] == "stream_event" {
+			block := record["event"].(map[string]any)["content_block"].(map[string]any)
+			texts = append(texts, block["text"].(string))
+		}
+		if record["type"] == "item.completed" || record["is_error"] == false {
+			t.Fatalf("rejection supplied a successful result: %s", line)
+		}
+	}
+	if want == "" && len(texts) != 0 || want != "" && (len(texts) != 1 || texts[0] != want) {
+		t.Fatalf("declared stdout = %#v, want one %q when nonempty", texts, want)
 	}
 }

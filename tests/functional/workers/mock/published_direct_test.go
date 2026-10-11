@@ -99,17 +99,7 @@ func assertDirectRejectedCaptureReplay(t *testing.T, host *support.FunctionalAPI
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{"PRIVATE ordinary stdout 世界", "PRIVATE ordinary stderr 世界"} {
-		if strings.Count(before, marker) != 1 {
-			t.Fatalf("output count for %q: %s", marker, before)
-		}
-	}
-	if strings.Index(before, "ordinary stdout") > strings.Index(before, "ordinary stderr") {
-		t.Fatalf("stream order: %s", before)
-	}
-	if strings.Contains(before, "declared-credential") || strings.Count(before, "redacted") != 2 {
-		t.Fatalf("declared secret redaction: %s", before)
-	}
+	assertDirectRejectedOutput(t, before)
 	show := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "show", "--worker-session-id", "direct-example-session"})
 	show.Input.WorkingDirectory, show.Input.Env = dir, environment
 	if err := host.Execute(t, show.Input); err != nil || !strings.Contains(show.Stdout(), `"state":"FAILED"`) {
@@ -300,18 +290,7 @@ func assertRejectedLostOutput(t *testing.T, host *support.FunctionalAPIServer, e
 	}
 	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
 	defer closeMCP()
-	result, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": "direct-example-session", "view": "logs"}})
-	if err != nil || result.IsError || len(result.Content) != 1 {
-		t.Fatalf("write-loss MCP: %v %+v", err, result)
-	}
-	var envelope struct {
-		Result struct {
-			Logs factoryapi.WorkerSessionLogPage `json:"logs"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil || !reflect.DeepEqual(page, envelope.Result.Logs) {
-		t.Fatalf("write-loss MCP/HTTP parity: %v MCP=%+v HTTP=%+v", err, envelope.Result.Logs, page)
-	}
+	assertRejectedLostOutputMCP(t, connection, page)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", "direct-example-session", "--view", "logs", "--follow"})
 	inputs.Input.Env = environment
 	if err := host.Execute(t, inputs.Input); err == nil || !strings.Contains(err.Error()+inputs.Stderr(), "WORKER_SESSION_LOGS_GAP") || strings.Contains(inputs.Stdout()+inputs.Stderr(), "write-secret") {
@@ -362,23 +341,10 @@ func TestRejectedMockCapturedOutputFactory(t *testing.T) {
 		t.Fatalf("rejected business outcome: %+v", status)
 	}
 	facts := assertRejectedCaptureFacts(t, host, id)
-	if facts.Direct || facts.FactorySessionId == nil || *facts.FactorySessionId != scope || facts.WorkName == nil || *facts.WorkName != name || !reflect.DeepEqual(facts.WorkIds, live.Sessions[0].WorkIds) || facts.AttemptId != live.Sessions[0].AttemptId {
-		t.Fatalf("rejected attribution: live=%+v ended=%+v", live.Sessions[0], facts)
-	}
+	assertRejectedFactoryAttribution(t, facts, live.Sessions[0], scope, name)
 	logs := assertRejectedCapturePages(t, host, id, cfg.Env)
 	transcript := assertRejectedCaptureInspection(t, host, facts, "all", cfg.Env, "FACTORY rejected stdout 世界")
-	encoded, err := json.Marshal(logs.Events)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, marker := range []string{"FACTORY rejected stdout 世界", "FACTORY rejected stderr 世界"} {
-		if strings.Count(string(encoded), marker) != 1 {
-			t.Fatalf("declared Factory output %q: %s", marker, encoded)
-		}
-	}
-	if strings.Index(string(encoded), "rejected stdout") > strings.Index(string(encoded), "rejected stderr") {
-		t.Fatalf("Factory stream order: %s", encoded)
-	}
+	assertRejectedFactoryOutput(t, logs.Events)
 	host.Close(t)
 	host = support.StartFunctionalAPIServer(t, cfg)
 	if restored := assertRejectedCaptureFacts(t, host, id); !equalRejectedCaptureFacts(facts, restored) {
@@ -402,28 +368,7 @@ func assertRejectedCaptureInspection(t *testing.T, host *support.FunctionalAPISe
 	t.Helper()
 	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
 	defer closeMCP()
-	scope := "direct"
-	if !facts.Direct {
-		scope = "factory"
-	}
-	for _, scoped := range []bool{false, true} {
-		query := url.Values{"history": {history}, "scope": {scope}}
-		arguments := map[string]any{"action": "LIST", "history": history, "scope": scope}
-		args := []string{"worker-sessions", "list", "--history", history, "--scope", scope}
-		if scoped && facts.FactorySessionId != nil {
-			query.Set("factorySessionId", *facts.FactorySessionId)
-			// MCP LIST has no Factory Session selector; compare its supported scope on this private host.
-			args = append(args, "--session", *facts.FactorySessionId)
-		}
-		page := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.URL()+"/worker-sessions?"+query.Encode())
-		var cli factoryapi.ListWorkerSessionsResponse
-		rejectedInspectionCLI(t, host, environment, args, &cli)
-		var remote factoryapi.ListWorkerSessionsResponse
-		rejectedInspectionMCP(t, connection, arguments, &remote)
-		if !reflect.DeepEqual(cli, page) || !reflect.DeepEqual(remote, page) || len(page.Sessions) != 1 || !equalRejectedCaptureFacts(facts, page.Sessions[0]) {
-			t.Fatalf("rejected LIST parity: HTTP=%+v CLI=%+v MCP=%+v original=%+v", page, cli, remote, facts)
-		}
-	}
+	assertRejectedCaptureList(t, host, connection, facts, history, environment)
 	id := facts.WorkerSessionId
 	transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, host.URL()+"/worker-sessions/"+url.PathEscape(id)+"/transcript")
 	var cli, remote factoryapi.WorkerSessionTranscriptResponse
@@ -483,10 +428,7 @@ func assertRejectedCaptureFacts(t *testing.T, host *support.FunctionalAPIServer,
 	if row.State != "FAILED" || row.TerminalCause == nil || *row.TerminalCause != "FAILED" || row.RecordingHealth == nil || *row.RecordingHealth != "COMPLETE" || row.StartedAt == nil || row.EndedAt == nil || row.DurationMillis == nil || row.EndedAt.Before(*row.StartedAt) {
 		t.Fatalf("rejected capture facts: %+v", row)
 	}
-	u := row.TokenUsage
-	if u == nil || u.InputTokens == nil || *u.InputTokens != 10 || u.OutputTokens == nil || *u.OutputTokens != 4 || u.TotalTokens == nil || *u.TotalTokens != 14 || u.Origin == nil || *u.Origin != "SYNTHETIC" {
-		t.Fatalf("rejected synthetic usage: %+v", row)
-	}
+	assertRejectedSyntheticUsage(t, row)
 	return row
 }
 
@@ -580,44 +522,7 @@ func assertRejectedCapturePages(t *testing.T, host *support.FunctionalAPIServer,
 	var events []factoryapi.WorkerSessionEvent
 	token := ""
 	for {
-		query := "?limit=1"
-		args := []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--limit", "1"}
-		if token != "" {
-			query += "&nextToken=" + url.QueryEscape(token)
-			args = append(args, "--next-token", token)
-		}
-		page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+query)
-		arguments := map[string]any{"action": "READ", "workerSessionId": id, "view": "logs", "limit": 1}
-		if token != "" {
-			arguments["nextToken"] = token
-		}
-		result, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: arguments})
-		if err != nil || result.IsError || len(result.Content) != 1 {
-			t.Fatalf("MCP rejected logs: %v %+v", err, result)
-		}
-		var envelope struct {
-			Result struct {
-				Logs factoryapi.WorkerSessionLogPage `json:"logs"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(envelope.Result.Logs, page) {
-			t.Fatalf("MCP log parity: MCP=%+v HTTP=%+v", envelope.Result.Logs, page)
-		}
-		inputs := support.FakeInputs(t.Context(), args)
-		inputs.Input.Env = environment
-		if err := host.Execute(t, inputs.Input); err != nil {
-			t.Fatalf("CLI bounded logs: %v %s", err, inputs.Stderr())
-		}
-		var cli factoryapi.WorkerSessionLogPage
-		if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(cli, page) || len(page.Events) > 1 || page.Health != "COMPLETE" || page.RecordingGenerationId != head.RecordingGenerationId || page.CommittedPosition != head.CommittedPosition {
-			t.Fatalf("bounded log parity: HTTP=%+v CLI=%+v head=%+v", page, cli, head)
-		}
+		page := readRejectedCapturePage(t, host, connection, id, environment, token, head)
 		events = append(events, page.Events...)
 		if len(events) > len(head.Events) {
 			t.Fatal("cursor duplicated events")
@@ -808,4 +713,136 @@ func publishedDirectMockHome(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return home
+}
+
+func assertDirectRejectedOutput(t *testing.T, before string) {
+	t.Helper()
+	for _, marker := range []string{"PRIVATE ordinary stdout 世界", "PRIVATE ordinary stderr 世界"} {
+		if strings.Count(before, marker) != 1 {
+			t.Fatalf("output count for %q: %s", marker, before)
+		}
+	}
+	if strings.Index(before, "ordinary stdout") > strings.Index(before, "ordinary stderr") {
+		t.Fatalf("stream order: %s", before)
+	}
+	if strings.Contains(before, "declared-credential") || strings.Count(before, "redacted") != 2 {
+		t.Fatalf("declared secret redaction: %s", before)
+	}
+}
+
+func assertRejectedLostOutputMCP(t *testing.T, connection *mcp.ClientSession, page factoryapi.WorkerSessionLogPage) {
+	t.Helper()
+	result, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: map[string]any{"action": "READ", "workerSessionId": "direct-example-session", "view": "logs"}})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("write-loss MCP: %v %+v", err, result)
+	}
+	var envelope struct {
+		Result struct {
+			Logs factoryapi.WorkerSessionLogPage `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil || !reflect.DeepEqual(page, envelope.Result.Logs) {
+		t.Fatalf("write-loss MCP/HTTP parity: %v MCP=%+v HTTP=%+v", err, envelope.Result.Logs, page)
+	}
+}
+
+func assertRejectedFactoryAttribution(t *testing.T, facts, live factoryapi.WorkerSessionObservation, scope, name string) {
+	t.Helper()
+	if facts.Direct || facts.FactorySessionId == nil || *facts.FactorySessionId != scope || facts.WorkName == nil || *facts.WorkName != name || !reflect.DeepEqual(facts.WorkIds, live.WorkIds) || facts.AttemptId != live.AttemptId {
+		t.Fatalf("rejected attribution: live=%+v ended=%+v", live, facts)
+	}
+}
+
+func assertRejectedFactoryOutput(t *testing.T, events []factoryapi.WorkerSessionEvent) {
+	t.Helper()
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{"FACTORY rejected stdout 世界", "FACTORY rejected stderr 世界"} {
+		if strings.Count(string(encoded), marker) != 1 {
+			t.Fatalf("declared Factory output %q: %s", marker, encoded)
+		}
+	}
+	if strings.Index(string(encoded), "rejected stdout") > strings.Index(string(encoded), "rejected stderr") {
+		t.Fatalf("Factory stream order: %s", encoded)
+	}
+}
+
+func assertRejectedCaptureList(t *testing.T, host *support.FunctionalAPIServer, connection *mcp.ClientSession, facts factoryapi.WorkerSessionObservation, history string, environment []string) {
+	t.Helper()
+	scope := "direct"
+	if !facts.Direct {
+		scope = "factory"
+	}
+	for _, scoped := range []bool{false, true} {
+		query := url.Values{"history": {history}, "scope": {scope}}
+		arguments := map[string]any{"action": "LIST", "history": history, "scope": scope}
+		args := []string{"worker-sessions", "list", "--history", history, "--scope", scope}
+		if scoped && facts.FactorySessionId != nil {
+			query.Set("factorySessionId", *facts.FactorySessionId)
+			// MCP LIST has no Factory Session selector; compare its supported scope on this private host.
+			args = append(args, "--session", *facts.FactorySessionId)
+		}
+		page := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.URL()+"/worker-sessions?"+query.Encode())
+		var cli factoryapi.ListWorkerSessionsResponse
+		rejectedInspectionCLI(t, host, environment, args, &cli)
+		var remote factoryapi.ListWorkerSessionsResponse
+		rejectedInspectionMCP(t, connection, arguments, &remote)
+		if !reflect.DeepEqual(cli, page) || !reflect.DeepEqual(remote, page) || len(page.Sessions) != 1 || !equalRejectedCaptureFacts(facts, page.Sessions[0]) {
+			t.Fatalf("rejected LIST parity: HTTP=%+v CLI=%+v MCP=%+v original=%+v", page, cli, remote, facts)
+		}
+	}
+}
+
+func assertRejectedSyntheticUsage(t *testing.T, row factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	u := row.TokenUsage
+	if u == nil || u.InputTokens == nil || *u.InputTokens != 10 || u.OutputTokens == nil || *u.OutputTokens != 4 || u.TotalTokens == nil || *u.TotalTokens != 14 || u.Origin == nil || *u.Origin != "SYNTHETIC" {
+		t.Fatalf("rejected synthetic usage: %+v", row)
+	}
+}
+
+func readRejectedCapturePage(t *testing.T, host *support.FunctionalAPIServer, connection *mcp.ClientSession, id string, environment []string, token string, head factoryapi.WorkerSessionLogPage) factoryapi.WorkerSessionLogPage {
+	t.Helper()
+	endpoint := host.URL() + "/worker-sessions/" + url.PathEscape(id) + "/logs"
+	query := "?limit=1"
+	args := []string{"you", "--server", host.URL(), "--json", "worker-sessions", "read", "--worker-session-id", id, "--view", "logs", "--limit", "1"}
+	if token != "" {
+		query += "&nextToken=" + url.QueryEscape(token)
+		args = append(args, "--next-token", token)
+	}
+	page := support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+query)
+	arguments := map[string]any{"action": "READ", "workerSessionId": id, "view": "logs", "limit": 1}
+	if token != "" {
+		arguments["nextToken"] = token
+	}
+	result, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: arguments})
+	if err != nil || result.IsError || len(result.Content) != 1 {
+		t.Fatalf("MCP rejected logs: %v %+v", err, result)
+	}
+	var envelope struct {
+		Result struct {
+			Logs factoryapi.WorkerSessionLogPage `json:"logs"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(result.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(envelope.Result.Logs, page) {
+		t.Fatalf("MCP log parity: MCP=%+v HTTP=%+v", envelope.Result.Logs, page)
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = environment
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI bounded logs: %v %s", err, inputs.Stderr())
+	}
+	var cli factoryapi.WorkerSessionLogPage
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &cli); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(cli, page) || len(page.Events) > 1 || page.Health != "COMPLETE" || page.RecordingGenerationId != head.RecordingGenerationId || page.CommittedPosition != head.CommittedPosition {
+		t.Fatalf("bounded log parity: HTTP=%+v CLI=%+v head=%+v", page, cli, head)
+	}
+	return page
 }
