@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -55,10 +56,11 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	}
 	t.Cleanup(providerGate.unblock)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		RecordingReadFile:     os.ReadFile,
-		ProcessLogger:         zap.New(logCore).With(zap.String("selected_backend", "completed-http")),
-		ScriptCommandRunner:   initialOpeningScriptRunner{effects: effects},
-		ProviderCommandRunner: completedHTTPProviderRunner{initialOpeningProviderRunner: initialOpeningProviderRunner{effects: effects, selected: providerGate}, failedDir: failed.candidateDir},
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
+		RecordingReadFile:               os.ReadFile,
+		ProcessLogger:                   zap.New(logCore).With(zap.String("selected_backend", "completed-http")),
+		ScriptCommandRunner:             initialOpeningScriptRunner{effects: effects},
+		ProviderCommandRunner:           completedHTTPProviderRunner{initialOpeningProviderRunner: initialOpeningProviderRunner{effects: effects, selected: providerGate}, failedDir: failed.candidateDir},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			starts.Add(1)
 			request.Handler = completedHTTPContextHandler(request.Handler)

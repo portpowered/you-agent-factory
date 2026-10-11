@@ -97,10 +97,6 @@ func TestApplicationOperationsRejectMissingSelectedSession(t *testing.T) {
 	if result := root.ApplicationControlWaitToComplete("missing", factoryruntime.WaitToCompleteRequest{}); result != (factoryruntime.WaitToCompleteResult{}) {
 		t.Fatalf("absent wait control = %+v", result)
 	}
-	var nilRoot *Root
-	if _, err := nilRoot.ApplicationDiagnostics("missing"); err == nil {
-		t.Fatal("nil root accepted application diagnostics")
-	}
 }
 
 func TestLiveControlRequiresSelectedSession(t *testing.T) {

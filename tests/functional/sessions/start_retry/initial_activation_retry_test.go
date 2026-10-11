@@ -164,6 +164,9 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	api := support.NewProcessAPIServer()
 	logCore, logs := observer.New(zap.InfoLevel)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		// Each reusable process owns its durable Worker recordings. Parallel
+		// process fixtures must not share the package's working-directory store.
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
 		// Preserve actual recording bytes and errors without the platform's
 		// Windows replacement retry loop on absent hydration files. OS file
 		// replacement races belong to the compiled integration lane.
@@ -1072,8 +1075,9 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	api := support.NewProcessAPIServer()
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		ProcessLogger: zap.New(core, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&rejectedWrites)))),
-		Clock:         initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		FactorySessionsWorkingDirectory: platformfilesystem.Local{WorkingDirectory: t.TempDir()},
+		ProcessLogger:                   zap.New(core, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&rejectedWrites)))),
+		Clock:                           initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
 		// Hydration preserves real bytes/errors through the same read effect as
 		// the healthy matrix, without Windows replacement retries on absent files.
 		RecordingReadFile:  os.ReadFile,
@@ -1214,6 +1218,11 @@ func testCompletedLifecycleInputReplacement(t *testing.T, sessions factorysessio
 	}
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.candidateID, before)
 	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	responsesAfterFailure := support.GetFactoryResponseEventsAt(t, baseURL, scenario.candidateID)
+	if len(responsesAfterFailure) <= len(responsesBefore) || !reflect.DeepEqual(responsesAfterFailure[:len(responsesBefore)], responsesBefore) {
+		t.Fatal("failed replacement lost the prior generation response history prefix")
+	}
+	cursor := responsesAfterFailure[len(responsesAfterFailure)-1].Sequence
 	// An unreadable candidate input follows the existing omission policy. A
 	// later replacement uses a new generation and admits the corrected bytes.
 	files.failRead.Store(true)
@@ -1240,12 +1249,28 @@ func testCompletedLifecycleInputReplacement(t *testing.T, sessions factorysessio
 	if !found {
 		t.Fatalf("replacement did not preseed selected bytes: %#v", listed)
 	}
-	// Live canonical history belongs to the selected ledger generation. The
-	// Session response authority retains the exact customer-visible prefix.
+	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
+	// Retained history belongs to the selected runtime generation. Successful
+	// replacement continues the Session sequence and accepts the prior cursor.
 	initialOpeningHistory(t, sessions, scenario.candidateID)
 	responsesAfter := support.GetFactoryResponseEventsAt(t, baseURL, scenario.candidateID)
-	if len(responsesAfter) < len(responsesBefore) || !reflect.DeepEqual(responsesAfter[:len(responsesBefore)], responsesBefore) {
-		t.Fatal("replacement lost the retained Session response history prefix")
+	if len(responsesAfter) == 0 {
+		t.Fatal("replacement has no observable response history")
+	}
+	stream := support.OpenFactoryResponseEventStreamAt(t,
+		support.SessionResponseEventsURLWithAfterSequence(baseURL, scenario.candidateID, cursor))
+	defer stream.Close()
+	if !stream.HasRetainedFrameCount || stream.RetainedFrameCount != len(responsesAfter) {
+		t.Fatalf("replacement cursor catch-up count = %d, want %d", stream.RetainedFrameCount, len(responsesAfter))
+	}
+	for _, event := range responsesAfter {
+		if event.Sequence <= cursor {
+			t.Fatalf("replacement sequence = %d, want greater than %d", event.Sequence, cursor)
+		}
+		if frame := stream.NextFrame(initialOpeningReadCeiling); !reflect.DeepEqual(frame.Event, event) {
+			t.Fatalf("replacement cursor event = %#v, want %#v", frame.Event, event)
+		}
+		cursor = event.Sequence
 	}
 }
 
