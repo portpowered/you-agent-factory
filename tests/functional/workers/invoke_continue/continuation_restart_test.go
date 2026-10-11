@@ -33,7 +33,7 @@ func TestCapturedNativeProviderStopThenContinue(t *testing.T) {
 
 // F7-C4: a running provider command can be controlled before it emits a native
 // identity. Refused redirection must preserve that source and its live sibling.
-func TestCapturedProviderMissingReferencePreservesControls(t *testing.T) {
+func TestCapturedCodexToolMissingReferencePreservesControls(t *testing.T) {
 	t.Parallel()
 	scenario := ensureInvokeContinuePackageFixture(t).scenario(t, "native-no-reference")
 	runner := scenario.providerRunner.(*nativeContinuationRunner)
@@ -42,6 +42,7 @@ func TestCapturedProviderMissingReferencePreservesControls(t *testing.T) {
 	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, source, true) })
 	invokeNativeContinuationWorker(t, scenario, "codex", sibling, "native sibling", runner.siblingReady)
 	t.Cleanup(func() { stopNativeContinuationWorker(t, scenario, sibling, true) })
+	assertCapturedCodexNoReferenceReads(t, scenario, source, false)
 	for _, remote := range []bool{false, true} {
 		request := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "interrupt", source,
 			"--request-id", scenarioScopedID(scenario, "interrupt"), "--successor-worker-session-id", successor,
@@ -58,6 +59,7 @@ func TestCapturedProviderMissingReferencePreservesControls(t *testing.T) {
 		assertMissingReferenceObservation(t, scenario, sibling, "RUNNING")
 	}
 	stopNativeContinuationWorker(t, scenario, source, true)
+	assertCapturedCodexNoReferenceReads(t, scenario, source, true)
 	for _, remote := range []bool{false, true} {
 		request := missingReferenceRequest(t, scenario, remote, []string{"worker-sessions", "continue", source,
 			"--request-id", scenarioScopedID(scenario, "continue"), "--successor-worker-session-id", successor,

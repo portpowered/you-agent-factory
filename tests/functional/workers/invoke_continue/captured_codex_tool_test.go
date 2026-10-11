@@ -167,6 +167,175 @@ type capturedCodexToolRunner struct {
 	started, release, stopped chan struct{}
 }
 
+type capturedCodexDenialRunner struct {
+	*invokeContinueResettableProviderCommandRunner
+	started, release, stopped chan struct{}
+}
+
+func newCapturedCodexDenialRunner() *capturedCodexDenialRunner {
+	r := &capturedCodexDenialRunner{invokeContinueResettableProviderCommandRunner: newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stderr: []byte("controlled approval rejection"), ExitCode: 1})}
+	r.reset()
+	return r
+}
+
+func (r *capturedCodexDenialRunner) reset() {
+	r.Reset()
+	r.started, r.release, r.stopped = make(chan struct{}), make(chan struct{}), make(chan struct{})
+}
+
+func (r *capturedCodexDenialRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if err != nil {
+		return result, err
+	}
+	if observer != nil {
+		observer(platformprocess.OutputStreamStderr, result.Stderr)
+	}
+	close(r.started)
+	defer close(r.stopped)
+	select {
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	case <-r.release:
+		return result, nil
+	}
+}
+
+func TestCapturedCodexToolIdentitylessRejection(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "captured-codex-denial")
+	defer scenario.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := scenario.providerRunner.(*capturedCodexDenialRunner)
+	defer func() {
+		select {
+		case <-runner.release:
+		default:
+			close(runner.release)
+		}
+		t19AwaitSignal(t, ctx, runner.stopped, "denial fixture joined")
+	}()
+	id := scenarioScopedID(scenario, "identityless-denial")
+	path := requesterExecutionPath(t, scenario, id)
+	invoke := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--async", "--execution", path)
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatal("denial fixture admission failed")
+	}
+	t19AwaitSignal(t, ctx, runner.started, "identityless diagnostic emitted")
+	// Publication commits asynchronously; wait on the captured public diagnostic.
+	_, err := support.WaitForObservation(30*time.Second, func() (string, error) {
+		_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
+		return body, nil
+	}, func(body string) bool { return strings.Contains(body, "controlled approval rejection") })
+	if err != nil {
+		t.Fatal("identityless diagnostic did not commit")
+	}
+	assertCapturedCodexDenialReads(t, ctx, fixture, scenario, id, false)
+	close(runner.release)
+	join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+	if err := fixture.process.Execute(join.Input); err == nil {
+		t.Fatal("rejected provider reported success")
+	}
+	assertCapturedCodexDenialReads(t, ctx, fixture, scenario, id, true)
+	observation := requesterObservation(t, fixture, scenario, ctx, id)
+	if observation.State != "FAILED" || observation.ProviderSession != nil || runner.CallCount() != 1 {
+		t.Fatal("identityless rejection acquired provider identity or another execution")
+	}
+}
+
+func assertCapturedCodexDenialReads(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string, terminal bool) {
+	t.Helper()
+	page := support.GetJSON[api.WorkerSessionLogPage](t, fixture.baseURL+"/worker-sessions/"+id+"/logs")
+	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--worker-session-id", id, "--view", "logs")
+	if err := fixture.process.Execute(read.Input); err != nil {
+		t.Fatal("diagnostic CLI read failed")
+	}
+	var cli, mcp api.WorkerSessionLogPage
+	if json.Unmarshal([]byte(read.Stdout()), &cli) != nil || json.Unmarshal(capturedCodexMCPRead(t, ctx, fixture, scenario, id, "logs"), &mcp) != nil || !reflect.DeepEqual(page, cli) || !reflect.DeepEqual(page, mcp) {
+		t.Fatal("diagnostic logs parity differs")
+	}
+	count := 0
+	for _, record := range page.Events {
+		if record.Event.Payload["kind"] == "TOOL" {
+			t.Fatal("identityless diagnostic fabricated a tool")
+		}
+		raw, err := json.Marshal(record.Event.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "controlled approval rejection") {
+			count++
+			if record.Event.Payload["kind"] != "PROGRESS" {
+				t.Fatal("identityless rejection lost diagnostic classification")
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("identityless diagnostic count = %d, want 1", count)
+	}
+	assertCapturedCodexUnavailableTranscript(t, ctx, fixture, scenario, id, terminal)
+}
+
+func assertCapturedCodexUnavailableTranscript(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string, terminal bool) {
+	t.Helper()
+	status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/transcript", nil)
+	var failure api.ErrorResponse
+	wantStatus, wantCode, wantMCP := http.StatusConflict, "WORKER_SESSION_TRANSCRIPT_ACTIVE", "worker_session.conflict"
+	if terminal {
+		wantStatus, wantCode, wantMCP = http.StatusInternalServerError, "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE", "worker_session.unavailable"
+	}
+	if status != wantStatus || json.Unmarshal([]byte(body), &failure) != nil || string(failure.Code) != wantCode {
+		t.Fatal("identityless transcript claimed available native facts")
+	}
+	transcript := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--worker-session-id", id, "--view", "transcript")
+	if err := fixture.process.Execute(transcript.Input); err == nil {
+		t.Fatal("identityless CLI transcript reported success")
+	}
+	assertDirectWorkerSessionCLIError(t, transcript, wantCode)
+	// MCP retains only allowlisted upstream codes. Active conflict is conveyed
+	// by its typed code/status, while terminal unavailability retains its code.
+	wantUpstream := ""
+	if terminal {
+		wantUpstream = wantCode
+	}
+	var mcpFailure struct {
+		Error struct {
+			Code    string `json:"code"`
+			Details struct {
+				UpstreamCode string `json:"upstreamCode"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(capturedCodexMCPRead(t, ctx, fixture, scenario, id, "transcript", true), &mcpFailure) != nil || mcpFailure.Error.Code != wantMCP || mcpFailure.Error.Details.UpstreamCode != wantUpstream {
+		t.Fatal("identityless MCP transcript error meaning differs")
+	}
+}
+
+func assertCapturedCodexNoReferenceReads(t *testing.T, scenario *invokeContinueScenario, id string, terminal bool) {
+	t.Helper()
+	fixture, ctx := scenario.fixture, t.Context()
+	page := support.GetJSON[api.WorkerSessionLogPage](t, fixture.baseURL+"/worker-sessions/"+id+"/logs")
+	if len(page.Events) == 0 {
+		t.Fatal("no-reference capture lost its opening")
+	}
+	for _, record := range page.Events {
+		if record.Event.Payload["kind"] == "TOOL" || record.Event.Payload["kind"] == "MESSAGE" {
+			t.Fatal("silent provider acquired invented tool or message facts")
+		}
+	}
+	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--worker-session-id", id, "--view", "logs")
+	if err := fixture.process.Execute(read.Input); err != nil {
+		t.Fatal("no-reference CLI logs failed")
+	}
+	var cli, mcp api.WorkerSessionLogPage
+	if json.Unmarshal([]byte(read.Stdout()), &cli) != nil || json.Unmarshal(capturedCodexMCPRead(t, ctx, fixture, scenario, id, "logs"), &mcp) != nil || !reflect.DeepEqual(page, cli) || !reflect.DeepEqual(page, mcp) {
+		t.Fatal("no-reference logs parity differs")
+	}
+	assertCapturedCodexUnavailableTranscript(t, ctx, fixture, scenario, id, terminal)
+}
+
 func newCapturedCodexToolRunner() *capturedCodexToolRunner {
 	runner := &capturedCodexToolRunner{invokeContinueResettableProviderCommandRunner: newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})}
 	runner.reset()
@@ -227,6 +396,60 @@ func TestCapturedCodexToolLiveFacts(t *testing.T) {
 		t.Fatal("live tool fixture admission failed")
 	}
 	t19AwaitSignal(t, ctx, runner.started, "tool facts emitted")
+	assertCapturedCodexLiveReads(t, ctx, fixture, scenario, id)
+	close(runner.release)
+	join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+	if err := fixture.process.Execute(join.Input); err != nil {
+		t.Fatal("live tool fixture completion failed")
+	}
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, scenario.homeDirectory, scenario.workingDirectory, id, "captured-tools-thread")
+	assertCapturedCodexToolReads(t, ctx, fixture, scenario, id)
+	if runner.CallCount() != 1 {
+		t.Fatal("live capture republished or reran provider")
+	}
+}
+
+func TestCapturedCodexToolFactoryLiveFacts(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "captured-codex-factory-live")
+	defer scenario.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := scenario.providerRunner.(*capturedCodexToolRunner)
+	defer func() {
+		select {
+		case <-runner.release:
+		default:
+			close(runner.release)
+		}
+		t19AwaitSignal(t, ctx, runner.stopped, "Factory tool fixture joined")
+	}()
+	t7WriteFactorySibling(t, scenario.workingDirectory)
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, scenario.workingDirectory)
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	item := support.SubmitSessionWorkAt(t, fixture.baseURL, opened.Session.Id, api.SubmitWorkRequest{WorkTypeName: "task", Payload: "controlled live tool capture"})
+	if item.WorkId == nil {
+		t.Fatal("live submitted Work has no identity")
+	}
+	t19AwaitSignal(t, ctx, runner.started, "Factory tool facts emitted")
+	rows := support.GetJSON[api.ListWorkerSessionsResponse](t, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/worker-sessions?workId="+*item.WorkId)
+	if len(rows.Sessions) != 1 || rows.Sessions[0].FactorySessionId == nil || *rows.Sessions[0].FactorySessionId != opened.Session.Id {
+		t.Fatal("live Factory tool capture lost owning session")
+	}
+	id := rows.Sessions[0].WorkerSessionId
+	assertCapturedCodexLiveReads(t, ctx, fixture, scenario, id)
+	close(runner.release)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, opened.Session.Id, 30*time.Second)
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, scenario.homeDirectory, scenario.workingDirectory, id, "captured-tools-thread")
+	assertCapturedCodexToolReads(t, ctx, fixture, scenario, id)
+	if runner.CallCount() != 1 {
+		t.Fatal("live Factory capture republished or reran provider")
+	}
+}
+
+func assertCapturedCodexLiveReads(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string) {
+	t.Helper()
 	page := awaitCapturedCodexLiveTools(t, ctx, fixture, id)
 	assertCapturedCodexToolLogs(t, page)
 	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--worker-session-id", id, "--view", "logs")
@@ -240,16 +463,6 @@ func TestCapturedCodexToolLiveFacts(t *testing.T) {
 	status, _ := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/transcript", nil)
 	if status != http.StatusConflict {
 		t.Fatal("active transcript contract changed")
-	}
-	close(runner.release)
-	join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
-	if err := fixture.process.Execute(join.Input); err != nil {
-		t.Fatal("live tool fixture completion failed")
-	}
-	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, scenario.homeDirectory, scenario.workingDirectory, id, "captured-tools-thread")
-	assertCapturedCodexToolReads(t, ctx, fixture, scenario, id)
-	if runner.CallCount() != 1 {
-		t.Fatal("live capture republished or reran provider")
 	}
 }
 
@@ -361,7 +574,7 @@ func assertCapturedCodexToolLogs(t *testing.T, logs api.WorkerSessionLogPage) {
 
 // This is an in-process public stdio client, not a built CLI or a second
 // application graph. Each connection owns its pipes and joins on closure.
-func capturedCodexMCPRead(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, view string) json.RawMessage {
+func capturedCodexMCPRead(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, view string, expectedError ...bool) json.RawMessage {
 	t.Helper()
 	input := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "server", "mcp", "--project-root", scenario.workingDirectory})
 	input.Input.Env, input.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
@@ -400,13 +613,18 @@ func capturedCodexMCPRead(t *testing.T, ctx context.Context, fixture *invokeCont
 	call(1, "initialize", map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "captured-functional", "version": "test"}})
 	raw := call(2, "tools/call", map[string]any{"name": "you.subagent", "arguments": map[string]any{"action": "READ", "workerSessionId": id, "view": view}})
 	var response struct {
-		IsError bool `json:"isError"`
-		Content []struct {
+		IsError           bool            `json:"isError"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+		Content           []struct {
 			Text string `json:"text"`
 		} `json:"content"`
 	}
-	if json.Unmarshal(raw, &response) != nil || response.IsError || len(response.Content) != 1 {
+	wantError := len(expectedError) > 0 && expectedError[0]
+	if json.Unmarshal(raw, &response) != nil || response.IsError != wantError || len(response.Content) != 1 {
 		t.Fatal("captured MCP READ failed")
+	}
+	if wantError {
+		return response.StructuredContent
 	}
 	var envelope struct {
 		Result map[string]json.RawMessage `json:"result"`

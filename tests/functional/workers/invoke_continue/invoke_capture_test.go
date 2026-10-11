@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -242,12 +241,12 @@ func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFix
 type recordingPrivateProfile struct {
 	host                         invokeContinueStartedProcess
 	home, dir, id, marker, token string
-	runner                       *testutil.ProviderCommandRunner
+	runner                       invokeContinueProviderCommandRunner
 }
 
 // FC6 needs two independently owned profiles: a shared host cannot prove that
 // a cursor for the same Worker ID is fenced by the durable profile owner.
-func TestRecordingContentPrivateProfilesFenceReadsAndCursors(t *testing.T) {
+func TestRecordingContentCapturedCodexToolPrivateProfilesFenceReadsAndCursors(t *testing.T) {
 	t.Parallel()
 	profiles := make([]recordingPrivateProfile, 2)
 	for i, name := range []string{"private-alpha", "private-beta"} {
@@ -257,8 +256,10 @@ func TestRecordingContentPrivateProfilesFenceReadsAndCursors(t *testing.T) {
 			t.Fatal(err)
 		}
 		marker := name + "-captured-content"
-		result := platformprocess.CommandResult{Stdout: directCodexSessionOutput(name+"-thread", marker)}
-		runner := testutil.NewProviderCommandRunner(result, result)
+		output := strings.ReplaceAll(string(capturedCodexToolOutput()), "captured-tools-thread", name+"-thread")
+		output = strings.ReplaceAll(output, "captured tools COMPLETE", marker)
+		result := platformprocess.CommandResult{Stdout: []byte(output)}
+		runner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(result, result)}
 		route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
 		started := startContinuationRestartHost(t, root, host, home, route)
 		for _, id := range []string{name, "same-worker-id"} {
@@ -303,6 +304,15 @@ func assertRecordingPrivateProfileReadable(t *testing.T, profile, foreign record
 			body := summaryRestartCLI(t, profile.host, profile.home, profile.dir, args...)
 			if strings.Contains(body, foreign.marker) || strings.Contains(body, foreign.id) || (view != "summary" && !strings.Contains(body, profile.marker)) {
 				t.Fatalf("private peer read changed or leaked: %s", body)
+			}
+			if view == "transcript" {
+				assertCapturedCodexToolTranscript(t, body)
+			} else if view == "logs" {
+				var page api.WorkerSessionLogPage
+				if err := json.Unmarshal([]byte(body), &page); err != nil {
+					t.Fatal(err)
+				}
+				assertCapturedCodexToolLogs(t, page)
 			}
 		}
 	}

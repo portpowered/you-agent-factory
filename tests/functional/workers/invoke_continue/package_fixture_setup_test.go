@@ -131,8 +131,14 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 			return invokeContinueScenarioSetup{}, err
 		}
 	}
-	liveTools := newCapturedCodexToolRunner()
-	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-live", liveTools, liveTools, nil, nil, nil, liveTools.reset); err != nil {
+	for _, name := range []string{"captured-codex-live", "captured-codex-factory-live"} {
+		liveTools := newCapturedCodexToolRunner()
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, liveTools, liveTools, nil, nil, nil, liveTools.reset); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
+	}
+	denial := newCapturedCodexDenialRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-denial", denial, denial, nil, nil, nil, denial.reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
 	if err := appendRequesterMCPScenarios(rootDir, &setup); err != nil {
