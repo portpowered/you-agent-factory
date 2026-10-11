@@ -7,6 +7,7 @@ import "errors"
 var (
 	ErrBadRequest           = errors.New("BAD_REQUEST")
 	ErrNotPermitted         = errors.New("MESSAGE_NOT_PERMITTED")
+	ErrRecipientNotFound    = errors.New("MESSAGE_RECIPIENT_NOT_FOUND")
 	ErrInterruptUnsupported = errors.New("MESSAGE_INTERRUPT_UNSUPPORTED")
 	ErrLimitExceeded        = errors.New("MESSAGE_LIMIT_EXCEEDED")
 )

@@ -126,11 +126,37 @@ func TestValidatorRedactsBeforeHashAndFingerprint(t *testing.T) {
 			t.Fatal("hash was not computed from safe content")
 		}
 		got.Request.RequestID = "alias"
-		digest, err := got.Fingerprint()
+		digest, err := got.Fingerprint("recipient-factory")
 		if err != nil || (fingerprint != "" && fingerprint != digest) {
 			t.Fatal("erased secret or alias influenced fingerprint")
 		}
 		fingerprint = digest
+	}
+}
+
+func TestPreparedFingerprintIncludesResolvedRecipientScope(t *testing.T) {
+	t.Parallel()
+	prepared, err := (Validator{}).Prepare(sendInput(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := prepared.Fingerprint("first-factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := prepared.Fingerprint("other-factory")
+	if err != nil || first == other {
+		t.Fatal("legacy recipient ID collision erased its resolved owner")
+	}
+	prepared.Request.RequestID = "different-alias"
+	retried, err := prepared.Fingerprint("first-factory")
+	if err != nil || retried != first {
+		t.Fatal("request alias changed normalized admission intent")
+	}
+	prepared.Request.Correlation.FactorySessionID = "descriptive-factory"
+	described, err := prepared.Fingerprint("first-factory")
+	if err != nil || described == other {
+		t.Fatal("descriptive correlation replaced recipient owner scope")
 	}
 }
 

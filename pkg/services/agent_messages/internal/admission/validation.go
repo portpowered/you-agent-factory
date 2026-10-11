@@ -162,12 +162,16 @@ func (v Validator) redactBody(body string) (string, int, error) {
 	return safe.Body, result.RedactedCount, nil
 }
 
-// Fingerprint compares normalized admission intent. Recipient resolution and
-// inherited reply defaults must be applied by the owner before this call.
-func (p Prepared) Fingerprint() (string, error) {
+// Fingerprint compares normalized admission intent and the resolved recipient
+// owner. Recipient resolution and inherited reply defaults must be applied by
+// the owner before this call; descriptive correlation is never an owner scope.
+func (p Prepared) Fingerprint(recipientFactorySessionID string) (string, error) {
 	r := p.Request
 	r.RequestID = ""
-	encoded, err := json.Marshal(r)
+	encoded, err := json.Marshal(struct {
+		Request                   agentmessages.SendRequest `json:"request"`
+		RecipientFactorySessionID string                    `json:"recipientFactorySessionId"`
+	}{r, recipientFactorySessionID})
 	if err != nil {
 		return "", agentmessages.ErrBadRequest
 	}
