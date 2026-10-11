@@ -19,9 +19,9 @@ flowchart TB
   subgraph execution["Execution"]
     s_services_models["models<br/>38385 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>1283 LOC · 0 subservices"]
-    s_services_providers["providers<br/>15409 LOC · 3 subservices"]
+    s_services_providers["providers<br/>15443 LOC · 3 subservices"]
     s_services_worker_sessions["worker sessions<br/>27305 LOC · 0 subservices"]
-    s_services_workers["workers<br/>21504 LOC · 2 subservices"]
+    s_services_workers["workers<br/>21536 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
     s_services_events["events<br/>1986 LOC · 0 subservices"]
@@ -133,10 +133,10 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`models`](services/models.md) | (subservice) assets (7144 LOC)<br/>(subservice) catalog (717 LOC)<br/>(subservice) inference (1109 LOC)<br/>(subservice) runtime host (3342 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (703 LOC)<br/>(subservice) resolution (298 LOC) |
 | [`provider_sessions`](services/provider_sessions.md) | — |
-| [`providers`](services/providers.md) | (subservice) acp (2751 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (5994 LOC) |
+| [`providers`](services/providers.md) | (subservice) acp (2751 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (6028 LOC) |
 | [`recordings`](services/recordings.md) | (subservice) artifacts export (596 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (746 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (352 LOC)<br/>(subservice) recording lifecycle (905 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (5730 LOC) |
 | [`system_initialization`](services/system_initialization.md) | — |
 | [`webhooks`](services/webhooks.md) | — |
 | [`work`](services/work.md) | (subservice) content materialization (704 LOC)<br/>(subservice) content staging (369 LOC)<br/>(subservice) invocation preparation (355 LOC)<br/>(subservice) request preparation (369 LOC)<br/>(subservice) state access (583 LOC) |
 | [`worker_sessions`](services/worker_sessions.md) | — |
-| [`workers`](services/workers.md) | (subservice) runners (5435 LOC)<br/>(subservice) workstations (2553 LOC) |
+| [`workers`](services/workers.md) | (subservice) runners (5461 LOC)<br/>(subservice) workstations (2553 LOC) |
