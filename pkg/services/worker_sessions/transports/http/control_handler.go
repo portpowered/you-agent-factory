@@ -259,7 +259,28 @@ func decodeTerminateFields(fields map[string]json.RawMessage) (factoryapi.Termin
 }
 
 func decodeWorkerSessionStartRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest], error) {
-	return httpcompat.Decode[factoryapi.WorkerSessionStartRequest](body)
+	document, err := io.ReadAll(body)
+	if err != nil {
+		return httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest]{}, err
+	}
+	fields, err := decodeTerminateObject(json.NewDecoder(strings.NewReader(string(document))))
+	if err != nil || fields == nil {
+		return httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest]{}, workersessions.ErrInvalidExecutionRequest
+	}
+	seen := make(map[string]bool)
+	for key, value := range fields {
+		key = strings.ToLower(key)
+		switch key {
+		case "requestid", "workersessionid", "execution", "retry", "prompt", "provider", "model", "reasoningeffort", "workingroot", "timeoutmillis":
+		default:
+			continue
+		}
+		if seen[key] || strings.TrimSpace(string(value)) == "null" {
+			return httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest]{}, workersessions.ErrInvalidExecutionRequest
+		}
+		seen[key] = true
+	}
+	return httpcompat.DecodeBytes[factoryapi.WorkerSessionStartRequest](document)
 }
 
 func decodeWorkerSessionContinueRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionContinueRequest], error) {

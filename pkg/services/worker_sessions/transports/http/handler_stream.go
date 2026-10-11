@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -172,6 +174,27 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 }
 
 func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	if errors.Is(err, operatorsettings.ErrResolutionInvalidInput) || errors.Is(err, operatorsettings.ErrDocumentMalformed) || errors.Is(err, operatorsettings.ErrDocumentNotFound) {
+		writeError(w, http.StatusBadRequest, "configure a valid defaults.subagent route or supply a concrete provider and model", "SUBAGENT_ROUTE_INVALID")
+		return
+	}
+	if errors.Is(err, providers.ErrUnknownProvider) || errors.Is(err, providers.ErrInvalidID) {
+		writeError(w, http.StatusBadRequest, "select an available concrete subagent provider", "SUBAGENT_PROVIDER_INVALID")
+		return
+	}
+	if errors.Is(err, providers.ErrProviderUnavailable) {
+		writeError(w, http.StatusServiceUnavailable, "the selected subagent provider is unavailable; check its configuration and prerequisites", "PROVIDER_UNAVAILABLE")
+		return
+	}
+	var providerFailure providers.ExecuteFailure
+	if errors.As(err, &providerFailure) {
+		status, code, message := subagentProviderFailureResponse(providerFailure.Kind)
+		writeError(w, status, message, code)
+		return
+	}
 	switch {
 	case errors.Is(err, workersessions.ErrCallerInvalid):
 		writeError(w, http.StatusForbidden, "Worker Session caller credentials are invalid", string(factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID))
@@ -196,6 +219,17 @@ func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusServiceUnavailable, "Workers could not admit the Worker Session", string(factoryapi.ErrorResponseCodeWORKERSESSIONADMISSIONFAILED))
 	default:
 		writeError(w, http.StatusInternalServerError, "failed to start Worker Session", "INTERNAL_ERROR")
+	}
+}
+
+func subagentProviderFailureResponse(kind providers.ExecuteFailureKind) (int, string, string) {
+	switch kind {
+	case providers.ExecuteFailureKindInvalidRequest:
+		return http.StatusBadRequest, "SUBAGENT_PROVIDER_INPUT_INVALID", "check the selected provider, model, and reasoning effort"
+	case providers.ExecuteFailureKindAuthentication:
+		return http.StatusForbidden, "SUBAGENT_PROVIDER_AUTHENTICATION", "configure authentication for the selected subagent provider"
+	default:
+		return http.StatusServiceUnavailable, "SUBAGENT_PROVIDER_UNAVAILABLE", "check the selected subagent provider configuration and prerequisites"
 	}
 }
 

@@ -379,7 +379,7 @@ func TestInvokeLocalFutureExecutionFieldsWarnOnStderrAfterSuccess(t *testing.T) 
 }
 
 func TestApplyInvokeOverridesPreservesExplicitFields(t *testing.T) {
-	request := factoryapi.WorkerSessionStartRequest{}
+	request := factoryapi.WorkerSessionStartRequest{Execution: &factoryapi.WorkerSessionResolvedExecution{}}
 	if err := applyInvokeOverrides(&request, InvokeConfig{
 		RequestID: " request ", WorkerSessionID: " session ", WorkstationName: " review ", DispatchID: " dispatch ",
 		WorkerType: " type ", RunnerID: " runner ", Provider: " provider ", Model: " model ", ReasoningEffort: " high ",
@@ -441,7 +441,7 @@ func assertInvokeRetry(t *testing.T, request factoryapi.WorkerSessionStartReques
 }
 
 func TestEnsureInvokeIdentitiesUsesInjectedGenerator(t *testing.T) {
-	request := factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "session"}
+	request := factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "session", Execution: &factoryapi.WorkerSessionResolvedExecution{}}
 	request.Execution.Dispatch.DispatchId = "dispatch"
 	if err := ensureInvokeIdentities(&request, unexpectedWorkerID); err != nil {
 		t.Fatalf("ensureInvokeIdentities(populated) = %v, want nil", err)
@@ -852,7 +852,7 @@ func TestWorkerSessionContinueAndInterruptOverflowFailBeforeDispatch(t *testing.
 
 func TestWorkerSessionExplicitInputsDoNotReadUnrelatedStdin(t *testing.T) {
 	messageReader := &workerSessionCountedReader{reader: strings.NewReader("unrelated")}
-	request := factoryapi.WorkerSessionStartRequest{}
+	request := factoryapi.WorkerSessionStartRequest{Execution: &factoryapi.WorkerSessionResolvedExecution{}}
 	if err := applyInvokeMessageOverride(&request, InvokeConfig{UserMessage: "flag message", Stdin: messageReader}); err != nil {
 		t.Fatalf("invoke explicit message error = %v", err)
 	}

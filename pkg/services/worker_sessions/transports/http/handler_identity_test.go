@@ -11,11 +11,164 @@ import (
 	"testing"
 	"time"
 
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+type subagentSettingsStub struct {
+	operatorsettings.Service
+	route     operatorsettings.SubagentRoute
+	err       error
+	calls     int
+	overrides operatorsettings.SubagentRouteUpdate
+}
+
+func (*subagentSettingsStub) DefaultConfigPath(home string) string { return home + "/config.json" }
+func (stub *subagentSettingsStub) ResolveSubagentRoute(_ context.Context, _ string, overrides operatorsettings.SubagentRouteUpdate) (operatorsettings.SubagentRoute, error) {
+	stub.calls++
+	stub.overrides = overrides
+	return stub.route, stub.err
+}
+
+type subagentProviderStub struct {
+	providers.Service
+	request providers.ExecuteRequest
+	err     error
+	calls   int
+}
+
+func (*subagentProviderStub) ResolveIdentity(_ context.Context, request providers.ResolveIdentityRequest) (providers.ResolveIdentityResult, error) {
+	return providers.ResolveIdentityResult{ID: providers.ID(request.Identity)}, nil
+}
+func (stub *subagentProviderStub) ValidateExecution(_ context.Context, request providers.ExecuteRequest) error {
+	stub.calls++
+	stub.request = request
+	return stub.err
+}
+
+func TestSubagentStartResolvesRouteBeforeSelectedHostAdmission(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"OPENCODE", "CODEX", "CLAUDE", "AGY"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			settings := &subagentSettingsStub{route: operatorsettings.SubagentRoute{Provider: provider, Model: "exact-model", ReasoningEffort: "high"}}
+			preflight := &subagentProviderStub{}
+			direct, selected := &fakeObservationService{}, &fakeObservationService{startResult: workersessions.StartResult{Session: workersessions.Session{ID: "worker"}}}
+			adapter := &Adapter{starter: direct, settings: settings, providers: preflight, resolveHome: func() (string, error) { return "isolated", nil },
+				resolver: hostAdmissionResolver{sources: map[string]workersessions.ObservationService{"selected": hostAdmissionSource{admission: selected}}}}
+			prompt, model, effort := " exact prompt ", "override-model", "high"
+			duration := int64(1234)
+			request := factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "worker", Prompt: &prompt, Provider: &provider, Model: &model, ReasoningEffort: &effort, TimeoutMillis: &duration}
+			response, err := adapter.StartWorkerSession(WithRuntimeHostSession(t.Context(), "selected"), request, nil)
+			if err != nil || !response.Accepted || direct.startCalled || !selected.startCalled {
+				t.Fatalf("selected prompt admission = %+v, %v; default called=%t", response, err, direct.startCalled)
+			}
+			execution := selected.startRequest.Execution.Execution
+			assertSubagentResolvedExecution(t, execution, provider, prompt)
+			if settings.calls != 1 || settings.overrides.Model != &model || preflight.calls != 1 || preflight.request.Model != execution.Model || preflight.request.Provider.String() != provider {
+				t.Fatal("route overrides or provider preflight were lost")
+			}
+		})
+	}
+}
+
+func assertSubagentResolvedExecution(t *testing.T, execution workers.WorkstationExecutionRequest, provider, prompt string) {
+	t.Helper()
+	if execution.ModelProvider != provider || execution.RunnerID != provider || execution.ExecutorProvider != provider || execution.Model != "exact-model" || execution.ReasoningEffort != "high" || execution.UserMessage != prompt || execution.Timeout != 1234*time.Millisecond || execution.SkipPermissions {
+		t.Fatalf("route or execution fields changed: %+v", execution)
+	}
+}
+
+func TestSubagentStartFailsBeforeAdmission(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"settings", "provider", "canceled", "invalid"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			settings := &subagentSettingsStub{route: operatorsettings.SubagentRoute{Provider: "CODEX", Model: "exact-model"}}
+			preflight, starter := &subagentProviderStub{}, &fakeObservationService{}
+			adapter := &Adapter{starter: starter, settings: settings, providers: preflight, resolveHome: func() (string, error) { return "isolated", nil }}
+			prompt := "hello"
+			request := factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "worker", Prompt: &prompt}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			want := operatorsettings.ErrResolutionInvalidInput
+			switch failure {
+			case "settings":
+				settings.err = want
+			case "provider":
+				want = providers.ErrExecuteFailed
+				preflight.err = want
+			case "canceled":
+				want = context.Canceled
+				cancel()
+			case "invalid":
+				want = workersessions.ErrInvalidExecutionRequest
+				request.Execution = &factoryapi.WorkerSessionResolvedExecution{}
+			}
+			_, err := adapter.StartWorkerSession(ctx, request, nil)
+			if !errors.Is(err, want) || starter.startCalled || (failure != "provider" && preflight.calls != 0) {
+				t.Fatalf("failed route = %v, start=%t, preflight=%d; want %v", err, starter.startCalled, preflight.calls, want)
+			}
+		})
+	}
+}
+
+func TestSubagentStartDecodeRejectsInvalidForms(t *testing.T) {
+	t.Parallel()
+	for _, suffix := range []string{`,"prompt":null`, `,"prompt":""`, `,"prompt":"hello","provider":null`, `,"prompt":"hello","retry":{}`, `,"prompt":"hello","execution":{}`, `,"prompt":"hello","timeoutMillis":0`, `,"prompt":"hello","timeoutMillis":9223372036855`, `,"prompt":"hello","workingRoot":"relative"`, `,"prompt":"hello","prompt":"second"`} {
+		t.Run(suffix, func(t *testing.T) {
+			t.Parallel()
+			starter := &fakeObservationService{}
+			handler := NewHandler(&Adapter{starter: starter}, zap.NewNop())
+			response := httptest.NewRecorder()
+			handler.StartWorkerSession(response, httptest.NewRequest(http.MethodPost, "/worker-sessions", strings.NewReader(`{"requestId":"request","workerSessionId":"worker"`+suffix+`}`)))
+			if response.Code != http.StatusBadRequest || starter.startCalled {
+				t.Fatalf("invalid start admitted: %d %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestSubagentStartOmittedTimeoutRemainsUnbounded(t *testing.T) {
+	t.Parallel()
+	prompt := "hello"
+	start, err := subagentStartInput(factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "worker", Prompt: &prompt})
+	if err != nil || start.Execution.Execution.Timeout != 0 || start.Execution.WorkstationName != "__provider_invocation__" {
+		t.Fatalf("unbounded start = %+v, %v", start, err)
+	}
+}
+
+func TestSubagentStartRouteFailuresHaveActionableTypedResponses(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{operatorsettings.ErrResolutionInvalidInput, http.StatusBadRequest, "SUBAGENT_ROUTE_INVALID"},
+		{providers.ErrUnknownProvider, http.StatusBadRequest, "SUBAGENT_PROVIDER_INVALID"},
+		{providers.ErrProviderUnavailable, http.StatusServiceUnavailable, "PROVIDER_UNAVAILABLE"},
+		{providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: "private input"}, http.StatusBadRequest, "SUBAGENT_PROVIDER_INPUT_INVALID"},
+		{providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: "private input"}, http.StatusServiceUnavailable, "SUBAGENT_PROVIDER_UNAVAILABLE"},
+	} {
+		t.Run(test.code, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			(&Handler{}).writeMappedStartError(response, test.err)
+			var body factoryapi.ErrorResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != test.status || string(body.Code) != test.code || strings.Contains(body.Message, "private input") {
+				t.Fatalf("route failure response = %d %+v", response.Code, body)
+			}
+		})
+	}
+}
 
 type sessionScopeResolverStub struct {
 	scope SessionScope

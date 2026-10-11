@@ -205,6 +205,9 @@ func normalizeInvokeRequest(config InvokeConfig) (normalizedInvokeRequest, error
 }
 
 func applyInvokeOverrides(request *factoryapi.WorkerSessionStartRequest, config InvokeConfig) error {
+	if request.Execution == nil {
+		request.Execution = &factoryapi.WorkerSessionResolvedExecution{}
+	}
 	// CLI identity and execution flags are the explicit highest-precedence
 	// source. The document itself remains detached and is never mutated by the
 	// caller after this function returns.
@@ -292,6 +295,9 @@ func applyInvokeRetryOverride(request *factoryapi.WorkerSessionStartRequest, con
 }
 
 func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest, generateID IDGenerator) error {
+	if request.Execution == nil {
+		request.Execution = &factoryapi.WorkerSessionResolvedExecution{}
+	}
 	if strings.TrimSpace(request.RequestId) == "" {
 		request.RequestId = generateID()
 	}

@@ -31,7 +31,9 @@ import (
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
@@ -245,8 +247,8 @@ func provideHTTPWorkerSessionScope(root *factorysessionwire.Root) workersessions
 func provideHTTPWorkerSessionController(logs workersessions.Service, sources workersessionswire.ObservationServiceCatalog) workerSessionControlRouter {
 	return workerSessionControlRouter{archived: logs, sources: sources}
 }
-func provideHTTPWorkerSessionsAdapter(logs workersessions.Service, controller workerSessionControlRouter, workService work.Service, attribution recordings.WorkerWorkAttributionReader, resolver workersessionshttp.SessionScopeResolver) *workersessionshttp.Adapter {
-	return workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(logs, logs, logs, controller, logs, workService, attribution, resolver)
+func provideHTTPWorkerSessionsAdapter(logs workersessions.Service, controller workerSessionControlRouter, workService work.Service, attribution recordings.WorkerWorkAttributionReader, resolver workersessionshttp.SessionScopeResolver, settings operatorsettings.Service, providerRoot providers.Service, home factorysessions.HomeDirectoryResolver) *workersessionshttp.Adapter {
+	return workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(logs, logs, logs, controller, logs, workService, attribution, settings, providerRoot, home, resolver)
 }
 func provideHTTPWorkerSessionsHandler(adapter *workersessionshttp.Adapter, fleet *workersessionswire.FleetObservationService, logs workersessions.Service, logger *zap.Logger) *workersessionshttp.Handler {
 	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet).WithLogsService(logs), logger)
