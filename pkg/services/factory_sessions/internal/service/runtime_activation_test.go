@@ -883,7 +883,9 @@ func TestSelectedReplayReadFailurePreservesExactCauseBeforeActivation(t *testing
 			})
 			root := &replayRoutingRoot{}
 			opening := &RuntimeOpening{runtimeRoot: root,
-				snapshotSelection: NewRuntimeSnapshotSelection(nil, nil, loader, nil, nil)}
+				snapshotSelection: NewRuntimeSnapshotSelection(func(context.Context, factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+					return factorydefinitions.ResolveRuntimeSnapshotResult{}, errors.New("unexpected snapshot resolution after replay read failure")
+				}, nil, loader, nil, nil)}
 			request := (runtimeOwnerFixture{FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 				Recordings: recordings.RuntimeSelection{ReplayPath: "selected.recording.json"}}).startRequest()
 			var err error

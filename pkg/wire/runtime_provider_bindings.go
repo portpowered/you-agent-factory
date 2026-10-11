@@ -17,6 +17,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -25,50 +26,64 @@ import (
 	managedbackend "github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
 )
 
-// newConfiguredProvidersService always installs the shell-free Antigravity
-// print-mode command effect. An injected serviceedges.Edges.AgyPTYHost exists
-// for hosts that intentionally select the legacy PTY seam. Composition keeps
-// command effects ahead of legacy PTY before supplying the completed effect.
-func newConfiguredProvidersService(
-	configuration providerswire.Configuration,
-	catalogProbe providerswire.CatalogProbeOperation,
-	agyRunner platformprocess.CommandRunner,
-	legacyAgy providerswire.AgyEffect,
-	clock platformclock.Source,
-	scheduler platformclock.TimerSource,
-	logger logging.Logger,
-	commandFactory platformprocess.CommandFactory,
-	locator platformprocess.ExecutableLocator,
-	stdioPipes platformprocess.StdioPipeFactory,
-	promptFiles providerswire.CodexPromptFileSystem,
-	resolveHome func() (string, error),
+// Each provider completes one owner before Providers receives its peers.
+func provideProvidersConfiguration(edges serviceedges.Edges) (providerswire.Configuration, error) {
+	return providerswire.PrepareConfiguration(providerswire.Configuration{
+		CatalogOverrides: edges.ProviderCatalogCapabilityOverrides,
+		Registrations:    edges.ProviderRegistrations,
+	})
+}
+
+type providersContextualCommandRunner platformprocess.CommandRunner
+type providersLoggedCommandRunner platformprocess.CommandRunner
+
+func provideProvidersContextualCommandRunner(runner factorysessionwire.ProviderCommandRunner, files workers.AgentToolFileSystem) providersContextualCommandRunner {
+	return workerswire.NewContextualMockWorkerCommandRunner(runner, files)
+}
+
+func provideProvidersLoggedCommandRunner(runner providersContextualCommandRunner, clock platformclock.Source) providersLoggedCommandRunner {
+	return workerswire.NewLoggingCommandRunner(runner, logging.NoopLogger{}, clock.Now)
+}
+
+func provideProvidersCommandAdapter(runner providersLoggedCommandRunner) providerswire.CommandRunner {
+	return workerswire.NewProviderCommandRunner(runner)
+}
+
+func provideProvidersAgyCommandEffect(runner providerswire.CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) providerswire.AgyEffect {
+	return providerswire.NewAgyCommandEffect(runner, clock, scheduler)
+}
+
+func provideProvidersCatalog(config providerswire.Configuration, edges serviceedges.Edges) (providerswire.CatalogService, error) {
+	probe := edges.ProviderCatalogProbe
+	if probe == nil {
+		probe = providerswire.IdentityCatalogProbe
+	}
+	return providerswire.NewCatalogService(probe, config.CatalogDescriptors, config.CatalogOverrides)
+}
+
+func provideProvidersACP(config providerswire.Configuration, edges serviceedges.Edges, scheduler platformclock.TimerSource) (providerswire.ACPService, error) {
+	return providerswire.NewACPService(config.ACPIntegrations, providePlatformProcessCommandFactory(edges),
+		provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges), scheduler, logging.NoopLogger{})
+}
+
+func provideProvidersCodex(runner providerswire.CommandRunner, clock platformclock.Source, edges serviceedges.Edges) providerswire.CodexEffect {
+	return providerswire.NewCodexEffect(runner, clock, provideProvidersCodexPromptFiles(edges), provideProvidersCodexHomeResolver(edges))
+}
+
+func provideProvidersClaude(runner providerswire.CommandRunner, clock platformclock.Source) providerswire.ClaudeEffect {
+	return providerswire.NewClaudeEffect(runner, clock)
+}
+
+func provideProvidersExecutionRegistrations(agy providerswire.AgyEffect, codex providerswire.CodexEffect,
+	claude providerswire.ClaudeEffect, acp providerswire.ACPService, config providerswire.Configuration,
+) ([]providerswire.ExecutionRegistration, error) {
+	return providerswire.ExecutionRegistrations(agy, codex, claude, acp, config.ACPIntegrations, config.Registrations)
+}
+
+func provideProvidersService(catalog providerswire.CatalogService, execution providerswire.ExecutionService,
+	acp providerswire.ACPService, config providerswire.Configuration,
 ) (providers.Service, error) {
-	runner := workerswire.NewProviderCommandRunner(agyRunner)
-	antigravity := legacyAgy
-	if agyRunner != nil {
-		antigravity = providerswire.NewAgyCommandEffect(runner, clock, scheduler)
-	}
-	config, err := providerswire.PrepareConfiguration(configuration)
-	if err != nil {
-		return nil, err
-	}
-	catalogService, err := providerswire.NewCatalogService(catalogProbe, config.CatalogDescriptors, config.CatalogOverrides)
-	if err != nil {
-		return nil, err
-	}
-	acpService, err := providerswire.NewACPService(config.ACPIntegrations, commandFactory, locator, stdioPipes, scheduler, logger)
-	if err != nil {
-		return nil, err
-	}
-	registrations, err := providerswire.ExecutionRegistrations(antigravity, providerswire.NewCodexEffect(runner, clock, promptFiles, resolveHome), providerswire.NewClaudeEffect(runner, clock), acpService, config.ACPIntegrations, config.Registrations)
-	if err != nil {
-		return nil, err
-	}
-	executionService, err := providerswire.NewAttemptExecutionService(catalogService, registrations)
-	if err != nil {
-		return nil, err
-	}
-	return providerswire.NewService(catalogService, executionService, acpService, config.ACPIntegrations, logger, acpService)
+	return providerswire.NewService(catalog, execution, acp, config.ACPIntegrations, logging.NoopLogger{}, acp)
 }
 
 type modelsProcessLauncher struct {

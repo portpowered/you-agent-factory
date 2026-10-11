@@ -184,3 +184,38 @@ func TestRuntimeSnapshotSelectionPortableFallbackAndUnsupportedResume(t *testing
 		t.Fatalf("unsupported resume: %#v %v", result, err)
 	}
 }
+
+func TestRuntimeSnapshotSelectionResolverUnavailablePreservesDomainError(t *testing.T) {
+	t.Parallel()
+	for _, intent := range []string{"live", "replay", "resume"} {
+		t.Run(intent, func(t *testing.T) {
+			t.Parallel()
+			cause := &factorydefinitions.RuntimeSnapshotResolutionError{
+				Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{Code: factorydefinitions.RuntimeSnapshotDiagnosticUnavailable, Field: "resolver", Message: "selected definition unavailable"},
+				Cause:      factorydefinitions.ErrRuntimeSnapshotResolverUnavailable,
+			}
+			selector := NewRuntimeSnapshotSelection(func(context.Context, factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+				return factorydefinitions.ResolveRuntimeSnapshotResult{}, cause
+			}, func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+				return replayRuntimeConfigStub{factoryDir: "/recorded"}, nil
+			}, nil, nil, nil)
+			canonical := factorydefinitions.FactorySnapshot(`{}`)
+			input := recordings.LoadReplayInputResult{Legacy: &factorydefinitions.ReplayArtifact{Factory: &canonical}}
+			var replay *recordings.LoadReplayInputResult
+			var resume *recordings.LoadResumeInputResult
+			recording := recordings.RuntimeSelection{}
+			if intent == "replay" {
+				replay = &input
+				recording.ReplayPath = "recording.json"
+			}
+			if intent == "resume" {
+				resume = &recordings.LoadResumeInputResult{Input: input}
+			}
+			result, err := selector.Resolve(t.Context(), factorydefinitions.RuntimeSelection{Directory: "/factory"}, recording, replay, resume, "session")
+			var diagnostic *factorydefinitions.RuntimeSnapshotResolutionError
+			if !errors.Is(err, cause) || !errors.Is(err, factorydefinitions.ErrRuntimeSnapshotResolverUnavailable) || !errors.As(err, &diagnostic) || diagnostic.Diagnostic != cause.Diagnostic || !reflect.DeepEqual(result, activationSnapshotResolution{}) {
+				t.Fatalf("selected domain error lost: result=%#v error=%v", result, err)
+			}
+		})
+	}
+}

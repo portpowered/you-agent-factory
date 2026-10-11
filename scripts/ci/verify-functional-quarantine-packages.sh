@@ -22,7 +22,6 @@ packages=(
   github.com/portpowered/infinite-you/tests/functional/operator_settings
   github.com/portpowered/infinite-you/tests/functional/recordings
   github.com/portpowered/infinite-you/tests/functional/work
-  github.com/portpowered/infinite-you/tests/functional/providers/contract
   github.com/portpowered/infinite-you/tests/functional/providers/mock_workers
   github.com/portpowered/infinite-you/tests/functional/providers/observability
   github.com/portpowered/infinite-you/tests/functional/providers/script

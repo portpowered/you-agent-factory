@@ -83,7 +83,7 @@ func TestProvideApplicationProcessLifecycleSharesTheExactEventsInstance(t *testi
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
+	providersService, err := newProvidersServiceFixture(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -125,7 +125,7 @@ func TestProvideApplicationProcessLifecycleRequiresEventsLifecycle(t *testing.T)
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
+	providersService, err := newProvidersServiceFixture(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}

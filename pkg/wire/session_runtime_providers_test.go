@@ -30,6 +30,7 @@ import (
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -101,7 +102,7 @@ func TestProvideConfiguredProvidersServiceProjectsInjectedStdioPipeFactory(t *te
 		// channel factory reports the failure first.
 		ProvidersExecutableLocator: &wireTestExecutableLocator{},
 	}
-	service, err := provideConfiguredProvidersService(selectedTestTimeEdges(edges), []operatorsettings.ACPIntegration{{
+	service, err := newConfiguredProvidersServiceFixture(selectedTestTimeEdges(edges), []operatorsettings.ACPIntegration{{
 		ID: "wire-acp-channel", Name: "wire-acp-channel", Transport: "stdio", Command: "wire-acp-channel-agent acp",
 	}}, nil)
 	if err != nil {
@@ -186,7 +187,7 @@ func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.Exec
 func TestOperatorSettingsCompletedOwnersUseProcessProviderCatalog(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
+	providersRoot, err := newProvidersServiceFixture(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -222,7 +223,7 @@ func TestOperatorSettingsCompletedOwnersUseProcessProviderCatalog(t *testing.T) 
 func TestProvideApplicationProcessLifecycle_ComposesOwnersClose(t *testing.T) {
 	t.Parallel()
 
-	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
+	providersService, err := newProvidersServiceFixture(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -487,7 +488,7 @@ type nonLifecycleProvidersService struct {
 }
 
 func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
-	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
+	providersService, err := newProvidersServiceFixture(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -617,7 +618,7 @@ func newProductionCleanupStatelessService(
 		WorkersWorktreeFileSystem: statelessWorktreeFileSystem{},
 		WorkersWorktreeGit:        git,
 	}
-	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
+	providersService, err := newProvidersServiceFixture(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -937,4 +938,49 @@ func newStatelessWorkersCompositionFixture(service providers.Service, modelsServ
 		return nil, err
 	}
 	return workerswire.NewService(execute)
+}
+
+// Legacy wiring-integration fixtures explicitly complete the same roles as Wire.
+// Customer behavior coverage uses root.BuildProcess under tests/functional.
+func newProvidersServiceFixture(edges serviceedges.Edges) (providers.Service, error) {
+	return newConfiguredProvidersServiceFixture(edges, nil, nil)
+}
+
+func newConfiguredProvidersServiceFixture(edges serviceedges.Edges, integrations []operatorsettings.ACPIntegration, runner platformprocess.CommandRunner) (providers.Service, error) {
+	config, err := providerswire.PrepareConfiguration(providerswire.Configuration{
+		ACPIntegrations: projectACPIntegrations(integrations), CatalogOverrides: edges.ProviderCatalogCapabilityOverrides,
+		Registrations: edges.ProviderRegistrations,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if runner == nil {
+		runner, err = provideFactoryRuntimeProviderCommandRunner(edges)
+		if err != nil {
+			return nil, err
+		}
+	}
+	contextual := provideProvidersContextualCommandRunner(runner, provideWorkersAgentToolFileSystem(edges))
+	logged := provideProvidersLoggedCommandRunner(contextual, edges.Clock)
+	command := provideProvidersCommandAdapter(logged)
+	agy := provideProvidersAgyCommandEffect(command, edges.Clock, edges.ProcessScheduler)
+	catalog, err := provideProvidersCatalog(config, edges)
+	if err != nil {
+		return nil, err
+	}
+	acp, err := provideProvidersACP(config, edges, edges.ProcessScheduler)
+	if err != nil {
+		return nil, err
+	}
+	codex := provideProvidersCodex(command, edges.Clock, edges)
+	claude := provideProvidersClaude(command, edges.Clock)
+	registrations, err := provideProvidersExecutionRegistrations(agy, codex, claude, acp, config)
+	if err != nil {
+		return nil, err
+	}
+	execution, err := providerswire.NewAttemptExecutionService(catalog, registrations)
+	if err != nil {
+		return nil, err
+	}
+	return provideProvidersService(catalog, execution, acp, config)
 }

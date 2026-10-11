@@ -76,7 +76,7 @@ func TestBundleOpeningInvokesSelectedResourceOperationAndRetainsPartialFailure(t
 		_ []interfaces.FactoryEvent,
 		_ workers.Service,
 		_ workersessions.Service,
-		_ factory.WorkerAttemptOpener,
+		_ factory.WorkerAttemptOpener, progress workers.ProgressPublisher,
 		_ func(string),
 		_ ...*workers.MockWorkersConfig,
 	) (*factoryhost.Bundle, error) {
@@ -381,7 +381,7 @@ func openFixedEffectsBundle(t *testing.T, owner *factoryinternal.RuntimeFactory,
 		"", factory.RuntimeLogStorageConfig{}, factory.RuntimeFileLoggingPolicyDisabled,
 		factory.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-"+sessionID, "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
-		flushInterval, resumeEvents, fixedEffectsWorker{}, sessions, sessions, nil)
+		flushInterval, resumeEvents, fixedEffectsWorker{}, sessions, sessions, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,18 +528,16 @@ func (opening *observationResourceOpening) Open(
 	mutations factory.PetriMutationRecorder,
 	_ time.Duration,
 	_ []interfaces.FactoryEvent,
-	worker workers.Service,
+	_ workers.Service,
 	_ workersessions.Service,
-	_ factory.WorkerAttemptOpener,
+	_ factory.WorkerAttemptOpener, progress workers.ProgressPublisher,
 	completion func(string),
 	_ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	opening.snapshots = append(opening.snapshots, snapshot)
 	opening.mutations = append(opening.mutations, mutations)
 	opening.completions = append(opening.completions, completion)
-	opening.progress = append(opening.progress, worker.(interface {
-		RuntimeProgressPublisher() workers.ProgressPublisher
-	}).RuntimeProgressPublisher())
+	opening.progress = append(opening.progress, progress)
 	return nil, opening.failure
 }
 
