@@ -88,7 +88,7 @@ func (t Transaction) validate() error {
 
 func (request Request) valid() bool {
 	return nonempty(request.SenderIdentity) && nonempty(request.RequestID) &&
-		len(request.RequestID) <= 200 && nonempty(request.MessageID) && validHash(request.RequestSHA256)
+		utf8.RuneCountInString(request.RequestID) <= 200 && nonempty(request.MessageID) && validHash(request.RequestSHA256)
 }
 
 func (entry Entry) valid() bool {

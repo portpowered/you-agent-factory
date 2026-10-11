@@ -91,6 +91,36 @@ func assertRequestRecovered(t *testing.T, journal *Journal, request Request) {
 
 // The store component is the subject: real files prove its commit/reconstruction
 // contract, while short writes and flush failures are controlled descriptors.
+func TestJournalPreservesMultibyteRequestIDAtCharacterLimit(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "messages.jsonl")
+	journal := New(testFiles{}, path)
+	if err := journal.Open(); err != nil {
+		t.Fatal(err)
+	}
+	original := sentTransaction("first", 1)
+	original.Requests[0].RequestID = strings.Repeat("é", 200)
+	if err := journal.Commit(original); err != nil {
+		t.Fatalf("200-character request rejected: %v", err)
+	}
+	reconstructed := New(testFiles{}, path)
+	if err := reconstructed.Open(); err != nil {
+		t.Fatal(err)
+	}
+	request := original.Requests[0]
+	got, exists, err := reconstructed.LookupRequest(request.SenderIdentity, request.RequestID)
+	if err != nil || !exists || got != request {
+		t.Fatalf("multibyte request did not survive reconstruction: %v", err)
+	}
+	alias := transaction(2, RequestAlias)
+	alias.Messages = []Entry{}
+	alias.Requests = []Request{request}
+	alias.Requests[0].RequestID += "é"
+	if err := journal.Commit(alias); !errors.Is(err, ErrInvalidTransaction) {
+		t.Fatalf("201-character request accepted: %v", err)
+	}
+}
+
 func TestJournalReconstructsConversationAndRequestAlias(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "messages.jsonl")
