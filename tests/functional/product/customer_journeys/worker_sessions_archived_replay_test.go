@@ -307,6 +307,52 @@ func assertArchivedUnknownCLIHTTP(t *testing.T, server *support.FunctionalAPISer
 type legacyOpeningNameStore struct {
 	*terminalCommitGate
 	namelessScope string
+	readFault     atomic.Pointer[archivedSummaryFault]
+}
+
+// Faults affect only the selected materialized summary at the authorized
+// recording edge. Other captures and the stored records remain real.
+type archivedSummaryFault struct {
+	id                string
+	err               error
+	entered, detached chan struct{}
+}
+
+func (store *legacyOpeningNameStore) ListWorkerSessionCaptures(ctx context.Context, request recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	page, err := store.WorkerRecordingStore.ListWorkerSessionCaptures(ctx, request)
+	if err != nil {
+		return page, err
+	}
+	for _, item := range page.Items {
+		if fault := store.readFault.Load(); fault != nil && fault.id == item.Catalog.WorkerSessionID {
+			return recordings.WorkerCapturedCatalogPage{}, fault.read(ctx)
+		}
+	}
+	return page, nil
+}
+
+func (store *legacyOpeningNameStore) LookupWorkerSessionCapture(ctx context.Context, id string) (recordings.WorkerSessionCatalogEntry, error) {
+	if fault := store.readFault.Load(); fault != nil && fault.id == id {
+		return recordings.WorkerSessionCatalogEntry{}, fault.read(ctx)
+	}
+	return store.WorkerRecordingStore.LookupWorkerSessionCapture(ctx, id)
+}
+
+func (fault *archivedSummaryFault) read(ctx context.Context) error {
+	if fault.err != nil {
+		return fault.err
+	}
+	close(fault.entered)
+	<-ctx.Done()
+	close(fault.detached)
+	return ctx.Err()
+}
+
+func (store *legacyOpeningNameStore) LookupWorkerSessionSummary(ctx context.Context, id string) (recordings.WorkerCapturedSummary, error) {
+	if fault := store.readFault.Load(); fault != nil && fault.id == id {
+		return recordings.WorkerCapturedSummary{}, fault.read(ctx)
+	}
+	return store.terminalCommitGate.LookupWorkerSessionSummary(ctx, id)
 }
 
 func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
@@ -403,6 +449,12 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	// must be sequential: the captured profile has exactly one writer.
 	cases = []committedTerminalCase{cases[8], cases[12]}
 	peer := newArchivedPeerCase(t, cases[0], "archive-peer-codex-COMPLETED", runner, gates)
+	// An authored FAILED destination is a business outcome even when the
+	// provider execution completes successfully. Never rewrite its capture.
+	support.UpdateFactoryConfig(t, peer.dir, func(config map[string]any) {
+		station := config["workstations"].([]any)[0].(map[string]any)
+		station["outputs"] = []any{map[string]any{"workType": "task", "state": "failed"}}
+	})
 	cases = append(cases, peer)
 	nameless := newArchivedPeerCase(t, peer, "archive-nameless-codex-COMPLETED", runner, gates)
 	cases = append(cases, nameless)
@@ -417,7 +469,8 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	}
 	backing := &terminalCommitGate{entered: make(chan struct{}), proceed: make(chan struct{})}
 	backing.release()
-	config.Edges.WorkerRecordingWriter = &legacyOpeningNameStore{terminalCommitGate: backing, namelessScope: nameless.scope}
+	store := &legacyOpeningNameStore{terminalCommitGate: backing, namelessScope: nameless.scope}
+	config.Edges.WorkerRecordingWriter = store
 	config.Edges.WorkerRecordingStoreObserver = func(store recordings.WorkerRecordingStore) { backing.WorkerRecordingStore = store }
 	// Close a real empty-board recording before admitting any Work. Later
 	// restoration consumes this immutable public recording, never a rewritten
@@ -455,6 +508,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 		cursors[index] = *page.NextToken
 	}
 	assertArchivedExplicitZeroUsage(t, before[len(before)-1])
+	assertArchivedBusinessFailure(t, server, before[5])
 	emptyWorks := submitArchivedPeerNamedWork(t, server, cases, names)
 	assertArchivedProviderCollision(t, server, before, true)
 	server.Close(t)
@@ -463,6 +517,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	assertArchivedResumedBoard(t, latest, before, logs, names, cursors, transcripts, true)
 	assertArchivedEmptyWorkParity(t, latest, emptyWorks, true)
 	assertArchivedProviderCollision(t, latest, before, true)
+	assertArchivedBusinessFailure(t, latest, before[5])
 	latest.Close(t)
 	// A peer has the same known name, but cannot supply a missing legacy fact.
 	archivedNames := append([]string(nil), names...)
@@ -480,6 +535,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	assertArchivedClosedScopeParity(t, closedScopes, before, logs, archivedNames, transcripts)
 	assertArchivedEmptyWorkParity(t, closedScopes, emptyWorks, false)
 	assertArchivedProviderCollision(t, closedScopes, before, false)
+	assertArchivedSummaryReadFaults(t, closedScopes, store, before[1], before[5])
 	closedScopes.Close(t)
 	assertArchivedPrivateProfileFence(t, config, before)
 }
@@ -1034,4 +1090,102 @@ func assertArchivedExplicitZeroUsage(t *testing.T, row factoryapi.WorkerSessionO
 		*row.TokenUsage.InputTokens != 0 || *row.TokenUsage.OutputTokens != 0 || *row.TokenUsage.TotalTokens != 0 {
 		t.Fatalf("committed explicit zeroes became missing or nonzero: %+v", row.TokenUsage)
 	}
+}
+
+func assertArchivedBusinessFailure(t *testing.T, server *support.FunctionalAPIServer, physical factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), functionalWorkerSignalTimeout)
+	defer cancel()
+	scope, workID := support.StringPointerValue(physical.FactorySessionId), support.StringPointerValue(physical.WorkId)
+	board, err := readWorkAtState(ctx, server.URL()+"/factory-sessions/"+scope+"/work", "failed", workID)
+	if err != nil {
+		t.Fatalf("completed execution did not reach declared failed Work state: board=%+v error=%v", board, err)
+	}
+	shown := assertTerminalReadParity(t, server, physical.WorkerSessionId)
+	if shown.State != "COMPLETED" || shown.ConfirmationState != factoryapi.CONFIRMED || shown.Failure != nil || !committedTerminalFactsEqual(shown, physical) {
+		t.Fatalf("business failure rewrote successful physical attempt: %+v", shown)
+	}
+	assertArchivedOwnScopeReads(t, server, shown)
+}
+
+func assertArchivedSummaryReadFaults(t *testing.T, server *support.FunctionalAPIServer, store *legacyOpeningNameStore, target, peer factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	scope, workID := support.StringPointerValue(target.FactorySessionId), support.StringPointerValue(target.WorkId)
+	base := "/factory-sessions/" + scope + "/worker-sessions"
+	queries := []struct {
+		path    string
+		args    []string
+		cliCode string
+	}{
+		{base + "?workId=" + url.QueryEscape(workID), []string{"list", "--session", scope, "--work-id", workID}, "PROJECTION_UNAVAILABLE"},
+		{base + "/" + target.WorkerSessionId, []string{"show", "--session", scope, "--worker-session-id", target.WorkerSessionId}, "WORKER_SESSION_PROJECTION_UNAVAILABLE"},
+	}
+	for _, query := range queries {
+		store.readFault.Store(&archivedSummaryFault{id: target.WorkerSessionId, err: recordings.ErrWorkerRecordingReplay})
+		response, err := http.Get(server.URL() + query.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var failure factoryapi.ErrorResponse
+		err = json.NewDecoder(response.Body).Decode(&failure)
+		_ = response.Body.Close()
+		if err != nil || response.StatusCode != http.StatusInternalServerError || failure.Code != "PROJECTION_UNAVAILABLE" {
+			t.Fatalf("damaged selected summary became success/not-found: status=%d failure=%+v error=%v", response.StatusCode, failure, err)
+		}
+		input := support.FakeInputs(t.Context(), append([]string{"you", "--server", server.URL(), "--json", "worker-sessions"}, query.args...))
+		cliErr := server.Execute(t, input.Input)
+		var cli struct {
+			Code string `json:"code"`
+		}
+		if err := json.Unmarshal([]byte(input.Stderr()), &cli); err != nil || cliErr == nil || cli.Code != query.cliCode || input.Stdout() != "" {
+			t.Fatalf("damaged CLI summary exposed success: stdout=%s stderr=%s error=%v decode=%v", input.Stdout(), input.Stderr(), cliErr, err)
+		}
+		store.readFault.Store(nil)
+		for _, observer := range []string{"HTTP", "CLI"} {
+			assertArchivedSummaryCancellation(t, server, store, target.WorkerSessionId, query.path, query.args, observer)
+		}
+	}
+	store.readFault.Store(nil)
+	assertArchivedOwnScopeReads(t, server, assertTerminalReadParity(t, server, target.WorkerSessionId))
+	assertArchivedOwnScopeReads(t, server, assertTerminalReadParity(t, server, peer.WorkerSessionId))
+}
+
+func assertArchivedSummaryCancellation(t *testing.T, server *support.FunctionalAPIServer, store *legacyOpeningNameStore, id, path string, args []string, observer string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	fault := &archivedSummaryFault{id: id, entered: make(chan struct{}), detached: make(chan struct{})}
+	store.readFault.Store(fault)
+	done := make(chan error, 1)
+	input := support.FakeInputs(ctx, append([]string{"you", "--server", server.URL(), "--json", "worker-sessions"}, args...))
+	go func() {
+		if observer == "CLI" {
+			done <- server.Execute(t, input.Input)
+			return
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL()+path, nil)
+		if err == nil {
+			var response *http.Response
+			response, err = http.DefaultClient.Do(request)
+			if response != nil {
+				_ = response.Body.Close()
+			}
+		}
+		done <- err
+	}()
+	waitCapturedReadSignal(t, fault.entered, "archived summary read admission")
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("%s archive cancellation: %v", observer, err)
+		}
+		if observer == "CLI" && input.Stdout() != "" {
+			t.Fatalf("canceled archive fabricated JSON: %s", input.Stdout())
+		}
+	case <-time.After(functionalWorkerSignalTimeout):
+		t.Fatal("archived observer failed to detach")
+	}
+	waitCapturedReadSignal(t, fault.detached, "archived summary storage cancellation")
+	store.readFault.Store(nil)
 }
