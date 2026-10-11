@@ -33,7 +33,7 @@ func TestInvocationScheduleRecordingRecoveryContinuesSequence(t *testing.T) {
 	clock := &invocationRecoveryClock{FakeClock: clockwork.NewFakeClockAt(time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)), armed: make(chan struct{}, 8)}
 	var calls atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
-		Clock:               support.ActivationClock{Clock: clock},
+		Clock:               activationClock{Clock: clock},
 		ScriptCommandRunner: invocationRecoveryRunner{calls: &calls},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			return ctx.Value(restartProbeServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
@@ -495,4 +495,24 @@ func automationRecoveryFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+// activationClock acknowledges host readiness polls through a controlled timer.
+// Domain time stays frozen until the scenario explicitly advances its Clock;
+// cron eligibility, retry, retention and recovery timers retain their durations.
+// This is fixture activation, not evidence for the selected startup wait itself.
+type activationClock struct{ clockwork.Clock }
+
+func (clock activationClock) NewTimer(duration time.Duration) clockwork.Timer {
+	if duration == 10*time.Millisecond {
+		activation := clockwork.NewFakeClockAt(clock.Now())
+		timer := activation.NewTimer(duration)
+		activation.Advance(duration)
+		return timer
+	}
+	return clock.Clock.NewTimer(duration)
+}
+
+func (clock activationClock) After(duration time.Duration) <-chan time.Time {
+	return clock.NewTimer(duration).Chan()
 }

@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -713,24 +712,4 @@ func GetFactoryResponseEventsAt(t testing.TB, baseURL, sessionID string) []facto
 		collected = append(collected, stream.NextFrame(functionalServerReadyTimeout).Event)
 	}
 	return collected
-}
-
-// ActivationClock acknowledges host readiness polls through a controlled timer.
-// Domain time stays frozen until the scenario explicitly advances its Clock;
-// cron eligibility, retry, retention and recovery timers retain their durations.
-// This is fixture activation, not evidence for the selected startup wait itself.
-type ActivationClock struct{ clockwork.Clock }
-
-func (clock ActivationClock) NewTimer(duration time.Duration) clockwork.Timer {
-	if duration == 10*time.Millisecond {
-		activation := clockwork.NewFakeClockAt(clock.Now())
-		timer := activation.NewTimer(duration)
-		activation.Advance(duration)
-		return timer
-	}
-	return clock.Clock.NewTimer(duration)
-}
-
-func (clock ActivationClock) After(duration time.Duration) <-chan time.Time {
-	return clock.NewTimer(duration).Chan()
 }

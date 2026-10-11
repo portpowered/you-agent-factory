@@ -109,7 +109,7 @@ func TestPollerRecoverableFailureRetriesWithoutDuplicates(t *testing.T) {
 		FactoryDir: dir,
 		Edges: serviceedges.Edges{
 			ScriptCommandRunner: runner,
-			Clock:               support.ActivationClock{Clock: fakeClock},
+			Clock:               activationClock{Clock: fakeClock},
 		},
 	})
 	defer server.Stop(t)
@@ -388,3 +388,23 @@ func (r *pollerRetrySequenceCommandRunner) signalPollCycle() {
 
 var _ platformprocess.CommandRunner = (*pollerIngressCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*pollerRetrySequenceCommandRunner)(nil)
+
+// activationClock acknowledges host readiness polls through a controlled timer.
+// Domain time stays frozen until the scenario explicitly advances its Clock;
+// cron eligibility, retry, retention and recovery timers retain their durations.
+// This is fixture activation, not evidence for the selected startup wait itself.
+type activationClock struct{ clockwork.Clock }
+
+func (clock activationClock) NewTimer(duration time.Duration) clockwork.Timer {
+	if duration == 10*time.Millisecond {
+		activation := clockwork.NewFakeClockAt(clock.Now())
+		timer := activation.NewTimer(duration)
+		activation.Advance(duration)
+		return timer
+	}
+	return clock.Clock.NewTimer(duration)
+}
+
+func (clock activationClock) After(duration time.Duration) <-chan time.Time {
+	return clock.NewTimer(duration).Chan()
+}
