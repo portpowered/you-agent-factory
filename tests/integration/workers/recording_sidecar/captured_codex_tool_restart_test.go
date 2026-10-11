@@ -144,7 +144,7 @@ func assertCapturedCodexRestartLogs(t *testing.T, logs api.WorkerSessionLogPage)
 			name = "mcp_tool_call:docs/lookup"
 		}
 		if payload.ToolName != name {
-			t.Fatal("restart changed source-derived tool name")
+			t.Fatalf("restart tool name: index=%d id=%q name=%q expected=%q", index, payload.ToolCallID, payload.ToolName, name)
 		}
 		assertCapturedCodexRestartResult(t, payload, index)
 		index++
@@ -198,7 +198,7 @@ emit({type:'item.started', item:{id:'success',type:'command_execution',command:'
 emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'private-output',exit_code:0,status:'completed'}});
 emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'private-denial',exit_code:1,status:'failed'}});
 emit({type:'item.started', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',arguments:{query:'visible',api_key:'private-token'},status:'in_progress'}});
-emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',result:{value:'visible'},status:'completed'}});
+emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible'},status:'completed'}});
 emit({type:'item.completed', item:{id:'reasoning',type:'reasoning',text:'private-reasoning'}});
 emit({type:'item.completed', item:{id:'answer',type:'agent_message',text:'restart tools COMPLETE'}});
 emit({type:'turn.completed',usage:{input_tokens:5,output_tokens:2}});
