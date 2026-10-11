@@ -280,7 +280,7 @@ func (a *Assembly) scopedReplaceSessionRuntime(fs *SessionRuntime,
 		replacement,
 		serviceMode,
 		fs.runtimeLifecycle,
-		fs.StartLiveRuntimeSidecars,
+		fs.runtimeSidecars,
 		fs.StopLiveRuntime,
 		func(err error) {
 			sessionID := ""

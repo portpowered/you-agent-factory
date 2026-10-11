@@ -129,7 +129,7 @@ func Replace(
 	replacement RuntimeInstance,
 	serviceMode bool,
 	lifecycle RuntimeLifecycle,
-	startSidecars func(context.Context, RuntimeHandle) error,
+	sidecars factory.RuntimeSidecars,
 	stop func(RuntimeHandle) error,
 	report func(error),
 	onPreviousRuntimeRetired func(string, *factorysessions.LiveRuntime, factory.RuntimeRecord),
@@ -155,11 +155,11 @@ func Replace(
 	}
 	restoreSidecars := serviceMode
 	if serviceMode {
-		lifecycle.StopSidecars(current)
+		sidecars.Stop(current)
 	}
 	defer func() {
-		if restoreSidecars && startSidecars != nil {
-			_ = startSidecars(serviceCtx, current)
+		if restoreSidecars {
+			_ = sidecars.Start(serviceCtx, current)
 		}
 	}()
 	replacementHandle, err := lifecycle.Start(serviceCtx, replacement)
@@ -170,8 +170,8 @@ func Replace(
 		_ = lifecycle.Stop(replacementHandle)
 		return nil, fmt.Errorf("start replacement runtime: %w", err)
 	}
-	if serviceMode && startSidecars != nil {
-		if err := startSidecars(serviceCtx, replacementHandle); err != nil {
+	if serviceMode {
+		if err := sidecars.Start(serviceCtx, replacementHandle); err != nil {
 			_ = lifecycle.Stop(replacementHandle)
 			return nil, fmt.Errorf("start replacement runtime sidecars: %w", err)
 		}
