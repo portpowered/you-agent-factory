@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -356,12 +358,66 @@ func redactedRecordingSnapshot(
 
 // NewRecordingFlushTickerFactory binds the real scheduling edge selected by
 // Wire without embedding wall-clock scheduling in lifecycle policy.
-func NewRecordingFlushTickerFactory() recordings.RecordingFlushTickerFactory {
+func NewRecordingFlushTickerFactory(scheduler platformclock.TimerSource) recordings.RecordingFlushTickerFactory {
 	return func(interval time.Duration) recordings.RecordingFlushTicker {
-		ticker := time.NewTicker(interval)
+		if interval <= 0 {
+			panic("recording flush interval must be positive")
+		}
+		ticks := make(chan time.Time, 1)
+		stop, done := make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		next := scheduler.Now().Add(interval)
+		timer := scheduler.NewTimer(interval)
+		cadence := recordingFlushCadence{scheduler: scheduler, interval: interval}
+		go cadence.run(next, timer, ticks, stop, done)
 		return recordings.RecordingFlushTicker{
-			Ticks: ticker.C,
-			Stop:  ticker.Stop,
+			Ticks: ticks,
+			Stop: func() {
+				once.Do(func() { close(stop) })
+				<-done
+			},
+		}
+	}
+}
+
+// Missed periods coalesce into one pending publication. Re-arm against the
+// original cadence, so a slow consumer never adds a full-period delay.
+type recordingFlushCadence struct {
+	scheduler platformclock.TimerSource
+	interval  time.Duration
+}
+
+func (cadence recordingFlushCadence) run(next time.Time, timer platformclock.Timer, ticks chan time.Time, stop <-chan struct{}, done chan<- struct{}) {
+	scheduler, interval := cadence.scheduler, cadence.interval
+	defer close(done)
+	defer func() {
+		timer.Stop()
+		select {
+		case <-ticks:
+		default:
+		}
+	}()
+	for {
+		select {
+		case <-stop:
+			return
+		case tick := <-timer.C():
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			select {
+			case ticks <- tick:
+			default:
+			}
+			now := scheduler.Now()
+			next = next.Add(interval)
+			if !next.After(now) {
+				next = next.Add((now.Sub(next)/interval + 1) * interval)
+			}
+			timer.Stop()
+			timer = scheduler.NewTimer(next.Sub(now))
 		}
 	}
 }
