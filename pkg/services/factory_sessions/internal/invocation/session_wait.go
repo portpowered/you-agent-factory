@@ -160,25 +160,7 @@ func joinedInvocationInterruption(sessionID string, input SessionInvocationWaitI
 	if !exists {
 		return nil
 	}
-	rootIDs := make(map[string]bool, len(request.WorkItems))
-	for _, item := range request.WorkItems {
-		rootIDs[item.ID] = true
-	}
-	matches := func(ids, traces []string) bool {
-		for _, trace := range traces {
-			if request.TraceID != "" && trace == request.TraceID {
-				return true
-			}
-		}
-		if request.TraceID == "" {
-			for _, id := range ids {
-				if rootIDs[id] {
-					return true
-				}
-			}
-		}
-		return false
-	}
+	matches := invocationDispatchMatcher(request)
 	for _, dispatch := range state.ActiveDispatches {
 		if matches(dispatch.WorkItemIDs, dispatch.TraceIDs) {
 			return nil
@@ -206,6 +188,28 @@ func joinedInvocationInterruption(sessionID string, input SessionInvocationWaitI
 		return failure
 	}
 	return nil
+}
+
+func invocationDispatchMatcher(request interfaces.WorkRequestPayload) func([]string, []string) bool {
+	rootIDs := make(map[string]bool, len(request.WorkItems))
+	for _, item := range request.WorkItems {
+		rootIDs[item.ID] = true
+	}
+	return func(ids, traces []string) bool {
+		for _, trace := range traces {
+			if request.TraceID != "" && trace == request.TraceID {
+				return true
+			}
+		}
+		if request.TraceID == "" {
+			for _, id := range ids {
+				if rootIDs[id] {
+					return true
+				}
+			}
+		}
+		return false
+	}
 }
 
 func (o *SessionOwner) canceledObservationResult(

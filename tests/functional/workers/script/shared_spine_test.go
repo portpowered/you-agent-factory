@@ -556,8 +556,8 @@ func assertScriptSharedWork(
 	}
 	if scenario.cancelAfterCommandStart {
 		work := workByID(t, listed, workID)
-		if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypePROCESSING {
-			t.Fatalf("%s canceled Work state = %#v, want init/PROCESSING without a routed result", scenario.name, work.State)
+		if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
+			t.Fatalf("%s canceled Work state = %#v, want init/INITIAL without a routed result", scenario.name, work.State)
 		}
 		if work.FailureDetail != nil {
 			t.Fatalf("%s canceled Work failure detail = %#v, want no business failure", scenario.name, work.FailureDetail)
@@ -635,14 +635,14 @@ func assertScriptSharedCancellationEvents(
 		t.Fatalf("%s dispatch observations = %#v, want exactly one admitted dispatch", scenario.name, dispatches)
 	}
 	dispatch := dispatches[0]
-	if dispatch.Response != nil {
-		t.Fatalf("%s canceled dispatch response = %#v, want no primary dispatch result", scenario.name, dispatch.Response)
+	if dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeCanceled || dispatch.Response.StructuredResult != nil || support.StringPointerValue(dispatch.Response.Output) != "" {
+		t.Fatalf("%s canceled dispatch response = %#v, want canceled without primary success", scenario.name, dispatch.Response)
 	}
 	if !support.DispatchObservationIncludesWork(dispatch, support.StringPointerValue(submitted.WorkId)) {
 		t.Fatalf("%s canceled dispatch omitted Work %q", scenario.name, support.StringPointerValue(submitted.WorkId))
 	}
 
-	var scriptRequests, scriptResponses, agentResponses int
+	var scriptRequests, scriptResponses, agentResponses, dispatchResponses int
 	for _, event := range events {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeScriptRequest:
@@ -682,16 +682,17 @@ func assertScriptSharedCancellationEvents(
 				t.Fatalf("%s agent response outcome = %q, want %q", scenario.name, payload.Outcome, scenario.expectedOutcome)
 			}
 		case factoryapi.FactoryEventTypeDispatchResponse:
-			t.Fatalf("%s emitted a dispatch response after cancellation", scenario.name)
+			dispatchResponses++
 		}
 	}
-	if scriptRequests != 1 || scriptResponses != 1 || agentResponses != 1 {
+	if scriptRequests != 1 || scriptResponses != 1 || agentResponses != 1 || dispatchResponses != 1 {
 		t.Fatalf(
-			"%s cancellation event counts = script requests:%d responses:%d agent responses:%d, want 1/1/1",
+			"%s cancellation event counts = script requests:%d responses:%d agent responses:%d dispatch responses:%d, want 1/1/1/1",
 			scenario.name,
 			scriptRequests,
 			scriptResponses,
 			agentResponses,
+			dispatchResponses,
 		)
 	}
 	if scenario.noInference && (hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceRequest) || hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceResponse)) {

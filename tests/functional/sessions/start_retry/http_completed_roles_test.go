@@ -50,7 +50,8 @@ func TestHTTPCompletedRoles(t *testing.T) {
 	providerGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{})}
 	for i := range overlap {
 		overlap[i] = newInitialOpeningProviderScenario(t)
-		providerGate.paths[overlap[i].candidateDir] = overlap[i].candidateID
+		// Word markers remain distinguishable through public diagnostic redaction.
+		providerGate.paths[overlap[i].candidateDir] = []string{"selected-alpha", "selected-bravo", "selected-charlie", "selected-delta"}[i]
 	}
 	t.Cleanup(providerGate.unblock)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
@@ -397,9 +398,9 @@ func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, ba
 	streams[0].Close()
 	closes[0]()
 	canceled := awaitCompletedHTTPInvocation(t, ctx, done[0])
-	var closedError factoryapi.ErrorResponse
-	if err := json.Unmarshal(canceled.body, &closedError); err != nil || canceled.status != http.StatusNotFound || closedError.Code != "NOT_FOUND" {
-		t.Fatalf("H10: closed invocation = %d %s, %v, want typed 404", canceled.status, canceled.body, err)
+	var interrupted factoryapi.InvocationResponse
+	if err := json.Unmarshal(canceled.body, &interrupted); err != nil || canceled.status != http.StatusOK || interrupted.Status != factoryapi.InvocationTerminalStatusFailed || interrupted.ErrorCode == nil || *interrupted.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || interrupted.PrimaryResult != nil {
+		t.Fatalf("H10: closed invocation = %d %s, %v, want interrupted without success", canceled.status, canceled.body, err)
 	}
 	completedHTTPError(t, baseURL+"/factory-sessions/"+ids[0], http.StatusNotFound, "NOT_FOUND")
 	for i := 1; i < len(ids); i++ {
@@ -411,7 +412,7 @@ func testCompletedHTTPOverlap(t *testing.T, sessions factorysessions.Service, ba
 		}
 	}
 	gate.unblock()
-	finishCompletedHTTPPeers(t, ctx, baseURL, ids, scenarios, done, streams, last)
+	finishCompletedHTTPPeers(t, ctx, baseURL, ids, scenarios, done, streams, last, gate.paths)
 }
 
 func testCompletedHTTPFailedCronRecovery(t *testing.T, sessions factorysessions.Service, baseURL string, logs *observer.ObservedLogs) {
@@ -574,11 +575,11 @@ func testCompletedHTTPRequestContexts(t *testing.T, sessions factorysessions.Ser
 	}
 }
 
-func finishCompletedHTTPPeers(t *testing.T, ctx context.Context, baseURL string, ids []string, scenarios []initialOpeningScenario, done []<-chan completedHTTPInvocation, streams []*support.FactoryResponseEventStream, last []int64) {
+func finishCompletedHTTPPeers(t *testing.T, ctx context.Context, baseURL string, ids []string, scenarios []initialOpeningScenario, done []<-chan completedHTTPInvocation, streams []*support.FactoryResponseEventStream, last []int64, outputByDir map[string]string) {
 	t.Helper()
 	for i := 1; i < len(ids); i++ {
 		result := awaitCompletedHTTPInvocation(t, ctx, done[i])
-		if result.status != http.StatusOK || result.response.Status != "COMPLETED" || !strings.Contains(string(result.body), scenarios[i].candidateID+" COMPLETE") {
+		if result.status != http.StatusOK || result.response.Status != "COMPLETED" || !strings.Contains(string(result.body), outputByDir[scenarios[i].candidateDir]+" COMPLETE") {
 			t.Fatalf("H10: peer %s lost selected output: %s", ids[i], result.body)
 		}
 		for {
@@ -586,7 +587,7 @@ func finishCompletedHTTPPeers(t *testing.T, ctx context.Context, baseURL string,
 			last[i] = assertCompletedHTTPFrame(t, frame, ids[i], last[i])
 			if frame.Event.Kind == "MESSAGE" && frame.Event.Phase == "COMPLETED" {
 				message, err := json.Marshal(frame.Event.Payload)
-				if err != nil || !strings.Contains(string(message), scenarios[i].candidateID+" COMPLETE") {
+				if err != nil || !strings.Contains(string(message), outputByDir[scenarios[i].candidateDir]+" COMPLETE") {
 					t.Fatalf("H11: peer response output = %s, %v", message, err)
 				}
 				break

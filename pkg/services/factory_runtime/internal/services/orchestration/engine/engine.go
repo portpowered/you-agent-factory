@@ -609,6 +609,42 @@ func (e *FactoryEngine) tickPhases(ctx context.Context, completionOnly bool) (bo
 	keepAlive = keepAlive || replayControlPending
 	mutated = mutated || replayControlPending
 	shouldTerminate := replayFinished
+	phases, err := e.runTickSubsystems(ctx, paused || replayPaused, rtSnapshot, mutated)
+	if err != nil {
+		return false, false, err
+	}
+	rtSnapshot, mutated = phases.snapshot, phases.mutated
+	shouldTerminate = shouldTerminate || phases.shouldTerminate
+
+	// Retire dispatch entries for results processed in this tick. This must
+	// happen AFTER all subsystems (including TerminationCheck) have run, so
+	// dispatch entries remain visible throughout the tick — preventing false
+	// deadlock detection when async results arrive mid-tick.
+	e.retireCompletedDispatches(e.runtimeState.Results, phases.completedDispatches)
+	e.runtimeState.Results = nil
+	// Results enrich the first following canonical relocation. Publish only
+	// after accepted mutations and dispatch retirement, in mutation order,
+	// before the resulting snapshot becomes observable to readers.
+	if e.recordWorkStateChange != nil {
+		for _, change := range phases.stateChanges {
+			e.recordWorkStateChange(e.runtimeState.TickCount, change)
+		}
+	}
+	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, phases.totalDispatches, rtSnapshot, mutated)
+	return mutated, shouldTerminate, nil
+}
+
+type tickPhaseResults struct {
+	snapshot            interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	mutated             bool
+	shouldTerminate     bool
+	totalDispatches     int
+	completedDispatches map[string]interfaces.CompletedDispatch
+	stateChanges        []work.WorkStateChangeRecord
+}
+
+func (e *FactoryEngine) runTickSubsystems(ctx context.Context, paused bool, rtSnapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) (tickPhaseResults, error) {
+	shouldTerminate := false
 	totalDispatches := 0
 	completedDispatches := make(map[string]interfaces.CompletedDispatch)
 	var stateChanges []work.WorkStateChangeRecord
@@ -616,44 +652,25 @@ func (e *FactoryEngine) tickPhases(ctx context.Context, completionOnly bool) (bo
 	for _, sub := range e.subsystems {
 		// Pause gates scheduling, not completion of already-started work.
 		// Only the result phases run; termination must not close a paused session.
-		if skipPausedTickGroup(sub.TickGroup(), paused || replayPaused) {
+		if skipPausedTickGroup(sub.TickGroup(), paused) {
 			continue
 		}
 		rtSnapshot = e.refreshSnapshotBeforeSubsystem(sub, rtSnapshot)
 		result, err := e.executeSubsystem(ctx, sub, &rtSnapshot)
 		if err != nil {
-			return false, false, fmt.Errorf("subsystem tick-group %d: %w", sub.TickGroup(), err)
+			return tickPhaseResults{}, fmt.Errorf("subsystem tick-group %d: %w", sub.TickGroup(), err)
 		}
 		if result == nil {
 			continue
 		}
-		if err := e.recordCompletedPetriMutations(result.CompletedDispatches); err != nil {
-			return false, false, err
-		}
-
-		if result.ShouldTerminate {
-			shouldTerminate = true
-			if result.Termination == nil {
-				e.terminationResult = nil
-			} else {
-				termination := *result.Termination
-				e.terminationResult = &termination
-			}
-		}
-
-		rtSnapshot, mutated, err = e.applySubsystemResult(ctx, sub.TickGroup(), result, rtSnapshot, mutated)
+		var dispatched int
+		rtSnapshot, mutated, dispatched, err = e.applyTickPhase(ctx, sub.TickGroup(), result, rtSnapshot, mutated)
 		if err != nil {
-			return false, false, err
+			return tickPhaseResults{}, err
 		}
+		shouldTerminate = shouldTerminate || result.ShouldTerminate
 		stateChanges = append(stateChanges, result.WorkStateChanges...)
-		dispatched, updatedSnapshot, err := e.forwardDispatches(ctx, result.Dispatches, rtSnapshot)
-		if err != nil {
-			return false, false, err
-		}
-		if dispatched {
-			rtSnapshot = updatedSnapshot
-			totalDispatches += len(result.Dispatches)
-		}
+		totalDispatches += dispatched
 
 		for _, completedDispatch := range result.CompletedDispatches {
 			completedDispatches[completedDispatch.DispatchID] = completedDispatch
@@ -664,22 +681,32 @@ func (e *FactoryEngine) tickPhases(ctx context.Context, completionOnly bool) (bo
 		}
 	}
 
-	// Retire dispatch entries for results processed in this tick. This must
-	// happen AFTER all subsystems (including TerminationCheck) have run, so
-	// dispatch entries remain visible throughout the tick — preventing false
-	// deadlock detection when async results arrive mid-tick.
-	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
-	e.runtimeState.Results = nil
-	// Results enrich the first following canonical relocation. Publish only
-	// after accepted mutations and dispatch retirement, in mutation order,
-	// before the resulting snapshot becomes observable to readers.
-	if e.recordWorkStateChange != nil {
-		for _, change := range stateChanges {
-			e.recordWorkStateChange(e.runtimeState.TickCount, change)
+	return tickPhaseResults{rtSnapshot, mutated, shouldTerminate, totalDispatches, completedDispatches, stateChanges}, nil
+}
+
+func (e *FactoryEngine) applyTickPhase(ctx context.Context, group subsystems.TickGroup, result *interfaces.TickResult, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, int, error) {
+	if err := e.recordCompletedPetriMutations(result.CompletedDispatches); err != nil {
+		return snapshot, mutated, 0, err
+	}
+	if result.ShouldTerminate {
+		e.terminationResult = nil
+		if result.Termination != nil {
+			termination := *result.Termination
+			e.terminationResult = &termination
 		}
 	}
-	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, totalDispatches, rtSnapshot, mutated)
-	return mutated, shouldTerminate, nil
+	updated, mutated, err := e.applySubsystemResult(ctx, group, result, snapshot, mutated)
+	if err != nil {
+		return updated, mutated, 0, err
+	}
+	dispatched, forwarded, err := e.forwardDispatches(ctx, result.Dispatches, updated)
+	if err != nil {
+		return updated, mutated, 0, err
+	}
+	if dispatched {
+		return forwarded, mutated, len(result.Dispatches), nil
+	}
+	return updated, mutated, 0, nil
 }
 
 func skipPausedTickGroup(group subsystems.TickGroup, paused bool) bool {

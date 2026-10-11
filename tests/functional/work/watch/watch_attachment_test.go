@@ -299,29 +299,7 @@ func TestJoinedSessionCancelResolvesPrimaryWaiterAndPreservesPeer(t *testing.T) 
 		}
 		peer.finish(t)
 		peer.assertCanonicalParity(t, decodeWatchLines(t, peer.out.String()))
-		select {
-		case <-selected.watch.Done():
-		case <-time.After(selectedWatchCeiling):
-			t.Fatal("primary finite watch did not drain after interruption")
-		}
-		if selected.watch.Err() == nil || !strings.Contains(selected.diagnostics.String(), "unfinished Work") {
-			t.Fatalf("primary finite diagnostic=%q error=%v", selected.diagnostics.String(), selected.watch.Err())
-		}
-		selected.watch.AcceptError()
-		events := support.GetFactoryEventsForSessionAt(t, host.endpoint, selected.session)
-		var workID string
-		for _, event := range events {
-			if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
-				if event.Context.WorkIds == nil || len(*event.Context.WorkIds) != 1 {
-					t.Fatalf("missing interrupted Work correlation: %+v", event)
-				}
-				workID = (*event.Context.WorkIds)[0]
-			}
-		}
-		if workID == "" || !strings.Contains(selected.diagnostics.String(), workID) {
-			t.Fatalf("primary unfinished Work=%q diagnostic=%q", workID, selected.diagnostics.String())
-		}
-		selected.assertCanonicalParity(t, decodeWatchLines(t, selected.out.String()))
+		assertPrimaryInterruptedWatch(t, selected)
 		later := peer.submit(t, "after-primary-interruption")
 		peer.awaitDispatches(t, 2)
 		var item factoryapi.Work
@@ -329,6 +307,33 @@ func TestJoinedSessionCancelResolvesPrimaryWaiterAndPreservesPeer(t *testing.T) 
 			t.Fatalf("later peer Work=%+v error=%v", item, err)
 		}
 	})
+}
+
+func assertPrimaryInterruptedWatch(t *testing.T, selected *liveObservation) {
+	t.Helper()
+	select {
+	case <-selected.watch.Done():
+	case <-time.After(selectedWatchCeiling):
+		t.Fatal("primary finite watch did not drain after interruption")
+	}
+	if selected.watch.Err() == nil || !strings.Contains(selected.diagnostics.String(), "unfinished Work") {
+		t.Fatalf("primary finite diagnostic=%q error=%v", selected.diagnostics.String(), selected.watch.Err())
+	}
+	selected.watch.AcceptError()
+	events := support.GetFactoryEventsForSessionAt(t, selected.host.endpoint, selected.session)
+	var workID string
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			if event.Context.WorkIds == nil || len(*event.Context.WorkIds) != 1 {
+				t.Fatalf("missing interrupted Work correlation: %+v", event)
+			}
+			workID = (*event.Context.WorkIds)[0]
+		}
+	}
+	if workID == "" || !strings.Contains(selected.diagnostics.String(), workID) {
+		t.Fatalf("primary unfinished Work=%q diagnostic=%q", workID, selected.diagnostics.String())
+	}
+	selected.assertCanonicalParity(t, decodeWatchLines(t, selected.out.String()))
 }
 
 type observationInvocationOutcome struct {

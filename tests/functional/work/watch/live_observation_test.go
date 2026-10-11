@@ -103,22 +103,27 @@ func runJoinedSessionCancel(t *testing.T, host *selectedWatchHost) {
 		t.Fatalf("finite canceled outcome=%v diagnostics=%q", s.watch.Err(), s.diagnostics.String())
 	}
 	s.watch.AcceptError()
+	assertJoinedObservationState(t, s, workID)
+}
+
+func assertJoinedObservationState(t *testing.T, s *liveObservation, workID string) {
+	t.Helper()
 	var after factoryapi.FactorySession
-	if err := json.Unmarshal([]byte(host.execute(t, "session", "show", s.session)), &after); err != nil {
+	if err := json.Unmarshal([]byte(s.host.execute(t, "session", "show", s.session)), &after); err != nil {
 		t.Fatal(err)
 	}
 	if after.Runtime.Progress.InFlightCount != 0 {
 		t.Fatalf("joined dispatch progress=%+v", after.Runtime)
 	}
 	var item factoryapi.Work
-	if err := json.Unmarshal([]byte(host.execute(t, "work", "show", workID, "--session", s.session)), &item); err != nil {
+	if err := json.Unmarshal([]byte(s.host.execute(t, "work", "show", workID, "--session", s.session)), &item); err != nil {
 		t.Fatal(err)
 	}
 	if item.State == nil || item.State.Type == factoryapi.WorkStateTypeTERMINAL || item.State.Type == factoryapi.WorkStateTypeFAILED {
 		t.Fatalf("canceled Work became terminal: %+v", item)
 	}
 	s.assertCanonicalParity(t, decodeWatchLines(t, s.out.String()))
-	events := support.GetFactoryEventsForSessionAt(t, host.endpoint, s.session)
+	events := support.GetFactoryEventsForSessionAt(t, s.host.endpoint, s.session)
 	responses := 0
 	for _, event := range events {
 		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {

@@ -108,12 +108,20 @@ func assertJoinedCancelInvocationResult(t *testing.T, stream, session, workID st
 		}
 		count++
 		response := record.Response
-		if response.Status != factoryapi.InvocationTerminalStatusFailed || response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || response.PrimaryResult != nil || response.SessionId == nil || *response.SessionId != session || response.WorkId == nil || *response.WorkId != workID || response.WorkState == nil || *response.WorkState != "init" {
-			t.Fatalf("canceled invocation result = %+v", response)
-		}
+		assertJoinedCancelResponse(t, response, session, workID)
 	}
 	if count != 1 {
 		t.Fatalf("canceled invocation result count=%d, want one", count)
+	}
+}
+
+func assertJoinedCancelResponse(t *testing.T, response factoryapi.InvocationResponse, session, workID string) {
+	t.Helper()
+	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || response.PrimaryResult != nil {
+		t.Fatalf("canceled invocation result = %+v", response)
+	}
+	if response.SessionId == nil || *response.SessionId != session || response.WorkId == nil || *response.WorkId != workID || response.WorkState == nil || *response.WorkState != "init" {
+		t.Fatalf("canceled invocation correlation = %+v", response)
 	}
 }
 

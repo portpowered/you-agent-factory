@@ -74,11 +74,11 @@ func assertAgentScenarioWork(
 	t.Helper()
 	if scenario.behavior == agentSharedCancel {
 		if len(listed.Results) != 1 {
-			t.Fatalf("%s cancellation Work results = %#v, want one processing Work", scenario.name, listed.Results)
+			t.Fatalf("%s cancellation Work results = %#v, want one unfinished retryable Work", scenario.name, listed.Results)
 		}
 		item := listed.Results[0]
-		if support.StringPointerValue(item.WorkId) != workID || item.State == nil || item.State.Name != "init" || item.State.Type != factoryapi.WorkStateTypePROCESSING {
-			t.Fatalf("%s cancellation Work = %#v, want Work %q in init/PROCESSING", scenario.name, item, workID)
+		if support.StringPointerValue(item.WorkId) != workID || item.State == nil || item.State.Name != "init" || item.State.Type != factoryapi.WorkStateTypeINITIAL {
+			t.Fatalf("%s cancellation Work = %#v, want Work %q in init/INITIAL", scenario.name, item, workID)
 		}
 		if item.FailureDetail != nil {
 			t.Fatalf("%s cancellation Work failure detail = %#v, want none", scenario.name, item.FailureDetail)
@@ -297,8 +297,8 @@ func assertAgentScenarioDispatch(
 		if dispatch.DispatchID == "" || !support.DispatchObservationIncludesWork(dispatch, workID) || dispatch.Request.TransitionId != "process" {
 			t.Fatalf("%s cancellation dispatch = %#v, want process dispatch correlated to Work %q", scenario.name, dispatch, workID)
 		}
-		if dispatch.Response != nil {
-			t.Fatalf("%s cancellation dispatch response = %#v, want no business response after session cancel", scenario.name, dispatch.Response)
+		if dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeCanceled || dispatch.Response.StructuredResult != nil || support.StringPointerValue(dispatch.Response.Output) != "" {
+			t.Fatalf("%s cancellation dispatch response = %#v, want canceled without success output", scenario.name, dispatch.Response)
 		}
 		correlated := false
 		for _, event := range events {
