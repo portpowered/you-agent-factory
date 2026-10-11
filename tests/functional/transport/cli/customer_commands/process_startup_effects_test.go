@@ -7,15 +7,92 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// W01/W04/W05: bootstrap is activated through the public command, with only
+// its exclusive directory reservation replaced. A retry uses the same completed
+// process and customer home; no real provider or standalone host is needed.
+func TestCLIInitializationFailureRetryAndCancellation(t *testing.T) {
+	t.Parallel()
+	unavailable := errors.New("controlled packaged installation unavailable")
+	var installationUnavailable atomic.Bool
+	installationUnavailable.Store(true)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		FactoryDefinitionPackagedInstallationDirectoryCreator: func(path string, mode fs.FileMode) error {
+			if strings.Contains(path, "unavailable-home") && installationUnavailable.Load() {
+				return unavailable
+			}
+			return os.Mkdir(path, mode)
+		},
+	})
+	t.Run("installation failure and retry", func(t *testing.T) {
+		t.Parallel()
+		home := newCLIHome(t)
+		home.home = filepath.Join(home.home, "unavailable-home")
+		// Help must remain usable before any bootstrap effect is activated.
+		home.requireSuccess(t, process, "--help")
+		configPath := filepath.Join(home.home, ".you-agent-factory", "config.json")
+		if _, err := os.Stat(configPath); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("help initialized operator configuration: %v", err)
+		}
+		args := []string{"--server", "http://127.0.0.1:1", "server", "mcp", "--project-root", home.work}
+		failed := home.run(t, process, nil, args...)
+		var partial systeminitialization.InitializePartialFailure
+		wantFacts := []systeminitialization.RollbackFact{
+			{Step: systeminitialization.InitializeStepSystemConfig, Outcome: systeminitialization.RollbackStepRolledBackOrPreserved},
+			{Step: systeminitialization.InitializeStepPackagedFactories, Outcome: systeminitialization.RollbackStepUnresolved},
+		}
+		if !errors.Is(failed.Err, unavailable) || !errors.Is(failed.Err, systeminitialization.ErrInitializePartialFailure) ||
+			!errors.As(failed.Err, &partial) || !reflect.DeepEqual(partial.Facts, wantFacts) || failed.Stdout != "" {
+			t.Fatalf("bootstrap failure = %#v; facts = %#v", failed, partial.Facts)
+		}
+		preserved, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatalf("partial initialization did not preserve operator configuration: %v", err)
+		}
+		installationUnavailable.Store(false)
+		home.requireSuccess(t, process, args...)
+		current, err := os.ReadFile(configPath)
+		if err != nil || string(current) != string(preserved) {
+			t.Fatalf("retry changed preserved operator configuration: %v", err)
+		}
+		factoryPath := filepath.Join(factorydefinitions.NamedFactoriesRoot(home.home), "@you", "subagent", "factory.json")
+		home.requireSuccess(t, process, "factory", "config", "validate", factoryPath)
+		// A repeat bootstrap must leave the installed public definition usable.
+		home.requireSuccess(t, process, args...)
+		home.requireSuccess(t, process, "factory", "config", "validate", factoryPath)
+	})
+	t.Run("cancellation has no rollback facts", func(t *testing.T) {
+		t.Parallel()
+		home := newCLIHome(t)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		inputs := support.FakeInputs(ctx, []string{"you", "server", "mcp", "--project-root", home.work})
+		inputs.Input.Env = []string{"HOME=" + home.home, "USERPROFILE=" + home.home}
+		inputs.Input.WorkingDirectory = home.work
+		inputs.Input.Stdin = strings.NewReader("")
+		err := process.Execute(inputs.Input)
+		var partial systeminitialization.InitializePartialFailure
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, systeminitialization.ErrInitializeCancelled) ||
+			errors.As(err, &partial) || inputs.Stdout() != "" {
+			t.Fatalf("canceled bootstrap = %v; stdout = %q; facts = %#v", err, inputs.Stdout(), partial.Facts)
+		}
+		if _, statErr := os.Stat(filepath.Join(home.home, ".you-agent-factory", "config.json")); !errors.Is(statErr, fs.ErrNotExist) {
+			t.Fatalf("canceled bootstrap published configuration: %v", statErr)
+		}
+	})
+}
 
 func TestCLIStartupCauseEffects(t *testing.T) {
 	t.Parallel()
