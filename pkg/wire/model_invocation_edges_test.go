@@ -71,7 +71,25 @@ func newModelsServiceFixture(edges serviceedges.Edges) (models.Service, error) {
 		return nil, err
 	}
 	temp, create, inspect := provideModelRuntimeTempDirectory(edges), provideModelRuntimeTempFile(edges), provideModelRuntimeInspectFile(edges)
-	runtime, err := provideModelInvocationRuntime(edges, runner, temp, create, provideModelAssetWriteFile(edges), inspect, provideModelAssetReadFile(edges), provideModelAssetRemovePath(edges))
+	generic := provideModelGenericInvocation(edges)
+	createInvocation, writeInvocation, removeInvocation := provideModelInvocationTempFile(create), provideModelInvocationWriteFile(provideModelAssetWriteFile(edges)), provideModelInvocationRemoveFile(provideModelAssetRemovePath(edges))
+	read := provideModelAssetReadFile(edges)
+	extract := provideModelVideoAudioTransform(runner, temp, createInvocation, writeInvocation, read, removeInvocation)
+	normalize := provideModelAudioNormalizer(runner, temp, createInvocation, writeInvocation, read, removeInvocation)
+	omni := provideModelOMNIInvocation(provideModelOMNICodec(provideModelInvocationProtocol(edges), extract))
+	asr, err := provideModelASRInvocation(provideModelASRBackend(edges, temp, createInvocation, writeInvocation, removeInvocation), generic, extract, normalize)
+	if err != nil {
+		return nil, err
+	}
+	embedding, err := provideModelEmbeddingInvocation(provideModelEmbeddingBackend(edges), generic)
+	if err != nil {
+		return nil, err
+	}
+	tts, err := provideModelTTSInvocation(provideModelTTSBackend(edges, temp, createInvocation, writeInvocation, inspect, read, removeInvocation))
+	if err != nil {
+		return nil, err
+	}
+	runtime, err := provideModelInvocationRuntime(generic, omni, asr, embedding, tts)
 	if err != nil {
 		return nil, err
 	}

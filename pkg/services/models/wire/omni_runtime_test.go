@@ -203,16 +203,9 @@ func TestNewInvocationRuntimeUsesFailClosedFallbackForNonOmni(t *testing.T) {
 func TestInferenceRuntimeFailsClosedWithoutProductionAdapters(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{})
+	runtime, err := invocationFixture(invocationFixtureOptions{})
 	if err != nil {
 		t.Fatalf("inferenceRuntime: %v", err)
-	}
-	composed, ok := runtime.(operationInvocationRuntime)
-	if !ok {
-		t.Fatalf("inferenceRuntime type = %T, want operationInvocationRuntime", runtime)
-	}
-	if _, ok := composed.generic.(failClosedInvocationRuntime); !ok {
-		t.Fatalf("production default generic runtime = %T, want fail-closed runtime", composed.generic)
 	}
 
 	catalog := models.GenericOperationCatalog{}
@@ -248,7 +241,7 @@ func TestInferenceRuntimeRoutesOmniBeforeGenericBackend(t *testing.T) {
 
 	scope := mustRoutingScope(t)
 	genericCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			genericCalls++
 			return []models.InferenceContent{{Name: "generic", Content: "generic answer"}}, nil, nil
@@ -293,7 +286,7 @@ func TestInferenceRuntimeRoutesASRBeforeGenericBackend(t *testing.T) {
 
 	scope := mustRoutingScope(t)
 	asrCalls := 0
-	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+	runtime, err := invocationFixture(invocationFixtureOptions{
 		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			return []models.InferenceContent{{Name: "generic"}}, nil, nil
 		},
@@ -707,5 +700,64 @@ func TestNewResourceLimiterRequiresClockAndConstructsInertly(t *testing.T) {
 	limiter, err := NewResourceLimiter(hooks, func() time.Time { calls++; return time.Time{} })
 	if limiter == nil || err != nil || calls != 0 {
 		t.Fatalf("inert construction = %v, %v, calls=%d", limiter, err, calls)
+	}
+}
+
+// Each collaborator is a completed fake role: this isolates the selector.
+type fixedInvocationRole string
+
+func (role fixedInvocationRole) Invoke(_ context.Context, request inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	return inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Name: "selected", Content: string(role)}}}, nil
+}
+
+func TestInvocationSelectsCompletedRoles(t *testing.T) {
+	t.Parallel()
+	runtime, err := NewInvocationRuntime(fixedInvocationRole("generic"), fixedInvocationRole("omni"),
+		fixedInvocationRole("asr"), fixedInvocationRole("embedding"), fixedInvocationRole("tts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ operation, want string }{
+		{"custom", "generic"}, {" omni ", "omni"}, {"asr", "asr"}, {"EMBED", "embedding"}, {"TTS", "tts"},
+	} {
+		result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{Operation: test.operation}})
+		if err != nil || len(result.Content) != 1 || result.Content[0].Content != test.want {
+			t.Fatalf("operation %q = %#v, %v; want %s", test.operation, result, err, test.want)
+		}
+	}
+}
+
+func TestInvocationRejectsIncompleteRoles(t *testing.T) {
+	t.Parallel()
+	role := fixedInvocationRole("complete")
+	for missing := 0; missing < 5; missing++ {
+		roles := []InvocationRuntime{role, role, role, role, role}
+		roles[missing] = nil
+		if _, err := NewInvocationRuntime(roles[0], roles[1], roles[2], roles[3], roles[4]); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+			t.Fatalf("missing role %d: %v", missing, err)
+		}
+	}
+}
+
+func TestInvocationGenericPreservesDeniedCauseAndDetachedArtifact(t *testing.T) {
+	t.Parallel()
+	denied := &models.InvocationFailure{Class: models.InvocationFailureClassBackendProtocol, Message: "controlled policy denial", Cause: models.ErrUnavailable}
+	backend := NewGenericInvocationRuntime(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return nil, nil, denied
+	})
+	result, err := backend.Invoke(t.Context(), inference.InvocationRuntimeRequest{})
+	if !errors.Is(err, denied) || result.Content != nil || result.Artifacts != nil {
+		t.Fatalf("denied generic = %#v, %v", result, err)
+	}
+	artifact, err := (models.InferenceArtifactRef{}).Parse("artifact://selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend = NewGenericInvocationRuntime(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return []models.InferenceContent{{Content: "selected output"}}, []models.InferenceArtifact{{Artifact: artifact, Name: "selected", MediaType: "text/plain"}}, nil
+	})
+	result, err = backend.Invoke(t.Context(), inference.InvocationRuntimeRequest{})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "selected output" || len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != artifact.String() {
+		t.Fatalf("generic output = %#v, %v", result, err)
 	}
 }

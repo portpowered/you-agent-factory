@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -51,6 +52,10 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 			}
 			bootstrapFixedLeafProfile(t, process, input)
 		},
+	})
+	t.Run("policy denial releases capacity for retry", func(t *testing.T) {
+		t.Parallel()
+		runFixedLeafDeniedInvocation(t, server.URL(), routes)
 	})
 	for _, name := range []string{"selected", "peer"} {
 		t.Run(name, func(t *testing.T) {
@@ -168,6 +173,7 @@ func invokeFixedLeafSession(t *testing.T, baseURL, session, requestID, text stri
 
 type fixedLeafRoute struct {
 	failure  bool
+	denial   error
 	output   string
 	observed chan models.InvokeModelRequest
 	release  chan struct{}
@@ -219,6 +225,9 @@ func (routes *fixedLeafRoutes) invoke(ctx context.Context, request models.Invoke
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
+	if route.denial != nil {
+		return nil, nil, route.denial
+	}
 	if route.failure {
 		return nil, nil, models.ErrInferenceTimeout
 	}
@@ -239,4 +248,34 @@ func (routes *fixedLeafRoutes) recordScope(t *testing.T, name, scope string) {
 		}
 	}
 	routes.scopes[name] = scope
+}
+
+func runFixedLeafDeniedInvocation(t *testing.T, baseURL string, routes *fixedLeafRoutes) {
+	t.Helper()
+	session := openFixedLeafSession(t, baseURL)
+	route := routes.register("policy-denied", false)
+	route.denial = &models.InvocationFailure{Class: models.InvocationFailureClassBackendProtocol,
+		Operation: models.OperationEMBED, Message: "controlled model policy denial", Cause: os.ErrPermission}
+	response := invokeFixedLeafSession(t, baseURL, session, "fixed-leaf-policy-denied", "policy-denied")
+	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
+		t.Fatalf("denied invocation = %#v; want FAILED without result", response)
+	}
+	waitFixedLeafAccepted(t, route)
+	assertFixedLeafModelEvent(t, baseURL, session, response.RequestId, true)
+	found := false
+	for _, event := range support.GetFactoryEventsForSessionAt(t, baseURL, session) {
+		if event.Type != "MODEL_RESPONSE" || event.Context.RequestId == nil || *event.Context.RequestId != response.RequestId {
+			continue
+		}
+		payload, err := event.Payload.AsModelResponseEventPayload()
+		if err != nil || payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeUnknown || payload.FailureDetail.Message != `inference failed for worker "embed-worker" model "embed" operation "EMBED": controlled model policy denial` {
+			t.Fatalf("policy denial classification = detail:%+v payload:%#v, %v", payload.FailureDetail, payload, err)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("missing policy denial diagnostic")
+	}
+	retry := routes.register("policy-permitted", false)
+	assertFixedLeafSuccess(t, invokeFixedLeafSession(t, baseURL, session, "fixed-leaf-policy-permitted", "policy-permitted"), retry.output)
 }

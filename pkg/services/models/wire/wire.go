@@ -16,7 +16,6 @@ import (
 
 	"encoding/hex"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
@@ -92,26 +91,6 @@ func NewPinnedGRPCHostProtocolNegotiator(
 	resolveSymlinks HostResolveSymlinks,
 ) HostProtocolNegotiator {
 	return localai.NewPinnedGRPCHostProtocolNegotiator(dialer, resolveSymlinks)
-}
-
-type invocationRuntimeOptions struct {
-	Backend          InvocationBackend
-	ASR              ASRBackend
-	Embedding        EmbeddingBackend
-	Client           InvocationProtocolClient
-	Dialer           InvocationProtocolDialer
-	VideoAudioRunner platformprocess.CommandRunner
-	ASRTempDirectory func() string
-	ASRCreateTemp    localai.TempFileFactory
-	ASRWriteFile     localai.InputFileWriter
-	ASRReadFile      func(string) ([]byte, error)
-	ASRRemoveFile    localai.InputFileRemover
-	TTSTempDirectory func() string
-	TTSCreateTemp    localai.TempFileFactory
-	TTSWriteFile     localai.InputFileWriter
-	TTSInspectFile   localai.TTSOutputInspector
-	TTSReadFile      localai.TTSOutputReader
-	TTSRemoveFile    localai.InputFileRemover
 }
 
 type invocationRuntime interface {
@@ -358,18 +337,22 @@ func NewRuntimeHost(
 		hostLogger, hostMetrics, platform, protocol, compatibility, resolveSymlinks, evidence, idleUnloadAfter, maxLoadedRuntimes)
 }
 
-// NewInvocationRuntime binds protocol and media effects without selecting a runner.
-func NewInvocationRuntime(
-	backend InvocationBackend, asr ASRBackend, embedding EmbeddingBackend,
-	client InvocationProtocolClient, dialer InvocationProtocolDialer, videoAudioRunner platformprocess.CommandRunner,
-	tempDirectory RuntimeTempDirectory, createTemp RuntimeCreateTempFile, writeFile AssetWriteFile,
-	inspectFile RuntimeInspectFile, readFile AssetReadFile, removeFile AssetRemovePath,
+// Each role is complete before the operation selector is constructed.
+type GenericInvocationRuntime interface{ InvocationRuntime }
+type OMNIInvocationRuntime interface{ InvocationRuntime }
+type ASRInvocationRuntime interface{ InvocationRuntime }
+type EmbeddingInvocationRuntime interface{ InvocationRuntime }
+type TTSInvocationRuntime interface{ InvocationRuntime }
+
+func NewInvocationRuntime(generic GenericInvocationRuntime, omni OMNIInvocationRuntime,
+	asr ASRInvocationRuntime, embedding EmbeddingInvocationRuntime, tts TTSInvocationRuntime,
 ) (InvocationRuntime, error) {
-	options := invocationRuntimeOptions{Backend: backend, ASR: asr, Embedding: embedding,
-		Client: client, Dialer: dialer, VideoAudioRunner: videoAudioRunner}
-	options = bindASRStaging(options, tempDirectory, createTemp, writeFile, readFile, removeFile)
-	options = bindTTSStaging(options, tempDirectory, createTemp, writeFile, inspectFile, readFile, removeFile)
-	return inferenceRuntime(options)
+	for _, role := range []any{generic, omni, asr, embedding, tts} {
+		if isNilDependency(role) {
+			return nil, models.ErrInvalidInferenceDependencies
+		}
+	}
+	return operationInvocationRuntime{generic: generic, omni: omni, asr: asr, embedding: embedding, tts: tts}, nil
 }
 
 type InvocationArtifactRegistrar = inferencewire.InvocationArtifactRegistrar

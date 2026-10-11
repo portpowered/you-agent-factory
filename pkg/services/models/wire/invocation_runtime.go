@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelcodecs "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
-	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio"
 	modelsruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
@@ -59,23 +58,20 @@ func (runtime operationInvocationRuntime) Invoke(
 	ctx context.Context,
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
-	if runtime.asr != nil && isASROperation(request) {
+	if isASROperation(request) {
 		return runtime.asr.Invoke(
 			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
 		)
 	}
-	if runtime.omni != nil && isOMNIOperation(request) {
+	if isOMNIOperation(request) {
 		return runtime.omni.Invoke(ctx, request)
 	}
-	if runtime.embedding != nil && isEmbeddingOperation(request) {
+	if isEmbeddingOperation(request) {
 		return runtime.embedding.Invoke(
 			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
 		)
 	}
 	if isTTSOperation(request) {
-		if runtime.tts == nil {
-			return failClosedInvocationRuntime{}.Invoke(ctx, request)
-		}
 		return runtime.tts.Invoke(
 			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
 		)
@@ -83,88 +79,16 @@ func (runtime operationInvocationRuntime) Invoke(
 	return runtime.generic.Invoke(ctx, request)
 }
 
-func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, error) {
-	runtime := operationInvocationRuntime{
-		generic: genericInvocationRuntime(options.Backend),
-		omni:    newInvocationRuntime(options.Client, options.Dialer, videoAudioExtractor(options)),
-	}
-	if err := configureASRRuntime(&runtime, options); err != nil {
-		return nil, err
-	}
-	if err := configureEmbeddingRuntime(&runtime, options); err != nil {
-		return nil, err
-	}
-	if err := configureTTSRuntime(&runtime, options); err != nil {
-		return nil, err
-	}
-	return runtime, nil
-}
-
-func configureASRRuntime(runtime *operationInvocationRuntime, options invocationRuntimeOptions) error {
-	backend := options.ASR
-	// An explicitly injected generic backend is a complete controlled
-	// operation effect. Keep it authoritative when a typed edge is absent;
-	// pinned typed defaults are production fallbacks, not fixture overrides.
-	if backend == nil && options.Backend == nil {
-		backend = localai.NewPinnedASRBackend(
-			options.Dialer, options.ASRTempDirectory, options.ASRCreateTemp,
-			options.ASRWriteFile, options.ASRRemoveFile,
-		)
-	}
-	if backend == nil {
-		return nil
-	}
-	asr, err := newASRInvocationRuntime(backend, videoAudioExtractor(options), audioNormalizer(options))
-	if err != nil {
-		return err
-	}
-	runtime.asr = asr
-	return nil
-}
-
-func configureEmbeddingRuntime(runtime *operationInvocationRuntime, options invocationRuntimeOptions) error {
-	backend := options.Embedding
-	if backend == nil && options.Backend == nil {
-		backend = localai.NewPinnedEmbeddingBackend(options.Dialer)
-	}
-	if backend == nil {
-		return nil
-	}
-	embedding, err := newEmbeddingInvocationRuntime(backend)
-	if err != nil {
-		return err
-	}
-	runtime.embedding = embedding
-	return nil
-}
-
-func configureTTSRuntime(runtime *operationInvocationRuntime, options invocationRuntimeOptions) error {
-	backend := localai.NewPinnedTTSBackend(
-		options.Dialer,
-		options.TTSTempDirectory,
-		options.TTSCreateTemp,
-		options.TTSWriteFile,
-		options.TTSInspectFile,
-		options.TTSReadFile,
-		options.TTSRemoveFile,
-	)
-	if backend == nil {
-		return nil
-	}
-	tts, err := newTTSInvocationRuntime(backend)
-	if err != nil {
-		return err
-	}
-	runtime.tts = tts
-	return nil
-}
-
-func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
+// NewGenericInvocationRuntime normalizes the optional public override.
+func NewGenericInvocationRuntime(backend InvocationBackend) GenericInvocationRuntime {
 	if backend == nil {
 		return failClosedInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
 }
+
+// NewUnavailableInvocationRuntime supplies an explicit fail-closed role.
+func NewUnavailableInvocationRuntime() InvocationRuntime { return failClosedInvocationRuntime{} }
 
 // failClosedInvocationRuntime is the production default when no operation
 // adapter was composed. It intentionally emits no content, preserving the
@@ -193,7 +117,10 @@ func (failClosedInvocationRuntime) Invoke(
 	}
 }
 
-func newASRInvocationRuntime(backend ASRBackend, extract, normalize localai.VideoAudioExtractor) (invocationRuntime, error) {
+func NewASRInvocationRuntime(backend ASRBackend, extract, normalize InvocationAudioTransform) (ASRInvocationRuntime, error) {
+	if backend == nil {
+		return nil, models.ErrInvalidInferenceDependencies
+	}
 	return modelsruntime.New(func(
 		ctx context.Context,
 		request modelcodecs.ASRRequest,
@@ -215,7 +142,10 @@ func newASRInvocationRuntime(backend ASRBackend, extract, normalize localai.Vide
 	}, modelsruntime.VideoAudioExtractor(extract), modelsruntime.VideoAudioExtractor(normalize))
 }
 
-func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime, error) {
+func NewEmbeddingInvocationRuntime(backend EmbeddingBackend) (EmbeddingInvocationRuntime, error) {
+	if backend == nil {
+		return nil, models.ErrInvalidInferenceDependencies
+	}
 	return modelsruntime.NewEmbedding(func(
 		ctx context.Context,
 		request modelcodecs.EmbeddingRequest,
@@ -233,44 +163,31 @@ func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime,
 	})
 }
 
-func newTTSInvocationRuntime(
-	backend func(context.Context, modelcodecs.TTSRequest) (modelcodecs.TTSResponse, error),
-) (invocationRuntime, error) {
-	return modelsruntime.NewTTS(modelsruntime.TTSBackend(backend))
+type InvocationProtocol = localai.ProtocolClient
+type InvocationOMNICodec = localai.OmniCodec
+type InvocationAudioTransform = localai.VideoAudioExtractor
+type InvocationTTSBackend = modelsruntime.TTSBackend
+
+func NewTTSInvocationRuntime(backend InvocationTTSBackend) (TTSInvocationRuntime, error) {
+	return modelsruntime.NewTTS(backend)
 }
 
-type omniInvocationRuntime struct {
-	codec    *localai.OmniCodec
-	fallback invocationRuntime
+type omniInvocationRuntime struct{ codec *InvocationOMNICodec }
+
+func NewOMNIInvocationRuntime(codec *InvocationOMNICodec) OMNIInvocationRuntime {
+	return omniInvocationRuntime{codec: codec}
 }
 
-// newInvocationRuntime keeps OMNI on the pinned protocol path. A missing
-// client fails closed for OMNI, while non-OMNI operations also fail closed
-// unless an explicit operation backend is composed.
-func newInvocationRuntime(
-	client InvocationProtocolClient,
-	dialer InvocationProtocolDialer,
-	extractors ...localai.VideoAudioExtractor,
-) invocationRuntime {
-	fallback := failClosedInvocationRuntime{}
-	if isNilDependency(client) {
-		client = nil
-	}
-	var protocolClient localai.ProtocolClient
-	if client != nil {
-		protocolClient = invocationProtocolAdapter{client: client}
-	} else if dialer != nil {
-		protocolClient = localai.NewPinnedGRPCProtocolClient(dialer)
-	}
-	var extract localai.VideoAudioExtractor
-	if len(extractors) > 0 {
-		extract = extractors[0]
-	}
+func NewInvocationProtocolAdapter(client InvocationProtocolClient) InvocationProtocol {
+	return invocationProtocolAdapter{client: client}
+}
 
-	return omniInvocationRuntime{
-		codec:    localai.NewPinnedOmniCodec(protocolClient, extract),
-		fallback: fallback,
-	}
+func NewPinnedInvocationProtocol(dialer InvocationProtocolDialer) InvocationProtocol {
+	return localai.NewPinnedGRPCProtocolClient(dialer)
+}
+
+func NewInvocationOMNICodec(client InvocationProtocol, extract InvocationAudioTransform) *InvocationOMNICodec {
+	return localai.NewPinnedOmniCodec(client, extract)
 }
 
 func (runtime omniInvocationRuntime) Invoke(
@@ -278,7 +195,7 @@ func (runtime omniInvocationRuntime) Invoke(
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
 	if !isOMNIOperation(request) {
-		return runtime.fallback.Invoke(ctx, request)
+		return failClosedInvocationRuntime{}.Invoke(ctx, request)
 	}
 	if runtime.codec == nil {
 		return inference.InvocationRuntimeResult{}, models.ErrUnavailable
@@ -366,23 +283,5 @@ func cloneInvocationParameterValue(value any) any {
 		return cloned
 	default:
 		return value
-	}
-}
-
-func videoAudioExtractor(options invocationRuntimeOptions) localai.VideoAudioExtractor {
-	if options.VideoAudioRunner == nil {
-		return nil
-	}
-	return func(ctx context.Context, video []byte) ([]byte, error) {
-		return videoaudio.ExtractVideoAudio(ctx, options.VideoAudioRunner, video, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
-	}
-}
-
-func audioNormalizer(options invocationRuntimeOptions) localai.VideoAudioExtractor {
-	if options.VideoAudioRunner == nil {
-		return nil
-	}
-	return func(ctx context.Context, audio []byte) ([]byte, error) {
-		return videoaudio.NormalizeAudio(ctx, options.VideoAudioRunner, audio, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
 	}
 }

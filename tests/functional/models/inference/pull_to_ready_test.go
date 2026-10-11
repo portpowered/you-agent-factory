@@ -205,12 +205,14 @@ func assertScopedPullSelectionReady(t *testing.T, process rootProcess, selected 
 	} else {
 		assertPullToReadyAlreadyPresent(t, pull, selected.body, cache)
 	}
+	// Each completed command releases its presentation scope. The next public
+	// inspection must still select this profile's cache after peer operations.
 	inspect := executeScopedPullSelection(t, process, selected.home, selected.directory, "inspect")
 	assertPullToReadyInspect(t, inspect, cache, selected.body)
 	var detail factoryapi.ModelDetail
 	decodePullToReadyJSON(t, inspect.raw, &detail)
-	if detail.ManagedRuntime.CachePath == nil {
-		t.Fatal("selected inspect omitted cache path")
+	if detail.ManagedRuntime.CachePath == nil || !pathWithinRoot(*detail.ManagedRuntime.CachePath, cache) {
+		t.Fatalf("selected inspect cache = %#v; want scoped root %s", detail.ManagedRuntime.CachePath, cache)
 	}
 	data, err := os.ReadFile(filepath.Join(*detail.ManagedRuntime.CachePath, pullToReadyAsset))
 	if err != nil || !bytes.Equal(data, selected.body) {
