@@ -28,6 +28,7 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -139,8 +140,8 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 		t.Fatal("peer has no response history before replacement")
 	}
 
-	oldLog := support.SessionRuntimeLogPath(t, sessions, sessionID)
-	peerLog := support.SessionRuntimeLogPath(t, sessions, peerID)
+	oldLog := sessionRuntimeLogPath(t, sessions, sessionID)
+	peerLog := sessionRuntimeLogPath(t, sessions, peerID)
 	firstInvocation := postSessionRuntimeReplaceInvocation(t, baseURL, sessionID, "replacement-input-secret")
 	assertSessionRuntimeReplaceInvocationCompleted(t, firstInvocation)
 
@@ -159,7 +160,7 @@ func TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement(t *testin
 	}
 
 	replaceSessionRuntimeCurrentFactory(t, baseURL, sessionID, "task")
-	currentLog := support.SessionRuntimeLogPath(t, sessions, sessionID)
+	currentLog := sessionRuntimeLogPath(t, sessions, sessionID)
 	if currentLog == oldLog {
 		t.Fatal("replacement retained retired log artifact")
 	}
@@ -552,6 +553,17 @@ func (sink *replacementLogErrors) String() string {
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
 	return sink.data.String()
+}
+
+func sessionRuntimeLogPath(t testing.TB, sessions factorysessions.Service, sessionID string) string {
+	t.Helper()
+	diagnostics, err := sessions.(interface {
+		ApplicationDiagnostics(string) (runtimeartifact.Diagnostics, error)
+	}).ApplicationDiagnostics(sessionID)
+	if err != nil || diagnostics.Path == "" {
+		t.Fatalf("session log artifact: %#v, %v", diagnostics, err)
+	}
+	return diagnostics.Path
 }
 
 func assertReplacementBackendDiagnostics(t *testing.T, logs *observer.ObservedLogs, selected, peer string) {
