@@ -122,11 +122,15 @@ func newModelAssetsFixture(edges serviceedges.Edges, scopes modelswire.RuntimeSc
 	if err != nil {
 		return nil, err
 	}
+	readDirectory, readFile := provideModelAssetReadDirectory(edges), provideModelAssetReadFile(edges)
+	openFile, inspectPath, removePath := provideModelAssetOpenFile(edges), provideModelAssetInspectPath(edges), provideModelAssetRemovePath(edges)
+	reclamation := modelswire.NewCacheReclamation(readDirectory, readFile, openFile, inspectPath, removePath,
+		coordination, modelswire.NewManagedSources(), modelswire.NewReclamationContextError())
 	return provideModelAssets(scopes, provideModelAssetHostPlatform(edges), provideModelAssetHTTP(edges), provideModelAssetEndpoints(edges),
-		provideModelAssetMakeDirectories(edges), provideModelAssetInspectPath(edges), provideModelAssetResolveHomeDirectory(edges),
-		provideModelAssetWriteFile(edges), provideModelAssetRenamePath(edges), provideModelAssetRemovePath(edges),
-		provideModelAssetReadFile(edges), provideModelAssetReadDirectory(edges), provideModelAssetCreateFile(edges), provideModelAssetOpenFile(edges),
-		provideModelAssetResolveEnvironment(edges), provideModelAssetRevision(edges), coordination)
+		provideModelAssetMakeDirectories(edges), inspectPath, provideModelAssetResolveHomeDirectory(edges),
+		provideModelAssetWriteFile(edges), provideModelAssetRenamePath(edges), removePath,
+		readFile, readDirectory, provideModelAssetCreateFile(edges), openFile,
+		provideModelAssetResolveEnvironment(edges), provideModelAssetRevision(edges), coordination, reclamation)
 }
 func newModelHostFixture(edges serviceedges.Edges, scopes modelswire.RuntimeScopes, assets modelswire.Assets,
 	source modelRuntimeEvidenceSource, evidence modelswire.RuntimeEvidenceRecorder) (modelswire.RuntimeHost, error) {
