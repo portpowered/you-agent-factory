@@ -43,6 +43,7 @@ external-effect package that is not a product service.
 - `chat_sessions`
 - `events`
 - `worker_sessions`
+- `agent_messages`
 - `webhooks`
 
 **Non-service families**
@@ -167,6 +168,19 @@ Top-level owner · `pkg/services/costs`
 | Consumers | HTTP/CLI transports and the process root capability. |
 | Transaction boundary | One report reads the Operator Settings price table and the Factory Visualization metrics query, then owns all valuation and rollup decisions locally. |
 | Failure recovery | Missing identities, prices, and class-specific rates remain visible as UNPRICED line items; dependency and malformed-input failures are typed Costs outcomes. |
+
+### `agent_messages`
+
+Top-level owner · `pkg/services/agent_messages`
+
+| Aspect | Rationale |
+| --- | --- |
+| Authority | Messaging owns admission policy, inbox authorization, read/reply transitions, idempotency, limits, and privacy. Worker Sessions alone validates live caller credentials and supplies requester/continuation facts. |
+| State store | Independent durable message journal and indexes. Factory Events and Provider Session transcripts contain no Agent Message records or bodies. |
+| Lifecycle | Inert construction followed by selected-profile store activation. Reconstruction and retention precede writable readiness. Messaging owns no Factory dispatch, revival, interruption, or background expiry in the QUEUE milestone. |
+| Consumers | Service-owned CLI/HTTP adapters, public transport mapping, and Events followers. Operator observation is read-only. |
+| Transaction boundary | Admission serializes policy, quota, deduplication, and journal commit. Replies and original-message status commit together. Durable flush precedes success and source-native Events publication. |
+| Failure recovery | Typed store faults quarantine Messaging and preserve existing bytes without changing Factory execution. Events gaps require durable inbox pull. Process reconstruction restores messages, relationships, statuses, and request aliases. |
 
 ### `events`
 
