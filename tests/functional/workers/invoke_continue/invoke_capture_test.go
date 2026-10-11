@@ -771,7 +771,9 @@ func runRecordingContentSecrets(t *testing.T, name string) {
 	body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
 		_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
 		return body, nil
-	}, func(body string) bool { return strings.Contains(body, "public progress") })
+	}, func(body string) bool {
+		return strings.Contains(body, "t7-private-progress") && strings.Contains(body, "command_execution")
+	})
 	if err != nil {
 		t.Fatalf("private capture: %v: %s", err, body)
 	}
@@ -811,7 +813,7 @@ func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *inv
 		t.Fatal(err)
 	}
 	t7AssertSecretsAbsent(t, string(encoded))
-	if !strings.Contains(string(encoded), "ordinary prefix") || !strings.Contains(string(encoded), "public progress") {
+	if !strings.Contains(string(encoded), "ordinary prefix") || !strings.Contains(string(encoded), "t7-private-progress") || !strings.Contains(string(encoded), "command_execution") {
 		t.Fatal("failed attempt lost ordinary captured neighbors")
 	}
 	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", "transcript", "--worker-session-id", id)
@@ -824,7 +826,7 @@ func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *inv
 		t.Fatalf("failed transcript parity: error=%v transcript=%s", err, read.Stdout())
 	}
 	t7AssertSecretsAbsent(t, read.Stdout())
-	if !strings.Contains(read.Stdout(), "ordinary prefix") || !strings.Contains(read.Stdout(), "public progress") {
+	if !strings.Contains(read.Stdout(), "ordinary prefix") || !strings.Contains(read.Stdout(), "t7-private-progress") || !strings.Contains(read.Stdout(), "command_execution") {
 		t.Fatal("failed transcript lost committed prefix")
 	}
 }
@@ -878,5 +880,113 @@ func TestT7CaptureLossRetainsPrefixAndLiveStop(t *testing.T) {
 	}
 	if runner.CallCount() != 1 {
 		t.Fatalf("degraded attempt provider calls = %d", runner.CallCount())
+	}
+}
+
+// Native-shaped facts use the command-runner edge on the shared root process;
+// this protects captured public values without claiming real provider emission.
+func capturedCodexToolOutput() []byte {
+	return []byte(`{"type":"thread.started","thread_id":"captured-tools-thread"}
+{"type":"item.started","item":{"id":"success","type":"command_execution","command":"private-command","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"success","type":"command_execution","aggregated_output":"private-output","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"failure","type":"command_execution","aggregated_output":"private-denial","exit_code":1,"status":"failed"}}
+{"type":"item.started","item":{"id":"mcp","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"visible"},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"mcp","type":"mcp_tool_call","result":{"value":"visible"},"status":"completed"}}
+{"type":"item.completed","item":{"id":"collab","type":"collab_tool_call"}}
+{"type":"item.completed","item":{"id":"answer","type":"agent_message","text":"captured tools COMPLETE"}}
+{"type":"turn.completed","usage":{"input_tokens":5,"output_tokens":2}}
+`)
+}
+
+func TestCapturedCodexToolPublicFacts(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	scenario := fixture.scenario(t, "captured-codex-tools")
+	defer scenario.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	id := scenarioScopedID(scenario, "captured-tools")
+	path := requesterExecutionPath(t, scenario, id)
+	invoke := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatal("tool fixture invocation failed")
+	}
+	awaitContinuationRestartLogs(t, invokeContinueStartedProcess{process: fixture.process, baseURL: fixture.baseURL}, scenario.homeDirectory, scenario.workingDirectory, id, "captured-tools-thread")
+	for _, view := range []string{"logs", "transcript"} {
+		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--worker-session-id", id, "--view", view)
+		if err := fixture.process.Execute(read.Input); err != nil {
+			t.Fatal("tool capture read failed")
+		}
+		status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/"+view, nil)
+		var cli, httpValue any
+		if view == "logs" {
+			cli, httpValue = &api.WorkerSessionLogPage{}, &api.WorkerSessionLogPage{}
+		} else {
+			cli, httpValue = &api.WorkerSessionTranscriptResponse{}, &api.WorkerSessionTranscriptResponse{}
+		}
+		// Compare the public contract values; CLI re-encodes HTTP timestamps.
+		if status != http.StatusOK || json.Unmarshal([]byte(read.Stdout()), cli) != nil || json.Unmarshal([]byte(body), httpValue) != nil || !reflect.DeepEqual(cli, httpValue) {
+			t.Fatalf("CLI/HTTP tool facts differ for %s (HTTP %d)", view, status)
+		}
+		for _, private := range []string{"private-command", "private-output", "private-denial"} {
+			if strings.Contains(body, private) {
+				t.Fatal("sensitive tool summary leaked")
+			}
+		}
+		if view == "logs" {
+			var logs api.WorkerSessionLogPage
+			if json.Unmarshal([]byte(body), &logs) != nil {
+				t.Fatal("invalid captured logs")
+			}
+			count := 0
+			for _, record := range logs.Events {
+				if record.Event.Payload["kind"] == "TOOL" {
+					count++
+				}
+			}
+			if count != 6 {
+				t.Fatalf("emitted tool lifecycle count = %d, want 6", count)
+			}
+		} else {
+			assertCapturedCodexToolTranscript(t, body)
+		}
+	}
+	if scenario.providerRunner.CallCount() != 1 {
+		t.Fatal("captured reads reran provider")
+	}
+}
+
+func assertCapturedCodexToolTranscript(t *testing.T, body string) {
+	t.Helper()
+	var transcript api.WorkerSessionTranscriptResponse
+	if json.Unmarshal([]byte(body), &transcript) != nil || len(transcript.Entries) != 8 {
+		t.Fatal("tool transcript lost or duplicated facts")
+	}
+	names := map[string]string{"success": "command_execution", "failure": "command_execution", "mcp": "mcp_tool_call:docs/lookup", "collab": "collab_tool_call"}
+	for _, entry := range transcript.Entries {
+		if entry.Type == "tool_call" {
+			if entry.CallId == nil || entry.Name == nil || *entry.Name != names[*entry.CallId] {
+				if entry.CallId == nil || entry.Name == nil {
+					t.Fatal("native tool identity/name unavailable")
+				}
+				t.Fatalf("native tool identity/name lost: id=%q name=%q", *entry.CallId, *entry.Name)
+			}
+			if *entry.CallId == "mcp" && (entry.Arguments == nil || !strings.Contains(*entry.Arguments, "visible")) {
+				t.Fatal("opening arguments lost on completion")
+			}
+		}
+		if entry.Type == "tool_output" && entry.CallId != nil && (*entry.CallId == "success" || *entry.CallId == "failure") {
+			var result map[string]any
+			if entry.Output == nil || json.Unmarshal([]byte(*entry.Output), &result) != nil {
+				t.Fatal("tool result is not valid JSON")
+			}
+			code, status := float64(0), "completed"
+			if *entry.CallId == "failure" {
+				code, status = 1, "failed"
+			}
+			if result["exit_code"] != code || result["status"] != status || entry.Status == nil || *entry.Status != status {
+				t.Fatal("tool outcome lost or misreported")
+			}
+		}
 	}
 }

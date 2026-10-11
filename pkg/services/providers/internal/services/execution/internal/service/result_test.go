@@ -283,3 +283,28 @@ func TestWorkerTokenClassificationPreservesNonsecretEnvironmentFacts(t *testing.
 		t.Fatal("classification mutated the execution environment")
 	}
 }
+
+func TestSanitizeCodexToolSummariesPreserveJSONAndPolicy(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{EnvVars: map[string]string{"API_KEY": "planted-secret"}}
+	fact := providers.ExecuteProgress{Phase: "tool.completed", Metadata: map[string]string{
+		"raw_input":  `{"command":"private command","arguments":{"query":"planted\u002dsecret","password":"private-password","safe":"visible"}}`,
+		"raw_output": `{"aggregated_output":"private-output","exit_code":0,"status":"completed","result":{"value":"planted\u002dsecret","safe":"visible"}}`,
+	}}
+	live := sanitizeCapturedProgress(fact, request)
+	terminal := normalizeDiagnostics(providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{fact}}, request).Progress[0]
+	for _, got := range []providers.ExecuteProgress{live, terminal} {
+		for key, expected := range map[string]string{
+			"raw_input":  `{"arguments":{"password":"<redacted>","query":"<redacted>","safe":"visible"},"command":"<redacted>"}`,
+			"raw_output": `{"aggregated_output":"<redacted>","exit_code":0,"result":{"safe":"visible","value":"<redacted>"},"status":"completed"}`,
+		} {
+			var actual, want any
+			if json.Unmarshal([]byte(got.Metadata[key]), &actual) != nil || json.Unmarshal([]byte(expected), &want) != nil || !reflect.DeepEqual(actual, want) {
+				t.Fatal("summary lost policy-safe typed facts")
+			}
+		}
+	}
+	if fact.Metadata["raw_output"] == live.Metadata["raw_output"] {
+		t.Fatal("sanitizer aliased native metadata")
+	}
+}
