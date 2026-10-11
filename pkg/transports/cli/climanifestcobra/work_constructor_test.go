@@ -1,6 +1,9 @@
 package climanifestcobra
 
 import (
+	"context"
+	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
@@ -10,63 +13,59 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T) {
-	registry := commandregistry.NewRegistry()
-	calls := make(map[string]int)
-	for _, command := range []struct {
-		id        string
-		handlerID string
-	}{
-		{id: "you.worker-sessions.list", handlerID: "you.worker-sessions.list.handler"},
-		{id: "you.worker-sessions.show", handlerID: "you.worker-sessions.show.handler"},
-		{id: "you.worker-sessions.read", handlerID: "you.worker-sessions.read.handler"},
-		{id: "you.worker-sessions.stream", handlerID: "you.worker-sessions.stream.handler"},
-		{id: "you.worker-sessions.start", handlerID: "you.worker-sessions.start.handler"},
-		{id: "you.worker-sessions.follow", handlerID: "you.worker-sessions.follow.handler"},
-		{id: "you.worker-sessions.invoke", handlerID: "you.worker-sessions.invoke.handler"},
-		{id: "you.worker-sessions.continue", handlerID: "you.worker-sessions.continue.handler"},
-		{id: "you.worker-sessions.interrupt", handlerID: "you.worker-sessions.interrupt.handler"},
-		{id: "you.worker-sessions.pause", handlerID: "you.worker-sessions.pause.handler"},
-		{id: "you.worker-sessions.resume", handlerID: "you.worker-sessions.resume.handler"},
-		{id: "you.worker-sessions.cancel", handlerID: "you.worker-sessions.cancel.handler"},
-		{id: "you.worker-sessions.terminate", handlerID: "you.worker-sessions.terminate.handler"},
-	} {
-		command := command
-		if err := registry.RegisterHandlers(command.handlerID, commandregistry.CommandHandlers{
-			PreRunE: func(_ *cobra.Command, _ []string) error {
-				calls[command.id+".pre"]++
-				return nil
-			},
-			RunE: func(_ *cobra.Command, _ []string) error {
-				calls[command.id]++
-				return nil
-			},
-		}); err != nil {
-			t.Fatalf("RegisterHandlers(%q) error = %v", command.handlerID, err)
-		}
+func TestNewWorkerSessionsFamilyCommandExecutesFollowWithParsedInputs(t *testing.T) {
+	t.Parallel()
+	for _, terminal := range []bool{true, false} {
+		t.Run(strconv.FormatBool(terminal), func(t *testing.T) {
+			t.Parallel()
+			registry := commandregistry.NewRegistry()
+			manifest := workerSessionsManifestWithRoot(t)
+			calls := 0
+			wantIDs := []string{"direct-b", "direct-a", "direct-b"}
+			for _, record := range manifest.Commands {
+				if record.Handler == nil {
+					continue
+				}
+				handler := noopRunE
+				if record.ID == "you.worker-sessions.follow" {
+					handler = func(cmd *cobra.Command, args []string) error {
+						calls++
+						if !reflect.DeepEqual(args, wantIDs) {
+							t.Errorf("follow IDs = %v, want %v", args, wantIDs)
+						}
+						got, err := cmd.Flags().GetBool("terminal")
+						if err != nil || got != terminal || !cmd.Flags().Changed("terminal") {
+							t.Errorf("terminal = %t, %v (changed=%t), want explicit %t", got, err, cmd.Flags().Changed("terminal"), terminal)
+						}
+						return nil
+					}
+				}
+				if err := registry.RegisterHandlers(record.Handler.ID, commandregistry.CommandHandlers{RunE: handler}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			command, err := NewWorkerSessionsFamilyCommand(registry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rootRecord := manifest.Commands["you"]
+			manifest.Commands = map[string]climanifest.Command{rootRecord.ID: rootRecord}
+			root, err := NewCommandTree(manifest, GenericBindings{Handlers: HandlerRegistry{
+				rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			root.AddCommand(command)
+			root.SetArgs(append([]string{"worker-sessions", "follow", "--terminal=" + strconv.FormatBool(terminal)}, wantIDs...))
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute follow: %v", err)
+			}
+			if calls != 1 {
+				t.Fatalf("follow handler calls = %d, want 1", calls)
+			}
+		})
 	}
-
-	workerSessions, err := NewWorkerSessionsFamilyCommand(registry)
-	if err != nil {
-		t.Fatalf("NewWorkerSessionsFamilyCommand() error = %v", err)
-	}
-	if workerSessions.Name() != "worker-sessions" || workerSessions.Parent() != nil {
-		t.Fatalf("worker-sessions command = name %q parent %v, want detached root", workerSessions.Name(), workerSessions.Parent())
-	}
-	if len(workerSessions.Commands()) != 13 {
-		t.Fatalf("worker-sessions child count = %d, want 13", len(workerSessions.Commands()))
-	}
-
-	for _, command := range []string{"start", "invoke", "continue", "interrupt", "pause", "resume", "cancel", "terminate", "list", "show", "read", "stream"} {
-		leaf, err := findCommandByPath(workerSessions, "worker-sessions "+command)
-		if err != nil {
-			t.Fatalf("FindCommandByPath(%s) error = %v", command, err)
-		}
-		if !leaf.Runnable() || leaf.RunE == nil {
-			t.Fatalf("worker-sessions %s must expose a runnable RunE leaf", command)
-		}
-	}
-	_ = calls
 }
 
 func TestNewWorkerSessionsFamilyCommandRejectsInvalidManifestsAndHandlers(t *testing.T) {

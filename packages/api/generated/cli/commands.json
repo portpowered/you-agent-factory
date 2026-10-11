@@ -12154,7 +12154,8 @@
         "examples": [
           "you --server http://localhost:8080 worker-sessions follow --terminal direct-a direct-b"
         ],
-        "visibility": "public"
+        "visibility": "public",
+        "sourceHash": "d0754b43721f59f6a99ede4138a1b473d5d4bf317fd0b8a7019f7d35740d341a"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -12236,7 +12237,7 @@
         "you.worker-sessions.follow.output.json": {
           "id": "you.worker-sessions.follow.output.json",
           "channel": "stdout",
-          "format": "ndjson"
+          "format": "json"
         }
       },
       "errors": {
