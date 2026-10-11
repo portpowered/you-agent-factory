@@ -1,6 +1,7 @@
 package start_retry_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,9 +30,11 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
@@ -973,7 +976,7 @@ func (fault *fixedRecordingFault) write(path string, data []byte) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-func testFixedRecordingFault(t *testing.T, sessions factorysessions.Service, process support.Process, fault *fixedRecordingFault) {
+func testFixedRecordingFault(t *testing.T, sessions factorysessions.Service, process support.Process, fault *fixedRecordingFault, logs *observer.ObservedLogs) {
 	t.Helper()
 	scenario := newInitialOpeningScenario(t)
 	peer := scenario.startPeer(t, sessions)
@@ -990,6 +993,15 @@ func testFixedRecordingFault(t *testing.T, sessions factorysessions.Service, pro
 	})
 	if !errors.Is(err, fault.cause) || result.Closed {
 		t.Fatalf("faulted recording close = %#v, %v, want selected write cause and no false close success", result, err)
+	}
+	// Recording finalization fails before retirement's stop operation. The
+	// addressed public close returns the typed cause; no stop log is promised.
+	var cleanup *recordings.RecordingCleanupError
+	if !errors.As(err, &cleanup) || !cleanup.Complete {
+		t.Fatalf("selected terminal cleanup = %v, want completed resource cleanup with retained failure", err)
+	}
+	if logs.FilterMessage("live Factory Session runtime stopped").FilterField(zap.String("session_id", scenario.candidateID)).Len() != 0 {
+		t.Fatal("failed recording flush emitted a successful stop diagnostic")
 	}
 	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
 	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
@@ -1031,11 +1043,21 @@ func assertFixedMissingRead(t *testing.T, endpoint string) {
 // in the reusable healthy-process matrix.
 func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	t.Parallel()
+	core, logs := observer.New(zap.InfoLevel)
+	var rejectedWrites bytes.Buffer
+	// Read only after command and process cleanup have joined every producer.
+	// An observer sees valid logs but misses zap's rejected file-sink writes.
+	t.Cleanup(func() {
+		if rejectedWrites.Len() != 0 {
+			t.Errorf("terminal cleanup wrote through a closed runtime sink: %s", rejectedWrites.String())
+		}
+	})
 	fault := &fixedRecordingFault{directory: t.TempDir(), cause: errors.New("selected recording write failed")}
 	api := support.NewProcessAPIServer()
 	effects := &initialOpeningEffects{calls: make(map[string]int)}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		Clock: initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		ProcessLogger: zap.New(core, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&rejectedWrites)))),
+		Clock:         initialOpeningClock{}, ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
 		// Hydration preserves real bytes/errors through the same read effect as
 		// the healthy matrix, without Windows replacement retries on absent files.
 		RecordingReadFile:  os.ReadFile,
@@ -1062,9 +1084,13 @@ func TestFixedObservationTerminalFlushFailure(t *testing.T) {
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	api.WaitForURL(t)
 	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
-	testFixedRecordingFault(t, sessions, process, fault)
+	testFixedRecordingFault(t, sessions, process, fault, logs)
 	// Execute may also surface the already asserted terminal resource error.
 	command.AcceptError()
+	command.Stop(t)
+	if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, fault.cause) {
+		t.Fatalf("terminal Execute lost selected cleanup cause: %v", err)
+	}
 }
 
 // Capture selected bytes at the public loading effect. Only the owned source
