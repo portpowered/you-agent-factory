@@ -136,16 +136,10 @@ func NewAssembly(
 }
 
 func (a *Assembly) CurrentRuntime() *factorysessions.LiveRuntime {
-	if a == nil || a.state == nil {
-		return nil
-	}
 	return a.state.CurrentRuntime()
 }
 
 func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
-	if a == nil || a.state == nil {
-		return nil
-	}
 	return a.state.Resolve(sessionID)
 }
 
@@ -338,30 +332,18 @@ func (a *Assembly) retireWorkAdmissionProjection(
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
-	if a == nil || a.state == nil {
-		return factorysessions.ErrRuntimeNotAvailable
-	}
 	return a.state.WithRuntimeRead(read)
 }
 
 func (a *Assembly) WithRuntimeReadForSession(sessionID string, read func(*factorysessions.LiveRuntime) error) error {
-	if a == nil || a.state == nil {
-		return factorysessions.ErrRuntimeNotAvailable
-	}
 	return a.state.WithRuntimeReadForSession(sessionID, read)
 }
 
 func (a *Assembly) InferenceProgressPublisherFactory(logger *zap.Logger) func(string) factorysessions.ProgressPublisher {
-	if a == nil || a.streams == nil {
-		return nil
-	}
 	return a.streams.InferenceProgressPublisherFactory(logger)
 }
 
 func (a *Assembly) DispatchCompletionObserverFactory() func(string) func(string) {
-	if a == nil || a.streams == nil {
-		return nil
-	}
 	return a.streams.DispatchCompletionObserverFactory()
 }
 

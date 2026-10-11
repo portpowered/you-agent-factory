@@ -17,9 +17,6 @@ import (
 // applicationSessionState resolves application lifecycle values from the
 // canonical live-session record. No application runtime registry is allocated.
 func (r *Root) applicationSessionState(sessionID string) (*runtimebinding.SessionState, error) {
-	if r == nil || r.Assembly == nil {
-		return nil, fmt.Errorf("Factory Sessions process root is required")
-	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, fmt.Errorf("application Factory Session ID is required")

@@ -291,7 +291,6 @@ func setBundleProgressPublisher(bundle *factoryhost.Bundle, publisher workers.Pr
 func resolveBundleInputs(
 	spec runtimebuild.SessionBuildSpec,
 	defaultSessionID string,
-	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factorydefinitions.LoadedFactorySource, string, *factorydefinitions.FactorySnapshot, error) {
 	loadedFactoryCfg, ok := spec.LoadedFactoryCfg.(factorydefinitions.LoadedFactorySource)
@@ -301,9 +300,6 @@ func resolveBundleInputs(
 	sessionID := firstNonEmptySessionID(spec.SessionID, defaultSessionID)
 	if sessionID == "" {
 		return nil, "", nil, fmt.Errorf("default Factory Session ID is required")
-	}
-	if recordingsRuntime == nil {
-		return nil, "", nil, fmt.Errorf("Recordings runtime opening is required")
 	}
 	var initialFactory *factorydefinitions.FactorySnapshot
 	if initialFactorySnapshot == nil {

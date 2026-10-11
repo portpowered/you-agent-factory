@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"sync"
 	"time"
 
@@ -14,19 +13,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
-
-// InputFileSystem is the host bundle's private view of the runtime input-tree
-// effect. It is intentionally not part of the Factory Runtime service root.
-type InputFileSystem interface {
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
-	Stat(string) (fs.FileInfo, error)
-}
 
 // Bundle is the runtime wiring produced by Build and referenced from live handles.
 type Bundle struct {
@@ -38,9 +28,6 @@ type Bundle struct {
 	StartedAtUTC         time.Time
 	EventHistory         recordings.RuntimeLedger
 	Factory              Engine
-	InputFiles           InputFileSystem
-	InputDirectoryWalker factory.InputDirectoryWalker
-	WorkRequestIDs       work.RequestIDGenerator
 	Net                  *state.Net
 	RuntimeCfg           factory.LoadedConfig
 	Logger               *zap.Logger

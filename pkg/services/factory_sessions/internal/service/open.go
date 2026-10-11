@@ -250,12 +250,6 @@ func (r *RuntimeOpening) prepareRuntimeOpening(
 	if session == nil {
 		return nil, fmt.Errorf("factory session runtime selection is required")
 	}
-	if r.recordingsService == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings service is required")
-	}
-	if r.recordingsRuntime == nil {
-		return nil, fmt.Errorf("construct runtime scope: Recordings runtime scope is required")
-	}
 	selection := sessionRuntimeSelection(session)
 	providedCanonicalSessionID := strings.TrimSpace(selection.CanonicalSessionID)
 	sessionID := strings.TrimSpace(session.SessionID)

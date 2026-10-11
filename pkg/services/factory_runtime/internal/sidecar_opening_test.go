@@ -2,7 +2,11 @@ package internal
 
 import (
 	"context"
+	"errors"
+	"io/fs"
+	"reflect"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -16,7 +20,7 @@ func TestSidecarOpeningPreservesModeAndPeerOwnership(t *testing.T) {
 	t.Parallel()
 	automation := &sidecarOpeningAutomation{active: make(map[string]bool)}
 	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
-	opening := NewSidecarOpening(automation, clock)
+	opening := NewSidecarOpening(automation, clock, nil, nil, nil)
 	peer := &factoryhost.Bundle{FactorySessionID: "peer", RuntimeInstanceID: "peer-runtime", RuntimeCfg: sidecarOpeningConfig{}}
 	candidate := &factoryhost.Bundle{FactorySessionID: "candidate", RuntimeInstanceID: "candidate-runtime", RuntimeCfg: sidecarOpeningConfig{}}
 	for _, scope := range []struct {
@@ -51,16 +55,83 @@ func (sidecarOpeningConfig) RuntimeBaseDir() string { return "execution" }
 
 type sidecarOpeningAutomation struct {
 	automations.Service
-	requests []automations.RuntimeActivationRequest
-	active   map[string]bool
-	starts   int
-	stops    int
+	requests   []automations.RuntimeActivationRequest
+	active     map[string]bool
+	starts     int
+	stops      int
+	onActivate func(automations.RuntimeActivationRequest) error
 }
 
 func (a *sidecarOpeningAutomation) ActivateRuntime(_ context.Context, request automations.RuntimeActivationRequest) (automations.RuntimeActivationResult, error) {
 	a.requests = append(a.requests, request)
+	if a.onActivate != nil {
+		if err := a.onActivate(request); err != nil {
+			return automations.RuntimeActivationResult{}, err
+		}
+	}
 	a.active[request.RuntimeID] = true
 	return automations.RuntimeActivationResult{}, nil
+}
+
+func TestCompletedLifecycleSidecarUsesSelectedInputEffectsAndPreservesPeerOnRetry(t *testing.T) {
+	t.Parallel()
+	files := fstest.MapFS{"peer/input": {Data: []byte("peer payload")}}
+	var walked []string
+	walker := func(path string, visit fs.WalkDirFunc) error {
+		walked = append(walked, path)
+		return visit(path, nil, nil)
+	}
+	var ids int
+	newID := func() string { ids++; return "selected-request" }
+	cause := fs.ErrNotExist
+	var payloads []string
+	automation := &sidecarOpeningAutomation{active: make(map[string]bool)}
+	automation.onActivate = func(request automations.RuntimeActivationRequest) error {
+		input := request.Inputs.Filesystem
+		data, err := input.Files.ReadFile(request.Snapshot.FactoryDir + "/input")
+		if err != nil {
+			return err
+		}
+		payloads = append(payloads, string(data))
+		if err := input.WalkDirectory(request.Snapshot.FactoryDir, func(path string, _ fs.DirEntry, err error) error {
+			if path != request.Snapshot.FactoryDir {
+				t.Errorf("walked %q", path)
+			}
+			return err
+		}); err != nil {
+			return err
+		}
+		if got := input.WorkRequestIDs(); got != "selected-request" {
+			t.Errorf("request ID = %q", got)
+		}
+		return nil
+	}
+	opening := NewSidecarOpening(automation, platformclock.Real{}, files, walker, newID)
+	peer := &factoryhost.Bundle{Dir: "peer", FactorySessionID: "peer", RuntimeInstanceID: "peer-runtime", RuntimeCfg: sidecarOpeningConfig{}}
+	candidate := &factoryhost.Bundle{Dir: "candidate", FactorySessionID: "candidate", RuntimeInstanceID: "candidate-runtime", RuntimeCfg: sidecarOpeningConfig{}}
+	if len(automation.requests) != 0 || ids != 0 || len(walked) != 0 {
+		t.Fatal("construction ran input effects")
+	}
+	if err := opening.Scope(true, false).Preseed(t.Context(), peer); err != nil {
+		t.Fatal(err)
+	}
+	if err := opening.Scope(false, false).Preseed(t.Context(), candidate); !errors.Is(err, cause) {
+		t.Fatalf("preseed cause = %v", err)
+	}
+	if !automation.active["peer-runtime"] || automation.active["candidate-runtime"] {
+		t.Fatalf("failed activation changed scopes: %v", automation.active)
+	}
+	files["candidate/input"] = &fstest.MapFile{Data: []byte("candidate payload")}
+	if err := opening.Scope(false, false).Preseed(t.Context(), candidate); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(payloads, []string{"peer payload", "candidate payload"}) || !reflect.DeepEqual(walked, []string{"peer", "candidate"}) || ids != 2 {
+		t.Fatalf("selected effects: payloads=%v walked=%v ids=%d", payloads, walked, ids)
+	}
+	opening.Scope(false, false).Stop(&factoryhost.Handle{Bundle: candidate})
+	if !automation.active["peer-runtime"] || automation.active["candidate-runtime"] {
+		t.Fatalf("stop changed peer: %v", automation.active)
+	}
 }
 
 func (a *sidecarOpeningAutomation) DeactivateRuntime(_ context.Context, request automations.RuntimeDeactivationRequest) (automations.RuntimeDeactivationResult, error) {
@@ -77,7 +148,7 @@ func (a *sidecarOpeningAutomation) StartRuntime(context.Context, string) error {
 func TestHistoricalSidecarDoesNotAdmitInputsOrStopLivePeer(t *testing.T) {
 	t.Parallel()
 	automation := &sidecarOpeningAutomation{active: make(map[string]bool)}
-	opening := NewSidecarOpening(automation, platformclock.NewDeterministic(time.Unix(0, 0), time.Second))
+	opening := NewSidecarOpening(automation, platformclock.NewDeterministic(time.Unix(0, 0), time.Second), nil, nil, nil)
 	peer := &factoryhost.Bundle{FactorySessionID: "peer", RuntimeInstanceID: "peer-runtime", RuntimeCfg: sidecarOpeningConfig{}}
 	if err := opening.Scope(true, false).Preseed(t.Context(), peer); err != nil {
 		t.Fatal(err)
