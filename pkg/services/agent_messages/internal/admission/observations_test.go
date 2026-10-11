@@ -24,6 +24,65 @@ type recoveryCell struct {
 	replayError                                       error
 }
 
+func TestRecoveryUsesOriginalAdmissionClock(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []string{"recorded", "missing", "zero", "future", "foreign chain", "foreign predecessor", "foreign successor"} {
+		t.Run(cell, func(t *testing.T) {
+			t.Parallel()
+			f, _, intent := admittedEngineFixture(t)
+			f.engine.revivesPerHour = 1
+			original := intent.AcceptedAt
+			intent.State, intent.Reason, intent.AcceptedAt = store.IntentPending, "", time.Time{}
+			f.ledger.intents[intent.RequestID] = intent
+			f.ledger.entries[0].Message.Reason = ""
+			f.now = f.now.Add(2 * time.Hour)
+			f.authority.recipients[intent.SuccessorWorkerSessionID] = recoverySuccessorClock(intent, original, f.now, cell)
+			configureRecoveryReplay(t, f, intent, recoveryCell{progress: true, complete: true})
+			f.engine.mu.Lock()
+			err := f.engine.recoverDelivery(t.Context(), intent)
+			f.engine.mu.Unlock()
+			if err != nil {
+				t.Fatal(err)
+			}
+			current := f.ledger.intents[intent.RequestID]
+			if cell == "recorded" {
+				if current.State != store.IntentAccepted || !current.AcceptedAt.Equal(original) {
+					t.Fatal("recovery refreshed the original admission clock", current)
+				}
+				if _, blocked := f.engine.reviveGate(intent.RecipientChainIdentity, []store.DeliveryIntent{current}); blocked {
+					t.Fatal("recovery extended an expired volume window")
+				}
+			} else if current.State != store.IntentUncertain || current.Reason != "REVIVE_FAILED" || !current.AcceptedAt.IsZero() || f.ledger.entries[0].Message.RevivedWorkerSessionID != "" {
+				t.Fatal("recovery guessed admission time or delivered facts", current)
+			}
+		})
+	}
+}
+
+func recoverySuccessorClock(intent store.DeliveryIntent, original, now time.Time, cell string) Identity {
+	successor := Identity{Chain: intent.RecipientChainIdentity, Observation: workersessions.Observation{
+		WorkerSessionID: intent.SuccessorWorkerSessionID, FactorySessionID: intent.FactorySessionID,
+		PredecessorWorkerSessionID: intent.SourceWorkerSessionID, StartedAt: &original}}
+
+	switch cell {
+	case "missing":
+		successor.Observation.StartedAt = nil
+	case "zero":
+		stamp := time.Time{}
+		successor.Observation.StartedAt = &stamp
+	case "future":
+		stamp := now.Add(time.Minute)
+		successor.Observation.StartedAt = &stamp
+	case "foreign chain":
+		successor.Chain = "foreign"
+	case "foreign predecessor":
+		successor.Observation.PredecessorWorkerSessionID = "foreign"
+	case "foreign successor":
+		successor.Observation.WorkerSessionID = "foreign"
+	}
+	return successor
+}
+
 func TestRecoveryRequiresExactAdmissionAndProviderProgress(t *testing.T) {
 	t.Parallel()
 	for _, cell := range []recoveryCell{
@@ -32,6 +91,7 @@ func TestRecoveryRequiresExactAdmissionAndProviderProgress(t *testing.T) {
 		{name: "active pending", state: store.IntentAdmitted, complete: true, active: true},
 		{name: "completed without progress", state: store.IntentUncertain, complete: true},
 		{name: "incomplete replay", state: store.IntentUncertain},
+		{name: "progress in incomplete replay", state: store.IntentUncertain, progress: true},
 		{name: "foreign successor", state: store.IntentUncertain, malformed: true},
 		{name: "unavailable replay", state: store.IntentUncertain, replayError: workersessions.ErrContinuationExecutionUnavailable},
 		{name: "rejected replay", state: store.IntentUncertain, replayError: workersessions.ErrContinuationNotAccepted},

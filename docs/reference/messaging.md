@@ -217,6 +217,9 @@ The default rolling limit permits six provider-confirmed revivals per recipient 
 Set `messaging.limits.revivesPerChainPerHour` in the selected profile to change this positive limit.
 Further messages remain queued with `REVIVE_LIMIT`.
 Failed attempts do not spend this limit.
+Recovery preserves the original admission time for this rolling limit.
+If an interrupted delivery has no saved admission time, Messaging reads the exact successor's recorded opening time.
+Missing or inconsistent timing evidence leaves the message queued with `REVIVE_FAILED`.
 Retries preserve the original message and never spend another revival.
 Use `--if-ended hold` to request queued retention explicitly.
 Use `--reply-hold` to make a future reply inherit `HOLD`.

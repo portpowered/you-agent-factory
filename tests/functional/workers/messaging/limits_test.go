@@ -675,3 +675,111 @@ func assertCLIBodyLimit(t *testing.T, f *fixture, lane map[string]string, body s
 		t.Fatalf("CLI oversized body parity: %v %s", err, inputs.Stderr())
 	}
 }
+
+func TestRecoveryRetainsOriginalReviveWindow(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{"ADMITTED", "ACCEPTED"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+			first, revival, pending, successor := interruptedWindowFixture(t, clock, state)
+			clock.SetTick(1800)
+			effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+			second := startHostRunner(t, first.home, first.dir, "", effects, nil, revival, "lane-next")
+			reason := "REVIVE_PENDING"
+			pending.Reason = &reason
+			recovered := second.awaitDeliveryOutcome(t, nil, pending)
+			if recovered.Status != "DELIVERED_REVIVE" || recovered.RevivedWorkerSessionId == nil || *recovered.RevivedWorkerSessionId != successor {
+				t.Fatal("recovery did not preserve the original confirmed successor")
+			}
+			lane := second.continueCaller(t, "lane", "lane-next")
+			request := map[string]any{"requestId": "window-limit", "to": map[string]string{"workerSessionId": "lead"}, "body": "ask before original window ends"}
+			limited := second.sendRaw(t, request, lane)
+			if limited.Reason == nil || *limited.Reason != "REVIVE_LIMIT" || limited.Status != "QUEUED" {
+				t.Fatal("recovery dropped successful original admission volume")
+			}
+			assertConcurrentReplay(t, second, request, lane, limited.MessageId)
+			second.endWorker(t, "lane-next")
+			second.server.Close(t)
+			assertRepeatedWindowRecovery(t, second, revival, recovered, limited, effects, clock)
+		})
+	}
+}
+
+func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, state string) (*fixture, *workerGate, api.AgentMessage, string) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, state: state}
+	progress := make(chan struct{})
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	core, _ := observer.New(zap.InfoLevel)
+	failure := &outcomeFailureSignal{Core: core, failed: make(chan struct{}), once: &sync.Once{}}
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}, AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(failure)}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"revivesPerChainPerHour":1}}}`, effects, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	result := make(chan outcomeSendResponse, 1)
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", map[string]any{"requestId": "window", "to": map[string]string{"workerSessionId": "lead"}, "body": "recover original clock"}, lane)
+		result <- outcomeSendResponse{status, body}
+	}()
+	successor := <-revival.started
+	<-revival.requests
+	close(progress)
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("window fixture did not reach refused milestone")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	response := <-result
+	if state == "ADMITTED" && response.status != http.StatusServiceUnavailable || state == "ACCEPTED" && response.status != http.StatusAccepted {
+		t.Fatal("wrong interrupted milestone response", response.status)
+	}
+	if state == "ACCEPTED" {
+		select {
+		case <-failure.failed:
+		case <-time.After(15 * time.Second):
+			t.Fatal("provider outcome refusal did not finish")
+		}
+	}
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", lane)
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("interrupted milestone guessed delivery")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	return f, revival, page.Messages[0], successor["YOU_WORKER_SESSION_ID"]
+}
+
+func assertRepeatedWindowRecovery(t *testing.T, first *fixture, revival *workerGate, recovered, limited api.AgentMessage, effects serviceedges.Edges, clock *platformclock.Deterministic) {
+	t.Helper()
+	f := startHostRunner(t, first.home, first.dir, "", effects, nil, revival, "lane-next-two")
+	lane := f.continueCaller(t, "lane-next", "lane-next-two")
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 2 || !reflect.DeepEqual(page.Messages[0], recovered) || !reflect.DeepEqual(page.Messages[1], limited) {
+		t.Fatal("repeat restart changed recovery or limited records")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("repeat recovery created another provider attempt")
+	default:
+	}
+	before := f.server.GetFactoryEvents(t)
+	// Clock controls admission timestamps only; public completion streams join
+	// provider effects. Crossing the original window must release its volume.
+	clock.SetTick(4000)
+	last := f.cliSend(t, lane, "lead", "--request-id", "window-expired", "--body", "ask after original window")
+	batch := last
+	batch.Body = limited.Body + "\n\n" + last.Body
+	assertReviveAdmission(t, f, revival, batch, nil)
+	f.waitEndedWorker(t, *last.RevivedWorkerSessionId)
+	assertProviderRetry(t, f, map[string]any{"requestId": "window-limit", "to": map[string]string{"workerSessionId": "lead"}, "body": limited.Body}, lane, readPage(t, f, "/messages?threadId="+limited.ThreadId, lane).Messages[0])
+	if after := f.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+		t.Fatal("recovery/window release changed Factory Events")
+	}
+	f.endWorker(t, "lane-next-two")
+}

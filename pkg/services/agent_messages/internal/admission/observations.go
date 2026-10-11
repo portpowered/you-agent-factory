@@ -272,10 +272,12 @@ func (e *Engine) recoverDelivery(ctx context.Context, intent store.DeliveryInten
 		next.State, next.Reason = store.IntentUncertain, "REVIVE_FAILED"
 	}
 	if next.State == store.IntentAdmitted {
-		if !intent.AcceptedAt.IsZero() {
-			next.AcceptedAt = intent.AcceptedAt
+		next.AcceptedAt = e.recoveredAdmissionTime(ctx, intent)
+		if next.AcceptedAt.IsZero() {
+			next.State, next.Reason = store.IntentUncertain, "REVIVE_FAILED"
+		} else {
+			next.State, next.Reason = e.recoveredProviderOutcome(ctx, intent, result.Session)
 		}
-		next.State, next.Reason = e.recoveredProviderOutcome(ctx, intent, result.Session)
 	}
 	if next.State == store.IntentFailed || next.State == store.IntentUncertain {
 		next.AcceptedAt = time.Time{}
@@ -305,6 +307,24 @@ func (e *Engine) recoverDelivery(ctx context.Context, intent store.DeliveryInten
 	return nil
 }
 
+// A saved ADMITTED clock is immutable. A PENDING intent may have survived a
+// refused admission flush: only the exact successor's authoritative opening
+// can supply its original clock. Replay time never spends a new quota window.
+func (e *Engine) recoveredAdmissionTime(ctx context.Context, intent store.DeliveryIntent) time.Time {
+	if !intent.AcceptedAt.IsZero() {
+		return intent.AcceptedAt
+	}
+	e.mu.Unlock()
+	defer e.mu.Lock()
+	successor, err := e.authority.Recipient(ctx, intent.SuccessorWorkerSessionID, intent.FactorySessionID)
+	o := successor.Observation
+	if err != nil || successor.Chain != intent.RecipientChainIdentity || o.WorkerSessionID != intent.SuccessorWorkerSessionID ||
+		o.PredecessorWorkerSessionID != intent.SourceWorkerSessionID || o.StartedAt == nil || o.StartedAt.IsZero() || o.StartedAt.After(e.now().UTC()) {
+		return time.Time{}
+	}
+	return o.StartedAt.UTC()
+}
+
 func (e *Engine) recoveredProviderOutcome(ctx context.Context, intent store.DeliveryIntent, session workersessions.Session) (string, string) {
 	e.mu.Unlock()
 	defer e.mu.Lock()
@@ -316,17 +336,21 @@ func (e *Engine) recoveredProviderOutcome(ctx context.Context, intent store.Deli
 		return store.IntentUncertain, "REVIVE_FAILED"
 	}
 	defer sub.Close()
+	confirmed := false
 	for {
 		delivery := sub.Next(ctx)
 		if delivery.Kind == workersessions.ObservationDeliveryRecord {
 			var draft providerRecord
 			if delivery.Event.SchemaID == "workers.draft.v1" && json.Unmarshal(delivery.Event.Payload, &draft) == nil && providerProgress(draft) {
-				return store.IntentAccepted, ""
+				confirmed = true
 			}
 			continue
 		}
 		if !completeRecoveryReplay(delivery) {
 			return store.IntentUncertain, "REVIVE_FAILED"
+		}
+		if confirmed {
+			return store.IntentAccepted, ""
 		}
 		if !session.State.Terminal() {
 			return store.IntentAdmitted, "REVIVE_PENDING"
