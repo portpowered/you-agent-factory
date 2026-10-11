@@ -125,7 +125,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 		scenarios: make([]invokeContinueScenario, 0, 16),
 		routes:    make([]invokeContinueStaticCommandRouteEntry, 0, 16),
 	}
-	for _, name := range []string{"captured-codex-tools", "captured-codex-factory"} {
+	for _, name := range []string{"captured-codex-tools", "captured-codex-factory", "captured-codex-partial-peer"} {
 		toolRunner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{Stdout: capturedCodexToolOutput()})}
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, toolRunner, toolRunner, nil, nil, nil, toolRunner.Reset); err != nil {
 			return invokeContinueScenarioSetup{}, err
@@ -139,6 +139,10 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	}
 	denial := newCapturedCodexDenialRunner()
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-denial", denial, denial, nil, nil, nil, denial.reset); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
+	partial := newCapturedCodexPartialRunner()
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "captured-codex-partial", partial, partial, nil, nil, nil, partial.reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
 	if err := appendRequesterMCPScenarios(rootDir, &setup); err != nil {

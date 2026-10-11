@@ -576,6 +576,11 @@ func assertCapturedCodexToolLogs(t *testing.T, logs api.WorkerSessionLogPage) {
 // application graph. Each connection owns its pipes and joins on closure.
 func capturedCodexMCPRead(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id, view string, expectedError ...bool) json.RawMessage {
 	t.Helper()
+	return capturedCodexMCPCall(t, ctx, fixture, scenario, view, len(expectedError) > 0 && expectedError[0], map[string]any{"action": "READ", "workerSessionId": id, "view": view})
+}
+
+func capturedCodexMCPCall(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, view string, wantError bool, arguments map[string]any) json.RawMessage {
+	t.Helper()
 	input := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "server", "mcp", "--project-root", scenario.workingDirectory})
 	input.Input.Env, input.Input.WorkingDirectory = scenario.environment(), scenario.workingDirectory
 	reader, writer := io.Pipe()
@@ -611,7 +616,7 @@ func capturedCodexMCPRead(t *testing.T, ctx context.Context, fixture *invokeCont
 		return response.Result
 	}
 	call(1, "initialize", map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "captured-functional", "version": "test"}})
-	raw := call(2, "tools/call", map[string]any{"name": "you.subagent", "arguments": map[string]any{"action": "READ", "workerSessionId": id, "view": view}})
+	raw := call(2, "tools/call", map[string]any{"name": "you.subagent", "arguments": arguments})
 	var response struct {
 		IsError           bool            `json:"isError"`
 		StructuredContent json.RawMessage `json:"structuredContent"`
@@ -619,7 +624,6 @@ func capturedCodexMCPRead(t *testing.T, ctx context.Context, fixture *invokeCont
 			Text string `json:"text"`
 		} `json:"content"`
 	}
-	wantError := len(expectedError) > 0 && expectedError[0]
 	if json.Unmarshal(raw, &response) != nil || response.IsError != wantError || len(response.Content) != 1 {
 		t.Fatal("captured MCP READ failed")
 	}
