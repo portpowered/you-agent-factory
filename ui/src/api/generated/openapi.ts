@@ -7211,6 +7211,7 @@ export interface components {
     };
     /** @description Shared operator configuration stored in .you-agent-factory/config.json. */
     GlobalConfig: {
+      messaging?: components["schemas"]["GlobalConfigMessaging"];
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
@@ -7885,6 +7886,38 @@ export interface components {
     DispatchCancellation: {
       /** @enum {string} */
       reason: DispatchCancellationReason;
+    };
+    GlobalConfigMessaging: {
+      /** @default true */
+      enabled: boolean;
+      /** @default 30 */
+      retentionDays: number;
+      policy?: {
+        /**
+         * @default [
+         *       "tag:project"
+         *     ]
+         */
+        scopeLabelKeys: string[];
+        /**
+         * @description Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+         * @default false
+         * @enum {boolean}
+         */
+        allowCrossScope: false;
+      };
+      limits?: {
+        /** @default 10 */
+        sendsPerChainPerHour: number;
+        /** @default 8 */
+        messagesPerThread: number;
+        /** @default 8192 */
+        maxBodyBytes: number;
+        /** @default 3 */
+        maxHop: number;
+        /** @default 86400 */
+        defaultExpirySeconds: number;
+      };
     };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */

@@ -791,6 +791,11 @@ const (
 	Stdio GlobalConfigACPIntegrationTransport = "stdio"
 )
 
+// Defines values for GlobalConfigMessagingPolicyAllowCrossScope.
+const (
+	False GlobalConfigMessagingPolicyAllowCrossScope = false
+)
+
 // Defines values for GlobalConfigModelLoadPolicy.
 const (
 	ONDEMAND GlobalConfigModelLoadPolicy = "ON_DEMAND"
@@ -5489,7 +5494,8 @@ type GlobalConfig struct {
 	BackendScopeID *string `json:"backendScopeID,omitempty"`
 
 	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
-	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
+	Defaults  *GlobalConfigDefaults  `json:"defaults,omitempty"`
+	Messaging *GlobalConfigMessaging `json:"messaging,omitempty"`
 
 	// Models Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
 	Models *GlobalConfigModels `json:"models,omitempty"`
@@ -5551,6 +5557,27 @@ type GlobalConfigDefaults struct {
 	WorkerModelProvider  *string                `json:"workerModelProvider,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
+
+// GlobalConfigMessaging defines model for GlobalConfigMessaging.
+type GlobalConfigMessaging struct {
+	Enabled *bool `json:"enabled,omitempty"`
+	Limits  *struct {
+		DefaultExpirySeconds *int `json:"defaultExpirySeconds,omitempty"`
+		MaxBodyBytes         *int `json:"maxBodyBytes,omitempty"`
+		MaxHop               *int `json:"maxHop,omitempty"`
+		MessagesPerThread    *int `json:"messagesPerThread,omitempty"`
+		SendsPerChainPerHour *int `json:"sendsPerChainPerHour,omitempty"`
+	} `json:"limits,omitempty"`
+	Policy *struct {
+		// AllowCrossScope Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+		AllowCrossScope *GlobalConfigMessagingPolicyAllowCrossScope `json:"allowCrossScope,omitempty"`
+		ScopeLabelKeys  *[]string                                   `json:"scopeLabelKeys,omitempty"`
+	} `json:"policy,omitempty"`
+	RetentionDays *int `json:"retentionDays,omitempty"`
+}
+
+// GlobalConfigMessagingPolicyAllowCrossScope Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+type GlobalConfigMessagingPolicyAllowCrossScope bool
 
 // GlobalConfigModel Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
 type GlobalConfigModel struct {
@@ -12018,6 +12045,14 @@ func (a *GlobalConfig) UnmarshalJSON(b []byte) error {
 		delete(object, "defaults")
 	}
 
+	if raw, found := object["messaging"]; found {
+		err = json.Unmarshal(raw, &a.Messaging)
+		if err != nil {
+			return fmt.Errorf("error reading 'messaging': %w", err)
+		}
+		delete(object, "messaging")
+	}
+
 	if raw, found := object["models"]; found {
 		err = json.Unmarshal(raw, &a.Models)
 		if err != nil {
@@ -12088,6 +12123,13 @@ func (a GlobalConfig) MarshalJSON() ([]byte, error) {
 		object["defaults"], err = json.Marshal(a.Defaults)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'defaults': %w", err)
+		}
+	}
+
+	if a.Messaging != nil {
+		object["messaging"], err = json.Marshal(a.Messaging)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'messaging': %w", err)
 		}
 	}
 

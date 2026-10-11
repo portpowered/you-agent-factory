@@ -1,6 +1,6 @@
 {
   "formatVersion": "operator-config-input/v1",
-  "unknownFieldPolicy": "unknown object fields are ignored at any nesting level and reported as sorted unique JSON paths; known-field validation and exactly one JSON document remain strict",
+  "unknownFieldPolicy": "unknown object fields are ignored and reported as sorted unique JSON paths; known-field validation and exactly one JSON document remain strict, except malformed or unsupported messaging settings quarantine only Messaging and are preserved during unrelated edits",
   "precedenceChain": "file \u003c env \u003c flag",
   "cases": [
     {

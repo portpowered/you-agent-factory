@@ -74,6 +74,79 @@
       "items": {
         "$ref": "#/$defs/workerPreset"
       }
+    },
+    "messaging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "retentionDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scopeLabelKeys": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": [
+                "tag:project"
+              ]
+            },
+            "allowCrossScope": {
+              "type": "boolean",
+              "enum": [
+                false
+              ],
+              "default": false,
+              "description": "Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission."
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sendsPerChainPerHour": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10
+            },
+            "messagesPerThread": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 8
+            },
+            "maxBodyBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "default": 8192
+            },
+            "maxHop": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3,
+              "default": 3
+            },
+            "defaultExpirySeconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 604800,
+              "default": 86400
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {
@@ -336,7 +409,19 @@
             "workerPresets[].id",
             "workerPresets[].modelProvider",
             "workerPresets[].model",
-            "workerPresets[].reasoningEffort"
+            "workerPresets[].reasoningEffort",
+            "messaging",
+            "messaging.enabled",
+            "messaging.retentionDays",
+            "messaging.policy",
+            "messaging.policy.scopeLabelKeys",
+            "messaging.policy.allowCrossScope",
+            "messaging.limits",
+            "messaging.limits.sendsPerChainPerHour",
+            "messaging.limits.messagesPerThread",
+            "messaging.limits.maxBodyBytes",
+            "messaging.limits.maxHop",
+            "messaging.limits.defaultExpirySeconds"
           ]
         }
       ]
@@ -344,10 +429,10 @@
     "unknownFieldPolicy": [
       {
         "package": "operator_settings",
-        "policy": "settings and identity loading use the generated GlobalConfig model, ignore unknown object fields with sorted path-only diagnostics, validate known fields, and reject malformed or trailing JSON values"
+        "policy": "unknown object fields are ignored and reported as sorted unique JSON paths; known-field validation and exactly one JSON document remain strict, except malformed or unsupported messaging settings quarantine only Messaging and are preserved during unrelated edits"
       }
     ],
-    "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults, runtime observability settings, and workerPresets",
+    "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults, runtime observability settings, and workerPresets; Messaging settings, including invalid sections, survive unrelated updates",
     "fields": {
       "backendScopeID": {
         "inventoryId": "backendScopeID",

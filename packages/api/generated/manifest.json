@@ -211,7 +211,7 @@
       "path": "generated/mcp/manifest.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "aed6556cf904bb5000b78d343e02b97d34a5f43076c2b7612e7761ce2da911c9",
+      "artifactHash": "4e8ef6bd0384bc2abad5aaed6493388598efe2a723c1926ccdef875ecafd44a6",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "aed6556cf904bb5000b78d343e02b97d34a5f43076c2b7612e7761ce2da911c9",
+        "sourceHash": "4e8ef6bd0384bc2abad5aaed6493388598efe2a723c1926ccdef875ecafd44a6",
         "visibility": "public"
       },
       "family": "openapi",
@@ -361,7 +361,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "0ba6a3c72e917dc867f24703865bb1072bbc84e162faad48c41d9f45f3de8481",
+      "artifactHash": "fcd264ae69d965f973aeca77de763649b88ec024c2d603afa518ac0fd8490ca2",
       "documentation": {
         "documentation": {
           "description": {
@@ -378,7 +378,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "0ba6a3c72e917dc867f24703865bb1072bbc84e162faad48c41d9f45f3de8481",
+        "sourceHash": "fcd264ae69d965f973aeca77de763649b88ec024c2d603afa518ac0fd8490ca2",
         "visibility": "public"
       },
       "family": "config",

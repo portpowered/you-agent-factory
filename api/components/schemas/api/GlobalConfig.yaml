@@ -2,6 +2,8 @@ type: object
 additionalProperties: true
 description: Shared operator configuration stored in .you-agent-factory/config.json.
 properties:
+  messaging:
+    $ref: './GlobalConfigMessaging.yaml'
   backendScopeID:
     type: string
     description: Stable identifier for the local provider-backed runtime boundary.

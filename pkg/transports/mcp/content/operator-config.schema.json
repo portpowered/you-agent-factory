@@ -6,6 +6,9 @@
   "additionalProperties": true,
   "description": "Shared operator configuration stored in .you-agent-factory/config.json.",
   "properties": {
+    "messaging": {
+      "$ref": "#/$defs/GlobalConfigMessaging"
+    },
     "backendScopeID": {
       "type": "string",
       "description": "Stable identifier for the local provider-backed runtime boundary."
@@ -348,6 +351,79 @@
         "workerModel": {
           "type": "string",
           "description": "Default worker model name."
+        }
+      }
+    },
+    "GlobalConfigMessaging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "retentionDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scopeLabelKeys": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": [
+                "tag:project"
+              ]
+            },
+            "allowCrossScope": {
+              "type": "boolean",
+              "enum": [
+                false
+              ],
+              "default": false,
+              "description": "Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission."
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sendsPerChainPerHour": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10
+            },
+            "messagesPerThread": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 8
+            },
+            "maxBodyBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "default": 8192
+            },
+            "maxHop": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3,
+              "default": 3
+            },
+            "defaultExpirySeconds": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 604800,
+              "default": 86400
+            }
+          }
         }
       }
     }

@@ -283,6 +283,7 @@ func configFromDocument(document Document) Config {
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		Messaging:  document.Messaging.Clone(),
 		PriceTable: document.PriceTable.Clone(),
 		Runtime: RuntimeSettings{
 			Logging: RuntimeArtifactSettings(document.Runtime.Logging),
@@ -313,6 +314,7 @@ func documentFromConfig(config Config) Document {
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
+		Messaging:  config.Messaging.Clone(),
 		PriceTable: config.PriceTable.Clone(),
 		Runtime: DocumentRuntimeSettings{
 			Logging: DocumentRuntimeArtifactSettings(config.Runtime.Logging),

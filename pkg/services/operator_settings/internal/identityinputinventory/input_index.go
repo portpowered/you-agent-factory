@@ -14,7 +14,7 @@ func ProjectInputInventory() operatorsettings.InputInventory {
 
 	return operatorsettings.InputInventory{
 		FormatVersion:      operatorsettings.InputInventoryFormatVersion,
-		UnknownFieldPolicy: "unknown object fields are ignored at any nesting level and reported as sorted unique JSON paths; known-field validation and exactly one JSON document remain strict",
+		UnknownFieldPolicy: "unknown object fields are ignored and reported as sorted unique JSON paths; known-field validation and exactly one JSON document remain strict, except malformed or unsupported messaging settings quarantine only Messaging and are preserved during unrelated edits",
 		PrecedenceChain:    operatorsettings.PrecedenceChain,
 		Cases:              cases,
 	}

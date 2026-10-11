@@ -69,6 +69,7 @@ type Config struct {
 	Defaults       Defaults
 	PriceTable     PriceTable
 	Runtime        RuntimeSettings
+	Messaging      *MessagingSettings
 	Workers        WorkerSettings
 	WorkerPresets  []WorkerPreset
 	Models         map[string]ModelConfig
@@ -323,6 +324,7 @@ func (cfg Config) Normalize() (Config, error) {
 			WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
 		},
 		Runtime:       runtime,
+		Messaging:     cfg.Messaging.Clone(),
 		Workers:       workers,
 		WorkerPresets: presets,
 		Models:        models,
@@ -548,6 +550,7 @@ type ModelConfiguration = ModelConfig
 // effect.
 func (cfg Config) Clone() Config {
 	cloned := cfg
+	cloned.Messaging = cfg.Messaging.Clone()
 	if cfg.WorkerPresets != nil {
 		cloned.WorkerPresets = make([]WorkerPreset, len(cfg.WorkerPresets))
 		copy(cloned.WorkerPresets, cfg.WorkerPresets)
