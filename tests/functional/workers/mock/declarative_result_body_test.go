@@ -44,7 +44,7 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 			t.Errorf("external effects: command=%d native=%d", denied.calls.Load(), native.Load())
 		}
 	})
-	for _, name := range []string{"F-M1-declared-gated-usage", "F-M2-business-failure-sibling", "F-M3-omitted-unmatched", "F-M4-invalid-preflight", "F-M5-opaque-unknown", "F-M6-concurrent-isolation", "F-M7-recording-zero-omitted", "F-M8-recording-optional-omitted"} {
+	for _, name := range []string{"F-M1-declared-gated-usage", "F-M2-business-failure-sibling", "F-M3-omitted-unmatched", "F-M4-invalid-preflight", "F-M5-opaque-unknown", "F-M6-concurrent-isolation", "F-M7-recording-zero-omitted", "F-M8-recording-optional-omitted", "F-C5-claude-result-only", "F-C7-claude-business-failure"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			if strings.HasPrefix(name, "F-M6") {
@@ -73,6 +73,187 @@ func TestDeclarativeAcceptResultBody(t *testing.T) {
 			t.Parallel()
 			runTopologyOnlyMockConfig(t, host, flag)
 		})
+	}
+}
+
+// Native assistant records and result-only declarative streams are different
+// external facts. This shared command edge supplies real protocol records and
+// denies every unconfigured route; it never launches a provider executable.
+func TestFactoryFinalCapture(t *testing.T) {
+	t.Parallel()
+	routes := newSharedWorkersMockCommandRunner()
+	denied := &directExampleDeniedRunner{}
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: publishedDirectMockFactory(t), WaitForServiceModeRuntime: true,
+		Env:   finalCaptureEnvironment(t),
+		Edges: serviceedges.Edges{ProviderCommandRunner: routes, ScriptCommandRunner: denied},
+	})
+	for _, provider := range []string{"codex", "claude"} {
+		for _, origin := range []string{"direct", "factory"} {
+			t.Run(provider+"/"+origin, func(t *testing.T) {
+				t.Parallel()
+				dir := declaredResultFactory(t)
+				environment := finalCaptureEnvironment(t)
+				body := `{"decision":"ACCEPTED","output":"PRIVATE_NATIVE_FINAL"}`
+				stdout := support.CodexSuccessStdout(body)
+				if provider == "claude" {
+					stdout = claudeNativeFinalFixture(t, body)
+				}
+				runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+				routes.setFor(dir, runner)
+				t.Cleanup(func() { routes.setFor(dir, nil) })
+				var workerID string
+				if origin == "direct" {
+					workerID = invokeNativeFinalDirect(t, host, dir, provider, environment)
+				} else {
+					workerID = invokeNativeFinalFactory(t, host, dir, provider, environment)
+				}
+				assertNativeFinalCapture(t, host, workerID, provider, body, environment)
+				if len(runner.Requests()) != 1 {
+					t.Fatalf("provider calls=%d, want one physical turn", len(runner.Requests()))
+				}
+			})
+		}
+	}
+}
+
+func claudeNativeFinalFixture(t *testing.T, body string) []byte {
+	t.Helper()
+	var lines []string
+	for _, record := range []any{
+		map[string]any{"type": "system", "subtype": "init", "session_id": "private-native-claude"},
+		map[string]any{"type": "assistant", "session_id": "private-native-claude", "message": map[string]any{
+			"id": "private-native-message", "role": "assistant", "content": []map[string]string{{"type": "text", "text": body}},
+		}},
+		map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": body, "session_id": "private-native-claude"},
+	} {
+		data, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, string(data))
+	}
+	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+func invokeNativeFinalDirect(t *testing.T, host *support.FunctionalAPIServer, dir, provider string, environment []string) string {
+	t.Helper()
+	path := writeRejectedDirectExecution(t, dir, provider)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--remote", "--json", "worker-sessions", "invoke", "--execution", path, "--async"})
+	inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+	// The public example has a fixed ID. Give each parallel direct execution
+	// its own identity in the same public request shape.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	id := uuid.NewString()
+	document["workerSessionId"], document["requestId"] = id, id+"-request"
+	data, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("direct invoke: %v %s", err, inputs.Stderr())
+	}
+	return id
+}
+
+func invokeNativeFinalFactory(t *testing.T, host *support.FunctionalAPIServer, dir, provider string, environment []string) string {
+	t.Helper()
+	model := "gpt-5"
+	if provider == "claude" {
+		model = "claude-sonnet-4-6"
+	}
+	support.WriteAgentConfig(t, dir, "processor", "---\ntype: AGENT_WORKER\nmodelProvider: "+strings.ToUpper(provider)+"\nmodel: "+model+"\nexecutorProvider: "+strings.ToUpper(provider)+"\n---\nReturn the requested reply.\n")
+	id := uuid.NewString()
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{WorkID: "target", WorkTypeID: "task", TraceID: id, Payload: []byte("PRIVATE_NATIVE_INPUT")})
+	ctx, cancel := context.WithCancel(t.Context())
+	inputs := support.FakeInputs(ctx, []string{"you", "run", "--session=" + id, "--dir", dir, "--continuously", "--quiet", "--no-record"})
+	inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
+	joined := make(chan struct{})
+	go func() { defer close(joined); _ = host.Execute(t, inputs.Input) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-joined:
+		case <-time.After(30 * time.Second):
+			t.Error("native Factory invocation did not join")
+		}
+	})
+	support.WaitForSessionTerminalStatus(t, host.URL(), id, 20*time.Second)
+	base := host.URL() + "/factory-sessions/" + id
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, base+"/work")
+	if support.CountWorkAtCustomerState(listed, "task:complete") != 1 {
+		t.Fatalf("Factory Work outcome: %+v; stderr=%s", listed, inputs.Stderr())
+	}
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, host.URL(), id))
+	if len(dispatches) != 1 || dispatches[0].Response == nil || support.StringPointerValue(dispatches[0].Response.Output) != "PRIVATE_NATIVE_FINAL" {
+		t.Fatalf("native envelope did not normalize to Work output: %+v", dispatches)
+	}
+	rows := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, base+"/worker-sessions?workId=target")
+	if len(rows.Sessions) != 1 || rows.Sessions[0].FactorySessionId == nil || *rows.Sessions[0].FactorySessionId != id {
+		t.Fatalf("Factory Worker association: %+v", rows)
+	}
+	return rows.Sessions[0].WorkerSessionId
+}
+
+func assertNativeFinalCapture(t *testing.T, host *support.FunctionalAPIServer, id, provider, body string, environment []string) {
+	t.Helper()
+	facts, err := support.WaitForObservation(10*time.Second, func() (factoryapi.WorkerSessionObservation, error) {
+		return support.GetJSON[factoryapi.WorkerSessionObservation](t, host.URL()+"/worker-sessions/"+id), nil
+	}, func(o factoryapi.WorkerSessionObservation) bool { return o.EndedAt != nil })
+	if err != nil || facts.State != "COMPLETED" || facts.Provider == nil || *facts.Provider != provider {
+		t.Fatalf("native physical completion: %+v %v", facts, err)
+	}
+	page := assertRejectedCapturePages(t, host, id, environment)
+	completed := completedAssistantDrafts(t, page)
+	if len(completed) != 1 {
+		t.Fatalf("completed native messages=%d, want one", len(completed))
+	}
+	assertCompletedEnvelope(t, completed[0], body)
+	if completed[0].Provenance.Provider != provider || completed[0].Provenance.Delivery != workers.DeliveryNativeStream {
+		t.Fatalf("native provenance changed: %+v", completed[0].Provenance)
+	}
+}
+
+func completedAssistantDrafts(t *testing.T, page factoryapi.WorkerSessionLogPage) []workers.Draft {
+	t.Helper()
+	var completed []workers.Draft
+	for _, event := range page.Events {
+		raw, err := json.Marshal(event.Event.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var draft workers.Draft
+		if err := json.Unmarshal(raw, &draft); err != nil {
+			t.Fatal(err)
+		}
+		if draft.Kind == workers.KindMessage && draft.Phase == workers.PhaseCompleted {
+			var payload workers.MessagePayload
+			if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Role == "assistant" {
+				completed = append(completed, draft)
+			}
+		}
+	}
+	return completed
+}
+
+func assertCompletedEnvelope(t *testing.T, draft workers.Draft, body string) {
+	t.Helper()
+	var payload workers.MessagePayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil || payload.Role != "assistant" || len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != body {
+		t.Fatalf("native envelope changed: %+v %v", payload, err)
 	}
 }
 
@@ -371,6 +552,9 @@ func assertMatchedMockTerminalDispatches(t *testing.T, dispatches []support.Disp
 
 func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, name string, rendezvous func(*testing.T)) {
 	dir := declaredResultFactory(t)
+	if strings.Contains(name, "claude") {
+		support.WriteAgentConfig(t, dir, "processor", "---\ntype: AGENT_WORKER\nmodelProvider: CLAUDE\nmodel: claude-sonnet-4-6\nexecutorProvider: CLAUDE\n---\nReturn the requested short reply.\n")
+	}
 	id := uuid.NewString()
 	// Workers' default execution environment can still include the host's
 	// GIT_TERMINAL_PROMPT=0, classified as sensitive by Providers. Keep this
@@ -378,7 +562,7 @@ func runDeclaredResultScenario(t *testing.T, host *support.FunctionalAPIServer, 
 	marker := name + "-" + strings.ReplaceAll(id, "0", "Z")
 	gate := support.NewMockWorkerGate(t)
 	body := json.RawMessage(`{"decision":"ACCEPTED","output":"` + marker + `"}`)
-	businessFailure := strings.HasPrefix(name, "F-M2")
+	businessFailure := strings.HasPrefix(name, "F-M2") || strings.HasPrefix(name, "F-C7")
 	if businessFailure {
 		body, marker = businessInvalidResultExample(t)
 	}
@@ -573,7 +757,14 @@ func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, work
 	if !strings.Contains(string(data), marker) || page.Health != "COMPLETE" {
 		t.Fatalf("captured logs = %s, health=%s", data, page.Health)
 	}
-	completed := 0
+	assertDeclaredCompletedMessage(t, page, name, body)
+	if strings.HasPrefix(name, "F-M7") || strings.HasPrefix(name, "F-M8") {
+		assertRecordingOptionalUsage(t, observation.TokenUsage, page, name)
+	}
+}
+
+func assertDeclaredCompletedMessage(t *testing.T, page factoryapi.WorkerSessionLogPage, name string, body json.RawMessage) {
+	t.Helper()
 	var encodedBody bytes.Buffer
 	if len(body) > 0 {
 		// The declarative JSON configuration writer compacts resultBody; those
@@ -582,33 +773,19 @@ func assertDeclaredCapture(t *testing.T, host *support.FunctionalAPIServer, work
 			t.Fatal(err)
 		}
 	}
-	for _, event := range page.Events {
-		raw, err := json.Marshal(event.Event.Payload)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var draft workers.Draft
-		if err := json.Unmarshal(raw, &draft); err != nil {
-			t.Fatal(err)
-		}
-		if draft.Kind == workers.KindMessage && draft.Phase == workers.PhaseCompleted {
-			var payload workers.MessagePayload
-			if err := json.Unmarshal(draft.Payload, &payload); err != nil {
-				t.Fatal(err)
-			}
-			if payload.Role == "assistant" {
-				completed++
-				if len(body) > 0 && (len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != encodedBody.String()) {
-					t.Fatalf("native envelope changed: got %+v, want %s", payload, encodedBody.String())
-				}
-			}
-		}
+	completed := completedAssistantDrafts(t, page)
+	if len(completed) != 1 {
+		t.Fatalf("completed assistant messages = %d, want exactly one", len(completed))
 	}
-	if completed != 1 {
-		t.Fatalf("completed assistant messages = %d, want exactly one: %s", completed, data)
+	draft := completed[0]
+	// The declarative Claude stream supplies a result without an assistant
+	// record. Capture its envelope once without claiming native authorship.
+	if strings.Contains(name, "claude") && (draft.Provenance.Provider != "agent-run" ||
+		draft.Provenance.Delivery != workers.DeliverySynthesized || draft.Provenance.Fidelity != workers.FidelityFinalOnly) {
+		t.Fatalf("result-only fallback provenance: %+v", draft.Provenance)
 	}
-	if strings.HasPrefix(name, "F-M7") || strings.HasPrefix(name, "F-M8") {
-		assertRecordingOptionalUsage(t, observation.TokenUsage, page, name)
+	if len(body) > 0 {
+		assertCompletedEnvelope(t, draft, encodedBody.String())
 	}
 }
 
@@ -693,6 +870,9 @@ func declaredResultConfig(t *testing.T, dir, name string, body json.RawMessage, 
 	entry := workers.MockWorkerConfig{RunType: workers.MockWorkerRunTypeAccept, WorkInputs: []workers.MockWorkInputSelector{{WorkID: "target"}}, ResultBody: body, GateConfig: gate.Config(30 * time.Second)}
 	zero, tokens := int64(0), int64(11)
 	entry.Usage = &workers.MockWorkerUsageConfig{Provider: "codex", Model: "gpt-5", InputTokens: &tokens, OutputTokens: &zero}
+	if strings.Contains(name, "claude") {
+		entry.Usage.Provider, entry.Usage.Model = "claude", "claude-sonnet-4-6"
+	}
 	if strings.HasPrefix(name, "F-M7") {
 		entry.Usage.InputTokens, entry.Usage.OutputTokens = &zero, nil
 	}
