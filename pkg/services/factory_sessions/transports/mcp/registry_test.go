@@ -96,7 +96,7 @@ func TestSubagentToolDocumentsAdmissionContract(t *testing.T) {
 		t.Fatal("you.subagent tool is missing")
 	}
 	properties := tool.OutputSchema["properties"].(map[string]any)
-	result := properties["result"].(map[string]any)["properties"].(map[string]any)
+	result := properties["result"].(map[string]any)["oneOf"].([]any)[0].(map[string]any)["properties"].(map[string]any)
 	for _, field := range []string{"requestId", "workerSessionId", "accepted", "state", "eventTopic"} {
 		if _, exists := result[field]; !exists {
 			t.Errorf("missing result field %s", field)

@@ -116,16 +116,10 @@ func DiscoverTools() []ToolDefinition {
 
 func subagentTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolSubagent,
-		Description: "Start a direct subagent (START, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. Omitted route uses dedicated defaults.subagent. RUN returns a migration error. START returns admission without waiting for completion.",
-		InputSchema: subagentInputSchema(),
-		OutputSchema: toolResponseSchema(objectSchema(map[string]any{
-			"requestId":       stringProperty("Start request identity."),
-			"workerSessionId": stringProperty("Direct Worker Session identity for READ and CONTROL."),
-			"accepted":        booleanProperty("Whether the start was admitted."),
-			"state":           stringProperty("Admitted Worker Session state."),
-			"eventTopic":      stringProperty("Worker Session Events topic."),
-		}, "requestId", "workerSessionId", "accepted", "state", "eventTopic")),
+		Name:                ToolSubagent,
+		Description:         "Start a direct subagent (START, default), or LIST, READ, CONTROL, MESSAGE and REVIVE Worker Sessions on the selected --server host. RUN returns a migration error. START and REVIVE return admission without waiting. MESSAGE requires current execution credentials and preserves durable host delivery facts.",
+		InputSchema:         subagentInputSchema(),
+		OutputSchema:        subagentResponseSchema(),
 		SuccessStableFields: []string{"result.requestId", "result.workerSessionId", "result.accepted", "result.state", "result.eventTopic"},
 		ErrorStableFields:   sharedErrorStableFields,
 	}

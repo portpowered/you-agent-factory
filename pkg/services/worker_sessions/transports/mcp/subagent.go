@@ -5,15 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	client "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"io"
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // Subagent validates the selector before starting or contacting the selected host.
-func (a *Adapter) Subagent(ctx context.Context, raw json.RawMessage, start func(context.Context, json.RawMessage) (json.RawMessage, error)) (json.RawMessage, error) {
+func (a *Adapter) Subagent(ctx context.Context, raw json.RawMessage, caller *workersessions.CallerIdentity, start func(context.Context, json.RawMessage) (json.RawMessage, error)) (json.RawMessage, error) {
 	action, input, err := decodeAction(raw)
 	if err != nil {
 		return json.Marshal(struct {
@@ -28,12 +30,15 @@ func (a *Adapter) Subagent(ctx context.Context, raw json.RawMessage, start func(
 	if action == "START" {
 		return start(ctx, input)
 	}
-	return a.Call(ctx, action, input)
+	return a.call(ctx, action, input, caller)
 }
 
 // Read object members individually so duplicate selectors and case aliases
 // cannot change the chosen action or target before validation.
 func decodeAction(raw json.RawMessage) (string, json.RawMessage, error) {
+	if !utf8.Valid(raw) {
+		return "", nil, fmt.Errorf("arguments must be valid UTF-8")
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	opening, err := decoder.Token()
 	if err != nil || opening != json.Delim('{') {
@@ -47,7 +52,7 @@ func decodeAction(raw json.RawMessage) (string, json.RawMessage, error) {
 			return "", nil, fmt.Errorf("invalid subagent arguments")
 		}
 		key, ok := token.(string)
-		if !ok || fields[key] != nil || !slices.Contains([]string{"action", "prompt", "provider", "model", "reasoningEffort", "workingRoot", "timeoutMillis", "history", "scope", "state", "limit", "nextToken", "workerSessionId", "view", "operation", "requestId", "expectedAttemptId", "successorWorkerSessionId", "replacementMessage", "resumeMode"}, key) {
+		if !ok || fields[key] != nil || !slices.Contains([]string{"action", "prompt", "provider", "model", "reasoningEffort", "workingRoot", "timeoutMillis", "history", "scope", "state", "limit", "nextToken", "workerSessionId", "view", "operation", "requestId", "expectedAttemptId", "successorWorkerSessionId", "replacementMessage", "resumeMode", "message", "inReplyTo", "factorySessionId", "bodySecret", "delivery", "ifEnded", "replyIfEnded", "expiresInSeconds", "correlation", "messages", "threadId", "status", "maxResults", "markRead", "fromWorkerSessionId", "correlationWorkId", "correlationFactorySessionId"}, key) {
 			return "", nil, fmt.Errorf("arguments contain duplicate or unknown properties")
 		}
 		var value json.RawMessage
@@ -75,8 +80,8 @@ func decodeAction(raw json.RawMessage) (string, json.RawMessage, error) {
 
 func decodeActionSelector(value json.RawMessage) (string, error) {
 	var action string
-	if err := json.Unmarshal(value, &action); err != nil || bytes.Equal(bytes.TrimSpace(value), []byte("null")) || !slices.Contains([]string{"START", "RUN", ActionList, ActionRead, ActionControl}, action) {
-		return "", fmt.Errorf("action must be START, RUN, LIST, READ or CONTROL")
+	if err := json.Unmarshal(value, &action); err != nil || bytes.Equal(bytes.TrimSpace(value), []byte("null")) || !slices.Contains([]string{"START", "RUN", ActionList, ActionRead, ActionControl, ActionMessage, ActionRevive}, action) {
+		return "", fmt.Errorf("action must be START, RUN, LIST, READ, CONTROL, MESSAGE or REVIVE")
 	}
 	return action, nil
 }

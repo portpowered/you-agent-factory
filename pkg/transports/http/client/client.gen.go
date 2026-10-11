@@ -10564,6 +10564,9 @@ type SendAgentMessageJSONRequestBody = AgentMessageSendRequest
 // StartWorkerSessionJSONRequestBody defines body for StartWorkerSession for application/json ContentType.
 type StartWorkerSessionJSONRequestBody = WorkerSessionStartRequest
 
+// ContinueWorkerSessionJSONRequestBody defines body for ContinueWorkerSession for application/json ContentType.
+type ContinueWorkerSessionJSONRequestBody = WorkerSessionContinueRequest
+
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
 type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
 
@@ -19737,6 +19740,11 @@ type ClientInterface interface {
 	// CancelWorkerSession request
 	CancelWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ContinueWorkerSessionWithBody request with any body
+	ContinueWorkerSessionWithBody(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ContinueWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body ContinueWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// StreamWorkerSessionEventsByTopLevelWorkerSessionId request
 	StreamWorkerSessionEventsByTopLevelWorkerSessionId(ctx context.Context, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19939,6 +19947,30 @@ func (c *Client) GetWorkerSessionObservationByWorkerSessionId(ctx context.Contex
 
 func (c *Client) CancelWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCancelWorkerSessionRequest(c.Server, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ContinueWorkerSessionWithBody(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewContinueWorkerSessionRequestWithBody(c.Server, workerSessionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ContinueWorkerSession(ctx context.Context, workerSessionId WorkerSessionID, body ContinueWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewContinueWorkerSessionRequest(c.Server, workerSessionId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -21096,6 +21128,53 @@ func NewCancelWorkerSessionRequest(server string, workerSessionId WorkerSessionI
 	return req, nil
 }
 
+// NewContinueWorkerSessionRequest calls the generic ContinueWorkerSession builder with application/json body
+func NewContinueWorkerSessionRequest(server string, workerSessionId WorkerSessionID, body ContinueWorkerSessionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewContinueWorkerSessionRequestWithBody(server, workerSessionId, "application/json", bodyReader)
+}
+
+// NewContinueWorkerSessionRequestWithBody generates requests for ContinueWorkerSession with any type of body
+func NewContinueWorkerSessionRequestWithBody(server string, workerSessionId WorkerSessionID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "worker_session_id", runtime.ParamLocationPath, workerSessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/worker-sessions/%s/continue", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest generates requests for StreamWorkerSessionEventsByTopLevelWorkerSessionId
 func NewStreamWorkerSessionEventsByTopLevelWorkerSessionIdRequest(server string, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams) (*http.Request, error) {
 	var err error
@@ -21505,6 +21584,11 @@ type ClientWithResponsesInterface interface {
 	// CancelWorkerSessionWithResponse request
 	CancelWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, reqEditors ...RequestEditorFn) (*CancelWorkerSessionClientResponse, error)
 
+	// ContinueWorkerSessionWithBodyWithResponse request with any body
+	ContinueWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ContinueWorkerSessionClientResponse, error)
+
+	ContinueWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body ContinueWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*ContinueWorkerSessionClientResponse, error)
+
 	// StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse request
 	StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse(ctx context.Context, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse, error)
 
@@ -21886,6 +21970,32 @@ func (r CancelWorkerSessionClientResponse) StatusCode() int {
 	return 0
 }
 
+type ContinueWorkerSessionClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *WorkerSessionContinueResponse
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON409      *WorkerSessionContinuationConflict
+	JSON503      *WorkerSessionContinuationUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r ContinueWorkerSessionClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ContinueWorkerSessionClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -22155,6 +22265,23 @@ func (c *ClientWithResponses) CancelWorkerSessionWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseCancelWorkerSessionClientResponse(rsp)
+}
+
+// ContinueWorkerSessionWithBodyWithResponse request with arbitrary body returning *ContinueWorkerSessionClientResponse
+func (c *ClientWithResponses) ContinueWorkerSessionWithBodyWithResponse(ctx context.Context, workerSessionId WorkerSessionID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ContinueWorkerSessionClientResponse, error) {
+	rsp, err := c.ContinueWorkerSessionWithBody(ctx, workerSessionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseContinueWorkerSessionClientResponse(rsp)
+}
+
+func (c *ClientWithResponses) ContinueWorkerSessionWithResponse(ctx context.Context, workerSessionId WorkerSessionID, body ContinueWorkerSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*ContinueWorkerSessionClientResponse, error) {
+	rsp, err := c.ContinueWorkerSession(ctx, workerSessionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseContinueWorkerSessionClientResponse(rsp)
 }
 
 // StreamWorkerSessionEventsByTopLevelWorkerSessionIdWithResponse request returning *StreamWorkerSessionEventsByTopLevelWorkerSessionIdClientResponse
@@ -22949,6 +23076,60 @@ func ParseCancelWorkerSessionClientResponse(rsp *http.Response) (*CancelWorkerSe
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest WorkerSessionControlUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseContinueWorkerSessionClientResponse parses an HTTP response from a ContinueWorkerSessionWithResponse call
+func ParseContinueWorkerSessionClientResponse(rsp *http.Response) (*ContinueWorkerSessionClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ContinueWorkerSessionClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest WorkerSessionContinueResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest WorkerSessionContinuationConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest WorkerSessionContinuationUnavailable
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

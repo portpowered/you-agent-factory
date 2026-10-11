@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	client "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
 
@@ -15,10 +16,15 @@ const (
 	ActionList    = "LIST"
 	ActionRead    = "READ"
 	ActionControl = "CONTROL"
+	ActionMessage = "MESSAGE"
+	ActionRevive  = "REVIVE"
 )
 
 // HostClient is the exact generated-client boundary consumed by the adapter.
 type HostClient interface {
+	SendAgentMessage(context.Context, *client.SendAgentMessageParams, client.SendAgentMessageJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error)
+	ListAgentMessages(context.Context, *client.ListAgentMessagesParams, ...client.RequestEditorFn) (*http.Response, error)
+	ContinueWorkerSession(context.Context, client.WorkerSessionID, client.ContinueWorkerSessionJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error)
 	StartWorkerSession(context.Context, *client.StartWorkerSessionParams, client.StartWorkerSessionJSONRequestBody, ...client.RequestEditorFn) (*http.Response, error)
 	ListWorkerSessions(context.Context, *client.ListWorkerSessionsParams, ...client.RequestEditorFn) (*http.Response, error)
 	GetWorkerSessionObservationByWorkerSessionId(context.Context, client.WorkerSessionID, *client.GetWorkerSessionObservationByWorkerSessionIdParams, ...client.RequestEditorFn) (*http.Response, error)
@@ -43,32 +49,42 @@ func New(host HostClient) (*Adapter, error) {
 
 // Call validates the complete input before sending any request to the host.
 func (a *Adapter) Call(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+	return a.call(ctx, name, raw, nil)
+}
+
+func (a *Adapter) call(ctx context.Context, name string, raw json.RawMessage, caller *workersessions.CallerIdentity) (json.RawMessage, error) {
 	var result any
 	var failure *toolError
-	switch name {
-	case ActionList:
-		input, err := decodeList(raw)
-		if err != nil {
-			failure = invalidRequest(err)
-		} else {
-			result, failure = a.list(ctx, input)
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	if name == ActionMessage || name == ActionRevive || ((name == ActionList || name == ActionRead) && fields["messages"] != nil) {
+		result, failure = a.messageAction(ctx, name, raw, caller)
+	} else {
+		switch name {
+		case ActionList:
+			input, err := decodeList(raw)
+			if err != nil {
+				failure = invalidRequest(err)
+			} else {
+				result, failure = a.list(ctx, input)
+			}
+		case ActionRead:
+			input, err := decodeRead(raw)
+			if err != nil {
+				failure = invalidRequest(err)
+			} else {
+				result, failure = a.read(ctx, input)
+			}
+		case ActionControl:
+			input, err := decodeControl(raw)
+			if err != nil {
+				failure = invalidRequest(err)
+			} else {
+				result, failure = a.control(ctx, input)
+			}
+		default:
+			failure = invalidRequest(fmt.Errorf("unknown Worker Session tool"))
 		}
-	case ActionRead:
-		input, err := decodeRead(raw)
-		if err != nil {
-			failure = invalidRequest(err)
-		} else {
-			result, failure = a.read(ctx, input)
-		}
-	case ActionControl:
-		input, err := decodeControl(raw)
-		if err != nil {
-			failure = invalidRequest(err)
-		} else {
-			result, failure = a.control(ctx, input)
-		}
-	default:
-		failure = invalidRequest(fmt.Errorf("unknown Worker Session tool"))
 	}
 	if failure != nil {
 		return json.Marshal(struct {

@@ -389,7 +389,7 @@
     {
       "id": "mcp.tool.you.subagent",
       "name": "you.subagent",
-      "description": "Start a direct subagent (START, default), or LIST, READ and CONTROL Worker Sessions on the selected --server host. Omitted route uses dedicated defaults.subagent. RUN returns a migration error. START returns admission without waiting for completion.",
+      "description": "Start a direct subagent (START, default), or LIST, READ, CONTROL, MESSAGE and REVIVE Worker Sessions on the selected --server host. RUN returns a migration error. START and REVIVE return admission without waiting. MESSAGE requires current execution credentials and preserves durable host delivery facts.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -400,7 +400,9 @@
               "RUN",
               "LIST",
               "READ",
-              "CONTROL"
+              "CONTROL",
+              "MESSAGE",
+              "REVIVE"
             ],
             "default": "START"
           }
@@ -600,6 +602,271 @@
               "operation"
             ],
             "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "MESSAGE"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "workerSessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "inReplyTo": {
+                "type": "string",
+                "minLength": 1
+              },
+              "factorySessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bodySecret": {
+                "type": "boolean",
+                "default": false
+              },
+              "delivery": {
+                "type": "string",
+                "enum": [
+                  "QUEUE",
+                  "INTERRUPT"
+                ],
+                "default": "QUEUE"
+              },
+              "ifEnded": {
+                "type": "string",
+                "enum": [
+                  "REVIVE",
+                  "HOLD"
+                ]
+              },
+              "replyIfEnded": {
+                "type": "string",
+                "enum": [
+                  "REVIVE",
+                  "HOLD"
+                ]
+              },
+              "expiresInSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 604800,
+                "default": 86400
+              },
+              "correlation": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "workId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "factorySessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "required": [
+              "action",
+              "message",
+              "requestId"
+            ],
+            "oneOf": [
+              {
+                "required": [
+                  "workerSessionId"
+                ],
+                "not": {
+                  "required": [
+                    "inReplyTo"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "inReplyTo"
+                ],
+                "not": {
+                  "required": [
+                    "workerSessionId"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "LIST"
+              },
+              "messages": {
+                "type": "boolean",
+                "const": true
+              },
+              "factorySessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "threadId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "QUEUED",
+                    "READ",
+                    "DELIVERED_REVIVE",
+                    "REPLIED",
+                    "EXPIRED"
+                  ]
+                }
+              },
+              "maxResults": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500,
+                "default": 100
+              },
+              "nextToken": {
+                "type": "string",
+                "minLength": 1
+              },
+              "markRead": {
+                "type": "boolean",
+                "default": false
+              },
+              "fromWorkerSessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "correlationWorkId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "correlationFactorySessionId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "action",
+              "messages"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "READ"
+              },
+              "workerSessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "messages": {
+                "type": "boolean",
+                "const": true
+              },
+              "factorySessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "threadId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "status": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "QUEUED",
+                    "READ",
+                    "DELIVERED_REVIVE",
+                    "REPLIED",
+                    "EXPIRED"
+                  ]
+                }
+              },
+              "maxResults": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500,
+                "default": 100
+              },
+              "nextToken": {
+                "type": "string",
+                "minLength": 1
+              },
+              "markRead": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "required": [
+              "action",
+              "messages",
+              "workerSessionId"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "REVIVE"
+              },
+              "workerSessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "requestId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "successorWorkerSessionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "factorySessionId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "action",
+              "workerSessionId",
+              "message",
+              "requestId",
+              "successorWorkerSessionId"
+            ]
           }
         ]
       },

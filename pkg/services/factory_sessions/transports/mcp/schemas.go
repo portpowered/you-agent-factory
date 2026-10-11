@@ -164,8 +164,8 @@ func subagentInputSchema() map[string]any {
 	run["properties"].(map[string]any)["action"] = map[string]any{"type": "string", "enum": []any{"START", "RUN"}}
 	return map[string]any{
 		"type":       "object",
-		"properties": map[string]any{"action": map[string]any{"type": "string", "enum": []any{"START", "RUN", "LIST", "READ", "CONTROL"}, "default": "START"}},
-		"oneOf":      append([]any{run}, workerActionSchemas()...),
+		"properties": map[string]any{"action": map[string]any{"type": "string", "enum": []any{"START", "RUN", "LIST", "READ", "CONTROL", "MESSAGE", "REVIVE"}, "default": "START"}},
+		"oneOf":      append(append([]any{run}, workerActionSchemas()...), subagentMessageActionSchemas()...),
 	}
 }
 
