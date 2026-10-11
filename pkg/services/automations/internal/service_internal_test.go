@@ -802,3 +802,26 @@ func runScopedScriptPollerFixture(owner *Service, ctx context.Context, runner pl
 	supervision.CursorScope = owner.cursorScope
 	return owner.scriptPollers.RunScriptPoller(ctx, runner, runtimeCfg, workstation, worker, supervision, submit)
 }
+
+func TestFixedRolesAutomationCursorPreservesSelectedCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("selected cursor read failed")
+	request := automations.GetCursorRequest{InstanceID: "selected-source"}
+	reconciler := &fixedRoleCursorReconciler{cause: cause}
+	service := &Service{reconciler: reconciler}
+	result, err := service.Root().GetCursor(t.Context(), request)
+	if !errors.Is(err, cause) || reconciler.request != request || result.InstanceID != request.InstanceID || result.Checkpoint != "selected-checkpoint" {
+		t.Fatalf("cursor = %#v, request = %#v, error = %v", result, reconciler.request, err)
+	}
+}
+
+type fixedRoleCursorReconciler struct {
+	reconciliation.Service
+	cause   error
+	request automations.GetCursorRequest
+}
+
+func (r *fixedRoleCursorReconciler) GetCursor(_ context.Context, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	r.request = request
+	return automations.GetCursorResult{InstanceID: request.InstanceID, Checkpoint: "selected-checkpoint"}, r.cause
+}

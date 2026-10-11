@@ -152,9 +152,6 @@ func (owner runtimeLogOwner) Open(baseLogger *zap.Logger, request factoryruntime
 	if request.Policy == factoryruntime.RuntimeFileLoggingPolicyDisabled {
 		return nil, nil
 	}
-	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
-		return nil, errors.New("runtime log owner is not configured")
-	}
 	opened, err := owner.opener.Open(logging.RuntimeLogOpeningRequest{
 		BaseLogger: baseLogger, RuntimeInstanceID: request.RuntimeInstanceID,
 		RootDirectory: request.RootDirectory, StartTimeUTC: owner.clock(), CollisionID: owner.newID(),
@@ -218,9 +215,6 @@ func runtimeMetricsRetentionReporter(
 	baseLogger *zap.Logger,
 ) platformmetrics.RuntimeMetricsRetentionReporter {
 	return func(report platformmetrics.RuntimeMetricsRetentionReport, sweepErr error) {
-		if baseLogger == nil {
-			return
-		}
 		fields := []zap.Field{
 			zap.String("root", report.RootDirectory),
 			zap.Bool("skipped", report.Skipped),
@@ -256,18 +250,12 @@ type runtimeMetricsOwner struct {
 }
 
 func (owner runtimeMetricsOwner) Close(ctx context.Context) error {
-	if owner.opener == nil {
-		return nil
-	}
 	return owner.opener.Close(ctx)
 }
 
 func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {
 	if request.Policy == factoryruntime.RuntimeMetricsPolicyDisabled {
 		return nil, nil
-	}
-	if owner.opener == nil || owner.clock == nil || owner.newID == nil {
-		return nil, errors.New("runtime metrics owner is not configured")
 	}
 	writer, err := owner.opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
 		SessionID: request.Scope.SessionID, RuntimeInstanceID: request.Scope.RuntimeInstanceID,

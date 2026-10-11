@@ -121,7 +121,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		platformclock.Real{}, testDefinitionMapper(),
 		runtimeopening.NewEngineOpening(nil, nil, nil, nil, factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
 			return factorydefinitions.WorkPropagationModeOutputAsPayload
-		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator()),
+		}), nil, testRuntimeID, testRuntimeID, localRuntimeFiles{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator(), localRuntimeFiles{}.ReadFile, nil, nil),
 		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(
 		context.Background(), zap.NewNop(), dir, dir, "~default", "",
@@ -195,6 +195,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 			nil,
 			dispatchplanningwire.NewOpening(),
 			scheduler.NewEnablementEvaluator(),
+			localRuntimeFiles{}.ReadFile, nil, nil,
 		),
 		nil, nil, nil, testRuntimeScopeService(newTestRuntimeLedger),
 	).Build(

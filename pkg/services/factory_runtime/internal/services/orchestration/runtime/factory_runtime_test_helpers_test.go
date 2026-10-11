@@ -196,7 +196,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	if opening == nil {
 		opening = NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
-		}), testRuntimeWorkService{}, func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) }, func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator())
+		}), testRuntimeWorkService{}, func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) }, func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) }, platformfilesystem.Local{}, nil, dispatchplanningwire.NewOpening(), scheduler.NewEnablementEvaluator(), platformfilesystem.Local{}.ReadFile, testPromptRenderer(workerService), testTemplateFields(workerService))
 	}
 	runtime, err := opening.Open(
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil,
@@ -2717,4 +2717,13 @@ func countRestoredInterruptions(ledger *recordingfixtures.ScriptedRuntimeLedger)
 		}
 	}
 	return count
+}
+
+func testPromptRenderer(service workers.Service) runtimePromptRenderer {
+	renderer, _ := service.(runtimePromptRenderer)
+	return renderer
+}
+func testTemplateFields(service workers.Service) runtimeTemplateFieldResolver {
+	fields, _ := service.(runtimeTemplateFieldResolver)
+	return fields
 }

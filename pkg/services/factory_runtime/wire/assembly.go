@@ -140,9 +140,12 @@ func NewEngineOpening(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	dispatchOpening OutboxOpening,
 	enablement Enablement,
+	promptSources factorydefinitions.FileReader,
+	prompts RequestPromptRenderer,
+	templateFields RequestTemplateFieldResolver,
 ) EngineOpening {
 	return runtime.NewEngineOpening(interpolation, providerSessions, quorumPolicy, outputShaping,
-		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, scheduler.SelectedEnablement(enablement))
+		workPropagation, workService, workRequestIDs, newID, runtimeDirs, decisionEnvelopes, dispatchOpening, scheduler.SelectedEnablement(enablement), promptSources, prompts, templateFields)
 }
 
 func NewBundleOpening(

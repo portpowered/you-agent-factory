@@ -452,11 +452,6 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 	}); ok {
 		configurable.SetMockWorkersConfig(mockWorkersConfig)
 	}
-	if configurable, ok := activeFactory.(interface {
-		SetPromptSourceReader(func(string) ([]byte, error))
-	}); ok && f.inputFiles != nil {
-		configurable.SetPromptSourceReader(f.inputFiles.ReadFile)
-	}
 	// Filesystem effects may finish after admission was canceled. Keep the
 	// unpublished engine inside this opening owner so unwind releases only its
 	// resources, without sealing worker admission for a same-identity retry.

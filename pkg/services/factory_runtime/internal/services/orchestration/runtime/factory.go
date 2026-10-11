@@ -154,6 +154,9 @@ type EngineOpening struct {
 	newID                      factory.IDGenerator
 	expectedArtifactFileSystem expectedArtifactFileSystem
 	decisionEnvelopes          interfaces.DecisionEnvelopeService
+	promptSources              interfaces.FileReader
+	prompts                    runtimePromptRenderer
+	templateFields             runtimeTemplateFieldResolver
 }
 
 // EngineOpeningSelection carries one selected owner through canonical Wire.
@@ -182,6 +185,9 @@ func NewEngineOpening(
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	dispatchOpening dispatchplanning.OutboxOpening,
 	enablement scheduler.Enablement,
+	promptSources interfaces.FileReader,
+	prompts runtimePromptRenderer,
+	templateFields runtimeTemplateFieldResolver,
 ) *EngineOpening {
 	return &EngineOpening{
 		dispatchOpening:            dispatchOpening,
@@ -196,6 +202,7 @@ func NewEngineOpening(
 		newID:                      newID,
 		expectedArtifactFileSystem: expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
 		decisionEnvelopes:          decisionEnvelopes,
+		promptSources:              promptSources, prompts: prompts, templateFields: templateFields,
 	}
 }
 
@@ -233,8 +240,6 @@ func (opening *EngineOpening) Open(
 		return nil, err
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
-	promptRenderer, _ := statelessService.(runtimePromptRenderer)
-	templateFieldResolver, _ := statelessService.(runtimeTemplateFieldResolver)
 	cfg := &runtimeConfig{
 		net:                                net,
 		scheduler:                          runtimeScheduler,
@@ -242,8 +247,9 @@ func (opening *EngineOpening) Open(
 		executeService:                     statelessService,
 		workerExecution:                    statelessService,
 		workerAttemptScheduler:             workerAttemptScheduler,
-		promptRenderer:                     promptRenderer,
-		templateFieldResolver:              templateFieldResolver,
+		promptRenderer:                     opening.prompts,
+		templateFieldResolver:              opening.templateFields,
+		promptSourceReader:                 opening.promptSources,
 		workerSessions:                     workerSessionsService,
 		workerAttempts:                     workerAttempts,
 		attemptCapacity:                    defaultRuntimeAttemptCapacity,
@@ -1110,14 +1116,6 @@ func (f *factoryImpl) SetMockWorkersConfig(config *workers.MockWorkersConfig) {
 		return
 	}
 	f.cfg.mockWorkersConfig = config.Clone()
-}
-
-// SetPromptSourceReader installs the read-only prompt-source filesystem edge.
-func (f *factoryImpl) SetPromptSourceReader(reader func(string) ([]byte, error)) {
-	if f == nil || f.cfg == nil {
-		return
-	}
-	f.cfg.promptSourceReader = reader
 }
 
 // schedulerAdapter adapts factory.TransitionScheduler to scheduler.Scheduler.
