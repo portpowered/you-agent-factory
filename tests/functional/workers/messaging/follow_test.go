@@ -348,8 +348,10 @@ func streamFramesAt(ctx context.Context, server, path string, caller map[string]
 		finished <- err
 		return
 	}
-	req.Header.Set("X-You-Worker-Session-Id", caller["YOU_WORKER_SESSION_ID"])
-	req.Header.Set("Authorization", "Bearer "+caller["YOU_WORKER_SESSION_TOKEN"])
+	if caller != nil {
+		req.Header.Set("X-You-Worker-Session-Id", caller["YOU_WORKER_SESSION_ID"])
+		req.Header.Set("Authorization", "Bearer "+caller["YOU_WORKER_SESSION_TOKEN"])
+	}
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		finished <- err

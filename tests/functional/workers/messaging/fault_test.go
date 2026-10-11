@@ -455,12 +455,15 @@ func TestMessagingSettingsPreserveCanonicalFactoryOutcome(t *testing.T) {
 		if cell.journal != "" {
 			writeJournal(t, filepath.Join(home, ".you-agent-factory", "messages", "messages.jsonl"), cell.journal)
 		}
-		f := startHostEffects(t, home, dir, cell.settings, serviceedges.Merge(healthyProviderEffects(), effects))
+		revival := &workerGate{started: make(chan map[string]string, 2), requests: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+		close(revival.release)
+		f := startHostRunner(t, home, dir, cell.settings, effects, nil, revival, cell.name+"-lead", cell.name+"-lane")
 		if cell.code != "" {
 			assertError(t, f, http.MethodGet, "/messages", nil, nil, http.StatusServiceUnavailable, cell.code)
 		} else if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
 			t.Fatal("isolated inbox is not empty")
 		}
+		assertMessagingSideChannelBeforeFactoryWork(t, f, revival, cell.name, cell.code)
 		assertHealthyWork(t, f)
 		events := comparableFactoryEvents(t, f.server.GetFactoryEvents(t))
 		f.server.Close(t)
@@ -469,6 +472,33 @@ func TestMessagingSettingsPreserveCanonicalFactoryOutcome(t *testing.T) {
 		} else if !reflect.DeepEqual(baseline, events) {
 			t.Fatalf("messaging %s changed canonical Factory events:\ndisabled: %s\nactual: %s", cell.name, baseline, events)
 		}
+	}
+}
+
+// Every immutable profile runs the same real Worker and Factory behavior.
+// Only the enabled profile admits the side-channel ask; its direct continuation
+// must not change the later canonical Factory sequence or Work outcome.
+func assertMessagingSideChannelBeforeFactoryWork(t *testing.T, f *fixture, revival *workerGate, prefix, code string) {
+	t.Helper()
+	lead := f.invoke(t, prefix+"-lead", nil)
+	lane := f.invoke(t, prefix+"-lane", lead)
+	f.endWorker(t, prefix+"-lead")
+	if code != "" {
+		assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "isolated-ask", "to": map[string]string{"workerSessionId": prefix + "-lead"}, "body": "private side-channel ask"}, lane, http.StatusServiceUnavailable, code)
+	} else {
+		before := messageFactoryStreams(t, f, prefix+"-lead", prefix+"-lane")
+		message := f.cliSend(t, lane, prefix+"-lead", "--request-id", "isolated-ask", "--body", "private side-channel ask")
+		head := assertReviveAdmission(t, f, revival, message, lead)
+		f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+		if after := messageFactoryStreams(t, f, prefix+"-lead", prefix+"-lane"); !reflect.DeepEqual(before, after) {
+			t.Fatal("side-channel continuation changed canonical Factory history")
+		}
+	}
+	f.endWorker(t, prefix+"-lane")
+	select {
+	case <-revival.requests:
+		t.Fatal("inactive Messaging or settled ask started another continuation")
+	default:
 	}
 }
 

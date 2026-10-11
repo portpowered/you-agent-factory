@@ -433,13 +433,20 @@ func TestRecipientObserverSurvivesRetainedGapUntilAuthoritativeEnd(t *testing.T)
 	defer release()
 	awaitRecipientRead(t, stream.next)
 	topic := workersessions.Topic("lead")
-	stream.wake <- events.Delivery{Kind: events.DeliveryGap, Gap: &events.GapFacts{Topic: topic, Requested: 1, EarliestRetained: 2, Head: 3}}
+	// Position one is genuinely missing, rather than merely preceding the
+	// earliest retained position. The component consumes the public gap tuple.
+	stream.wake <- events.Delivery{Kind: events.DeliveryGap, Gap: &events.GapFacts{Topic: topic, Requested: 0, EarliestRetained: 2, Head: 3}}
 	awaitRecipientRead(t, stream.next)
 	stream.wake <- events.Delivery{Kind: events.DeliveryBackpressure}
 	awaitRecipientRead(t, stream.next)
 	if cursor := <-stream.resumed; cursor.Topic != topic || cursor.Position != 3 {
 		t.Fatal("backpressure recovery did not resume at the retained head")
 	}
+	// A stale terminal record is a wakeup, never authority to revive a
+	// currently running recipient. Its later authoritative end is decisive.
+	stream.wake <- events.Delivery{Kind: events.DeliveryRecord, Record: events.Record{
+		SchemaID: "workers.draft.v1", Payload: json.RawMessage(`{"kind":"SESSION","phase":"COMPLETED"}`)}}
+	awaitRecipientRead(t, stream.next)
 	select {
 	case <-admitted:
 		t.Fatal("a gap guessed an ended recipient")

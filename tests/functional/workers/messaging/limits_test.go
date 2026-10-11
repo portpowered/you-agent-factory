@@ -468,11 +468,15 @@ func TestInboxExpiresWithoutCustomerRequestsAndCannotRevive(t *testing.T) {
 	readPage(t, f, "/messages?threadId="+read.ThreadId+"&markRead=true", lead)
 	parent := f.cliSend(t, lane, "lead", "--request-id", "replied-parent", "--body", "answered ask", "--expires", "1m")
 	reply := f.cliSend(t, lead, "reply", parent.MessageId, "--request-id", "reply", "--body", "held answer", "--if-ended", "hold", "--expires", "2m")
+	defaultExpiry := f.cliSend(t, lane, "lead", "--request-id", "expire-default", "--body", "default deadline ask")
+	maximumExpiry := f.cliSend(t, lane, "lead", "--request-id", "expire-maximum", "--body", "maximum deadline held ask", "--expires", "168h", "--if-ended", "hold")
 	before := messageFactoryStreams(t, f, "lead", "lane")
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	frames, finished := make(chan []byte, 32), make(chan error, 1)
-	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+	// Operator observation survives the running caller's own attempt deadline
+	// while the clock crosses the default and maximum message lifetimes.
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", nil, frames, finished)
 	select {
 	case <-signal.ready:
 	case <-ctx.Done():
@@ -488,6 +492,16 @@ func TestInboxExpiresWithoutCustomerRequestsAndCannotRevive(t *testing.T) {
 	}
 	clock.SetTick(120)
 	awaitExpiredMessages(t, ctx, frames, finished, reply)
+	clock.SetTick(86400)
+	awaitExpiredMessages(t, ctx, frames, finished, defaultExpiry)
+	if message := f.get(t, maximumExpiry.MessageId, nil); message.Status != "QUEUED" {
+		t.Fatal("default deadline expired the maximum-duration message early")
+	}
+	clock.SetTick(604800)
+	awaitExpiredMessages(t, ctx, frames, finished, maximumExpiry)
+	if message := f.get(t, parent.MessageId, nil); message.Status != "REPLIED" {
+		t.Fatal("maximum deadline regressed the replied parent")
+	}
 	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
 		t.Fatal("autonomous expiry changed Factory Events")
 	}
@@ -506,7 +520,7 @@ func TestInboxExpiresWithoutCustomerRequestsAndCannotRevive(t *testing.T) {
 	f.endWorker(t, "lane")
 	f.server.Close(t)
 	second := startHostEffects(t, f.home, f.dir, "", effects)
-	for _, original := range []api.AgentMessage{queued, held, read, reply} {
+	for _, original := range []api.AgentMessage{queued, held, read, reply, defaultExpiry, maximumExpiry} {
 		if message := second.get(t, original.MessageId, nil); message.Status != "EXPIRED" || message.Body != original.Body || message.RevivedWorkerSessionId != nil {
 			t.Fatal("reconstruction lost autonomous expiry or revived its content")
 		}
