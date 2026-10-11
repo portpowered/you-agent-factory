@@ -10,6 +10,9 @@ var (
 	ErrRecipientNotFound    = errors.New("MESSAGE_RECIPIENT_NOT_FOUND")
 	ErrInterruptUnsupported = errors.New("MESSAGE_INTERRUPT_UNSUPPORTED")
 	ErrLimitExceeded        = errors.New("MESSAGE_LIMIT_EXCEEDED")
+	ErrRequestConflict      = errors.New("MESSAGE_REQUEST_CONFLICT")
+	ErrMessageNotFound      = errors.New("MESSAGE_NOT_FOUND")
+	ErrDisabled             = errors.New("MESSAGING_DISABLED")
 )
 
 // LimitError reports the exhausted dimension without exposing request content.
