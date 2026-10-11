@@ -92,6 +92,9 @@ func ExecuteDetached(
 		}
 		return result, err
 	}
+	if observed.hasCompletedMessage() {
+		return result, nil
+	}
 	publishAgentFinalMessage(
 		request.ProgressPublisher,
 		request.Attempt.Dispatch.DispatchID,
@@ -105,14 +108,15 @@ func ExecuteDetached(
 // lastRunnerResult keeps the most recent provider turn of one agent loop. It is
 // request-scoped: a new value is created for every ExecuteDetached call.
 type lastRunnerResult struct {
-	runner   workerexecution.Runner
-	mu       sync.Mutex
-	result   workerexecution.RunnerExecutionResult
-	lastErr  error
-	executed bool
-	publish  workerexecution.ProgressPublisher
-	message  *workerexecution.Draft
-	turn     uint64
+	runner    workerexecution.Runner //nolint:staticcheck // Retained workstation adapter uses the transitional Runner boundary until workstation adapters are deleted.
+	mu        sync.Mutex
+	result    workerexecution.RunnerExecutionResult
+	lastErr   error
+	executed  bool
+	publish   workerexecution.ProgressPublisher
+	message   *workerexecution.Draft
+	completed bool
+	turn      uint64
 }
 
 func (observed *lastRunnerResult) Execute(
@@ -128,29 +132,65 @@ func (observed *lastRunnerResult) Execute(
 	observed.mu.Unlock()
 	var mu sync.Mutex
 	var message *workerexecution.Draft
+	var completed, closed bool
 	if publish != nil {
 		ctx = workerinternal.WithProgressPublisher(ctx, func(fragment workerexecution.ProgressFragment) {
+			mu.Lock()
+			defer mu.Unlock()
+			if closed {
+				return
+			}
 			// Native item IDs can be reused in a later provider turn. Preserve
 			// the item and carry its request-local turn scope separately.
 			fragment = scopeMessageTurn(fragment, turnID)
 			if identity, isMessage := assistantMessageIdentity(fragment); isMessage {
-				mu.Lock()
 				message = identity
-				mu.Unlock()
 			}
+			completed = completed || completedAssistantMessage(fragment)
 			publish(fragment)
 		})
 	}
 	result, err := observed.runner.Execute(ctx, request)
 	mu.Lock()
+	closed = true
 	observed.mu.Lock()
 	observed.result = result
 	observed.lastErr = err
 	observed.executed = true
 	observed.message = message
+	observed.completed = completed
 	observed.mu.Unlock()
 	mu.Unlock()
 	return result, err
+}
+
+func (observed *lastRunnerResult) hasCompletedMessage() bool {
+	observed.mu.Lock()
+	defer observed.mu.Unlock()
+	return observed.completed
+}
+
+// Completion is a turn-local fact, independent of item IDs or normalized Work
+// output. In particular Claude's native decision envelope has no item ID.
+func completedAssistantMessage(fragment workerexecution.ProgressFragment) bool {
+	if draft, ok := fragment.CanonicalDraft.(workerexecution.Draft); ok {
+		if draft.Kind != workerexecution.KindMessage || draft.Phase != workerexecution.PhaseCompleted {
+			return false
+		}
+		var payload workerexecution.MessagePayload
+		if json.Unmarshal(draft.Payload, &payload) != nil || payload.Role != "assistant" {
+			return false
+		}
+		for _, block := range payload.ContentBlocks {
+			if strings.TrimSpace(block.Text) != "" {
+				return true
+			}
+		}
+		return false
+	}
+	return fragment.Kind == workerexecution.ProgressFragmentKind &&
+		strings.EqualFold(strings.TrimSpace(fragment.Type), "message.completed") &&
+		strings.TrimSpace(fragment.Payload) != ""
 }
 
 func (observed *lastRunnerResult) messageIdentity() *workerexecution.Draft {

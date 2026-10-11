@@ -5,5 +5,5 @@
 {"kind":"SESSION","phase":"UPDATED","provider":"cursor","nativeType":"updated","itemId":"session"}
 {"kind":"REASONING","phase":"COMPLETED","provider":"cursor","nativeType":"completed","itemId":"assistant-reasoning"}
 {"kind":"SESSION","phase":"UPDATED","provider":"cursor","nativeType":"completed","itemId":"session"}
-{"kind":"MESSAGE","phase":"COMPLETED","provider":"cursor","nativeType":"message.completed","itemId":"cursor-message"}
+{"kind":"MESSAGE","phase":"COMPLETED","provider":"agent-run","nativeType":"agent_final_response","itemId":"dispatch-final-message"}
 {"kind":"RUN","phase":"COMPLETED","provider":"cursor","nativeType":"STREAM_COMPLETED","itemId":""}

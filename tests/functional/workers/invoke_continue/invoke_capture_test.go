@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -394,7 +395,7 @@ func assertRecordingDirectReads(t *testing.T, ctx context.Context, fixture *invo
 			t.Fatal("unknown provider accounting invented a captured usage fact")
 		}
 	}
-	assertRecordingMessageProvenance(t, page, false, name == "recording-final-only")
+	assertRecordingMessageProvenance(t, page, name == "recording-final-only")
 	for _, view := range []string{"logs", "transcript"} {
 		read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", view, "--worker-session-id", id)
 		if err := fixture.process.Execute(read.Input); err != nil {
@@ -412,13 +413,9 @@ func assertRecordingDirectReads(t *testing.T, ctx context.Context, fixture *invo
 
 func assertRequesterPrivacyListShow(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, observation api.WorkerSessionObservation, token string) {
 	t.Helper()
-	listed := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "list", "--history", "all")
-	if err := fixture.process.Execute(listed.Input); err != nil {
-		t.Fatal("privacy list failed")
-	}
-	assertRequesterTokenAbsent(t, token, listed.Stdout()+listed.Stderr())
+	listed := awaitRequesterPrivacyList(t, fixture, scenario, ctx, token)
 	var rows api.ListWorkerSessionsResponse
-	decodeDirectWorkerSessionResult(t, listed.Stdout(), &rows)
+	decodeDirectWorkerSessionResult(t, listed, &rows)
 	found := false
 	for _, row := range rows.Sessions {
 		if row.WorkerSessionId == observation.WorkerSessionId {
@@ -441,6 +438,34 @@ func assertRequesterPrivacyListShow(t *testing.T, fixture *invokeContinuePackage
 	if !strings.Contains(show.Stdout(), observation.WorkerSessionId) || !strings.Contains(show.Stdout(), string(observation.State)) {
 		t.Fatal("human privacy show lost terminal identity")
 	}
+}
+
+func awaitRequesterPrivacyList(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, token string) string {
+	t.Helper()
+	// Fleet history samples live owners before the durable catalog. A parallel
+	// peer admitted between those reads can temporarily lack an owner in that
+	// snapshot. Await a complete projection, without accepting other failures.
+	body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
+		listed := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "list", "--history", "all")
+		listErr := fixture.process.Execute(listed.Input)
+		diagnostic := strings.ReplaceAll(listed.Stdout()+listed.Stderr(), token, "[REDACTED]")
+		if listErr != nil {
+			safeError := strings.ReplaceAll(listErr.Error(), token, "[REDACTED]")
+			var failure *workersessionscli.CLIError
+			if ctx.Err() != nil || !errors.As(listErr, &failure) || failure.Code != "PROJECTION_UNAVAILABLE" {
+				t.Fatalf("privacy list failed: %s; stdout/stderr: %s", safeError, diagnostic)
+			}
+			assertRequesterTokenAbsent(t, token, listed.Stdout()+listed.Stderr())
+			t.Logf("privacy list projection pending: %s; stdout/stderr: %s", safeError, diagnostic)
+			return diagnostic, listErr
+		}
+		assertRequesterTokenAbsent(t, token, listed.Stdout()+listed.Stderr())
+		return listed.Stdout(), nil
+	}, func(string) bool { return true })
+	if err != nil {
+		t.Fatalf("privacy list readiness failed: %s", strings.ReplaceAll(err.Error(), token, "[REDACTED]"))
+	}
+	return body
 }
 
 func assertRequesterTokenAbsent(t *testing.T, token, body string) {
@@ -565,7 +590,7 @@ func runRecordingContentFactoryResult(t *testing.T, name string) {
 		t.Fatalf("Factory transcript: %v %s", err, read.Stderr())
 	}
 	assertRecordingFactoryTranscript(t, read.Stdout(), fixture.baseURL, id, gated)
-	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), true, false)
+	assertRecordingMessageProvenance(t, recordingContentPages(t, ctx, fixture.baseURL, id), false)
 	if !gated && scenario.providerRunner.CallCount() != 2 {
 		t.Fatal("retry witness did not execute two provider turns")
 	}
@@ -660,7 +685,7 @@ func recordingContentPages(t *testing.T, ctx context.Context, baseURL, id string
 	return result
 }
 
-func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPage, agentLoop, finalOnly bool) {
+func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPage, finalOnly bool) {
 	t.Helper()
 	var native, synthesized []workers.Draft
 	for _, event := range page.Events {
@@ -682,27 +707,18 @@ func assertRecordingMessageProvenance(t *testing.T, page api.WorkerSessionLogPag
 			synthesized = append(synthesized, draft)
 		}
 	}
-	wantSynthesized := 0
-	if agentLoop {
-		wantSynthesized = 1
-	}
-	if (finalOnly && len(native) != 1) || (!finalOnly && len(native) < 2) || len(synthesized) != wantSynthesized {
+	if (finalOnly && len(native) != 1) || (!finalOnly && len(native) < 2) || len(synthesized) != 0 {
 		t.Fatalf("stream/final provenance: native=%+v synthesized=%+v", native, synthesized)
 	}
-	if len(synthesized) == 0 {
-		// Direct provider execution has no agent-loop final snapshot.
-		if native[len(native)-1].Phase != workers.PhaseCompleted {
-			t.Fatal("direct stream lost completed message")
-		}
-		return
-	}
-	assertRecordingFinalSnapshotIdentity(t, native[len(native)-1], synthesized[0])
+	// Native completions are authoritative for direct and agent-loop turns.
+	// Result-only synthesized FINAL_ONLY fallback is covered by FactoryFinalCapture.
+	assertRecordingCompletedNativeIdentity(t, native[len(native)-1])
 }
 
-func assertRecordingFinalSnapshotIdentity(t *testing.T, last, final workers.Draft) {
+func assertRecordingCompletedNativeIdentity(t *testing.T, last workers.Draft) {
 	t.Helper()
-	if last.ItemID == "" || last.ItemID != final.ItemID || last.TurnID != final.TurnID || last.RunID != final.RunID || last.DispatchID != final.DispatchID || final.Provenance.Fidelity != workers.FidelityNormalized {
-		t.Fatalf("final snapshot lost last stream identity: %+v / %+v", last, final)
+	if last.Phase != workers.PhaseCompleted || last.ItemID == "" || last.DispatchID == "" || last.Provenance.Fidelity != workers.FidelityNormalized {
+		t.Fatalf("native stream lost completed message identity/provenance: %+v", last)
 	}
 }
 

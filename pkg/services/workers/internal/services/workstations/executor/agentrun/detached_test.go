@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -26,6 +27,7 @@ type detachedRunnerStub struct {
 	calls     int
 	requests  []workerexecution.RunnerExecutionRequest
 	fragments [][]workerexecution.ProgressFragment
+	callback  workerexecution.ProgressPublisher
 }
 
 func (runner *detachedRunnerStub) Execute(
@@ -38,6 +40,7 @@ func (runner *detachedRunnerStub) Execute(
 	runner.requests = append(runner.requests, request)
 	runner.mu.Unlock()
 	if publish := workerinternal.ProgressPublisherFromContext(ctx, nil); publish != nil && index < len(runner.fragments) {
+		runner.callback = publish
 		for _, fragment := range runner.fragments[index] {
 			publish(fragment)
 		}
@@ -52,6 +55,67 @@ func (runner *detachedRunnerStub) Execute(
 		index = len(runner.results) - 1
 	}
 	return runner.results[index], nil
+}
+
+func TestExecuteDetachedSelectsOnlyFinalTurnCompletion(t *testing.T) {
+	t.Parallel()
+	envelope := "{\r\n  \"output\": \"answer\", \"decision\": \"ACCEPTED\"\r\n}"
+	payload, _ := json.Marshal(workerexecution.MessagePayload{Role: "assistant",
+		ContentBlocks: []workerexecution.ContentBlock{{Kind: workerexecution.ContentBlockText, Text: envelope}}})
+	native := workerexecution.ProgressFragment{Kind: workerexecution.ProgressFragmentKind,
+		Type: "message.completed", Payload: envelope, Provider: "claude"}
+	canonical := native
+	canonical.CanonicalDraft = workerexecution.Draft{Kind: workerexecution.KindMessage,
+		Phase: workerexecution.PhaseCompleted, Payload: payload}
+	delta := native
+	delta.Type = "message.delta"
+	blank := native
+	blank.Payload = " "
+	tool := native
+	tool.Type = "tool.completed"
+	for _, test := range []struct {
+		name         string
+		turns        [][]workerexecution.ProgressFragment
+		wantFallback bool
+	}{
+		{"Claude anonymous envelope", [][]workerexecution.ProgressFragment{{native}}, false},
+		{"canonical anonymous envelope", [][]workerexecution.ProgressFragment{{canonical}}, false},
+		{"two genuine equal messages", [][]workerexecution.ProgressFragment{{native, native}}, false},
+		{"earlier completion", [][]workerexecution.ProgressFragment{{native}, {delta}}, true},
+		{"delta only", [][]workerexecution.ProgressFragment{{delta}}, true},
+		{"blank only", [][]workerexecution.ProgressFragment{{blank}}, true},
+		{"tool only", [][]workerexecution.ProgressFragment{{tool}}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var got []workerexecution.ProgressFragment
+			runner := &detachedRunnerStub{results: []workerexecution.RunnerExecutionResult{{Content: "answer"}}, fragments: test.turns}
+			_, err := ExecuteDetached(t.Context(), &inferencingHarnessStub{turns: len(test.turns)}, runner,
+				DetachedRequest{Attempt: detachedAttempt(), ProgressPublisher: func(f workerexecution.ProgressFragment) { got = append(got, f) }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 0
+			for _, turn := range test.turns {
+				want += len(turn)
+			}
+			if test.wantFallback {
+				want++
+			}
+			if len(got) != want {
+				t.Fatalf("observations = %d, want %d: %+v", len(got), want, got)
+			}
+			if got[0].Payload != test.turns[0][0].Payload {
+				t.Fatal("native content changed")
+			}
+			// A callback retained by the runner cannot publish or change selection
+			// after its physical turn returns, even while a later turn runs.
+			runner.callback(native)
+			if len(got) != want {
+				t.Fatal("late callback added an observation")
+			}
+		})
+	}
 }
 
 func (runner *detachedRunnerStub) callCount() int {
