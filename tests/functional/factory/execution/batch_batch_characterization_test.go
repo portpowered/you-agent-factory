@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -70,7 +72,7 @@ func assertFiniteBatchReplay(t *testing.T, host *factorySessionHost, dir, record
 	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = dir
 	if err := host.server.Execute(t, inputs.Input); err != nil {
-		t.Fatalf("replay canceled batch: %v", err)
+		t.Fatalf("replay canceled batch: %v (type=%T); cause=%#v; stdout=%s stderr=%s", err, err, errors.Unwrap(err), inputs.Stdout(), inputs.Stderr())
 	}
 	if !strings.Contains(inputs.Stdout(), `Work: id="btrc-batch-child" type="task" state="init"`) || !strings.Contains(inputs.Stdout(), "DISPATCH_RESPONSE") {
 		t.Fatalf("replay lost unfinished Work/canonical dispatch: %s", inputs.Stdout())
@@ -656,9 +658,7 @@ func btrcStringSliceValue(value *[]string) []string {
 func assertFiniteBatchCanceledResult(t *testing.T, mode string, err error, stdout, stderr string) {
 	t.Helper()
 	if mode == "context" {
-		if !errors.Is(err, context.Canceled) || !strings.Contains(stderr, "batch interrupted") || strings.Contains(stderr, "CURRENT_FACTORY_INVALID") {
-			t.Fatalf("interrupted batch = %v / %s", err, stderr)
-		}
+		assertFiniteBatchInterrupted(t, err, stderr)
 		return
 	}
 	var failure *runcli.InvocationError
@@ -678,21 +678,49 @@ func assertFiniteBatchCanceledResult(t *testing.T, mode string, err error, stdou
 		t.Fatalf("failed member lost: %v", err)
 	}
 	if mode == "json" || mode == "global-json" {
-		var report struct {
-			Status   string
-			Failures []struct {
-				WorkID    string
-				WorkState string
-				Reason    string
-			}
-		}
-		if err := json.Unmarshal([]byte(stdout), &report); err != nil {
-			t.Fatalf("JSON result: %v / %s", err, stdout)
-		}
-		if report.Status != "FAILED" || len(report.Failures) != 2 {
-			t.Fatalf("report = %#v", report)
+		assertFiniteBatchCanceledJSON(t, stdout)
+	}
+}
+
+func assertFiniteBatchInterrupted(t *testing.T, err error, stderr string) {
+	t.Helper()
+	if !errors.Is(err, context.Canceled) || !strings.Contains(stderr, "batch interrupted") || strings.Contains(stderr, "CURRENT_FACTORY_INVALID") {
+		t.Fatalf("interrupted batch = %v / %s", err, stderr)
+	}
+}
+
+func assertFiniteBatchCanceledJSON(t *testing.T, stdout string) {
+	t.Helper()
+	var report struct {
+		Status   string
+		Failures []struct {
+			WorkID    string
+			WorkState string
+			Reason    string
 		}
 	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("JSON result: %v / %s", err, stdout)
+	}
+	if report.Status != "FAILED" || len(report.Failures) != 2 {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+// finiteBatchStartup observes the public CLI readiness line, which follows
+// startup completion and recording publication. A command can start earlier.
+type finiteBatchStartup struct {
+	io.Writer
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (output *finiteBatchStartup) Write(data []byte) (int, error) {
+	n, err := output.Writer.Write(data)
+	if err == nil && strings.Contains(string(data[:n]), "Factory initiated:") {
+		output.once.Do(func() { close(output.ready) })
+	}
+	return n, err
 }
 
 func exerciseFiniteBatchCancellation(t *testing.T, host *factorySessionHost, mode string) {
@@ -725,6 +753,10 @@ func exerciseFiniteBatchCancellation(t *testing.T, host *factorySessionHost, mod
 		args = append([]string{"you", "--json"}, args[1:]...)
 	}
 	inputs := support.FakeInputs(t.Context(), args)
+	startup := &finiteBatchStartup{Writer: inputs.Input.Stdout, ready: make(chan struct{})}
+	if mode == "context" {
+		inputs.Input.Stdout = startup
+	}
 	home := t.TempDir()
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = dir
@@ -744,18 +776,13 @@ func exerciseFiniteBatchCancellation(t *testing.T, host *factorySessionHost, mod
 		t.Fatal("test ended before readiness")
 	}
 	if mode == "completed-and-held" || mode == "failed-and-held" {
-		result := platformprocess.CommandResult{Stdout: []byte("processed. COMPLETE")}
-		if mode == "failed-and-held" {
-			result = platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 400 Bad Request: invalid request")}
-		}
-		shaped, err := support.NewShapedProviderCommandRunner(result).Run(t.Context(), call.request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		call.reply <- shaped
+		releaseFiniteBatchMember(t, call, mode)
 		call = selectedAwait(t, runner.calls)
 	}
 	if mode == "context" {
+		// Worker readiness alone does not establish a started CLI invocation.
+		// Cancel only after public startup completion while the worker is held.
+		selectedAwait(t, startup.ready)
 		cancel()
 	} else {
 		cancelFiniteBatchSession(t, host.server.URL(), sessionID)
@@ -767,4 +794,17 @@ func exerciseFiniteBatchCancellation(t *testing.T, host *factorySessionHost, mod
 	if finishPeer != nil {
 		finishPeer()
 	}
+}
+
+func releaseFiniteBatchMember(t *testing.T, call selectedCommandCall, mode string) {
+	t.Helper()
+	result := platformprocess.CommandResult{Stdout: []byte("processed. COMPLETE")}
+	if mode == "failed-and-held" {
+		result = platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 400 Bad Request: invalid request")}
+	}
+	shaped, err := support.NewShapedProviderCommandRunner(result).Run(t.Context(), call.request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call.reply <- shaped
 }

@@ -244,16 +244,21 @@ func TestReportBatchResultUnfinishedWorkKeepsActualStateAndDistinctReasons(t *te
 				}
 				return
 			}
-			var report batchReport
-			if err := json.Unmarshal(output.Bytes(), &report); err != nil {
-				t.Fatal(err)
-			}
-			if report.Status != "FAILED" || len(report.Failures) != 2 || report.Failures[0].WorkID != "a-failed" ||
-				report.Failures[0].Reason != "actual failure" || report.Failures[1].WorkID != "b-held" ||
-				report.Failures[1].WorkState != "task:init" || !strings.Contains(report.Failures[1].Reason, "unfinished") {
-				t.Fatalf("report = %#v", report)
-			}
+			assertUnfinishedBatchJSON(t, output.Bytes())
 		})
+	}
+}
+
+func assertUnfinishedBatchJSON(t *testing.T, output []byte) {
+	t.Helper()
+	var report batchReport
+	if err := json.Unmarshal(output, &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != "FAILED" || len(report.Failures) != 2 || report.Failures[0].WorkID != "a-failed" ||
+		report.Failures[0].Reason != "actual failure" || report.Failures[1].WorkID != "b-held" ||
+		report.Failures[1].WorkState != "task:init" || !strings.Contains(report.Failures[1].Reason, "unfinished") {
+		t.Fatalf("report = %#v", report)
 	}
 }
 
