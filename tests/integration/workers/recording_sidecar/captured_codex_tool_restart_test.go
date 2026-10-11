@@ -86,8 +86,26 @@ func readCapturedCodexRestart(t *testing.T, f invokeArtifactFixture, server stri
 	assertCapturedCodexRestartFacts(t, snapshot)
 	assertCapturedCodexRestartHTTP(t, f, server, snapshot)
 	assertHistoryMCPViews(t, f.ctx, f.binary, f.project, f.env, server, snapshot.Observation, snapshot.Logs, []string{"READ", "logs", "transcript"}, snapshot.Transcript)
-	assertHistoryReplay(t, f.ctx, f.binary, f.project, f.env, server, snapshot.Logs)
+	assertCapturedCodexRestartPages(t, f, server, snapshot.Logs)
 	return snapshot
+}
+
+func assertCapturedCodexRestartPages(t *testing.T, f invokeArtifactFixture, server string, want api.WorkerSessionLogPage) {
+	t.Helper()
+	var events []api.WorkerSessionEvent
+	token := ""
+	for range len(want.Events) + 1 {
+		page := historyLogPage(t, f.ctx, f.binary, f.project, f.env, server, want.WorkerSessionId, token)
+		events = append(events, page.Events...)
+		if page.NextToken == nil {
+			if !reflect.DeepEqual(events, want.Events) {
+				t.Fatal("restart paging changed acknowledged positions or facts")
+			}
+			return
+		}
+		token = *page.NextToken
+	}
+	t.Fatal("bounded tool recording did not finish paging")
 }
 
 func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtifactSnapshot) {
@@ -95,7 +113,7 @@ func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtif
 	assertCapturedCodexRestartMetadata(t, snapshot.Observation)
 	assertCapturedCodexRestartLogs(t, snapshot.Logs)
 	if len(snapshot.Transcript.Entries) != 7 {
-		t.Fatal("restart lost or duplicated transcript entries")
+		t.Fatalf("restart transcript entry count=%d expected=7", len(snapshot.Transcript.Entries))
 	}
 	for i, entry := range snapshot.Transcript.Entries[:6] {
 		id := []string{"success", "failure", "mcp"}[i/2]
@@ -198,8 +216,7 @@ emit({type:'item.started', item:{id:'success',type:'command_execution',command:'
 emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'private-output',exit_code:0,status:'completed'}});
 emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'private-denial',exit_code:1,status:'failed'}});
 emit({type:'item.started', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',arguments:{query:'visible',api_key:'private-token'},status:'in_progress'}});
-emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible'},status:'completed'}});
-emit({type:'item.completed', item:{id:'reasoning',type:'reasoning',text:'private-reasoning'}});
+emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible',private_reasoning:'private-reasoning'},status:'completed'}});
 emit({type:'item.completed', item:{id:'answer',type:'agent_message',text:'restart tools COMPLETE'}});
 emit({type:'turn.completed',usage:{input_tokens:5,output_tokens:2}});
 `
