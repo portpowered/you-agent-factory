@@ -41,6 +41,9 @@ type Ledger interface {
 // It owns no durable state or admission authority.
 type EventAppender interface {
 	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
+	AttachSource(context.Context, events.AttachSourceRequest) (events.AttachSourceResult, error)
+	Read(context.Context, events.ReadRequest) (events.ReadResult, error)
+	Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error)
 }
 
 // Engine serializes admission across policy, request aliases, limits and the

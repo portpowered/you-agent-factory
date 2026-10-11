@@ -22,6 +22,11 @@ func (recipient Recipient) ObservationTopic() events.Topic {
 
 const ObservationSchema events.SchemaID = "agent-message-observation/v1"
 
+// ObservationStream aggregates recipient streams for authorized live queries.
+// Transports consume it only through Service.Follow; Events topic names are
+// routing identities, never customer authorization capabilities.
+const ObservationStream events.Topic = "agent-messages/events"
+
 // Service is the sole peer boundary for durable Agent Message operations.
 // Caller credentials are execution-only and are validated on every operation.
 // A nil caller permits operator observation, never send, reply or mark-read.

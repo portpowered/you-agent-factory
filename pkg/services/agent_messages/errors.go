@@ -14,6 +14,9 @@ var (
 	ErrCursorInvalid        = errors.New("MESSAGE_CURSOR_INVALID")
 	ErrMessageNotFound      = errors.New("MESSAGE_NOT_FOUND")
 	ErrDisabled             = errors.New("MESSAGING_DISABLED")
+	ErrStreamUnavailable    = errors.New("MESSAGE_STREAM_UNAVAILABLE")
+	ErrStreamGap            = errors.New("MESSAGE_STREAM_GAP")
+	ErrStreamBackpressure   = errors.New("MESSAGE_STREAM_BACKPRESSURE")
 )
 
 // LimitError reports the exhausted dimension without exposing request content.

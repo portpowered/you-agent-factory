@@ -28,6 +28,16 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 			Kind: observationKind(entry), Message: entry.Message}
 		payload, err := json.Marshal(observation)
 		if err == nil {
+			topic := entry.Message.To.ObservationTopic()
+			_, attachErr := e.events.AttachSource(publication, events.AttachSourceRequest{
+				Destination: agentmessages.ObservationStream, Source: topic,
+				StartAt: events.Cursor{Topic: topic}, Mode: events.AttachModeLiveOnly,
+			})
+			if attachErr != nil && e.logger != nil {
+				e.logger.WarnContext(publication, "Agent Message aggregate stream unavailable")
+			}
+		}
+		if err == nil {
 			_, err = e.events.Append(publication, events.AppendRequest{
 				Topic: entry.Message.To.ObservationTopic(), SourceType: "agent-message",
 				SourceID: events.SourceID(entry.Message.MessageID), SourceSequence: events.SourceSequence(t.Sequence),

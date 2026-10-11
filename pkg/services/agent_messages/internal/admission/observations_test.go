@@ -16,9 +16,24 @@ import (
 )
 
 type observationAppender struct {
-	requests []events.AppendRequest
-	err      error
-	before   func(context.Context, events.AppendRequest)
+	requests    []events.AppendRequest
+	attachments []events.AttachSourceRequest
+	attachError error
+	err         error
+	before      func(context.Context, events.AppendRequest)
+}
+
+func (a *observationAppender) AttachSource(_ context.Context, r events.AttachSourceRequest) (events.AttachSourceResult, error) {
+	a.attachments = append(a.attachments, r)
+	return events.AttachSourceResult{}, a.attachError
+}
+
+func (*observationAppender) Read(context.Context, events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{}, agentmessages.ErrStreamUnavailable
+}
+
+func (*observationAppender) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
+	return nil, agentmessages.ErrStreamUnavailable
 }
 
 func (a *observationAppender) Append(ctx context.Context, r events.AppendRequest) (events.AppendResult, error) {
@@ -74,6 +89,7 @@ func TestObservationsFollowDurableSendReplyAndRead(t *testing.T) {
 	if len(a.requests) != 1 {
 		t.Fatal("idempotent retry or alias fabricated a message observation")
 	}
+	assertAggregateAttachment(t, a, first)
 	f.authority.sender = engineIdentity("lead")
 	if _, err := f.engine.Get(context.Background(), agentmessages.GetRequest{MessageID: first.MessageID, Caller: f.caller}); err != nil {
 		t.Fatal(err)
@@ -92,6 +108,15 @@ func TestObservationsFollowDurableSendReplyAndRead(t *testing.T) {
 	if child.RecordID != parent.RecordID || child.Sequence != parent.Sequence || child.Message.InReplyTo != first.MessageID ||
 		child.Message.ThreadID != first.ThreadID || parent.Message.RepliedByMessageID != reply.MessageID {
 		t.Fatal("atomic reply observations lost their common commit or relationship")
+	}
+}
+
+func assertAggregateAttachment(t *testing.T, a *observationAppender, message agentmessages.Message) {
+	t.Helper()
+	if len(a.attachments) != 1 || a.attachments[0].Validate() != nil ||
+		a.attachments[0].Source != message.To.ObservationTopic() ||
+		a.attachments[0].Destination != agentmessages.ObservationStream || a.attachments[0].Mode != events.AttachModeLiveOnly {
+		t.Fatal("recipient stream was not attached to authorized query aggregate")
 	}
 }
 
@@ -238,5 +263,24 @@ func TestObservationFailurePreservesDisconnectedDurableSuccessAndSafeTelemetry(t
 	}
 	if !strings.Contains(telemetry.String(), "Agent Message observation unavailable") || bytes.Contains(a.requests[0].Payload, []byte(f.caller.Token)) {
 		t.Fatal("missing safe failure diagnostic or leaked caller credentials")
+	}
+}
+
+func TestAggregateAttachmentFailurePreservesRecipientObservation(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	var telemetry bytes.Buffer
+	f.engine.logger = slog.New(slog.NewJSONHandler(&telemetry, nil))
+	a := &observationAppender{attachError: errors.New("caller-secret planted-secret")}
+	f.engine.events = a
+	m, err := f.engine.Send(context.Background(), engineRequest("one", "body"), f.caller, "factory")
+	if err != nil || len(a.requests) != 1 || len(f.ledger.entries) != 1 {
+		t.Fatalf("attachment changed admission/publication: %v", err)
+	}
+	if a.requests[0].Topic != m.To.ObservationTopic() {
+		t.Fatal("attachment failure redirected recipient observation")
+	}
+	if strings.Contains(telemetry.String(), "planted-secret") || strings.Contains(telemetry.String(), f.caller.Token) {
+		t.Fatal("attachment diagnostics leaked")
 	}
 }
