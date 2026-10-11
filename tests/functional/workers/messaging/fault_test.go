@@ -608,6 +608,65 @@ func TestReadOnlyRetentionStorePreservesInboxAndFactoryWork(t *testing.T) {
 	}
 }
 
+func TestRecipientEndDuringSendFlushDeliversOnce(t *testing.T) {
+	t.Parallel()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), kind: "SENT"}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{AgentMessageStoreFileSystem: gate}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	result := make(chan outcomeSendResponse, 1)
+	request := map[string]any{"requestId": "end-during-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "input committed after recipient end"}
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+		result <- outcomeSendResponse{status: status, body: body}
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("send did not reach its durable flush")
+	}
+	// The recipient ends before SENT commits or an end observer can register.
+	// Worker completion is independent of the blocked Messaging journal.
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	select {
+	case <-revival.requests:
+		t.Fatal("uncommitted send reached the provider")
+	case <-result:
+		t.Fatal("send returned before its durable flush")
+	default:
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	var response outcomeSendResponse
+	select {
+	case response = <-result:
+	case <-time.After(15 * time.Second):
+		t.Fatal("committed send did not finish")
+	}
+	var sent api.AgentMessageSendResponse
+	if response.status != http.StatusAccepted || json.Unmarshal(response.body, &sent) != nil {
+		t.Fatalf("send after recipient end: %d %s", response.status, response.body)
+	}
+	final := f.awaitDeliveryOutcome(t, lane, sent.Message)
+	head := assertReviveAdmission(t, f, revival, final, lead)
+	if replay := f.cliSend(t, lane, "lead", "--request-id", "end-during-send", "--body", request["body"].(string)); !reflect.DeepEqual(replay, final) {
+		t.Fatal("CLI retry changed the HTTP delivery or started a second send")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	assertContinuationLinks(t, f, "lead", head["YOU_WORKER_SESSION_ID"])
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("send/end overlap changed canonical Factory Events")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("send/end overlap or retry branched the continuation")
+	default:
+	}
+}
+
 func TestStartupDeliversUnreadMessagesWithoutAnotherSend(t *testing.T) {
 	t.Parallel()
 	home, dir := t.TempDir(), t.TempDir()
