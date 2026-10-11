@@ -16,7 +16,7 @@ import (
 
 // The invoking lane owns compilation. This one real subprocess/restart journey
 // uses the production Codex adapter with a private PATH-owned, unpaid shim.
-func TestCapturedCodexToolJoinedRestart(t *testing.T) {
+func TestCapturedCodexToolContentRestart(t *testing.T) {
 	t.Parallel()
 	f := newInvokeArtifactFixture(t)
 	f.env = capturedCodexRestartEnvironment(f.env)
@@ -135,7 +135,7 @@ func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtif
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{"private-command", "private-output", "private-denial", "private-token", "private-reasoning", "wsv-key-fixture", "private-key-value"} {
+	for _, secret := range []string{"private-token", "private-reasoning", "wsv-key-fixture", "private-key-value"} {
 		if strings.Contains(string(raw), secret) {
 			t.Fatal("restart leaked sensitive native-shaped facts")
 		}
@@ -193,6 +193,12 @@ func decodeCapturedCodexRestartTool(t *testing.T, value map[string]interface{}) 
 
 func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload, index int) {
 	t.Helper()
+	if index == 0 {
+		var arguments map[string]any
+		if json.Unmarshal(payload.ArgumentsSummary, &arguments) != nil || arguments["command"] != "benign-command <redacted>" {
+			t.Fatal("restart changed selectively sanitized command")
+		}
+	}
 	if index == 4 {
 		var result map[string]any
 		if json.Unmarshal(payload.ResultSummary, &result) != nil {
@@ -208,7 +214,7 @@ func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload,
 		return
 	}
 	var result map[string]any
-	if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != payload.Status {
+	if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != payload.Status || result["aggregated_output"] != []string{"benign-output <redacted>", "benign-denial"}[index-1] {
 		t.Fatal("restart changed zero/sandbox-failed result")
 	}
 }
@@ -242,9 +248,9 @@ const capturedCodexRestartShim = `
 if (process.argv.includes('--version')) { console.log('controlled-codex'); process.exit(0); }
 const emit = value => console.log(JSON.stringify(value));
 emit({type:'thread.started', thread_id:'restart-tools-thread'});
-emit({type:'item.started', item:{id:'success',type:'command_execution',command:'private-command',status:'in_progress'}});
-emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'private-output',exit_code:0,status:'completed'}});
-emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'private-denial',exit_code:1,status:'failed'}});
+emit({type:'item.started', item:{id:'success',type:'command_execution',command:'benign-command wsv-key-fixture',status:'in_progress'}});
+emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'benign-output wsv-key-fixture',exit_code:0,status:'completed'}});
+emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'benign-denial',exit_code:1,status:'failed'}});
 emit({type:'item.started', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',arguments:{query:'visible',api_key:'private-token'},status:'in_progress'}});
 emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible',private_reasoning:'private-reasoning','wsv-key-fixture':'private-key-value',nested:{'prefix-wsv-key-fixture':'private-key-value',safe:0}},status:'completed'}});
 emit({type:'item.completed', item:{id:'answer',type:'agent_message',text:'restart tools COMPLETE'}});

@@ -53,7 +53,7 @@ func TestCapturedCodexToolTerminationPreservesPartialFacts(t *testing.T) {
 	peer := fixture.scenario(t, "captured-codex-partial-peer")
 	defer peer.close(t)
 	peerID := scenarioScopedID(peer, "peer")
-	peerInvoke := t7RemoteCLIInputs(peer, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, peer, peerID))
+	peerInvoke := t7RemoteCLIInputs(peer, ctx, fixture.baseURL, "invoke", "--execution", capturedCodexExecutionPath(t, peer, peerID))
 	if err := fixture.process.Execute(peerInvoke.Input); err != nil {
 		t.Fatal("partial tool sibling admission failed")
 	}
