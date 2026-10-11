@@ -571,14 +571,19 @@ func (e *FactoryEngine) SetReplayHistoricalWorks(existing []work.ExistingWork) {
 	e.replayHistoricalWorks = append([]work.ExistingWork(nil), existing...)
 }
 
-// SetReplayLifecycleControls preserves the scheduling boundary of paused
-// completion ticks. Replay advances its logical clock and consumes recorded
-// results; it never interprets those ticks as a live restart or resume.
+// SetReplayLifecycleControls preserves recorded pause and closeout boundaries.
+// Replay consumes recorded results without turning unfinished Work into a live
+// retry after closeout. A later recorded retry remains part of the full history.
 func (e *FactoryEngine) SetReplayLifecycleControls(events []interfaces.FactoryEvent) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.replayPauseControls = nil
+	e.replayCompletedTick = nil
 	for _, event := range events {
+		if event.Type == interfaces.FactoryEventTypeSessionCompleted || event.Type == interfaces.FactoryEventTypeRunResponse {
+			tick := event.Context.Tick
+			e.replayCompletedTick = &tick
+		}
 		if event.Type == interfaces.FactoryEventTypeSessionPaused || event.Type == interfaces.FactoryEventTypeSessionResumed {
 			e.replayPauseControls = append(e.replayPauseControls, interfaces.FactoryEvent{Type: event.Type, Context: interfaces.FactoryEventContext{Tick: event.Context.Tick}})
 		}
