@@ -7,6 +7,8 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -395,4 +397,46 @@ func assertHeldReplyOriginalRequester(t *testing.T, original string, ask, reply 
 		reply.To.WorkerSessionId != original || reply.ThreadId != ask.ThreadId || reply.InReplyTo == nil || *reply.InReplyTo != ask.MessageId {
 		t.Fatalf("held reply lost original requester or delivery policy: %+v", reply)
 	}
+}
+
+func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	core, logs := observer.New(zap.InfoLevel)
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{ProcessLogger: zap.New(core)}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	raw := "private execution credential: " + lane["YOU_WORKER_SESSION_TOKEN"]
+	message := f.cliSend(t, lane, "lead", "--request-id", "redacted", "--body", raw)
+	if message.Body == raw || strings.Contains(message.Body, lane["YOU_WORKER_SESSION_TOKEN"]) || message.BodyRedactionCount != 1 {
+		t.Fatal("execution token reached public delivery body")
+	}
+	successor := assertReviveAdmission(t, f, revival, message, lead)
+	journal, err := os.ReadFile(filepath.Join(f.home, ".you-agent-factory", "messages", "messages.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(journal), lane["YOU_WORKER_SESSION_TOKEN"]) || strings.Contains(string(journal), raw) {
+		t.Fatal("execution token reached durable message or intent")
+	}
+	alias := f.cliSend(t, lane, "lead", "--request-id", "redacted-alias", "--body", raw)
+	if alias.MessageId != message.MessageId {
+		t.Fatal("normalized private body lost dedup")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	f.server.Close(t)
+	private := []string{raw, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"], successor["YOU_WORKER_SESSION_TOKEN"]}
+	next := startHostRunner(t, f.home, f.dir, "", edges.Edges{ProcessLogger: zap.New(core)}, nil, revival)
+	page := readPage(t, next, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], message) {
+		t.Fatal("reconstruction changed the normalized delivery")
+	}
+	assertError(t, next, http.MethodGet, "/messages/"+message.MessageId, nil, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	assertNoRecoveryCommand(t, revival)
+	next.server.Close(t)
+	assertPrivateArtifacts(t, f.home, private)
+	assertPrivateArtifacts(t, f.dir, private)
+	assertPrivateStreamDiagnostics(t, logs, private...)
 }

@@ -3543,7 +3543,7 @@ components:
             deliveredWorkerSessionId:
               type: string
               nullable: true
-              description: Exact successor reached after authoritative admission and durable delivery.
+              description: Exact successor reached after provider-confirmed resumed progress and durable delivery.
         correlation:
           type: object
           additionalProperties: false
@@ -3596,7 +3596,7 @@ components:
         revivedWorkerSessionId:
           type: string
           nullable: true
-          description: Admitted successor. Published only after durable delivery commit.
+          description: Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit.
         repliedByMessageId:
           type: string
           nullable: true
@@ -3610,7 +3610,7 @@ components:
         - REPLIED
         - EXPIRED
         - REJECTED
-      description: Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires confirmed continuation admission and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
+      description: Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
     AgentMessageSendResponse:
       type: object
       additionalProperties: false

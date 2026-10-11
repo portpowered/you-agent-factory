@@ -21,7 +21,7 @@ properties:
       kind: {type: string, enum: [WORKER_SESSION]}
       workerSessionId: {type: string, minLength: 1}
       factorySessionId: {type: string, nullable: true}
-      deliveredWorkerSessionId: {type: string, nullable: true, description: Exact successor reached after authoritative admission and durable delivery.}
+      deliveredWorkerSessionId: {type: string, nullable: true, description: Exact successor reached after provider-confirmed resumed progress and durable delivery.}
   correlation:
     type: object
     additionalProperties: false
@@ -39,5 +39,5 @@ properties:
   hop: {type: integer, minimum: 0, maximum: 3}
   sentAt: {type: string, format: date-time}
   expiresAt: {type: string, format: date-time}
-  revivedWorkerSessionId: {type: string, nullable: true, description: Admitted successor. Published only after durable delivery commit.}
+  revivedWorkerSessionId: {type: string, nullable: true, description: Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit.}
   repliedByMessageId: {type: string, nullable: true}

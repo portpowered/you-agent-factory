@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -260,7 +258,9 @@ func TestReviveAdmissionPublishesDurableOutcomeToReadAndFollow(t *testing.T) {
 				default:
 				}
 			} else {
-				assertReviveAdmission(t, f, revival, message, lead)
+				successor := assertReviveAdmission(t, f, revival, message, lead)
+				close(revival.release)
+				f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
 			}
 			if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
 				t.Fatal("admission outcome changed canonical Factory Events")
@@ -271,6 +271,8 @@ func TestReviveAdmissionPublishesDurableOutcomeToReadAndFollow(t *testing.T) {
 			case <-time.After(15 * time.Second):
 				t.Fatal("admission follow did not join")
 			}
+			f.endWorker(t, "lane")
+			f.server.Close(t)
 		})
 	}
 }
@@ -758,40 +760,6 @@ func TestDeniedEndedRecipientSendHasNoDeliveryEffect(t *testing.T) {
 	successor := assertReviveAdmission(t, f, revival, message, lead)
 	close(revival.release)
 	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
-}
-
-func TestReviveInputRedactsExecutionTokenBeforeDurableIntent(t *testing.T) {
-	t.Parallel()
-	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
-	core, logs := observer.New(zap.InfoLevel)
-	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", edges.Edges{ProcessLogger: zap.New(core)}, nil, revival, "lead", "lane")
-	lead := f.invoke(t, "lead", nil)
-	lane := f.invoke(t, "lane", lead)
-	f.endWorker(t, "lead")
-	raw := "private execution credential: " + lane["YOU_WORKER_SESSION_TOKEN"]
-	message := f.cliSend(t, lane, "lead", "--request-id", "redacted", "--body", raw)
-	if message.Body == raw || strings.Contains(message.Body, lane["YOU_WORKER_SESSION_TOKEN"]) || message.BodyRedactionCount != 1 {
-		t.Fatal("execution token reached public delivery body")
-	}
-	successor := assertReviveAdmission(t, f, revival, message, lead)
-	journal, err := os.ReadFile(filepath.Join(f.home, ".you-agent-factory", "messages", "messages.jsonl"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(journal), lane["YOU_WORKER_SESSION_TOKEN"]) || strings.Contains(string(journal), raw) {
-		t.Fatal("execution token reached durable message or intent")
-	}
-	alias := f.cliSend(t, lane, "lead", "--request-id", "redacted-alias", "--body", raw)
-	if alias.MessageId != message.MessageId {
-		t.Fatal("normalized private body lost dedup")
-	}
-	close(revival.release)
-	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
-	f.server.Close(t)
-	private := []string{raw, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"], successor["YOU_WORKER_SESSION_TOKEN"]}
-	assertPrivateArtifacts(t, f.home, private)
-	assertPrivateArtifacts(t, f.dir, private)
-	assertPrivateStreamDiagnostics(t, logs, private...)
 }
 
 // Separate selected profiles are necessary here: identical Worker Session IDs

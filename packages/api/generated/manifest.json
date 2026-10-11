@@ -211,7 +211,7 @@
       "path": "generated/mcp/manifest.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "a906daa745214dab784148f7d49fd31e31219920a4110beb6efb73aa56dc1d0e",
+      "artifactHash": "a6ea72cd2231348a0dc65d34bf33ddf65e96cc8fb7fc2413f46fff82d66e7a7f",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "a906daa745214dab784148f7d49fd31e31219920a4110beb6efb73aa56dc1d0e",
+        "sourceHash": "a6ea72cd2231348a0dc65d34bf33ddf65e96cc8fb7fc2413f46fff82d66e7a7f",
         "visibility": "public"
       },
       "family": "openapi",

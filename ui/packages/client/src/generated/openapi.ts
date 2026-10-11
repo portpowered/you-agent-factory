@@ -1447,7 +1447,7 @@ export interface components {
         kind: AgentMessageToKind;
         workerSessionId: string;
         factorySessionId?: string | null;
-        /** @description Exact successor reached after authoritative admission and durable delivery. */
+        /** @description Exact successor reached after provider-confirmed resumed progress and durable delivery. */
         deliveredWorkerSessionId?: string | null;
       };
       correlation?: {
@@ -1473,12 +1473,12 @@ export interface components {
       sentAt: string;
       /** Format: date-time */
       expiresAt: string;
-      /** @description Admitted successor. Published only after durable delivery commit. */
+      /** @description Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit. */
       revivedWorkerSessionId?: string | null;
       repliedByMessageId?: string | null;
     };
     /**
-     * @description Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires confirmed continuation admission and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
+     * @description Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
      * @enum {string}
      */
     AgentMessageDeliveryStatus: AgentMessageDeliveryStatus;

@@ -1,3 +1,3 @@
 type: string
 enum: [QUEUED, READ, DELIVERED_REVIVE, DELIVERED_INTERRUPT, REPLIED, EXPIRED, REJECTED]
-description: Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires confirmed continuation admission and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
+description: Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.

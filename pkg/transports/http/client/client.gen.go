@@ -1820,17 +1820,17 @@ type AgentMessage struct {
 	RepliedByMessageId *string                  `json:"repliedByMessageId"`
 	ReplyIfEnded       AgentMessageReplyIfEnded `json:"replyIfEnded"`
 
-	// RevivedWorkerSessionId Admitted successor. Published only after durable delivery commit.
+	// RevivedWorkerSessionId Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit.
 	RevivedWorkerSessionId *string   `json:"revivedWorkerSessionId"`
 	SentAt                 time.Time `json:"sentAt"`
 
-	// Status Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires confirmed continuation admission and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
+	// Status Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
 	Status AgentMessageDeliveryStatus `json:"status"`
 
 	// ThreadId Identity of the first message in the thread.
 	ThreadId string `json:"threadId"`
 	To       struct {
-		// DeliveredWorkerSessionId Exact successor reached after authoritative admission and durable delivery.
+		// DeliveredWorkerSessionId Exact successor reached after provider-confirmed resumed progress and durable delivery.
 		DeliveredWorkerSessionId *string            `json:"deliveredWorkerSessionId"`
 		FactorySessionId         *string            `json:"factorySessionId"`
 		Kind                     AgentMessageToKind `json:"kind"`
@@ -1858,7 +1858,7 @@ type AgentMessageAddress struct {
 	WorkerSessionId string `json:"workerSessionId"`
 }
 
-// AgentMessageDeliveryStatus Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires confirmed continuation admission and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
+// AgentMessageDeliveryStatus Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
 type AgentMessageDeliveryStatus string
 
 // AgentMessageListResponse defines model for AgentMessageListResponse.

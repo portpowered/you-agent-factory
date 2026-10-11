@@ -102,8 +102,8 @@ func TestRecipientChainReviveLimitCountsConfirmedSuccessors(t *testing.T) {
 		name, settings string
 		limit          int
 	}{
-		{"default six", "", 6},
-		{"selected two", `{"messaging":{"limits":{"revivesPerChainPerHour":2}}}`, 2},
+		{"default six", `{"messaging":{"retentionDays":1}}`, 6},
+		{"selected two", `{"messaging":{"retentionDays":1,"limits":{"revivesPerChainPerHour":2}}}`, 2},
 	} {
 		t.Run(cell.name, func(t *testing.T) {
 			t.Parallel()
@@ -123,6 +123,11 @@ func assertRecipientChainReviveLimit(t *testing.T, settings string, limit int) {
 	f := startHostRunner(t, t.TempDir(), t.TempDir(), settings, effects, nil, revival, "lead", "lane")
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
+	old := f.cliSend(t, lane, "lead", "--request-id", "pre-window", "--body", "settled before revive window", "--expires", "1m")
+	clock.SetTick(25 * 60 * 60)
+	if page := readPage(t, f, "/messages?threadId="+old.ThreadId, lane); len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("revive quota compaction fixture did not settle old input")
+	}
 	f.endWorker(t, "lead")
 	before := messageFactoryStreams(t, f, "lead", "lane")
 	for i := range limit {
@@ -200,7 +205,7 @@ func assertReviveQuotaWindowRelease(t *testing.T, f *fixture, revival *workerGat
 	t.Helper()
 	// The window excludes successful admissions at its exact one-hour boundary.
 	// The clock edge changes timestamps only; completion remains stream-driven.
-	clock.SetTick(3600)
+	clock.SetTick(25*60*60 + 3600)
 	page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil)
 	if len(page.Messages) != limit+3 {
 		t.Fatal("concurrent asks or retries lost messages or created duplicates")
@@ -701,12 +706,17 @@ func TestRecoveryRetainsOriginalReviveWindow(t *testing.T) {
 			assertConcurrentReplay(t, second, request, lane, limited.MessageId)
 			second.endWorker(t, "lane-next")
 			second.server.Close(t)
-			assertRepeatedWindowRecovery(t, second, revival, recovered, limited, effects, clock)
+			assertRepeatedWindowRecovery(t, second, revival, recovered, limited, effects, clock, 4000)
 		})
 	}
 }
 
 func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, state string, result *platformprocess.CommandResult) (*fixture, *workerGate, api.AgentMessage, string) {
+	t.Helper()
+	return interruptedRetentionFixture(t, clock, state, result, false)
+}
+
+func interruptedRetentionFixture(t *testing.T, clock *platformclock.Deterministic, state string, result *platformprocess.CommandResult, compact bool) (*fixture, *workerGate, api.AgentMessage, string) {
 	t.Helper()
 	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, state: state}
 	progress := make(chan struct{})
@@ -714,10 +724,17 @@ func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, 
 	core, _ := observer.New(zap.InfoLevel)
 	failure := &outcomeFailureSignal{Core: core, failed: make(chan struct{}), once: &sync.Once{}}
 	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}, AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(failure)}
-	f := startHostRunner(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"revivesPerChainPerHour":1}}}`, effects, nil, revival, "lead", "lane")
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), `{"messaging":{"retentionDays":1,"limits":{"revivesPerChainPerHour":1}}}`, effects, nil, revival, "lead", "lane")
 	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
 	lead := f.invoke(t, "lead", nil)
 	lane := f.invoke(t, "lane", lead)
+	if compact {
+		old := f.cliSend(t, lane, "lead", "--request-id", "old-retention", "--body", "settled unrelated old input", "--expires", "1m")
+		clock.SetTick(48 * 60 * 60)
+		if page := readPage(t, f, "/messages?threadId="+old.ThreadId, nil); len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+			t.Fatal("compaction fixture did not settle old input")
+		}
+	}
 	f.endWorker(t, "lead")
 	responseChannel := make(chan outcomeSendResponse, 1)
 	go func() {
@@ -737,17 +754,14 @@ func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, 
 	}
 	gate.unblock.Do(func() { close(gate.release) })
 	response := <-responseChannel
-	if state == "ADMITTED" && response.status != http.StatusServiceUnavailable || state != "ADMITTED" && response.status != http.StatusAccepted {
-		t.Fatal("wrong interrupted milestone response", response.status)
-	}
-	if state != "ADMITTED" {
-		select {
-		case <-failure.failed:
-		case <-time.After(15 * time.Second):
-			t.Fatal("provider outcome refusal did not finish")
-		}
-	}
+	assertInterruptedMilestoneResponse(t, response, state, failure)
 	page := readPage(t, f, "/messages?toWorkerSessionId=lead", lane)
+	if compact {
+		if len(page.Messages) != 2 || page.Messages[0].Status != "EXPIRED" {
+			t.Fatal("compaction fixture lost its unrelated settled input")
+		}
+		page.Messages = page.Messages[1:]
+	}
 	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
 		t.Fatal("interrupted milestone guessed delivery")
 	}
@@ -760,7 +774,21 @@ func interruptedWindowFixture(t *testing.T, clock *platformclock.Deterministic, 
 	return f, revival, page.Messages[0], successor["YOU_WORKER_SESSION_ID"]
 }
 
-func assertRepeatedWindowRecovery(t *testing.T, first *fixture, revival *workerGate, recovered, limited api.AgentMessage, effects serviceedges.Edges, clock *platformclock.Deterministic) {
+func assertInterruptedMilestoneResponse(t *testing.T, response outcomeSendResponse, state string, failure *outcomeFailureSignal) {
+	t.Helper()
+	if state == "ADMITTED" && response.status != http.StatusServiceUnavailable || state != "ADMITTED" && response.status != http.StatusAccepted {
+		t.Fatal("wrong interrupted milestone response", response.status)
+	}
+	if state != "ADMITTED" {
+		select {
+		case <-failure.failed:
+		case <-time.After(15 * time.Second):
+			t.Fatal("provider outcome refusal did not finish")
+		}
+	}
+}
+
+func assertRepeatedWindowRecovery(t *testing.T, first *fixture, revival *workerGate, recovered, limited api.AgentMessage, effects serviceedges.Edges, clock *platformclock.Deterministic, releaseTick int) {
 	t.Helper()
 	f := startHostRunner(t, first.home, first.dir, "", effects, nil, revival, "lane-next-two")
 	lane := f.continueCaller(t, "lane-next", "lane-next-two")
@@ -776,7 +804,7 @@ func assertRepeatedWindowRecovery(t *testing.T, first *fixture, revival *workerG
 	before := f.server.GetFactoryEvents(t)
 	// Clock controls admission timestamps only; public completion streams join
 	// provider effects. Crossing the original window must release its volume.
-	clock.SetTick(4000)
+	clock.SetTick(releaseTick)
 	last := f.cliSend(t, lane, "lead", "--request-id", "window-expired", "--body", "ask after original window")
 	batch := last
 	batch.Body = limited.Body + "\n\n" + last.Body
@@ -885,6 +913,66 @@ func assertNoRecoveryCommand(t *testing.T, gates ...*workerGate) {
 		default:
 		}
 	}
+}
+
+func TestRecoveryRetentionReplacementPreservesOriginalEffect(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{"ADMITTED", "ACCEPTED"} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			assertRecoveryRetentionReplacement(t, state)
+		})
+	}
+}
+
+func assertRecoveryRetentionReplacement(t *testing.T, state string) {
+	t.Helper()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	first, revival, pending, successor := interruptedRetentionFixture(t, clock, state, nil, true)
+	assertInactiveStartupPreservesUnread(t, first, revival, pending.MessageId)
+	path := filepath.Join(first.home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+	refused := serviceedges.Merge(effects, serviceedges.Edges{AgentMessageStoreFileSystem: refusedRetentionFileSystem{}})
+	settings := `{"messaging":{"retentionDays":1,"limits":{"revivesPerChainPerHour":1}}}`
+	second := startHostRunner(t, first.home, first.dir, settings, refused, nil, revival, "healthy")
+	for _, route := range []string{"/messages", "/messages/" + pending.MessageId, "/messages?follow=true"} {
+		assertError(t, second, http.MethodGet, route, nil, nil, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	}
+	second.invoke(t, "healthy", nil)
+	second.endWorker(t, "healthy")
+	second.server.Close(t)
+	if after, err := os.ReadFile(path); err != nil || string(after) != string(before) {
+		t.Fatal("refused recovery retention changed the original journal")
+	}
+	assertNoRecoveryCommand(t, revival)
+	third := startHostRunner(t, first.home, first.dir, "", effects, nil, revival, "lane-next")
+	reason := "REVIVE_PENDING"
+	pending.Reason = &reason
+	recovered := third.awaitDeliveryOutcome(t, nil, pending)
+	if recovered.Status != "DELIVERED_REVIVE" || recovered.RevivedWorkerSessionId == nil || *recovered.RevivedWorkerSessionId != successor {
+		t.Fatal("compacted recovery changed or guessed the original effect")
+	}
+	page := readPage(t, third, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], recovered) {
+		t.Fatal("compaction failed to remove only the unrelated expired message")
+	}
+	lane := third.continueCaller(t, "lane", "lane-next")
+	request := map[string]any{"requestId": "window", "to": map[string]string{"workerSessionId": "lead"}, "body": pending.Body}
+	assertProviderRetry(t, third, request, lane, recovered)
+	request["requestId"] = "retained-alias"
+	assertProviderRetry(t, third, request, lane, recovered)
+	limited := third.cliSend(t, lane, "lead", "--request-id", "window-limit", "--body", "ask before original window ends")
+	if limited.Status != "QUEUED" || limited.Reason == nil || *limited.Reason != "REVIVE_LIMIT" {
+		t.Fatal("compaction reset the original accepted volume")
+	}
+	assertNoRecoveryCommand(t, revival)
+	third.endWorker(t, "lane-next")
+	third.server.Close(t)
+	assertRepeatedWindowRecovery(t, third, revival, recovered, limited, effects, clock, 48*60*60+4000)
 }
 
 func TestRecoveryOutcomeFlushFailureRetainsOriginalEffect(t *testing.T) {
