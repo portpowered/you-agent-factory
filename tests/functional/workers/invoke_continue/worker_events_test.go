@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -58,8 +59,20 @@ func TestWorkerEventsDirectIdleFollowAndObserverDetach(t *testing.T) {
 	assertWorkerEventsCommandIdle(t, runner)
 	assertWorkerEventsCommandIdle(t, peer)
 	assertWorkerEventsDirectDenial(t, ctx, host.baseURL+"/worker-sessions/unknown-worker/events", http.StatusNotFound, api.ErrorResponseCodeNOTFOUND)
+	assertWorkerEventsDirectDenial(t, ctx, host.baseURL+"/factory-sessions/foreign/worker-sessions/events-target/events", http.StatusNotFound, api.ErrorResponseCodeNOTFOUND)
 	assertWorkerEventsDirectDenial(t, ctx, endpoint+"?after_position=9223372036854775807", http.StatusBadRequest, api.ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE)
 	cliFollow, cliWriter := startWorkerEventsDirectCLI(t, ctx, host, home, dir)
+	logsCtx, detachLogs := context.WithCancel(ctx)
+	detachedLogs, _ := startWorkerEventsDirectCLI(t, logsCtx, host, home, dir, "read", "--worker-session-id", "events-target", "--view", "logs", "--follow")
+	detachLogs()
+	select {
+	case <-detachedLogs.Done():
+	case <-ctx.Done():
+		t.Fatal("CLI logs observer did not detach")
+	}
+	assertWorkerEventsCommandIdle(t, runner)
+	assertWorkerEventsCommandIdle(t, peer)
+	logsFollow, logsWriter := startWorkerEventsDirectCLI(t, ctx, host, home, dir, "read", "--worker-session-id", "events-target", "--view", "logs", "--follow")
 	runner.releaseProgress()
 	frames, err := drainWorkerEventsDirect(first)
 	if err != nil {
@@ -81,14 +94,8 @@ func TestWorkerEventsDirectIdleFollowAndObserverDetach(t *testing.T) {
 	}
 	assertWorkerEventsCommandIdle(t, peer)
 	assertWorkerEventsDirectReplay(t, ctx, endpoint, records)
-	select {
-	case <-cliFollow.Done():
-	case <-ctx.Done():
-		t.Fatal("CLI follow did not finish at terminal EOF")
-	}
-	if cliFollow.Err() != nil || !strings.Contains(string(cliWriter.bytes()), "events-later-target") {
-		t.Fatalf("CLI follow lost later progress: %v %s", cliFollow.Err(), cliWriter.bytes())
-	}
+	assertWorkerEventsCLIComplete(t, ctx, cliFollow, cliWriter)
+	assertWorkerEventsCLIComplete(t, ctx, logsFollow, logsWriter)
 	// The existing finite CLI consumer must terminate without waiting for peer.
 	output := summaryRestartCLI(t, host, home, dir, "stream", "--worker-session-id", "events-target", "--replay-only")
 	if !strings.Contains(output, "events-later-target") {
@@ -98,9 +105,65 @@ func TestWorkerEventsDirectIdleFollowAndObserverDetach(t *testing.T) {
 	t19AwaitSignal(t, ctx, peer.joined, "peer provider joined")
 }
 
-func startWorkerEventsDirectCLI(t *testing.T, ctx context.Context, host invokeContinueStartedProcess, home, dir string) (*support.ProcessCommand, *s8SignalWriter) {
+func assertWorkerEventsCLIComplete(t *testing.T, ctx context.Context, command *support.ProcessCommand, writer *s8SignalWriter) {
 	t.Helper()
-	input := support.FakeInputs(ctx, []string{"you", "--remote", "--server", host.baseURL, "--json", "worker-sessions", "stream", "--worker-session-id", "events-target", "--follow"})
+	select {
+	case <-command.Done():
+	case <-ctx.Done():
+		t.Fatal("CLI follow did not finish at terminal EOF")
+	}
+	if command.Err() != nil || !strings.Contains(string(writer.bytes()), "events-later-target") {
+		t.Fatalf("CLI follow lost later progress: %v %s", command.Err(), writer.bytes())
+	}
+}
+
+// Canonical IDs select only the host's private profile. A foreign ID never
+// establishes SSE, and each host's retained replay contains only its output.
+func TestWorkerEventsPrivateProfileDenial(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	var profiles []recordingPrivateProfile
+	for _, id := range []string{"events-private-alpha", "events-private-beta"} {
+		root, dir := t.TempDir(), t.TempDir()
+		hostDir, home, err := prepareInvokeContinuePackageRoot(t, root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		marker := id + "-content"
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: directCodexSessionOutput(id+"-thread", marker)})
+		route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
+		host := startContinuationRestartHost(t, root, hostDir, home, route)
+		path := filepath.Join(dir, "execution.json")
+		writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{requestID: id + "-request", workerSessionID: id, dispatchID: id + "-attempt", workingDirectory: dir, userMessage: id})
+		summaryRestartCLI(t, host, home, dir, "invoke", "--execution", path)
+		profiles = append(profiles, recordingPrivateProfile{host: host, home: home, dir: dir, id: id, marker: marker, runner: runner})
+	}
+	for i, profile := range profiles {
+		foreign := profiles[1-i]
+		assertWorkerEventsDirectDenial(t, ctx, profile.host.baseURL+"/worker-sessions/"+foreign.id+"/events", http.StatusNotFound, api.ErrorResponseCodeNOTFOUND)
+		response := openWorkerEventsDirect(t, ctx, profile.host.baseURL+"/worker-sessions/"+profile.id+"/events?replayOnly=true")
+		frames, err := drainWorkerEventsDirect(response)
+		response.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := json.Marshal(frames)
+		if err != nil || !strings.Contains(string(body), profile.marker) || strings.Contains(string(body), foreign.marker) || strings.Contains(string(body), foreign.id) {
+			t.Fatalf("private profile replay changed or leaked: %s (%v)", body, err)
+		}
+		if profile.runner.CallCount() != 1 {
+			t.Fatal("event reads admitted another provider execution")
+		}
+	}
+}
+
+func startWorkerEventsDirectCLI(t *testing.T, ctx context.Context, host invokeContinueStartedProcess, home, dir string, args ...string) (*support.ProcessCommand, *s8SignalWriter) {
+	t.Helper()
+	if len(args) == 0 {
+		args = []string{"stream", "--worker-session-id", "events-target", "--follow"}
+	}
+	input := support.FakeInputs(ctx, append([]string{"you", "--remote", "--server", host.baseURL, "--json", "worker-sessions"}, args...))
 	input.Input.Env, input.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
 	writer := newS8SignalWriter("events-target", input.Stderr)
 	input.Input.Stdout = writer
