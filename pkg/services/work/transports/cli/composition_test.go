@@ -63,7 +63,7 @@ func TestBindServiceDelegatesThroughAdapterService(t *testing.T) {
 		return "graph TD\n", nil
 	}
 	service := workcli.BindService(workcli.Config{
-		ListPrepare: workdomain.NewListRequestPreparation(),
+		ListPrepare: testListRequestPreparation{},
 		Visualize:   operation,
 	})
 	if service == nil {
@@ -129,7 +129,7 @@ func testHTTPErrorServer(t *testing.T) string {
 func TestBindListMatchesFreeFunctionFacade(t *testing.T) {
 	t.Parallel()
 
-	prepare := workdomain.NewListRequestPreparation()
+	prepare := testListRequestPreparation{}
 	transport := testHTTPProtocol(t)
 	operation := workcli.BindList(transport, prepare)
 	server := testHTTPErrorServer(t)
@@ -153,7 +153,7 @@ func TestBindListMatchesFreeFunctionFacade(t *testing.T) {
 func TestBindListMatchesTransportCompositionFacade(t *testing.T) {
 	t.Parallel()
 
-	prepare := workdomain.NewListRequestPreparation()
+	prepare := testListRequestPreparation{}
 	transport := testHTTPProtocol(t)
 	bound := workcli.BindList(transport, prepare)
 	facade := transportworkcli.NewList(transport, prepare)

@@ -18,6 +18,7 @@ type AuthoredLayoutWriter = internalauthoredlayout.Writer
 // NewAuthoringLayout constructs only the authoring owner from completed ports.
 func NewAuthoringLayout(
 	validator factorydefinitions.Validator,
+	validateDefinition factorydefinitions.DefinitionValidationOperation,
 	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
 	decodeFactory factorydefinitions.FactoryConfigJSONDecoder,
 	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
@@ -30,7 +31,7 @@ func NewAuthoringLayout(
 	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
 	directories factorydefinitions.DirectoryReplacementStore,
 ) (AuthoringLayout, error) {
-	return authoringlayoutwire.NewService(validator, mapInput, decodeFactory,
+	return authoringlayoutwire.NewService(validator, validateDefinition, mapInput, decodeFactory,
 		normalizeAuthored, encodeFactory, write, validate, flatten, expand,
 		fileSystem, requireDefinitionDir, directories)
 }

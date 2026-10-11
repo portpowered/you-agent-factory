@@ -4,10 +4,6 @@ package wire
 
 import (
 	"context"
-	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
-	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
-	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
-	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
@@ -17,15 +13,19 @@ import (
 	agentmessageswire "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
+	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
@@ -185,6 +185,7 @@ var servicesSet = wire.NewSet(
 	workwire.NewRequestPolicy,
 	workwire.NewRequestPreparationService,
 	work.NewSingleWorkTargetPreparation,
+	workwire.NewListRequestPolicy,
 	work.NewListRequestPreparation,
 	work.NewFactoryRequestBatchPreparation,
 	workwire.NewInvocationInputPolicy,

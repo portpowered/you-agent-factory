@@ -101,7 +101,13 @@ func TestConstructedService_ListVerboseDiagnosticsOnHTTPFailure(t *testing.T) {
 func TestConstructedService_ListValidationFailurePreservesStateTypeMessage(t *testing.T) {
 	t.Parallel()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	prepare := listPreparationFunc(func(_ context.Context, options workdomain.ListOptions) (workdomain.PreparedListRequest, error) {
+		if options.StateType != "INVALID" {
+			t.Fatalf("options = %#v", options)
+		}
+		return workdomain.PreparedListRequest{}, &workdomain.ValidationError{Field: "state.type", Message: "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED"}
+	})
+	service := constructedWorkCLIService(t, prepare, nil)
 	var out bytes.Buffer
 	err := service.List(workcli.ListConfig{
 		Context:   context.Background(),
@@ -132,7 +138,7 @@ func TestConstructedService_ShowHumanOutputPreservesAcceptedSummary(t *testing.T
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: context.Background(),
@@ -177,7 +183,7 @@ func TestConstructedService_ShowJSONOutputEmitsWorkObject(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: context.Background(),
@@ -213,7 +219,7 @@ func TestConstructedService_ShowNotFoundPreservesExitRelevantError(t *testing.T)
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: context.Background(),
@@ -254,7 +260,7 @@ func TestConstructedService_MoveHumanOutputPreservesMoveSummary(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	err := service.Move(workcli.MoveConfig{
 		Context:   context.Background(),
@@ -297,7 +303,7 @@ func TestConstructedService_MoveJSONOutputEmitsStableEnvelope(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	err := service.Move(workcli.MoveConfig{
 		Context:   context.Background(),
@@ -341,7 +347,7 @@ func TestConstructedService_MoveHTTPRejectionPreservesDiagnosticsAndError(t *tes
 	}))
 	defer srv.Close()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := service.Move(workcli.MoveConfig{
@@ -376,7 +382,7 @@ func TestConstructedService_VisualizeFailureLeavesOutputEmpty(t *testing.T) {
 	operation := func(workdomain.VisualizationRequest) (string, error) {
 		return "", want
 	}
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), operation)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, operation)
 	var out bytes.Buffer
 	err := service.Visualize(workcli.VisualizeConfig{
 		BatchFile: "batch.json",
@@ -396,7 +402,7 @@ func TestConstructedService_ShowHonorsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	var out bytes.Buffer
 	err := service.Show(workcli.ShowConfig{
 		Context: ctx,

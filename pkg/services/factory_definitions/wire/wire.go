@@ -53,6 +53,7 @@ func NewService(
 func NewLifecycleHost(
 	sessionHost factorydefinitions.SessionHost,
 	persistence factorydefinitions.Persistence,
+	authoring AuthoringLayout,
 	loader *compilationloading.Loader,
 	namedPaths factorydefinitions.NamedPathResolver,
 	preparePortable factorydefinitions.PortableFactoryConfigPreparer,
@@ -64,6 +65,9 @@ func NewLifecycleHost(
 	if persistence == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: persistence is required")
 	}
+	if authoring == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: authoring layout is required")
+	}
 	if loader == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: loader is required")
 	}
@@ -74,7 +78,11 @@ func NewLifecycleHost(
 		sessionHost.PersistRootDir, sessionHost.WorkstationLoader, loader.LoadRuntimeSource,
 		namedPaths.ReadCurrentPointer,
 		func(segment string, payload []byte) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-			return persistence.PrepareFactoryLayout(context.Background(), segment, payload)
+			result, err := authoring.PrepareFactoryLayout(context.Background(), factorydefinitions.PrepareFactoryLayoutRequest{Name: segment, Payload: payload})
+			if err != nil {
+				return nil, err
+			}
+			return &result.Prepared, nil
 		},
 		persistence.CreateNamedFactory, namedPaths.WriteCurrentPointer, preparePortable, captureSnapshot,
 		sessionHost.CurrentRuntimeConfig, sessionHost.WorkflowID, namedPaths.ResolveExistingDir,

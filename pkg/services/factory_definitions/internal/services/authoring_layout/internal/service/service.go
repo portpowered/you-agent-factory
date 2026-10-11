@@ -37,6 +37,7 @@ var _ authoringlayout.Service = (*Service)(nil)
 // New constructs the authoring_layout implementation from exact injected ports.
 func New(
 	validator factorydefinitions.Validator,
+	validateDefinition factorydefinitions.DefinitionValidationOperation,
 	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
 	decodeFactory factorydefinitions.FactoryConfigJSONDecoder,
 	normalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error),
@@ -49,22 +50,6 @@ func New(
 	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
 	directories factorydefinitions.DirectoryReplacementStore,
 ) *Service {
-	if fileSystem == nil || requireDefinitionDir == nil {
-		return nil
-	}
-	if validator == nil ||
-		mapInput == nil ||
-		decodeFactory == nil ||
-		normalizeAuthored == nil ||
-		encodeFactory == nil ||
-		write == nil ||
-		validate == nil ||
-		flatten == nil ||
-		expand == nil ||
-		directories == nil {
-		return nil
-	}
-	validateDefinition, _ := any(validator).(factorydefinitions.DefinitionValidationOperation)
 	return &Service{
 		validator:            validator,
 		validateDefinition:   validateDefinition,
@@ -86,15 +71,8 @@ func (s *Service) PrepareFactoryLayout(
 	ctx context.Context,
 	request factorydefinitions.PrepareFactoryLayoutRequest,
 ) (factorydefinitions.PrepareFactoryLayoutResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.PrepareFactoryLayoutResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.PrepareFactoryLayoutResult{}, err
-	}
-	if s.validateDefinition == nil {
-		return factorydefinitions.PrepareFactoryLayoutResult{},
-			fmt.Errorf("Factory Definitions validation operation is required")
 	}
 
 	validationRequest, err := s.mapInput(request.Payload)
@@ -136,9 +114,6 @@ func (s *Service) FlattenFactoryLayout(
 	ctx context.Context,
 	request factorydefinitions.FlattenFactoryLayoutRequest,
 ) (factorydefinitions.FlattenFactoryLayoutResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.FlattenFactoryLayoutResult{}, err
-	}
 	canonical, err := flatten.FactoryLayout(ctx, request.Path, s.flatten)
 	if err != nil {
 		return factorydefinitions.FlattenFactoryLayoutResult{}, err
@@ -150,9 +125,6 @@ func (s *Service) ExpandFactoryLayout(
 	ctx context.Context,
 	request factorydefinitions.ExpandFactoryLayoutRequest,
 ) (factorydefinitions.ExpandFactoryLayoutResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.ExpandFactoryLayoutResult{}, err
-	}
 	factoryDir, report, err := expand.FactoryLayout(ctx, request.Path, s.expand)
 	if err != nil {
 		return factorydefinitions.ExpandFactoryLayoutResult{}, err
@@ -167,9 +139,6 @@ func (s *Service) CreateNamedFactory(
 	ctx context.Context,
 	request factorydefinitions.CreateNamedFactoryRequest,
 ) (factorydefinitions.CreateNamedFactoryResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.CreateNamedFactoryResult{}, err
-	}
 	factoryDir, err := persist.NamedFactory(
 		ctx,
 		request.RootDir,
@@ -191,9 +160,6 @@ func (s *Service) ReplaceNamedFactory(
 	ctx context.Context,
 	request factorydefinitions.ReplaceNamedFactoryRequest,
 ) (factorydefinitions.ReplaceNamedFactoryResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factorydefinitions.ReplaceNamedFactoryResult{}, err
-	}
 	factoryDir, err := persist.NamedFactory(
 		ctx,
 		request.RootDir,
@@ -224,44 +190,4 @@ func atomicWriteFailure(name, factoryDir string, cause error) error {
 		PreviousPreserved: true,
 		Cause:             cause,
 	}
-}
-
-func (s *Service) requirePorts() error {
-	if s == nil || s.fileSystem == nil {
-		return fmt.Errorf("Factory Definitions persistence filesystem is required")
-	}
-	if s.requireDefinitionDir == nil {
-		return fmt.Errorf("Factory Definition directory validator is required")
-	}
-	if s.validator == nil {
-		return fmt.Errorf("Factory Definitions validator is required")
-	}
-	if s.mapInput == nil {
-		return fmt.Errorf("Factory Definitions payload mapper is required")
-	}
-	if s.decodeFactory == nil {
-		return fmt.Errorf("Factory Definitions decoder is required")
-	}
-	if s.normalizeAuthored == nil {
-		return fmt.Errorf("Factory Definitions authored normalizer is required")
-	}
-	if s.encodeFactory == nil {
-		return fmt.Errorf("Factory Definitions encoder is required")
-	}
-	if s.write == nil {
-		return fmt.Errorf("Factory Definitions layout writer is required")
-	}
-	if s.validate == nil {
-		return fmt.Errorf("Factory Definitions layout validator is required")
-	}
-	if s.flatten == nil {
-		return fmt.Errorf("Factory Definitions layout flattener is required")
-	}
-	if s.expand == nil {
-		return fmt.Errorf("Factory Definitions layout expander is required")
-	}
-	if s.directories == nil {
-		return fmt.Errorf("directory replacement store is required")
-	}
-	return nil
 }
