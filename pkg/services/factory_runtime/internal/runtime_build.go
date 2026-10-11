@@ -280,14 +280,6 @@ func setReplayEvents(
 	}
 }
 
-func setBundleProgressPublisher(bundle *factoryhost.Bundle, publisher workers.ProgressPublisher) {
-	if configurable, ok := bundle.Factory.(interface {
-		SetProgressPublisher(workers.ProgressPublisher)
-	}); ok {
-		configurable.SetProgressPublisher(publisher)
-	}
-}
-
 func resolveBundleInputs(
 	spec runtimebuild.SessionBuildSpec,
 	defaultSessionID string,

@@ -22,7 +22,8 @@ type RuntimeSnapshotSelection struct {
 	resolveHome        factorysessions.HomeDirectoryResolver
 }
 
-// NewRuntimeSnapshotSelection stores the fixed selection capabilities without executing them.
+// NewRuntimeSnapshotSelection stores the required Definitions resolver bound by owner Wire
+// and the optional replay/source capabilities without executing them.
 func NewRuntimeSnapshotSelection(
 	resolveSnapshot factorydefinitions.RuntimeSnapshotOperation,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
@@ -87,9 +88,6 @@ func (s *RuntimeSnapshotSelection) resolveActivationDefinitionSnapshot(
 	workflowID string,
 	sessionID string,
 ) (factorydefinitions.RuntimeSnapshot, error) {
-	if s.resolveSnapshot == nil {
-		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
-	}
 	resolved, err := s.resolveSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
 		// SourcePath is the concrete authored file for direct layouts. Do not
 		// send the retained directory as FactoryDir as the Definitions root
@@ -167,9 +165,6 @@ func (s *RuntimeSnapshotSelection) resolveLegacyFactorySnapshot(
 	factoryJSON *factorydefinitions.FactorySnapshot,
 	intent string,
 ) (factorydefinitions.RuntimeSnapshot, error) {
-	if s.resolveSnapshot == nil {
-		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
-	}
 	replayConfig, err := s.decodeLegacyReplayConfig(factoryJSON)
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, err
@@ -303,15 +298,4 @@ func absolutizeActivationPath(
 		return filepath.Clean(resolved), nil
 	}
 	return logicaltarget.AbsolutizeFactoryDirectory(path, resolveHome)
-}
-
-func runtimeSnapshotResolverUnavailable() error {
-	return &factorydefinitions.RuntimeSnapshotResolutionError{
-		Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{
-			Code:    factorydefinitions.RuntimeSnapshotDiagnosticUnavailable,
-			Field:   "resolver",
-			Message: "Factory Definitions runtime snapshot resolver is unavailable",
-		},
-		Cause: factorydefinitions.ErrRuntimeSnapshotResolverUnavailable,
-	}
 }

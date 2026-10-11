@@ -52,7 +52,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 		"/recordings/session.json", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {
@@ -90,7 +90,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 		loaded, "runtime-identity-handoff", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.
 		loaded, "runtime-identity-fallback", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, false, nil, nil, nil,
 		0, nil,
-		testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
+		testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil, nil,
 	)
 	if err == nil {
 		t.Fatal("Build succeeded, want partial-opening failure")
@@ -284,7 +284,7 @@ func TestBuild_PreservesOpeningAndCleanupFailures(t *testing.T) {
 				factory.RuntimeMetricsStorageConfig{}, loaded, stage, "", clockwork.NewFakeClock(),
 				"recording.json", nil, nil, false, nil, nil, nil,
 				0, nil,
-				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
+				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil, nil,
 			)
 			if bundle == nil || bundle.RuntimeService() != nil || err == nil {
 				t.Fatalf("Build = (%v, %v), want partial ownership without a live service", bundle, err)
@@ -336,7 +336,7 @@ func TestBuild_FailedOpeningRetainsRetryableCleanupWithoutRepeatingReleasedResou
 				factory.RuntimeMetricsStorageConfig{}, loaded, "candidate-runtime", "", clockwork.NewFakeClock(),
 				"recording.json", nil, nil, false, nil, nil, nil,
 				0, nil,
-				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil,
+				testRuntimeWorkers{}, &stubWorkerSessionsService{}, nil, nil, nil,
 			)
 			if !errors.Is(err, openingErr) || errors.Is(err, releaseErr) != (failed != "none") {
 				t.Fatalf("Build error = %v, lost opening or release cause", err)
@@ -610,7 +610,7 @@ func TestBuild_FileLoggingRetainsSelectedLogger(t *testing.T) {
 		"", factory.RuntimeMetricsStorageConfig{}, loaded, "selected-runtime", "", clockwork.NewFakeClock(),
 		"", nil, nil, false, nil, nil, nil,
 		0, nil,
-		testRuntimeWorkers{}, sessions, sessions, nil,
+		testRuntimeWorkers{}, sessions, sessions, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -649,7 +649,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {
@@ -687,7 +687,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {

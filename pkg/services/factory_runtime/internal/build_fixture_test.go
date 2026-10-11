@@ -448,6 +448,7 @@ func (opening *controlledEngineOpening) Open(
 	statelessService workers.Service,
 	workerSessionsService workersessions.Service,
 	workerAttempts factory.WorkerAttemptOpener,
+	progressPublisher workers.ProgressPublisher,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	invocationFileReader interfaces.FileReader,
 	workflowContext *factory_context.FactoryContext,
