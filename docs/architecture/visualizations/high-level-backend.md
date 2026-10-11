@@ -14,7 +14,7 @@ flowchart TB
   end
   subgraph coordination["Factory coordination"]
     s_services_factory_runtime["factory runtime<br/>50161 LOC · 4 subservices"]
-    s_services_factory_sessions["factory sessions<br/>60709 LOC · 3 subservices"]
+    s_services_factory_sessions["factory sessions<br/>60844 LOC · 3 subservices"]
   end
   subgraph execution["Execution"]
     s_services_models["models<br/>38254 LOC · 5 subservices"]
@@ -25,7 +25,7 @@ flowchart TB
   end
   subgraph recordings["Recordings and events"]
     s_services_events["events<br/>1986 LOC · 0 subservices"]
-    s_services_recordings["recordings<br/>36570 LOC · 8 subservices"]
+    s_services_recordings["recordings<br/>36642 LOC · 8 subservices"]
   end
   subgraph metrics["Metrics"]
     s_services_costs["costs<br/>2168 LOC · 0 subservices"]
@@ -139,7 +139,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (705 LOC)<br/>(subservice) resolution (298 LOC) |
 | [`provider_sessions`](services/provider_sessions.md) | — |
 | [`providers`](services/providers.md) | (subservice) acp (2751 LOC)<br/>(subservice) catalog (801 LOC)<br/>(subservice) execution (6143 LOC) |
-| [`recordings`](services/recordings.md) | (subservice) artifacts export (596 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (746 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (352 LOC)<br/>(subservice) recording lifecycle (905 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (5759 LOC) |
+| [`recordings`](services/recordings.md) | (subservice) artifacts export (596 LOC)<br/>(subservice) canonical ledger (479 LOC)<br/>(subservice) historical query (746 LOC)<br/>(subservice) projection query (261 LOC)<br/>(subservice) recorded session inventory (352 LOC)<br/>(subservice) recording lifecycle (967 LOC)<br/>(subservice) replay (368 LOC)<br/>(subservice) worker capture (5759 LOC) |
 | [`system_initialization`](services/system_initialization.md) | — |
 | [`webhooks`](services/webhooks.md) | — |
 | [`work`](services/work.md) | (subservice) content materialization (704 LOC)<br/>(subservice) content staging (369 LOC)<br/>(subservice) invocation preparation (355 LOC)<br/>(subservice) request preparation (369 LOC)<br/>(subservice) state access (583 LOC) |
