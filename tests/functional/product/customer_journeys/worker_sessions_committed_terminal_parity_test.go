@@ -206,7 +206,95 @@ func TestWorkerSessionCommittedTerminalParity(t *testing.T) {
 		}
 	}
 	reopened.Close(t)
+	t.Run("committed failure with operator stop", assertCommittedFailureStopParity)
 	t.Run("opening-only and owner-lost", assertCommittedTerminalPrefixFences)
+}
+
+// Controlled storage input represents a compatible capture whose writer knew
+// an underlying failure when it committed the stop. This proves read projection,
+// not that today's provider cancellation path generates that extra failure.
+// Identity, position, timing and control operations remain production output.
+type committedFailureStore struct {
+	*terminalCommitGate
+}
+
+func (store *committedFailureStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	var draft workers.Draft
+	if err := json.Unmarshal(record.Record.Payload, &draft); err != nil {
+		return err
+	}
+	if draft.Kind == workers.KindSession && draft.Phase == workers.PhaseCanceled {
+		var payload map[string]any
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+			return err
+		}
+		payload["failureCause"] = "WORKERS_EXECUTION_FAILURE"
+		payload["failureDetail"] = "expected output artifact was not produced"
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		draft.Payload = raw
+		record.Record.Payload, err = json.Marshal(draft)
+		if err != nil {
+			return err
+		}
+	}
+	return store.terminalCommitGate.PersistWorkerRecord(ctx, record)
+}
+
+func assertCommittedFailureStopParity(t *testing.T) {
+	t.Helper()
+	states := []string{"CANCELED", "TERMINATED"}
+	runner := &committedTerminalRunner{slots: make(map[string]*functionalWorkerGate)}
+	for _, state := range states {
+		runner.slots["direct-codex-"+state] = newFunctionalWorkerGate(make(chan struct{}))
+	}
+	dir, home := support.ScaffoldSingleStepFactory(t, "underlying-failure-stop"), t.TempDir()
+	config := support.FunctionalAPIServerConfig{FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env: []string{"HOME=" + home, "USERPROFILE=" + home, "APPDATA=" + home, "LOCALAPPDATA=" + home,
+			"XDG_CONFIG_HOME=" + home, "XDG_DATA_HOME=" + home, "TEMP=" + home, "TMP=" + home},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, FactorySessionsWorkingDirectory: capturedRecordingDirectory(dir)}}
+	backing := &terminalCommitGate{entered: make(chan struct{}), proceed: make(chan struct{})}
+	backing.release()
+	config.Edges.WorkerRecordingWriter = &committedFailureStore{terminalCommitGate: backing}
+	config.Edges.WorkerRecordingStoreObserver = func(store recordings.WorkerRecordingStore) { backing.WorkerRecordingStore = store }
+	server := support.StartFunctionalAPIServer(t, config)
+	before := make([]factoryapi.WorkerSessionObservation, len(states))
+	// Unscoped LIST is fleet-wide. Keep its observation window free of pending
+	// terminal writes; the surrounding matrix already proves concurrent attempts.
+	for index, state := range states {
+		id, model := "underlying-"+state, "direct-codex-"+state
+		admitCommittedTerminal(t, server, id, model, "codex")
+		runner.slots[model].waitStarted(t)
+		action := map[string]string{"CANCELED": "cancel", "TERMINATED": "terminate"}[state]
+		response := postWorkerSessionControl(t, server.URL(), id, action)
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s status=%d", action, response.StatusCode)
+		}
+		runner.slots[model].waitCanceled(t)
+		waitCapturedTerminal(t, server.URL(), id)
+		before[index] = assertCommittedTerminalPublicParity(t, server, id, state)
+		assertUnderlyingFailureAndStop(t, before[index], action)
+		assertCommittedTerminalCapture(t, server, id)
+	}
+	server.Close(t)
+	reopened := support.StartFunctionalAPIServer(t, config)
+	for index, state := range states {
+		got := assertCommittedTerminalPublicParity(t, reopened, before[index].WorkerSessionId, state)
+		if !committedTerminalFactsEqual(before[index], got) {
+			t.Fatalf("underlying failure or stop changed on reopen: before=%+v after=%+v", before[index], got)
+		}
+	}
+}
+
+func assertUnderlyingFailureAndStop(t *testing.T, shown factoryapi.WorkerSessionObservation, action string) {
+	t.Helper()
+	if shown.Failure == nil || shown.Failure.Kind != "WORKERS_EXECUTION_FAILURE" || shown.Failure.Detail != "expected output artifact was not produced" ||
+		shown.TerminalCause == nil || string(*shown.TerminalCause) != "OPERATOR_"+strings.ToUpper(action) {
+		t.Fatalf("committed underlying failure conflated with operator stop: %+v", shown)
+	}
 }
 
 func assertCommittedTerminalCapture(t *testing.T, server *support.FunctionalAPIServer, id string) factoryapi.WorkerSessionLogPage {
