@@ -151,10 +151,15 @@
       "name": "you init",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.message",

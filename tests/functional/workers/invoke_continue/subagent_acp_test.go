@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,7 +28,7 @@ import (
 // per START. The stdio peer withholds completion without holding a fixture lock.
 func TestSubagentOpenCodeDefault(t *testing.T) {
 	t.Parallel()
-	functionalevidence.Covers(t, "cli/you.worker-sessions.start", "rest/startWorkerSession", "rest/getWorkerSessionObservationByWorkerSessionId")
+	functionalevidence.Covers(t, "cli/you.init", "cli/you.worker-sessions.start", "rest/startWorkerSession", "rest/getWorkerSessionObservationByWorkerSessionId")
 	root := t.TempDir()
 	hostDir, home, err := prepareInvokeContinuePackageRoot(t, root)
 	if err != nil {
@@ -73,12 +74,43 @@ func TestSubagentOpenCodeDefault(t *testing.T) {
 	if err := os.WriteFile(configPath, profile, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	profile = preserveSavedSubagentRoute(t, host, home, hostDir, configPath, profile)
 	for _, name := range []string{"default", "model-override", "unadvertised-model"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			assertSubagentACPDefault(t, host, home, root, name, peers, configPath, profile)
 		})
 	}
+}
+
+// Configure through the supported isolated file surface, then exercise the
+// public generic-settings update before START reloads the saved dedicated route.
+// This document-only phase precedes parallel admissions and owns no session.
+func preserveSavedSubagentRoute(t *testing.T, host invokeContinueStartedProcess, home, dir, path string, before []byte) []byte {
+	t.Helper()
+	input := support.FakeInputs(t.Context(), []string{"you", "init", "--provider", "claude", "--model", "updated-generic-model"})
+	input.Input.Env, input.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	if err := host.process.Execute(input.Input); err != nil {
+		t.Fatalf("generic settings update: %v %s %s", err, input.Stdout(), input.Stderr())
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var original, saved map[string]any
+	if err := json.Unmarshal(before, &original); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(after, &saved); err != nil {
+		t.Fatal(err)
+	}
+	defaults := saved["defaults"].(map[string]any)
+	wantRoute := map[string]any{"provider": "OPENCODE", "model": "controlled-free-model"}
+	if !reflect.DeepEqual(defaults["subagent"], wantRoute) || defaults["workerModelProvider"] != "claude" || defaults["workerModel"] != "updated-generic-model" ||
+		defaults["futureDefault"] != original["defaults"].(map[string]any)["futureDefault"] || !reflect.DeepEqual(saved["futureRoot"], original["futureRoot"]) {
+		t.Fatalf("settings update did not preserve the dedicated route and siblings: %s", after)
+	}
+	return after
 }
 
 func assertSubagentACPDefault(t *testing.T, host invokeContinueStartedProcess, home, root, name string, peers map[string]*subagentACPPeer, configPath string, profile []byte) {

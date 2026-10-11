@@ -483,6 +483,7 @@
     {
       "test": "tests/functional/workers/invoke_continue/subagent_acp_test.go::TestSubagentOpenCodeDefault",
       "stableIds": [
+        "cli/you.init",
         "cli/you.worker-sessions.start",
         "rest/getWorkerSessionObservationByWorkerSessionId",
         "rest/startWorkerSession"
