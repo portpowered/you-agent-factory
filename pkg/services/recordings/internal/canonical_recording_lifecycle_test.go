@@ -254,7 +254,7 @@ func beginLifecycleScope(t *testing.T) (*scopeAdapterLifecycle, *scopeAdapterCan
 	}}}
 	canonical := &scopeAdapterCanonical{}
 	root := NewCombinedService(nil, nil, owner, nil, nil, canonical, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false)
 	request := recordings.BeginRecordingScopeRequest{
 		Enabled:       true,
 		Scope:         owner.status.Scope,
@@ -492,7 +492,7 @@ func TestRecordingScopeAppendForwardsLifecycleRejectionWithoutAcceptedResult(t *
 	lifecycle := &rejectingRecordingEventLifecycle{activeRuntimeLifecycle: owner}
 	canonical := &activeRuntimeCanonical{}
 	root := NewCombinedService(nil, nil, lifecycle, nil, nil, canonical, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	ref := root.newRecordingScope()
 	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: owner.status.RecordingID, eventScope: scope}
 	event := scopedScopeEvent("rejected-event", 0, scope)
@@ -524,7 +524,7 @@ func TestRecordingScopeCancellationAfterStartRemovesBinding(t *testing.T) {
 	lifecycle := cancelAfterStartLifecycle{activeRuntimeLifecycle: owner, cancel: cancel}
 	finishedAt := time.Unix(1_700_000_300, 0).UTC()
 	root := NewCombinedService(nil, nil, lifecycle, nil, nil, nil, nil,
-		staticRecordingClock{at: finishedAt}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{at: finishedAt}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	request := recordings.BeginRecordingScopeRequest{
 		Enabled: true, Scope: owner.status.Scope,
 		Target: recordings.RecordingTargetRequest{HomeDir: "home"},

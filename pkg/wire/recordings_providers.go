@@ -41,8 +41,7 @@ func provideRecordingsRoot(
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
 ) recordings.Service {
-	claim := provideRecordingTargetClaim(edges)
-	service := recordingswire.NewService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, recordings.RecordingTargetOptions{Claim: claim, CaseInsensitive: runtime.GOOS == "windows"})
+	service := recordingswire.NewService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs, edges.RecordingTargetClaim, runtime.GOOS == "windows")
 	if edges.RecordingsRootObserver != nil {
 		edges.RecordingsRootObserver(service)
 	}
@@ -52,9 +51,10 @@ func provideRecordingsRoot(
 	return service
 }
 
-func provideRecordingTargetClaim(edges serviceedges.Edges) recordings.RecordingTargetClaim {
-	if edges.RecordingTargetClaim != nil {
-		return edges.RecordingTargetClaim
+// NormalizeRecordingTargetClaim selects the optional host effect before graph construction.
+func NormalizeRecordingTargetClaim(claim recordings.RecordingTargetClaim) recordings.RecordingTargetClaim {
+	if claim != nil {
+		return claim
 	}
 	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
 	if err != nil {

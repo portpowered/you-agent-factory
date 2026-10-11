@@ -12,6 +12,9 @@ import (
 	"github.com/google/wire"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
+	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
+	agentmessageshttp "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/http"
+	agentmessageswire "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -45,6 +48,7 @@ var platformSet = wire.NewSet(
 )
 
 var apiSet = wire.NewSet(
+	agentmessageshttp.NewHandler,
 	providersessionshttp.NewAdapter,
 	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
@@ -82,6 +86,14 @@ var apiSet = wire.NewSet(
 )
 
 var servicesSet = wire.NewSet(
+	provideMessageJournal,
+	provideMessageStartup,
+	provideMessageAuthority,
+	provideMessageValidator,
+	provideMessageQuota,
+	provideMessageEngine,
+	agentmessageswire.NewConfiguredService,
+	wire.Bind(new(agentmessages.Service), new(*agentmessageswire.ConfiguredService)),
 	provideProvidersService,
 	provideEventsService,
 	provideWorkerRecordingWriter,
@@ -561,6 +573,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideSubmitWorkOperation,
 	provideSubmitBatchOperation,
 	provideListWorkerSessionsOperation,
+	provideMessagesCLI,
 	provideShowWorkerSessionOperation,
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,

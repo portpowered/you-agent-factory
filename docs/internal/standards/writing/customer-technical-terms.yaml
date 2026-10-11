@@ -171,6 +171,21 @@ terms:
       - Customer execution diagnostics
     owner: api/components/schemas/api/WorkerSessionObservation.yaml
 
+  - canonical: Agent Message
+    definition: A durable message between permitted Worker Sessions, separate from Factory Events and Provider Session transcripts.
+    category: product-term
+    approvedForms:
+      singular: Agent Message
+      plural: Agent Messages
+      verb: null
+    discouragedAlternatives: []
+    example: Pull the durable inbox to read an `Agent Message` addressed to your Worker Session.
+    surfaces:
+      - Messaging CLI and HTTP API
+      - Messaging reference documentation
+      - Message observations
+    owner: api/components/schemas/api/AgentMessage.yaml
+
   - canonical: Workstation
     definition: A processing step that consumes authored Work states, runs a Worker or logical move, and emits the next Work states.
     category: product-term

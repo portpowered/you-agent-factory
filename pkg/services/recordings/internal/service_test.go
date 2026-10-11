@@ -79,12 +79,10 @@ func (lease *changedRecordingTarget) Validate() error { return lease.cause }
 
 func TestRecordingTargetOwnershipRequiresConfirmedLease(t *testing.T) {
 	t.Parallel()
-	for _, claim := range []recordings.RecordingTargetClaim{nil, func(context.Context, string, string) (io.Closer, error) { return nil, nil }} {
-		service := &combinedService{caseInsensitive: runtime.GOOS == "windows", targetClaim: claim}
-		lease, err := service.ClaimRecordingTarget(t.Context(), "board.json")
-		if lease != nil || !errors.Is(err, recordings.ErrRecordingBindingConflict) {
-			t.Fatalf("unconfirmed ownership accepted: lease=%v error=%v", lease, err)
-		}
+	service := &combinedService{targetClaim: func(context.Context, string, string) (io.Closer, error) { return nil, nil }}
+	lease, err := service.ClaimRecordingTarget(t.Context(), "board.json")
+	if lease != nil || !errors.Is(err, recordings.ErrRecordingBindingConflict) {
+		t.Fatalf("unconfirmed ownership accepted: lease=%v error=%v", lease, err)
 	}
 }
 
@@ -160,5 +158,105 @@ func TestOwnedRecordingPublicationValidatesInputThenRetainsWriterOwnership(t *te
 				t.Fatalf("owned publication mistaken for external replacement: validation=%v flush=%v writes=%d", validationErr, flushErr, lifecycle.writes)
 			}
 		})
+	}
+}
+
+func unavailableTargetClaim(context.Context, string, string) (io.Closer, error) {
+	return nil, recordings.ErrRecordingBindingConflict
+}
+
+type claimLease struct {
+	cause  error
+	closed int
+}
+
+func (lease *claimLease) Close() error {
+	lease.closed++
+	return lease.cause
+}
+
+func TestRecordingTargetDirectConstructionAndCasePolicy(t *testing.T) {
+	for _, insensitive := range []bool{false, true} {
+		t.Run(fmt.Sprintf("case-insensitive=%t", insensitive), func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join("Recordings", "Board.JSON")
+			key, err := filepath.Abs(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if insensitive {
+				key = strings.ToLower(key)
+			}
+			calls := 0
+			lease := &claimLease{}
+			claim := func(ctx context.Context, target, marker string) (io.Closer, error) {
+				calls++
+				if ctx != t.Context() || target != path || marker != key+".recording.lock" {
+					t.Fatalf("claim arguments = %v, %q, %q", ctx, target, marker)
+				}
+				return lease, nil
+			}
+			service := NewCombinedService(nil, nil, nil, nil, nil, nil, nil,
+				staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, claim, insensitive).(*combinedService)
+			if calls != 0 {
+				t.Fatal("construction acquired ownership")
+			}
+			owned, err := service.ClaimRecordingTarget(t.Context(), path)
+			if err != nil || calls != 1 {
+				t.Fatalf("claim = %v; calls = %d", err, calls)
+			}
+			if service.recordingTargetValidator(path) != owned.(recordings.RecordingTargetValidator) {
+				t.Fatal("selected target has no validator")
+			}
+			if got := service.recordingTargetValidator(strings.ToUpper(path)); (got == owned.(recordings.RecordingTargetValidator)) != insensitive {
+				t.Fatal("case policy did not select the expected ownership")
+			}
+			if err := owned.Close(); err != nil || lease.closed != 1 || service.recordingTargetValidator(path) != nil {
+				t.Fatalf("release = %v; closes = %d", err, lease.closed)
+			}
+		})
+	}
+}
+
+func TestRecordingTargetReleaseFailureRetryAndStalePeerIsolation(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("release unavailable")
+	selected, replacement, peer := &claimLease{cause: cause}, &claimLease{}, &claimLease{}
+	leases := []*claimLease{selected, peer, replacement}
+	service := &combinedService{targetClaim: func(context.Context, string, string) (io.Closer, error) {
+		lease := leases[0]
+		leases = leases[1:]
+		return lease, nil
+	}}
+	first, err := service.ClaimRecordingTarget(t.Context(), "selected.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := service.ClaimRecordingTarget(t.Context(), "peer.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); !errors.Is(err, cause) || service.recordingTargetValidator("selected.json") != first.(recordings.RecordingTargetValidator) {
+		t.Fatalf("failed release lost ownership/cause: %v", err)
+	}
+	selected.cause = nil
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	later, err := service.ClaimRecordingTarget(t.Context(), "selected.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil || service.recordingTargetValidator("selected.json") != later.(recordings.RecordingTargetValidator) {
+		t.Fatalf("stale close removed later ownership: %v", err)
+	}
+	if service.recordingTargetValidator("peer.json") != other.(recordings.RecordingTargetValidator) || peer.closed != 0 {
+		t.Fatal("selected release affected peer")
+	}
+	if err := later.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Close(); err != nil {
+		t.Fatal(err)
 	}
 }

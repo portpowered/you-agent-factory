@@ -2,7 +2,10 @@ package climanifestgen
 
 import (
 	"fmt"
+	"path/filepath"
 
+	"github.com/portpowered/infinite-you/internal/contractjoiner"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
@@ -33,6 +36,19 @@ func ExtractWorkersFamily(manifest climanifest.Manifest) (climanifest.Manifest, 
 // observation commands.
 func ExtractWorkerSessionsFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
 	return extractFamily(manifest, "worker sessions", WorkerSessionsFamilyCommandIDs)
+}
+
+// MessagesArtifact derives the Agent Message command family from its authored contract.
+func MessagesArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifest, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
+	if err != nil {
+		return nil, err
+	}
+	family, err := extractFamily(manifest, "messages", []string{"you.message", "you.message.reply", "you.message.list"})
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
 // ExtractRunSubmitFamily returns manifest metadata for exactly the run/submit

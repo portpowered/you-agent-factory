@@ -18,6 +18,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	agentmessagescli "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/cli"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
@@ -176,6 +177,7 @@ type CommandFactory struct {
 	MoveWork                   func(workcli.MoveConfig) error
 	VisualizeWork              func(workcli.VisualizeConfig) error
 	ListWorkerSessions         workersessionscli.ListOperation
+	MessagesCLI                *agentmessagescli.Adapter
 	ShowWorkerSession          workersessionscli.ShowOperation
 	ReadWorkerSession          workersessionscli.ReadOperation
 	StreamWorkerSession        workersessionscli.StreamOperation
@@ -251,6 +253,7 @@ func NewCommandFactory(
 	moveWork MoveWorkOperation,
 	visualizeWork VisualizeWorkOperation,
 	listWorkerSessions ListWorkerSessionsOperation,
+	messagesCLI *agentmessagescli.Adapter,
 	showWorkerSession ShowWorkerSessionsOperation,
 	readWorkerSession ReadWorkerSessionOperation,
 	streamWorkerSession StreamWorkerSessionOperation,
@@ -327,6 +330,7 @@ func NewCommandFactory(
 		MoveWork:                          moveWork,
 		VisualizeWork:                     visualizeWork,
 		ListWorkerSessions:                listWorkerSessions,
+		MessagesCLI:                       messagesCLI,
 		ShowWorkerSession:                 showWorkerSession,
 		ReadWorkerSession:                 readWorkerSession,
 		StreamWorkerSession:               streamWorkerSession,

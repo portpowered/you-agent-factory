@@ -16,11 +16,18 @@ import (
 
 type historyCatalogFake struct {
 	capturedActivityFake
-	items []recordings.WorkerCapturedCatalogItem
-	err   error
+	items            []recordings.WorkerCapturedCatalogItem
+	err              error
+	preparedRequests []recordings.WorkerCapturedCatalogRequest
+	historyReads     int
 }
 
 func (f *historyCatalogFake) ListWorkerSessionCaptures(_ context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.historyReads++
+	return f.catalogPage(req)
+}
+
+func (f *historyCatalogFake) catalogPage(req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
 	if req.NextToken == "second" {
 		return recordings.WorkerCapturedCatalogPage{Items: f.items[1:]}, f.err
 	}
@@ -189,8 +196,9 @@ func TestArchivedHistoryUsesBoundedCommittedUsageAndTerminalConfirmation(t *test
 	}
 }
 
-func (*historyCatalogFake) ListPreparedWorkerSessionCaptures(context.Context, recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
-	panic("unexpected prepared catalog read")
+func (f *historyCatalogFake) ListPreparedWorkerSessionCaptures(_ context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.preparedRequests = append(f.preparedRequests, req)
+	return f.catalogPage(req)
 }
 
 func TestUsageOriginProjectionPreservesPresenceAndLegacy(t *testing.T) {
@@ -207,5 +215,52 @@ func TestUsageOriginProjectionPreservesPresenceAndLegacy(t *testing.T) {
 		if (usage.Origin == "SYNTHETIC") != (fields["origin"] != nil) {
 			t.Fatalf("origin invented or lost: %+v", usage)
 		}
+	}
+}
+
+type changingHistoryCatalog struct {
+	historyCatalogFake
+	failures, calls int
+	failure         error
+}
+
+func (f *changingHistoryCatalog) ListWorkerSessionCaptures(_ context.Context, req recordings.WorkerCapturedCatalogRequest) (recordings.WorkerCapturedCatalogPage, error) {
+	f.calls++
+	if req.NextToken != "" && f.failures > 0 {
+		f.failures--
+		return recordings.WorkerCapturedCatalogPage{}, f.failure
+	}
+	return f.catalogPage(req)
+}
+
+func TestArchivedHistoryRestartsInvalidatedCatalogWithoutMixingPages(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name            string
+		failures, calls int
+		failure, want   error
+	}{
+		{"admission between pages", 1, 4, recordings.ErrInvalidWorkerRecordingRequest, nil},
+		{"bounded churn", 3, 6, recordings.ErrInvalidWorkerRecordingRequest, workersessions.ErrObservationProjectionUnavailable},
+		{"corruption", 1, 2, recordings.ErrWorkerRecordingReplay, workersessions.ErrObservationProjectionUnavailable},
+		{"cancellation", 1, 2, context.Canceled, workersessions.ErrObservationProjectionUnavailable},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			catalog := &changingHistoryCatalog{historyCatalogFake: historyCatalogFake{items: []recordings.WorkerCapturedCatalogItem{
+				historyCapture(t, "first", "factory", "attempt-1", true),
+				historyCapture(t, "second", "factory", "attempt-2", true),
+			}}, failures: cell.failures, failure: cell.failure}
+			rows, err := (&LogReader{reader: catalog}).archivedHistory(t.Context(), workersessions.ListWorkerSessionObservationsRequest{}, nil)
+			if !errors.Is(err, cell.want) || catalog.calls != cell.calls {
+				t.Fatalf("rows=%+v err=%v calls=%d; want err=%v calls=%d", rows, err, catalog.calls, cell.want, cell.calls)
+			}
+			if err == nil && (len(rows) != 2 || rows[0].WorkerSessionID != "first" || rows[1].WorkerSessionID != "second") {
+				t.Fatalf("selection mixed or lost pages: %+v", rows)
+			}
+			if err != nil && len(rows) != 0 {
+				t.Fatalf("failed selection exposed a partial archive: %+v", rows)
+			}
+		})
 	}
 }

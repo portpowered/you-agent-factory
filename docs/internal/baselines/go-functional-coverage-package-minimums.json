@@ -308,6 +308,10 @@
       "minimum": 62.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/agent_messages",
+      "minimum": 15.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations",
       "minimum": 0.00
     },

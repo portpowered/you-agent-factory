@@ -13,6 +13,7 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
+		Messaging:  config.Messaging.Clone(),
 		PriceTable: config.PriceTable.Clone(),
 		Runtime:    documentRuntimeFromConfig(config.Runtime),
 		Workers: operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{
@@ -59,6 +60,7 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		Messaging:  document.Messaging.Clone(),
 		PriceTable: document.PriceTable.Clone(),
 		Runtime: operatorsettings.RuntimeSettings{
 			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),

@@ -27,8 +27,9 @@ func Decode(data []byte) (operatorsettings.Config, error) {
 
 // DecodeWithDiagnostics decodes one generated GlobalConfig document, maps it
 // to normalized Operator Settings values, and reports sorted unique paths for
-// unknown object fields. Known-field validation and exactly-one-document
-// enforcement remain strict.
+// unknown object fields. Exactly-one-document enforcement remains strict.
+// Invalid Messaging settings quarantine only Messaging; other known fields
+// retain strict validation.
 func DecodeWithDiagnostics(
 	data []byte,
 ) (operatorsettings.Config, operatorsettings.ConfigDecodeDiagnostics, error) {
@@ -38,7 +39,11 @@ func DecodeWithDiagnostics(
 	if err := decoder.Decode(&raw); err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
 	}
-	normalized, err := canonicalizeKnownJSONFieldNames(raw)
+	withoutMessaging, messaging, err := detachMessaging(raw)
+	if err != nil {
+		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
+	}
+	normalized, err := canonicalizeKnownJSONFieldNames(withoutMessaging)
 	if err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, fmt.Errorf("decode generated global config: %w", err)
 	}
@@ -58,6 +63,7 @@ func DecodeWithDiagnostics(
 	if err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
 	}
+	config.Messaging = messaging
 	config, err = config.Normalize()
 	if err != nil {
 		return operatorsettings.Config{}, operatorsettings.ConfigDecodeDiagnostics{}, err
@@ -500,6 +506,10 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 	generated := encodeConfig(normalized)
 
 	payload, err := json.MarshalIndent(generated, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode generated global config: %w", err)
+	}
+	payload, err = attachMessaging(payload, normalized.Messaging)
 	if err != nil {
 		return nil, fmt.Errorf("encode generated global config: %w", err)
 	}

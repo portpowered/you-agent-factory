@@ -16,7 +16,7 @@ import (
 // Construct only the root adapter; nil embedded interfaces reject unexpected
 // calls. Owner policy and public composed journeys have separate witnesses.
 func replayArtifactAdapter(artifacts recordingswire.ArtifactsExportOwner, replay recordingswire.ReplayOwner) recordings.RecordingReplayArtifacts {
-	return recordingswire.NewService(nil, nil, nil, artifacts, replay, nil, nil, platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(recordings.RecordingReplayArtifacts)
+	return recordingswire.NewService(nil, nil, nil, artifacts, replay, nil, nil, platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(recordings.RecordingReplayArtifacts)
 }
 
 type artifactAdapterOwner struct {

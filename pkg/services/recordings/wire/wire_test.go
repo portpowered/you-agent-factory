@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -120,7 +121,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}}
 	service := recordingswire.NewService(ledger, constructorProjection{},
 		constructorLifecycle{}, constructorArtifacts{}, replay, constructorCanonical{}, historical,
-		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false)
 	if service == nil || ledger.subscribeCalls != 0 || replay.request.RecordingID != "" || historical.request.Recording.RecordingID != "" {
 		t.Fatal("construction activated a completed collaborator")
 	}
@@ -711,4 +712,8 @@ func TestHistoricalReplayV2ArtifactRemainsReadableThroughRecordingOwner(t *testi
 }
 func decodeFunctionalFactorySnapshot(payload []byte) (*factorydefinitions.FactorySnapshot, error) {
 	return factorydefinitions.NewFactorySnapshot(json.RawMessage(payload))
+}
+
+func unavailableTargetClaim(context.Context, string, string) (io.Closer, error) {
+	return nil, recordings.ErrRecordingBindingConflict
 }

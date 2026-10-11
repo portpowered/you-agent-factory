@@ -48,6 +48,24 @@ func TestWorkerSessionControlRoutesReportUnavailableWithoutOwnerHandler(t *testi
 	}
 }
 
+func TestAgentMessageRoutesReportDisabledWithoutOwnerHandler(t *testing.T) {
+	t.Parallel()
+	server := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	for _, route := range []struct{ method, path string }{
+		{http.MethodPost, "/messages"},
+		{http.MethodGet, "/messages?toMe=true&markRead=true"},
+		{http.MethodGet, "/messages?follow=true"},
+		{http.MethodGet, "/messages/msg-one"},
+	} {
+		t.Run(route.method+route.path, func(t *testing.T) {
+			t.Parallel()
+			recorder := httptest.NewRecorder()
+			server.Handler().ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
+			assertJSONError(t, recorder, http.StatusServiceUnavailable, "MESSAGING_DISABLED", "MESSAGING_DISABLED")
+		})
+	}
+}
+
 func TestServerWithRecordings_RoutesDurableResultToRecordingsAdapter(t *testing.T) {
 	t.Parallel()
 

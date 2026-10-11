@@ -862,3 +862,70 @@ func TestScopedWorkListAuthorityFailureDoesNotReadAttempts(t *testing.T) {
 		}
 	}
 }
+
+type archivedWorkListStub struct {
+	workersessions.Service
+	rows     []workersessions.Observation
+	err      error
+	requests []workersessions.ListObservationsRequest
+}
+
+func (s *archivedWorkListStub) ListObservations(_ context.Context, request workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	s.requests = append(s.requests, request)
+	if s.err != nil {
+		return workersessions.ListObservationsResult{}, s.err
+	}
+	return workersessions.ListObservationsResult{Observations: s.rows}, nil
+}
+
+func TestArchivedWorkAttributionRequiresExactMembershipAndPropagatesFailure(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name, session, id string
+		captureErr, want  error
+		known             bool
+		count             int
+	}{
+		{name: "missing board", session: "original", id: "work", count: 2},
+		{name: "known board deduplicates", session: "original", id: "work", known: true, count: 2},
+		{name: "foreign factory", session: "foreign", id: "work", want: work.ErrWorkNotFound},
+		{name: "unknown work", session: "original", id: "unknown", want: work.ErrWorkNotFound},
+		{name: "default is not original", session: "~default", id: "work", want: work.ErrWorkNotFound},
+		{name: "damaged selected metadata", session: "original", id: "work", captureErr: workersessions.ErrObservationProjectionUnavailable, want: workersessions.ErrObservationProjectionUnavailable},
+		{name: "canceled reader", session: "original", id: "work", captureErr: context.Canceled, want: context.Canceled},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			rows := []workersessions.Observation{
+				{WorkerSessionID: "first", FactorySessionID: "original", WorkIDs: []string{"work"}, AttemptID: "a", State: workersessions.StateCompleted},
+				{WorkerSessionID: "second", FactorySessionID: "original", WorkIDs: []string{"work"}, AttemptID: "b", State: workersessions.StateFailed},
+				{WorkerSessionID: "peer", FactorySessionID: "foreign", WorkIDs: []string{"other"}, AttemptID: "c"},
+			}
+			capture := &archivedWorkListStub{rows: rows, err: cell.captureErr}
+			peer := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: rows[:1]}}
+			authority := workServiceStub{getErr: work.ErrWorkNotFound}
+			if cell.known {
+				authority = workServiceStub{getResult: work.ReadModel{WorkID: "work", Name: "known"}}
+			}
+			adapter := NewAdapter(peer, authority)
+			adapter.logs = capture
+			got, err := adapter.ListWorkerSessions(t.Context(), cell.session, cell.id)
+			if !errors.Is(err, cell.want) || len(got.Sessions) != cell.count {
+				t.Fatalf("archive list=%+v err=%v; want count=%d err=%v", got, err, cell.count, cell.want)
+			}
+			for _, request := range capture.requests {
+				if request.FactorySessionID != cell.session || request.WorkID != cell.id {
+					t.Fatalf("wrong capture scope: %+v", request)
+				}
+			}
+			for _, row := range got.Sessions {
+				if row.FactorySessionId == nil || *row.FactorySessionId != "original" || row.WorkId == nil || *row.WorkId != "work" {
+					t.Fatalf("foreign attribution: %+v", row)
+				}
+				if !cell.known && row.WorkName != nil {
+					t.Fatalf("fabricated missing name: %+v", row)
+				}
+			}
+		})
+	}
+}

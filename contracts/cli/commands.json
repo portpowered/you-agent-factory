@@ -1,5 +1,1784 @@
 {
   "commands": {
+    "you.message": {
+      "aliases": [],
+      "arguments": {
+        "you.message.arg.0": {
+          "acceptedSources": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "handlerBindingId": "you.message.binding.recipient-and-body",
+          "id": "you.message.arg.0",
+          "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "recipient-and-body",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "scope": "local",
+          "valueType": "stringArray",
+          "variadic": true,
+          "visibility": "visible"
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Queue a durable message to your evidenced requester or lead. Use reply to answer a message and list to pull an authorized inbox. Messaging never dispatches, revives or interrupts a Worker Session in this milestone.",
+            "id": "you.message.description"
+          },
+          "title": {
+            "canonicalEnglish": "Send an Agent Message",
+            "id": "you.message.title"
+          }
+        },
+        "examples": [
+          "you message --worker-session-id recipient --body \"Proceeding with the admitted default.\""
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.message",
+        "sourceHash": "c9c5219b81a9c82bf9980130f5ed1a26fafa641f1b0748142c9cd046d5b1eb88",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.message.exit.failure": {
+          "code": 1,
+          "id": "you.message.exit.failure",
+          "kind": "failure"
+        },
+        "you.message.exit.success": {
+          "code": 0,
+          "id": "you.message.exit.success",
+          "kind": "success"
+        },
+        "you.message.exit.usage": {
+          "code": 1,
+          "id": "you.message.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.message.flag.body": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.body",
+          "id": "you.message.flag.body",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.body",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "body",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "sensitive",
+          "shorthand": "",
+          "usage": "Message body; omit to use body arguments or non-terminal stdin.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.body-secret": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.binding.body-secret",
+          "id": "you.message.flag.body-secret",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.body-secret",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "body-secret",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Declare the entire body secret; redact it before storage and publication.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.flag.correlation-factory-session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.correlation-factory-session",
+          "id": "you.message.flag.correlation-factory-session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.correlation-factory-session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "correlation-factory-session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Informational Factory Session identity; defaults to YOU_FACTORY_SESSION_ID.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.correlation-work-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.correlation-work-id",
+          "id": "you.message.flag.correlation-work-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.correlation-work-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "correlation-work-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Informational Work identity; defaults to YOU_WORK_ID.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.expires": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.expires",
+          "id": "you.message.flag.expires",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.expires",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "expires",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Expiry duration: 1m to 168h; omit for the configured default.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.if-ended": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.if-ended",
+          "id": "you.message.flag.if-ended",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.if-ended",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "if-ended",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Ended recipient policy: revive or hold; revival remains queued in this milestone.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.interrupt": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.binding.interrupt",
+          "id": "you.message.flag.interrupt",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.interrupt",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "interrupt",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Request interruption; this milestone returns MESSAGE_INTERRUPT_UNSUPPORTED.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.flag.output": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": "human"
+          },
+          "handlerBindingId": "you.message.binding.output",
+          "id": "you.message.flag.output",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.output",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "output",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Output format: human or json.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.reply-hold": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.binding.reply-hold",
+          "id": "you.message.flag.reply-hold",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.reply-hold",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "reply-hold",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Keep replies queued when the original sender has ended.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.flag.request-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.request-id",
+          "id": "you.message.flag.request-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.request-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "request-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Stable retry key; generated when omitted.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.session",
+          "id": "you.message.flag.session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Select the recipient Factory Session for an ambiguous Worker Session identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.flag.worker-session-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.binding.worker-session-id",
+          "id": "you.message.flag.worker-session-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.flag.worker-session-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "worker-session-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Address this Worker Session explicitly, including reserved command names.",
+          "valueType": "string",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.message.handler",
+        "operationId": "sendAgentMessage"
+      },
+      "handlerBindings": {
+        "you.message.binding.body": {
+          "id": "you.message.binding.body",
+          "inputId": "you.message.flag.body"
+        },
+        "you.message.binding.body-secret": {
+          "id": "you.message.binding.body-secret",
+          "inputId": "you.message.flag.body-secret"
+        },
+        "you.message.binding.correlation-factory-session": {
+          "id": "you.message.binding.correlation-factory-session",
+          "inputId": "you.message.flag.correlation-factory-session"
+        },
+        "you.message.binding.correlation-work-id": {
+          "id": "you.message.binding.correlation-work-id",
+          "inputId": "you.message.flag.correlation-work-id"
+        },
+        "you.message.binding.expires": {
+          "id": "you.message.binding.expires",
+          "inputId": "you.message.flag.expires"
+        },
+        "you.message.binding.if-ended": {
+          "id": "you.message.binding.if-ended",
+          "inputId": "you.message.flag.if-ended"
+        },
+        "you.message.binding.interrupt": {
+          "id": "you.message.binding.interrupt",
+          "inputId": "you.message.flag.interrupt"
+        },
+        "you.message.binding.output": {
+          "id": "you.message.binding.output",
+          "inputId": "you.message.flag.output"
+        },
+        "you.message.binding.recipient-and-body": {
+          "id": "you.message.binding.recipient-and-body",
+          "inputId": "you.message.arg.0"
+        },
+        "you.message.binding.reply-hold": {
+          "id": "you.message.binding.reply-hold",
+          "inputId": "you.message.flag.reply-hold"
+        },
+        "you.message.binding.request-id": {
+          "id": "you.message.binding.request-id",
+          "inputId": "you.message.flag.request-id"
+        },
+        "you.message.binding.session": {
+          "id": "you.message.binding.session",
+          "inputId": "you.message.flag.session"
+        },
+        "you.message.binding.worker-session-id": {
+          "id": "you.message.binding.worker-session-id",
+          "inputId": "you.message.flag.worker-session-id"
+        }
+      },
+      "id": "you.message",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.message",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "message",
+      "outputs": {
+        "you.message.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.message.output.human"
+        },
+        "you.message.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.message.output.json"
+        }
+      },
+      "path": "you message",
+      "placement": "remote-only",
+      "precedence": {
+        "acrossTiers": "replace",
+        "multipleBindings": "reject",
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "repeated": "append",
+          "scalar": "last"
+        }
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.message.side-effect.network": {
+          "id": "you.message.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "usage": {
+        "example": "  you message --output json",
+        "line": "message [worker-session-id] [body...]"
+      },
+      "visibility": "visible"
+    },
+    "you.message.list": {
+      "aliases": [],
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Pull authorized messages in durable sequence order. Filters combine with AND. Operators can observe messages but cannot send, reply or mark another recipient message read.",
+            "id": "you.message.list.description"
+          },
+          "title": {
+            "canonicalEnglish": "Read Agent Messages",
+            "id": "you.message.list.title"
+          }
+        },
+        "examples": [
+          "you message list --to-me --output json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.message.list",
+        "sourceHash": "f64ba43ea2d3c45408e47573d8dbb907aa5e81ec4662afb975564c2f6920ef43",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.message.list.exit.failure": {
+          "code": 1,
+          "id": "you.message.list.exit.failure",
+          "kind": "failure"
+        },
+        "you.message.list.exit.success": {
+          "code": 0,
+          "id": "you.message.list.exit.success",
+          "kind": "success"
+        },
+        "you.message.list.exit.usage": {
+          "code": 1,
+          "id": "you.message.list.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.message.list.flag.correlation-factory-session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.correlation-factory-session",
+          "id": "you.message.list.flag.correlation-factory-session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.correlation-factory-session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "correlation-factory-session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Filter by informational Factory Session identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.correlation-work-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.correlation-work-id",
+          "id": "you.message.list.flag.correlation-work-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.correlation-work-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "correlation-work-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Filter by informational Work identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.follow": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.list.binding.follow",
+          "id": "you.message.list.flag.follow",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.follow",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "follow",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Follow authorized source-native changes; pull the inbox after a stream gap.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.from-worker-session-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.from-worker-session-id",
+          "id": "you.message.list.flag.from-worker-session-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.from-worker-session-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "from-worker-session-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Filter by exact sender Worker Session identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.mark-read": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.list.binding.mark-read",
+          "id": "you.message.list.flag.mark-read",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.mark-read",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "mark-read",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Mark only the permitted recipient messages in the returned page READ.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.max-results": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "int": 0
+          },
+          "handlerBindingId": "you.message.list.binding.max-results",
+          "id": "you.message.list.flag.max-results",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.max-results",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "max-results",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Maximum messages per page: 1 to 500; omit for the server default.",
+          "valueType": "int",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.next-token": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.next-token",
+          "id": "you.message.list.flag.next-token",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.next-token",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "next-token",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Continue the same authorized inbox query.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.output": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": "human"
+          },
+          "handlerBindingId": "you.message.list.binding.output",
+          "id": "you.message.list.flag.output",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.output",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "output",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Output format: human or json.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.session",
+          "id": "you.message.list.flag.session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Select the recipient Factory Session for an ambiguous Worker Session identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.status": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "stringArray": []
+          },
+          "handlerBindingId": "you.message.list.binding.status",
+          "id": "you.message.list.flag.status",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.status",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "status",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": true,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Filter by status; repeat for alternatives.",
+          "valueType": "stringArray",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.thread": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.thread",
+          "id": "you.message.list.flag.thread",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.thread",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "thread",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Filter by message thread identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.to-me": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.list.binding.to-me",
+          "id": "you.message.list.flag.to-me",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.to-me",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "to-me",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Read the verified caller continuation and own-Work inbox.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.list.flag.to-worker-session-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.list.binding.to-worker-session-id",
+          "id": "you.message.list.flag.to-worker-session-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.list.flag.to-worker-session-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "to-worker-session-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Filter by exact recipient Worker Session identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.message.list.handler",
+        "operationId": "listAgentMessages"
+      },
+      "handlerBindings": {
+        "you.message.list.binding.correlation-factory-session": {
+          "id": "you.message.list.binding.correlation-factory-session",
+          "inputId": "you.message.list.flag.correlation-factory-session"
+        },
+        "you.message.list.binding.correlation-work-id": {
+          "id": "you.message.list.binding.correlation-work-id",
+          "inputId": "you.message.list.flag.correlation-work-id"
+        },
+        "you.message.list.binding.follow": {
+          "id": "you.message.list.binding.follow",
+          "inputId": "you.message.list.flag.follow"
+        },
+        "you.message.list.binding.from-worker-session-id": {
+          "id": "you.message.list.binding.from-worker-session-id",
+          "inputId": "you.message.list.flag.from-worker-session-id"
+        },
+        "you.message.list.binding.mark-read": {
+          "id": "you.message.list.binding.mark-read",
+          "inputId": "you.message.list.flag.mark-read"
+        },
+        "you.message.list.binding.max-results": {
+          "id": "you.message.list.binding.max-results",
+          "inputId": "you.message.list.flag.max-results"
+        },
+        "you.message.list.binding.next-token": {
+          "id": "you.message.list.binding.next-token",
+          "inputId": "you.message.list.flag.next-token"
+        },
+        "you.message.list.binding.output": {
+          "id": "you.message.list.binding.output",
+          "inputId": "you.message.list.flag.output"
+        },
+        "you.message.list.binding.session": {
+          "id": "you.message.list.binding.session",
+          "inputId": "you.message.list.flag.session"
+        },
+        "you.message.list.binding.status": {
+          "id": "you.message.list.binding.status",
+          "inputId": "you.message.list.flag.status"
+        },
+        "you.message.list.binding.thread": {
+          "id": "you.message.list.binding.thread",
+          "inputId": "you.message.list.flag.thread"
+        },
+        "you.message.list.binding.to-me": {
+          "id": "you.message.list.binding.to-me",
+          "inputId": "you.message.list.flag.to-me"
+        },
+        "you.message.list.binding.to-worker-session-id": {
+          "id": "you.message.list.binding.to-worker-session-id",
+          "inputId": "you.message.list.flag.to-worker-session-id"
+        }
+      },
+      "id": "you.message.list",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.message.list",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "list",
+      "outputs": {
+        "you.message.list.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.message.list.output.human"
+        },
+        "you.message.list.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.message.list.output.json"
+        }
+      },
+      "path": "you message list",
+      "placement": "remote-only",
+      "precedence": {
+        "acrossTiers": "replace",
+        "multipleBindings": "reject",
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "repeated": "append",
+          "scalar": "last"
+        }
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.message.list.side-effect.network": {
+          "id": "you.message.list.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "usage": {
+        "example": "  you message list --output json",
+        "line": "list"
+      },
+      "visibility": "visible"
+    },
+    "you.message.reply": {
+      "aliases": [],
+      "arguments": {
+        "you.message.reply.arg.0": {
+          "acceptedSources": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "handlerBindingId": "you.message.reply.binding.message-id",
+          "id": "you.message.reply.arg.0",
+          "kind": "positional",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.arg.0",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "maxCardinality": -1,
+          "minCardinality": 1,
+          "name": "message-id",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "scope": "local",
+          "valueType": "stringArray",
+          "variadic": true,
+          "visibility": "visible"
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Reply to the original sender by default. Preserve the thread and mark the original message REPLIED in the same durable transaction.",
+            "id": "you.message.reply.description"
+          },
+          "title": {
+            "canonicalEnglish": "Reply to an Agent Message",
+            "id": "you.message.reply.title"
+          }
+        },
+        "examples": [
+          "you message reply msg-parent \"Use the admitted default.\""
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.message.reply",
+        "sourceHash": "c911df40a0740beacaae099e1d223d7d53f7bd8c11b06ed31a47ec6896837aff",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.message.reply.exit.failure": {
+          "code": 1,
+          "id": "you.message.reply.exit.failure",
+          "kind": "failure"
+        },
+        "you.message.reply.exit.success": {
+          "code": 0,
+          "id": "you.message.reply.exit.success",
+          "kind": "success"
+        },
+        "you.message.reply.exit.usage": {
+          "code": 1,
+          "id": "you.message.reply.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.message.reply.flag.body": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.body",
+          "id": "you.message.reply.flag.body",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.body",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "body",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "sensitive",
+          "shorthand": "",
+          "usage": "Message body; omit to use body arguments or non-terminal stdin.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.body-secret": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.reply.binding.body-secret",
+          "id": "you.message.reply.flag.body-secret",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.body-secret",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "body-secret",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Declare the entire body secret; redact it before storage and publication.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.correlation-factory-session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.correlation-factory-session",
+          "id": "you.message.reply.flag.correlation-factory-session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.correlation-factory-session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "correlation-factory-session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Informational Factory Session identity; defaults to YOU_FACTORY_SESSION_ID.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.correlation-work-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.correlation-work-id",
+          "id": "you.message.reply.flag.correlation-work-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.correlation-work-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "correlation-work-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Informational Work identity; defaults to YOU_WORK_ID.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.expires": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.expires",
+          "id": "you.message.reply.flag.expires",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.expires",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "expires",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Expiry duration: 1m to 168h; omit for the configured default.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.if-ended": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.if-ended",
+          "id": "you.message.reply.flag.if-ended",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.if-ended",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "if-ended",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Ended recipient policy: revive or hold; revival remains queued in this milestone.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.interrupt": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.reply.binding.interrupt",
+          "id": "you.message.reply.flag.interrupt",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.interrupt",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "interrupt",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Request interruption; this milestone returns MESSAGE_INTERRUPT_UNSUPPORTED.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.output": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": "human"
+          },
+          "handlerBindingId": "you.message.reply.binding.output",
+          "id": "you.message.reply.flag.output",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.output",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "output",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Output format: human or json.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.reply-hold": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.message.reply.binding.reply-hold",
+          "id": "you.message.reply.flag.reply-hold",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.reply-hold",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "reply-hold",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Keep replies queued when the original sender has ended.",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.request-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.request-id",
+          "id": "you.message.reply.flag.request-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.request-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "request-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Stable retry key; generated when omitted.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.session": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.session",
+          "id": "you.message.reply.flag.session",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "session",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Select the recipient Factory Session for an ambiguous Worker Session identity.",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.message.reply.flag.worker-session-id": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.message.reply.binding.worker-session-id",
+          "id": "you.message.reply.flag.worker-session-id",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.message.reply.flag.worker-session-id",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "worker-session-id",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "Address this Worker Session explicitly, including reserved command names.",
+          "valueType": "string",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.message.reply.handler",
+        "operationId": "sendAgentMessage"
+      },
+      "handlerBindings": {
+        "you.message.reply.binding.body": {
+          "id": "you.message.reply.binding.body",
+          "inputId": "you.message.reply.flag.body"
+        },
+        "you.message.reply.binding.body-secret": {
+          "id": "you.message.reply.binding.body-secret",
+          "inputId": "you.message.reply.flag.body-secret"
+        },
+        "you.message.reply.binding.correlation-factory-session": {
+          "id": "you.message.reply.binding.correlation-factory-session",
+          "inputId": "you.message.reply.flag.correlation-factory-session"
+        },
+        "you.message.reply.binding.correlation-work-id": {
+          "id": "you.message.reply.binding.correlation-work-id",
+          "inputId": "you.message.reply.flag.correlation-work-id"
+        },
+        "you.message.reply.binding.expires": {
+          "id": "you.message.reply.binding.expires",
+          "inputId": "you.message.reply.flag.expires"
+        },
+        "you.message.reply.binding.if-ended": {
+          "id": "you.message.reply.binding.if-ended",
+          "inputId": "you.message.reply.flag.if-ended"
+        },
+        "you.message.reply.binding.interrupt": {
+          "id": "you.message.reply.binding.interrupt",
+          "inputId": "you.message.reply.flag.interrupt"
+        },
+        "you.message.reply.binding.message-id": {
+          "id": "you.message.reply.binding.message-id",
+          "inputId": "you.message.reply.arg.0"
+        },
+        "you.message.reply.binding.output": {
+          "id": "you.message.reply.binding.output",
+          "inputId": "you.message.reply.flag.output"
+        },
+        "you.message.reply.binding.reply-hold": {
+          "id": "you.message.reply.binding.reply-hold",
+          "inputId": "you.message.reply.flag.reply-hold"
+        },
+        "you.message.reply.binding.request-id": {
+          "id": "you.message.reply.binding.request-id",
+          "inputId": "you.message.reply.flag.request-id"
+        },
+        "you.message.reply.binding.session": {
+          "id": "you.message.reply.binding.session",
+          "inputId": "you.message.reply.flag.session"
+        },
+        "you.message.reply.binding.worker-session-id": {
+          "id": "you.message.reply.binding.worker-session-id",
+          "inputId": "you.message.reply.flag.worker-session-id"
+        }
+      },
+      "id": "you.message.reply",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.message.reply",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "reply",
+      "outputs": {
+        "you.message.reply.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.message.reply.output.human"
+        },
+        "you.message.reply.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.message.reply.output.json"
+        }
+      },
+      "path": "you message reply",
+      "placement": "remote-only",
+      "precedence": {
+        "acrossTiers": "replace",
+        "multipleBindings": "reject",
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "repeated": "append",
+          "scalar": "last"
+        }
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.message.reply.side-effect.network": {
+          "id": "you.message.reply.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "usage": {
+        "example": "  you message reply msg-parent \"Use the admitted default.\"",
+        "line": "reply <message-id> [body...]"
+      },
+      "visibility": "visible"
+    },
     "you": {
       "aliases": [],
       "completeness": "authoritative",

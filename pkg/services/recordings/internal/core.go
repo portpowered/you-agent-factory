@@ -54,9 +54,6 @@ type combinedService struct {
 }
 
 func (service *combinedService) ClaimRecordingTarget(ctx context.Context, path string) (io.Closer, error) {
-	if service.targetClaim == nil {
-		return nil, &recordingTargetClaimError{path: path, cause: recordings.ErrRecordingBindingConflict}
-	}
 	key, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolve recording target %q: %w", recordings.ErrRecordingBindingConflict, path, err)
@@ -385,7 +382,8 @@ func NewCombinedService(
 	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 	replayInputs recordings.ReplayInputLoader,
-	targetOptions ...recordings.RecordingTargetOptions,
+	claim recordings.RecordingTargetClaim,
+	caseInsensitive bool,
 ) recordings.Service {
 	service := &combinedService{
 		Ledger:                 ledger,
@@ -402,14 +400,12 @@ func NewCombinedService(
 		replaySnapshotDecoder:  decodeSnapshot,
 		replayConfigDecoder:    decodeRuntimeConfig,
 		replayInputs:           replayInputs,
+		targetClaim:            claim,
+		caseInsensitive:        caseInsensitive,
 		replayByKey:            make(map[string]*recordings.ReplayArtifact),
 		scopeByRef:             make(map[recordings.RecordingScopeRef]*recordingScopeBinding),
 	}
 	service.scopeIssuer = recordingScopeIssuer(service)
-	if len(targetOptions) == 1 {
-		service.targetClaim = targetOptions[0].Claim
-		service.caseInsensitive = targetOptions[0].CaseInsensitive
-	}
 	return service
 }
 

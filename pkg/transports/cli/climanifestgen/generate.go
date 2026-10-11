@@ -38,6 +38,7 @@ const (
 	// WorkerSessionsFamilyJSONPath is generated worker-session observation
 	// command metadata.
 	WorkerSessionsFamilyJSONPath = "pkg/transports/cli/generated/worker_sessions_family.json"
+	MessagesFamilyJSONPath       = "pkg/transports/cli/generated/messages_family.json"
 
 	// RunSubmitFamilyJSONPath is the generated run/submit-family metadata artifact.
 	RunSubmitFamilyJSONPath = "pkg/transports/cli/generated/run_submit_family.json"
@@ -300,6 +301,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{WorkFamilyJSONPath, WorkArtifact},
 		{WorkersFamilyJSONPath, WorkersArtifact},
 		{WorkerSessionsFamilyJSONPath, WorkerSessionsArtifact},
+		{MessagesFamilyJSONPath, MessagesArtifact},
 		{SessionFamilyJSONPath, SessionFamilyArtifact},
 		{RunSubmitFamilyJSONPath, RunSubmitArtifact},
 		{FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact},
@@ -328,6 +330,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{Path: WorkFamilyJSONPath, Absent: true},
 		{Path: WorkersFamilyJSONPath, Absent: true},
 		{Path: WorkerSessionsFamilyJSONPath, Absent: true},
+		{Path: MessagesFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyCommandIDsPath, Payload: sessionCommandIDsSource()},
 		{Path: RepresentativeFamilyCommandIDsPath, Payload: representativeAndWorkCommandIDsSource()},
@@ -359,6 +362,7 @@ func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
 		{functionName: "workFamilyManifestValue", path: WorkFamilyJSONPath},
 		{functionName: "workersFamilyManifestValue", path: WorkersFamilyJSONPath},
 		{functionName: "workerSessionsFamilyManifestValue", path: WorkerSessionsFamilyJSONPath},
+		{functionName: "messagesFamilyManifestValue", path: MessagesFamilyJSONPath},
 		{functionName: "factoryConfigInitFamilyManifestValue", path: FactoryConfigInitFamilyJSONPath},
 		{functionName: "modelsDocsFamilyManifestValue", path: ModelsDocsFamilyJSONPath},
 		{functionName: "providersFamilyManifestValue", path: ProvidersFamilyJSONPath},

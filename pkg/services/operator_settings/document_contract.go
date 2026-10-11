@@ -82,6 +82,7 @@ type Document struct {
 	Defaults       DocumentDefaults
 	PriceTable     PriceTable
 	Runtime        DocumentRuntimeSettings
+	Messaging      *MessagingSettings
 	WorkerPresets  []DocumentWorkerPreset
 	Models         map[string]ModelConfig
 	Workers        DocumentWorkerSettings
@@ -90,6 +91,7 @@ type Document struct {
 // Clone returns a detached document copy.
 func (document Document) Clone() Document {
 	cloned := document
+	cloned.Messaging = document.Messaging.Clone()
 	cloned.Defaults = document.Defaults.Clone()
 	cloned.PriceTable = document.PriceTable.Clone()
 	cloned.Runtime = document.Runtime.Clone()

@@ -8,9 +8,12 @@ package wire
 
 import (
 	"context"
-	wire13 "github.com/google/wire"
+	wire14 "github.com/google/wire"
 	"github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/process"
+	"github.com/portpowered/infinite-you/pkg/services/agent_messages"
+	http6 "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/http"
+	wire13 "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	wire10 "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	http5 "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
@@ -799,11 +802,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v215 := provideWorkVisualizationOperation()
 	visualizeWorkOperation := provideVisualizeWorkOperation(v215)
 	v216 := provideListWorkerSessionsOperation(wireStandardCLIHTTPProtocol, source)
-	v217 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	wireStreamingCLIHTTPProtocol, err := provideStreamingCLIHTTPProtocol(source)
 	if err != nil {
 		return nil, err
 	}
+	cliAdapter := provideMessagesCLI(wireStandardCLIHTTPProtocol, wireStreamingCLIHTTPProtocol)
+	v217 := provideShowWorkerSessionOperation(wireStandardCLIHTTPProtocol)
 	v218 := provideReadWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireStreamingCLIHTTPProtocol)
 	v219 := provideStreamWorkerSessionOperation(wireStreamingCLIHTTPProtocol)
 	wireLocalWorkerSessionsBoundary, err := provideLocalWorkerSessionsBoundary(workersessionsService)
@@ -883,10 +887,39 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	wireHttpRuntimeBinding := provideHTTPRuntimeBindingWithMetrics(v207, httpAdapter, v228, v229, adapter2, handler, httpHandler, metricsHandler, handler2, handler3, workerOwnerRecoveryOperation, executionEndpointBinding, logger)
+	v235, err := provideMessageAuthority(callerValidator, v234)
+	if err != nil {
+		return nil, err
+	}
+	v236, err := provideMessageValidator()
+	if err != nil {
+		return nil, err
+	}
+	v237, err := provideMessageQuota()
+	if err != nil {
+		return nil, err
+	}
+	v238, err := provideMessageJournal()
+	if err != nil {
+		return nil, err
+	}
+	v239, err := provideMessageEngine(v235, v236, v237, v238, source, eventsService, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	v240, err := provideMessageStartup(v238, source, loggingLogger)
+	if err != nil {
+		return nil, err
+	}
+	v241, err := wire13.NewConfiguredService(v239, v240, configLoader)
+	if err != nil {
+		return nil, err
+	}
+	handler4 := http6.NewHandler(v241, loggingLogger)
+	wireHttpRuntimeBinding := provideHTTPRuntimeBindingWithMetrics(v207, httpAdapter, v228, v229, adapter2, handler, httpHandler, metricsHandler, handler2, handler3, workerOwnerRecoveryOperation, executionEndpointBinding, logger, v241, handler4)
 	runnerFactory := provideLifecycleRunnerFactory()
-	v235 := wire3.NewLifecyclePlanOperation()
-	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v207, runtimeOpening, wireHttpRuntimeBinding, runnerFactory, v235)
+	v242 := wire3.NewLifecyclePlanOperation()
+	runtimeRunnerBuilder, err := provideRunRuntimeRunnerBuilder(v207, runtimeOpening, wireHttpRuntimeBinding, runnerFactory, v242)
 	if err != nil {
 		return nil, err
 	}
@@ -922,23 +955,23 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	factoryTargetCatalogService := provideChatSessionsFactoryTargetCatalogService(operatorsettingsService, catalogPathsService, loggingLogger)
 	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir(edges2)
-	v236 := provideChatSessionsResponseBridge(chatsessionsService, v207, eventsService, loggingLogger)
-	responseBridge := provideACPServerResponseBridge(v236)
-	v237, err := provideACPWireRecorder(edges2, acpWireLogSettings, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
+	v243 := provideChatSessionsResponseBridge(chatsessionsService, v207, eventsService, loggingLogger)
+	responseBridge := provideACPServerResponseBridge(v243)
+	v244, err := provideACPWireRecorder(edges2, acpWireLogSettings, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
 	if err != nil {
 		return nil, err
 	}
 	factorySessionStartResolver := provideACPServerFactorySessionStartResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
-	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, v207, eventsService, wireAcpServerResolveHomeDir, responseBridge, v237, factorySessionStartResolver)
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, v207, eventsService, wireAcpServerResolveHomeDir, responseBridge, v244, factorySessionStartResolver)
 	operation := provideMetricsCLI()
 	costReportOperation := provideCostsReportCLI()
 	cliOperation := provideCostsCLI()
 	serverstopOperation := provideServerStopCLI()
-	v238 := provideSessionListPreparation(v207)
-	v239 := provideCommandDiagnostics()
-	sessionResolvedHandlers := provideSessionResolvedHandlers(localSessionsCLIService, sessionService, v238, v239)
-	factoryConfigInitHandler := provideFactoryConfigInitHandler(queryFactoryOperation, listFactoriesOperation, createFactoryFromFileOperation, updateFactoryFromFileOperation, deleteFactoryOperation, replaceFactoryCurrentOperation, validateFactoryOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, configureInitOperation, cliInstallPackagedFactoryOperation, namedFactoryRootsResolver, v239)
-	commandFactory := cli.NewCommandFactory(cliObserver, v, factoryNamesOperation, packagedFactoryNamesOperation, selectedFactorySignatureOperation, namedFactoryRootsResolver, namedFactoryCandidatePathsResolver, v4, factoryConfigRootResolver, factoryConfigFileLoader, requestFileLoader, singleWorkTargetPreparation, invocationInputPreparation, loggerBuilder, v7, batchInputFileSystem, pathInspector, directoryCreator, opener, defaultsResolver, configLoader, v207, cliService, service2, sessionService, localSessionsCLIService, submitWorkOperation, submitBatchOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, v97, configureInitOperation, cliInstallPackagedFactoryOperation, queryFactoryOperation, listFactoriesOperation, validateFactoryOperation, createFactoryFromFileOperation, replaceFactoryCurrentOperation, updateFactoryFromFileOperation, deleteFactoryOperation, listWorkOperation, listHumanApprovalsOperation, showHumanApprovalOperation, watchWorkOperation, showWorkOperation, moveWorkOperation, visualizeWorkOperation, v216, v217, v218, v219, v220, v221, v222, pauseWorkerSessionOperation, resumeWorkerSessionOperation, cancelWorkerSessionOperation, terminateWorkerSessionOperation, wireLocalWorkerSessionsBoundary, wireLocalWorkerSessionsBoundary, selectionFactory, remoteInvocationOperation, v226, operations, server, runtimeMetricsQuery, operation, costReportOperation, cliOperation, serverstopOperation, sessionResolvedHandlers, factoryConfigInitHandler)
+	v245 := provideSessionListPreparation(v207)
+	v246 := provideCommandDiagnostics()
+	sessionResolvedHandlers := provideSessionResolvedHandlers(localSessionsCLIService, sessionService, v245, v246)
+	factoryConfigInitHandler := provideFactoryConfigInitHandler(queryFactoryOperation, listFactoriesOperation, createFactoryFromFileOperation, updateFactoryFromFileOperation, deleteFactoryOperation, replaceFactoryCurrentOperation, validateFactoryOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, configureInitOperation, cliInstallPackagedFactoryOperation, namedFactoryRootsResolver, v246)
+	commandFactory := cli.NewCommandFactory(cliObserver, v, factoryNamesOperation, packagedFactoryNamesOperation, selectedFactorySignatureOperation, namedFactoryRootsResolver, namedFactoryCandidatePathsResolver, v4, factoryConfigRootResolver, factoryConfigFileLoader, requestFileLoader, singleWorkTargetPreparation, invocationInputPreparation, loggerBuilder, v7, batchInputFileSystem, pathInspector, directoryCreator, opener, defaultsResolver, configLoader, v207, cliService, service2, sessionService, localSessionsCLIService, submitWorkOperation, submitBatchOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, v97, configureInitOperation, cliInstallPackagedFactoryOperation, queryFactoryOperation, listFactoriesOperation, validateFactoryOperation, createFactoryFromFileOperation, replaceFactoryCurrentOperation, updateFactoryFromFileOperation, deleteFactoryOperation, listWorkOperation, listHumanApprovalsOperation, showHumanApprovalOperation, watchWorkOperation, showWorkOperation, moveWorkOperation, visualizeWorkOperation, v216, cliAdapter, v217, v218, v219, v220, v221, v222, pauseWorkerSessionOperation, resumeWorkerSessionOperation, cancelWorkerSessionOperation, terminateWorkerSessionOperation, wireLocalWorkerSessionsBoundary, wireLocalWorkerSessionsBoundary, selectionFactory, remoteInvocationOperation, v226, operations, server, runtimeMetricsQuery, operation, costReportOperation, cliOperation, serverstopOperation, sessionResolvedHandlers, factoryConfigInitHandler)
 	stdioOpener := stdio.NewOpener()
 	client, err := provideMCPWorkerHostClient()
 	if err != nil {
@@ -967,8 +1000,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v240 := provideSystemInitializationInspectPath(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v124, packagedFactoryCatalogOperations, operatorsettingsService, v240)
+	v247 := provideSystemInitializationInspectPath(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v124, packagedFactoryCatalogOperations, operatorsettingsService, v247)
 	if err != nil {
 		return nil, err
 	}
@@ -1010,11 +1043,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 
 // wire.go:
 
-var platformSet = wire13.NewSet(
-	provideProcessLogger, wire13.FieldsOf(new(edges.Edges), "Clock"),
+var platformSet = wire14.NewSet(
+	provideProcessLogger, wire14.FieldsOf(new(edges.Edges), "Clock"),
 )
 
-var apiSet = wire13.NewSet(http2.NewAdapter, http2.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics,
+var apiSet = wire14.NewSet(http6.NewHandler, http2.NewAdapter, http2.NewHandler, stdio.NewOpener, provideHTTPRuntimeBindingWithMetrics,
 	provideHTTPDefinitionMapping,
 	provideHTTPDefinitionsAPI,
 	provideHTTPRecordingsAdapter,
@@ -1039,8 +1072,13 @@ var apiSet = wire13.NewSet(http2.NewAdapter, http2.NewHandler, stdio.NewOpener, 
 	provideHTTPWorkerPrompts,
 )
 
-var servicesSet = wire13.NewSet(
-	provideProvidersService,
+var servicesSet = wire14.NewSet(
+	provideMessageJournal,
+	provideMessageStartup,
+	provideMessageAuthority,
+	provideMessageValidator,
+	provideMessageQuota,
+	provideMessageEngine, wire13.NewConfiguredService, wire14.Bind(new(agentmessages.Service), new(*wire13.ConfiguredService)), provideProvidersService,
 	provideEventsService,
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder, wire5.NewWorkerControlOperationStore, wire5.NewWorkerRestartInputStore, wire5.NewWorkerOwnerRecoveryOperation, wire5.NewWorkerCapturePreparationOperation, provideWorkerRecordingReader,
@@ -1050,7 +1088,7 @@ var servicesSet = wire13.NewSet(
 	provideWorkerAttemptOpener,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
-	provideFactorySessionProviderIdentityResolver, wire3.NewRequestPreparation, wire3.NewLiveChangeCoordinator, wire3.NewIdentity, wire3.NewResponseStreams, wire3.NewSessionRegistry, wire3.NewResponseStreamRegistry, wire3.NewSessionState, wire3.NewInvocationAuthority, wire3.NewInvocationOwner, wire3.NewInvocationTelemetry, wire3.NewInvocationSpecialCase, provideInvocationWorkPolicy, wire3.NewScopeControl, wire3.NewRecordedHistory, wire3.NewProcessDurableScope, provideProcessDurableExecution, wire3.NewScopeActivation, provideInvocationWorldStateProjector, wire3.NewStreamObserver, wire3.NewStreamManager, wire13.Bind(new(wire3.StreamManager), new(*wire3.GatewayStreams)), provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+	provideFactorySessionProviderIdentityResolver, wire3.NewRequestPreparation, wire3.NewLiveChangeCoordinator, wire3.NewIdentity, wire3.NewResponseStreams, wire3.NewSessionRegistry, wire3.NewResponseStreamRegistry, wire3.NewSessionState, wire3.NewInvocationAuthority, wire3.NewInvocationOwner, wire3.NewInvocationTelemetry, wire3.NewInvocationSpecialCase, provideInvocationWorkPolicy, wire3.NewScopeControl, wire3.NewRecordedHistory, wire3.NewProcessDurableScope, provideProcessDurableExecution, wire3.NewScopeActivation, provideInvocationWorldStateProjector, wire3.NewStreamObserver, wire3.NewStreamManager, wire14.Bind(new(wire3.StreamManager), new(*wire3.GatewayStreams)), provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
@@ -1072,7 +1110,7 @@ var servicesSet = wire13.NewSet(
 	provideDurableOpening,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
-	provideProcessRuntimeFactory, wire3.NewLifecyclePlanOperation, wire13.Bind(new(factory_visualization.RuntimeReader), new(*wire3.Root)), wire12.NewRuntimeSourceOpening, wire12.NewActivationOpening, wire12.NewProjectionOpening, wire12.NewScopeOpening, provideFactoryVisualizationOpening,
+	provideProcessRuntimeFactory, wire3.NewLifecyclePlanOperation, wire14.Bind(new(factory_visualization.RuntimeReader), new(*wire3.Root)), wire12.NewRuntimeSourceOpening, wire12.NewActivationOpening, wire12.NewProjectionOpening, wire12.NewScopeOpening, provideFactoryVisualizationOpening,
 	provideResponsePresentation, wire12.NewRuntimeSinkOwner, wire3.NewOpeningPresentationOwner, provideWorkContentStagingService, wire.NewContentPolicy, wire.NewContentPreparation, wire.NewRequestContentBridge, wire.NewRequestPolicy, wire.NewRequestPreparationService, work.NewSingleWorkTargetPreparation, work.NewListRequestPreparation, work.NewFactoryRequestBatchPreparation, wire.NewInvocationInputPolicy, wire.NewInvocationInputAdapter, provideWorkSessionResolver, wire.NewStateAccess, provideWorkSnapshotReader,
 	provideWorkersMockWorkersConfigFileSystem,
 	provideWorkersMockWorkersConfigDiagnosticsLoader,
@@ -1183,7 +1221,7 @@ var servicesSet = wire13.NewSet(
 	provideAutomationsClock,
 	provideAutomationsScriptPollers,
 	provideAutomationsOwner, wire10.NewCursorScopes, wire10.NewSourceLifecycle, wire10.NewReconciliation, wire10.NewCron, wire10.NewFilesystemWatchers, provideAutomationsCommandRunner,
-	provideAutomationsRoot, wire13.Bind(new(automations.Service), new(automations.Root)), wire3.NewRuntimeAssembly, wire3.NewRuntimeModelInvocation, provideRuntimeModelFactoryConfigReader,
+	provideAutomationsRoot, wire14.Bind(new(automations.Service), new(automations.Root)), wire3.NewRuntimeAssembly, wire3.NewRuntimeModelInvocation, provideRuntimeModelFactoryConfigReader,
 	provideRuntimeModelWorkerExecution,
 	provideFactorySessionReconnectValidator, wire3.NewSessionHost, wire3.NewNamedFactoryActivator, wire3.NewKeyedDefinitionActivationGateway, provideSessionCheckpointStoreFactory,
 	provideFactorySessionsCapability,
@@ -1226,7 +1264,7 @@ var servicesSet = wire13.NewSet(
 	provideFactoryDefinitionNamedPathResolver,
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
-	provideFactoryDefinitionPackagedInstallationDirectoryCreator, wire6.NewPackagedFactoryInstallationService, wire13.Bind(new(factorydefinitions.PackagedFactoryInstaller), new(*wire6.PackagedFactoryInstallationService)), providePackagedFactoryInstallation,
+	provideFactoryDefinitionPackagedInstallationDirectoryCreator, wire6.NewPackagedFactoryInstallationService, wire14.Bind(new(factorydefinitions.PackagedFactoryInstaller), new(*wire6.PackagedFactoryInstallationService)), providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,
 	provideFactoryDefinitionScaffoldFileSystem,
@@ -1263,7 +1301,7 @@ var servicesSet = wire13.NewSet(
 	provideFactoryDefinitionsRoot,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
-	provideInitialFactorySnapshotFactory, wire4.NewEnablementEvaluator, wire4.NewEngineOpening, wire4.NewBundleOpening, wire13.Bind(new(wire4.RuntimeResourceOpening), new(*wire4.RuntimeFactory)), wire4.NewRuntimeFactory, wire4.NewOutboxOpening, wire4.NewDefinitionMapper, provideRuntimePreparationWorkstationLoader,
+	provideInitialFactorySnapshotFactory, wire4.NewEnablementEvaluator, wire4.NewEngineOpening, wire4.NewBundleOpening, wire14.Bind(new(wire4.RuntimeResourceOpening), new(*wire4.RuntimeFactory)), wire4.NewRuntimeFactory, wire4.NewOutboxOpening, wire4.NewDefinitionMapper, provideRuntimePreparationWorkstationLoader,
 	provideRuntimePreparation,
 	provideRuntimeRequestInvocationFiles,
 	provideRuntimeRequestPrompts,
@@ -1276,18 +1314,18 @@ var servicesSet = wire13.NewSet(
 	provideRuntimeDispatchPlanning, wire4.NewLifecycle, wire4.NewInstanceHost, wire4.NewRuntimeStopOperation, provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
-	provideReplayRuntimeConfigDecoder, wire3.NewRoot, wire3.RuntimeOpeningAssembly, wire3.NewRuntimeOpening, wire3.RuntimeOpeningStart, wire3.RuntimeOpeningHistoricalInspection, wire3.NewExecutionBinding, wire3.NewRuntimeResourceAcquisition, wire3.NewRuntimeOpeningCompletion, wire3.RuntimeOpeningBindingSet, wire3.NewRuntimeInputLoading, wire3.NewRuntimePreparation, wire3.NewRuntimeSnapshotSelection, wire3.NewRuntimeInitialEngine, wire3.NewHistoricalReplayBehavior, wire13.Bind(new(factorysessions.Service), new(*wire3.Root)),
+	provideReplayRuntimeConfigDecoder, wire3.NewRoot, wire3.RuntimeOpeningAssembly, wire3.NewRuntimeOpening, wire3.RuntimeOpeningStart, wire3.RuntimeOpeningHistoricalInspection, wire3.NewExecutionBinding, wire3.NewRuntimeResourceAcquisition, wire3.NewRuntimeOpeningCompletion, wire3.RuntimeOpeningBindingSet, wire3.NewRuntimeInputLoading, wire3.NewRuntimePreparation, wire3.NewRuntimeSnapshotSelection, wire3.NewRuntimeInitialEngine, wire3.NewHistoricalReplayBehavior, wire14.Bind(new(factorysessions.Service), new(*wire3.Root)),
 )
 
-var providerSessionServiceSet = wire13.NewSet(
+var providerSessionServiceSet = wire14.NewSet(
 	provideProviderSessions,
 )
 
-var factorySessionsServicesSet = wire13.NewSet(
+var factorySessionsServicesSet = wire14.NewSet(
 	provideJavaScriptWorkflows,
 )
 
-var factoryDefinitionsServicesSet = wire13.NewSet(
+var factoryDefinitionsServicesSet = wire14.NewSet(
 	provideFactoryDefinitionsAuthoringFileSystem,
 	provideFactoryDefinitionsAuthoringInbox,
 	provideFactoryDefinitionsHost,
@@ -1318,7 +1356,7 @@ var factoryDefinitionsServicesSet = wire13.NewSet(
 	provideEffectiveFactoryDefinitionsService, wire6.NewCatalogPathsService, wire6.NewCatalogService,
 )
 
-var workerServiceSet = wire13.NewSet(wire8.NewService, provideWorkersFactoryDocs,
+var workerServiceSet = wire14.NewSet(wire8.NewService, provideWorkersFactoryDocs,
 	provideWorkersAgentRunner,
 	provideWorkersScriptRunner,
 	provideWorkersInferenceRunner,
@@ -1335,7 +1373,7 @@ var workerServiceSet = wire13.NewSet(wire8.NewService, provideWorkersFactoryDocs
 	provideWorkerCurrentWorkingDirectory,
 )
 
-var cliCommandOperationsSet = wire13.NewSet(
+var cliCommandOperationsSet = wire14.NewSet(
 	provideCLIObserver,
 	provideNamedFactoryRootsResolver,
 	provideNamedFactoryCandidatePathsResolver,
@@ -1366,6 +1404,7 @@ var cliCommandOperationsSet = wire13.NewSet(
 	provideSubmitWorkOperation,
 	provideSubmitBatchOperation,
 	provideListWorkerSessionsOperation,
+	provideMessagesCLI,
 	provideShowWorkerSessionOperation,
 	provideReadWorkerSessionOperation,
 	provideStreamWorkerSessionOperation,
@@ -1377,7 +1416,7 @@ var cliCommandOperationsSet = wire13.NewSet(
 	provideResumeWorkerSessionOperation,
 	provideCancelWorkerSessionOperation,
 	provideTerminateWorkerSessionOperation,
-	provideLocalWorkerSessionsBoundary, wire13.Bind(new(workersessions.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)), wire13.Bind(new(workersessions.LocalControlBoundary), new(*localWorkerSessionsBoundary)), provideInvokeWorkerSessionOperation,
+	provideLocalWorkerSessionsBoundary, wire14.Bind(new(workersessions.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)), wire14.Bind(new(workersessions.LocalControlBoundary), new(*localWorkerSessionsBoundary)), provideInvokeWorkerSessionOperation,
 	provideSessionsCLIService,
 	provideSessionListPreparation,
 	provideCommandDiagnostics,
@@ -1416,7 +1455,7 @@ var cliCommandOperationsSet = wire13.NewSet(
 
 // BundleSet is the one canonical provider set used by the single public bundle
 // injector. It constructs only inert command and service initializers.
-var BundleSet = wire13.NewSet(
+var BundleSet = wire14.NewSet(
 	platformSet,
 	apiSet,
 	servicesSet,
@@ -1430,7 +1469,7 @@ var BundleSet = wire13.NewSet(
 	provideCanonicalFactoryConfigReader,
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
-	provideSystemInitializationOperation, wire13.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire13.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,
+	provideSystemInitializationOperation, wire14.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire14.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideSessionStartRequestFactory, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
@@ -1448,5 +1487,5 @@ var BundleSet = wire13.NewSet(
 	provideMCPProviderIdentityResolver,
 	provideStdioHandler,
 	provideDirectJavaScriptHostAdapter, run.NewDirectJavaScriptRunOperation, application.NewInitializer, provideRunInvocationOperation,
-	provideModelsCLIInvocationOperation, cli.NewCommandFactory, application.NewProcessWithRuntimeCosts, wire13.Bind(new(process.Initializer), new(*application.Initializer)), wire13.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
+	provideModelsCLIInvocationOperation, cli.NewCommandFactory, application.NewProcessWithRuntimeCosts, wire14.Bind(new(process.Initializer), new(*application.Initializer)), wire14.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
 )

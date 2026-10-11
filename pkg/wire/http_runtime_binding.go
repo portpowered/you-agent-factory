@@ -14,6 +14,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	agentmessageshttp "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/http"
+	agentmessageswire "github.com/portpowered/infinite-you/pkg/services/agent_messages/wire"
 	"github.com/portpowered/infinite-you/pkg/services/costs"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
@@ -117,14 +119,21 @@ func provideHTTPRuntimeBindingWithMetrics(
 	recoverOwners recordings.WorkerOwnerRecoveryOperation,
 	endpointBinding workersessions.ExecutionEndpointBinding,
 	logger *zap.Logger,
+	messages *agentmessageswire.ConfiguredService,
+	messagesHTTP *agentmessageshttp.Handler,
 ) httpRuntimeBinding {
 	return func(sessionID string, cancellation initializer.InvocationCancellation) (http.Handler, error) {
+		presentation, err := root.SessionPresentation(sessionID)
+		if err != nil {
+			return nil, err
+		}
+		messagesHTTP := messagesHTTP.ForProfile(messages.Activate(context.Background(), presentation.OperatorSettingsPath))
 		if recoverOwners != nil {
 			if err := recoverOwners(context.Background()); err != nil {
 				return nil, err
 			}
 		}
-		handler, err := newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, workerSessionsHandler, logger)
+		handler, err := newHTTPRuntimeHandlerWithMetrics(root, recordingsAdapter, sessionsHandler, factoryDefinitionsHandler, workHandler, sessionID, cancellation, providerSessionsHTTP, modelsHandler, metricsHandler, costsHandler, workerSessionsHandler, logger, messagesHTTP)
 		if err != nil {
 			return nil, err
 		}
@@ -158,6 +167,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	costsHandler *costshttp.Handler,
 	workerSessionsHandler *workersessionshttp.Handler,
 	logger *zap.Logger,
+	messagesHTTP *agentmessageshttp.Handler,
 ) (http.Handler, error) {
 	if root == nil {
 		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
@@ -169,7 +179,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	return newHTTPRuntimeServer(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler,
 		providerSessionsHTTP, factoryDefinitionsHandler, presentation, sessionID, cancellation, metricsHandler,
-		costsHandler, workerSessionsHandler, logger,
+		costsHandler, workerSessionsHandler, logger, messagesHTTP,
 	), nil
 }
 
@@ -422,6 +432,7 @@ func newHTTPRuntimeServer(
 	costsHandler *costshttp.Handler,
 	workerSessionsHandler *workersessionshttp.Handler,
 	logger *zap.Logger,
+	messagesHTTP *agentmessageshttp.Handler,
 ) http.Handler {
 	var shutdown transporthttp.ShutdownOperation
 	if cancellation != nil {
@@ -429,7 +440,7 @@ func newHTTPRuntimeServer(
 	}
 	handler := transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, logger, metricsHandler, costsHandler, shutdown, workerSessionsHandler,
+		factoryDefinitionsHandler, logger, metricsHandler, costsHandler, shutdown, messagesHTTP, workerSessionsHandler,
 	).Handler()
 	modelsScope := presentation.ModelsScope
 	metricsRoot := presentation.MetricsRootDir

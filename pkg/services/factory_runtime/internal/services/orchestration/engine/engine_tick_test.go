@@ -116,6 +116,52 @@ func TestReplayEndingPausedFinishesAfterRecordedResult(t *testing.T) {
 	}
 }
 
+func TestCanceledReplayRecordedBoundary(t *testing.T) {
+	for _, scenario := range []struct {
+		name          string
+		marker        interfaces.FactoryEventType
+		completedTick int
+	}{
+		{"run-response", interfaces.FactoryEventTypeRunResponse, 1},
+		{"session-completed", interfaces.FactoryEventTypeSessionCompleted, 1},
+		{"later-recorded-closeout", interfaces.FactoryEventTypeSessionCompleted, 3},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			completedTick := scenario.completedTick
+			dispatcher := &mockSubsystem{group: subsystems.Dispatcher}
+			applications := 0
+			router := &mockSubsystem{group: subsystems.Transitioner, execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+				if len(snapshot.Results) == 1 && snapshot.Results[0].Outcome == workerexecution.OutcomeCanceled {
+					applications++
+				}
+				return nil, nil
+			}}
+			engine := newTestFactoryEngine(buildTestNet(), petri.NewMarking("replay"), []subsystems.Subsystem{dispatcher, router})
+			engine.SetReplayLifecycleControls([]interfaces.FactoryEvent{
+				{Type: interfaces.FactoryEventTypeRunResponse, Context: interfaces.FactoryEventContext{Tick: 1}},
+				{Type: scenario.marker, Context: interfaces.FactoryEventContext{Tick: completedTick}},
+			})
+			engine.runtimeState.Dispatches["recorded"] = &interfaces.DispatchEntry{DispatchID: "recorded"}
+			engine.runtimeState.InFlightCount = 1
+			engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{DispatchID: "recorded", Outcome: workerexecution.OutcomeCanceled})
+			for tick := 1; tick <= completedTick; tick++ {
+				_, terminated, err := engine.tickOnce(context.Background())
+				if err != nil || terminated != (tick == completedTick) {
+					t.Fatalf("tick %d: terminated=%t err=%v", tick, terminated, err)
+				}
+			}
+			if applications != 1 || len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 || dispatcher.callCount != completedTick {
+				t.Fatalf("completion applications=%d dispatch history=%d scheduling ticks=%d", applications, len(engine.GetRuntimeStateSnapshot().DispatchHistory), dispatcher.callCount)
+			}
+			_, terminated, err := engine.tickOnce(context.Background())
+			if err != nil || !terminated || dispatcher.callCount != completedTick {
+				t.Fatalf("closeout drain retried Work: terminated=%t scheduling ticks=%d err=%v", terminated, dispatcher.callCount, err)
+			}
+		})
+	}
+}
+
 func TestTickNRunsMultipleTicks(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")

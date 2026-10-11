@@ -9,6 +9,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	agentmessagescli "github.com/portpowered/infinite-you/pkg/services/agent_messages/transports/cli"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -957,6 +958,7 @@ func newTestCommandFactory(operations commandTestOperations) CommandFactory {
 		operations.MoveWork,
 		operations.VisualizeWork,
 		operations.ListWorkerSessions,
+		operations.MessagesCLI,
 		operations.ShowWorkerSession,
 		operations.ReadWorkerSession,
 		operations.StreamWorkerSession,
@@ -1034,6 +1036,7 @@ type commandTestOperations struct {
 	ShowWork                          ShowWorkOperation
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
+	MessagesCLI                       *agentmessagescli.Adapter
 	ListWorkerSessions                ListWorkerSessionsOperation
 	ShowWorkerSession                 ShowWorkerSessionsOperation
 	ReadWorkerSession                 ReadWorkerSessionOperation

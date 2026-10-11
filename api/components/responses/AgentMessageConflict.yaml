@@ -1,0 +1,5 @@
+description: The request identity conflicts, or the recipient identity is ambiguous.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

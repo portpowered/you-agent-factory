@@ -800,6 +800,9 @@ func prepareLegacyAttributionFixtures(t *testing.T, dir string, expected map[str
 			continue
 		}
 		delete(opening, "workName")
+		if id == expected["absent"]["workerSessionId"] {
+			removeLegacyOpeningName(t, opening)
+		}
 		lines[0], err = json.Marshal(opening)
 		if err != nil {
 			t.Fatal(err)
@@ -811,6 +814,41 @@ func prepareLegacyAttributionFixtures(t *testing.T, dir string, expected map[str
 	if err := os.Remove(filepath.Join(dir, "absent.json")); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func removeLegacyOpeningName(t *testing.T, opening map[string]json.RawMessage) {
+	t.Helper()
+	var record map[string]json.RawMessage
+	var draft map[string]json.RawMessage
+	var payload map[string]json.RawMessage
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal(opening["record"], &record); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(record["Payload"], &draft); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(draft["payload"], &payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(payload["sessionMetadata"], &metadata); err != nil {
+		t.Fatal(err)
+	}
+	var labels []string
+	if err := json.Unmarshal(metadata["labels"], &labels); err != nil {
+		t.Fatal(err)
+	}
+	retained := labels[:0]
+	for _, label := range labels {
+		if !strings.HasPrefix(label, "tag:_work_name=") {
+			retained = append(retained, label)
+		}
+	}
+	metadata["labels"], _ = json.Marshal(retained)
+	payload["sessionMetadata"], _ = json.Marshal(metadata)
+	draft["payload"], _ = json.Marshal(payload)
+	record["Payload"], _ = json.Marshal(draft)
+	opening["record"], _ = json.Marshal(record)
 }
 
 func assertStartupAttribution(t *testing.T, ctx context.Context, connection *mcp.ClientSession, reopened *support.FunctionalAPIServer, expected map[string]map[string]any) {

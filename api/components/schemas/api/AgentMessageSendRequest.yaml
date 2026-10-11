@@ -1,0 +1,42 @@
+type: object
+additionalProperties: false
+required: [requestId, body]
+description: At least one of to or inReplyTo is required. Replies without to target the original sender.
+anyOf:
+  - required: [to]
+  - required: [inReplyTo]
+properties:
+  requestId: {type: string, minLength: 1, maxLength: 200}
+  to: {$ref: './AgentMessageAddress.yaml'}
+  body:
+    type: string
+    minLength: 1
+    maxLength: 8192
+    description: Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction.
+  bodySecret:
+    type: boolean
+    default: false
+    description: Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+  inReplyTo: {type: string, minLength: 1}
+  delivery:
+    type: string
+    enum: [QUEUE, INTERRUPT]
+    default: QUEUE
+    description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+  ifEnded:
+    type: string
+    enum: [REVIVE, HOLD]
+    default: REVIVE
+    description: T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+  replyIfEnded:
+    type: string
+    enum: [REVIVE, HOLD]
+    default: REVIVE
+    description: Default ifEnded for a reply, unless explicitly overridden.
+  correlation:
+    type: object
+    additionalProperties: false
+    properties:
+      workId: {type: string, minLength: 1}
+      factorySessionId: {type: string, minLength: 1}
+  expiresInSeconds: {type: integer, minimum: 60, maximum: 604800, default: 86400}

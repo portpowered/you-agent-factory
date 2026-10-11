@@ -136,12 +136,12 @@ func cleanupEnvironment(home, temp string) []string {
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
 		switch strings.ToUpper(key) {
-		case "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "YOU_HOME":
+		case "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "YOU_HOME", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR":
 			continue
 		}
 		env = append(env, entry)
 	}
-	return append(env, "HOME="+home, "USERPROFILE="+home, "YOU_HOME="+home, "TEMP="+temp, "TMP="+temp, "TMPDIR="+temp)
+	return append(env, "HOME="+home, "USERPROFILE="+home, "YOU_HOME="+home, "TEMP="+temp, "TMP="+temp, "TMPDIR="+temp, "APPDATA="+home, "LOCALAPPDATA="+home, "XDG_CONFIG_HOME="+home, "XDG_DATA_HOME="+home, "XDG_CACHE_HOME="+temp, "XDG_STATE_HOME="+home, "XDG_RUNTIME_DIR="+temp)
 }
 
 func waitForCleanupGate(t *testing.T, ctx context.Context, ready string, done <-chan error) {

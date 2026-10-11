@@ -157,6 +157,13 @@ func (s *FactoryEventStream) NextEventContext(ctx context.Context) factoryapi.Fa
 	case err := <-s.errs:
 		s.t.Fatalf("factory event stream error: %v", err)
 	case <-s.done:
+		// EOF joins the reader, so every received frame is now buffered.
+		// Drain those frames before reporting closure to lifecycle observers.
+		select {
+		case event := <-s.events:
+			return event
+		default:
+		}
 		s.t.Fatal("factory event stream closed before the expected event")
 	case <-ctx.Done():
 		s.t.Fatalf("waiting for factory event stream payload: %v", ctx.Err())
@@ -176,7 +183,12 @@ func (s *FactoryEventStream) TryNextEvent(timeout time.Duration) (factoryapi.Fac
 	case err := <-s.errs:
 		s.t.Fatalf("factory event stream error: %v", err)
 	case <-s.done:
-		return factoryapi.FactoryEvent{}, false
+		select {
+		case event := <-s.events:
+			return event, true
+		default:
+			return factoryapi.FactoryEvent{}, false
+		}
 	case <-time.After(timeout):
 		return factoryapi.FactoryEvent{}, false
 	}

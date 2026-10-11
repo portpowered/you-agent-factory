@@ -23,6 +23,8 @@ tags:
     description: Provider-owned session diagnostics for dashboard inspection.
   - name: Worker Sessions
     description: Worker Session observations correlated with Factory Work.
+  - name: Messages
+    description: Durable Agent Message inboxes and permitted Worker Session coordination.
   - name: Models
     description: Model discovery and capability inspection for the current runtime.
   - name: Metrics
@@ -30,6 +32,109 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
+  /messages:
+    post:
+      tags: [Messages]
+      operationId: sendAgentMessage
+      summary: Send an Agent Message to a Worker Session
+      description: >-
+        Worker Sessions validates the exact active RUNNING caller.
+        Messaging permits only the caller's evidenced lead/requester chain
+        or a lead's own Project workers. Persist before returning success.
+        Messages remain queued. Revival and interruption are unavailable.
+      security: [{WorkerSessionCaller: []}]
+      parameters:
+        - $ref: '#/components/parameters/AgentMessageCallerId'
+        - $ref: '#/components/parameters/AgentMessageFactorySessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AgentMessageSendRequest'}
+      responses:
+        '202':
+          description: Persisted message, including an idempotent replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentMessageSendResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/AgentMessageNotPermitted'}
+        '404': {$ref: '#/components/responses/AgentMessageNotFound'}
+        '409': {$ref: '#/components/responses/AgentMessageConflict'}
+        '429': {$ref: '#/components/responses/AgentMessageLimitExceeded'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/AgentMessagingUnavailable'}
+    get:
+      tags: [Messages]
+      operationId: listAgentMessages
+      summary: Read permitted Agent Messages
+      description: >-
+        Filters combine with AND after read authorization. Store sequence
+        orders pages ascending. toMe includes the verified continuation chain
+        and exact own-Work identity, never a matching project label alone.
+        markRead affects only messages the caller is permitted to receive.
+        follow uses source-native Events and ends on process reconstruction.
+        Each message frame uses the message SSE event; typed stream failures
+        use the error SSE event with an ErrorResponse payload.
+      security: [{WorkerSessionCaller: []}, {}]
+      parameters:
+        - $ref: '#/components/parameters/AgentMessageCallerId'
+        - $ref: '#/components/parameters/AgentMessageFactorySessionId'
+        - {name: toMe, in: query, schema: {type: boolean, default: false}}
+        - {name: toWorkerSessionId, in: query, schema: {type: string, minLength: 1}}
+        - {name: fromWorkerSessionId, in: query, schema: {type: string, minLength: 1}}
+        - {name: threadId, in: query, schema: {type: string, minLength: 1}}
+        - {name: correlationWorkId, in: query, schema: {type: string, minLength: 1}}
+        - {name: correlationFactorySessionId, in: query, schema: {type: string, minLength: 1}}
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema: {type: array, items: {$ref: '#/components/schemas/AgentMessageDeliveryStatus'}}
+        - {name: maxResults, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+        - {name: nextToken, in: query, schema: {type: string, minLength: 1}}
+        - {name: markRead, in: query, schema: {type: boolean, default: false}}
+        - {name: follow, in: query, schema: {type: boolean, default: false}}
+      responses:
+        '200':
+          description: Authorized page or filtered source-native observations
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentMessageListResponse'}
+            text/event-stream:
+              schema: {type: string}
+              x-event-schema: {$ref: '#/components/schemas/AgentMessageObservation'}
+              x-error-event-schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/AgentMessageNotPermitted'}
+        '409': {$ref: '#/components/responses/AgentMessageConflict'}
+        '410': {$ref: '#/components/responses/AgentMessageStreamGap'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/AgentMessagingUnavailable'}
+  /messages/{message_id}:
+    get:
+      tags: [Messages]
+      operationId: getAgentMessage
+      summary: Read one Agent Message
+      description: >-
+        A permitted recipient reading QUEUED marks it READ durably.
+        Sender and operator observation never marks another recipient's message.
+        REPLIED and EXPIRED do not regress to READ.
+      security: [{WorkerSessionCaller: []}, {}]
+      parameters:
+        - $ref: '#/components/parameters/AgentMessageCallerId'
+        - {name: message_id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Authorized message with its current durable status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentMessage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/AgentMessageNotPermitted'}
+        '404': {$ref: '#/components/responses/AgentMessageNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/AgentMessagingUnavailable'}
   /metrics:
     get:
       tags:
@@ -2645,6 +2750,10 @@ components:
     WorkerSessionCaller:
       $ref: './components/securitySchemes/WorkerSessionCaller.yaml'
   parameters:
+    AgentMessageCallerId:
+      $ref: './components/parameters/AgentMessageCallerId.yaml'
+    AgentMessageFactorySessionId:
+      $ref: './components/parameters/AgentMessageFactorySessionId.yaml'
     SessionID:
       $ref: './components/parameters/SessionID.yaml'
     HumanApprovalID:
@@ -2716,6 +2825,18 @@ components:
     LogicalSessionKeyId:
       $ref: './components/parameters/LogicalSessionKeyId.yaml'
   responses:
+    AgentMessageNotPermitted:
+      $ref: './components/responses/AgentMessageNotPermitted.yaml'
+    AgentMessageNotFound:
+      $ref: './components/responses/AgentMessageNotFound.yaml'
+    AgentMessageConflict:
+      $ref: './components/responses/AgentMessageConflict.yaml'
+    AgentMessagingUnavailable:
+      $ref: './components/responses/AgentMessagingUnavailable.yaml'
+    AgentMessageStreamGap:
+      $ref: './components/responses/AgentMessageStreamGap.yaml'
+    AgentMessageLimitExceeded:
+      $ref: './components/responses/AgentMessageLimitExceeded.yaml'
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
     CreateFactoryBadRequest:
@@ -2781,6 +2902,20 @@ components:
     ResponseEventStreamExpired:
       $ref: './components/responses/ResponseEventStreamExpired.yaml'
   schemas:
+    AgentMessageSendRequest:
+      $ref: './components/schemas/api/AgentMessageSendRequest.yaml'
+    AgentMessageAddress:
+      $ref: './components/schemas/api/AgentMessageAddress.yaml'
+    AgentMessage:
+      $ref: './components/schemas/api/AgentMessage.yaml'
+    AgentMessageDeliveryStatus:
+      $ref: './components/schemas/api/AgentMessageDeliveryStatus.yaml'
+    AgentMessageSendResponse:
+      $ref: './components/schemas/api/AgentMessageSendResponse.yaml'
+    AgentMessageListResponse:
+      $ref: './components/schemas/api/AgentMessageListResponse.yaml'
+    AgentMessageObservation:
+      $ref: './components/schemas/api/AgentMessageObservation.yaml'
     SubmitWorkRequest:
       $ref: './components/schemas/api/SubmitWorkRequest.yaml'
     SubmitRelation:

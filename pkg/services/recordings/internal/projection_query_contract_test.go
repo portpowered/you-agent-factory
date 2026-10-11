@@ -319,7 +319,7 @@ func newFinalizedQueryFixture(t *testing.T) *scopedQueryFixture {
 	}}
 	projection := &plainReplayProjection{}
 	root := NewCombinedService(nil, projection, snapshots, artifacts, replay, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	opened, err := root.OpenRecordingScope(context.Background(), recordings.OpenRecordingScopeRequest{
 		RecordingID: "scope-adapter", Scope: scope,
 	})
@@ -652,7 +652,7 @@ func TestRecordingScopeDelegatesSnapshotAndReplayFailures(t *testing.T) {
 	t.Parallel()
 	lifecycle := &snapshotErrorLifecycle{Err: recordings.ErrMissingRecordingTarget}
 	root := NewCombinedService(nil, nil, lifecycle, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	ref := root.newRecordingScope()
 	root.scopeByRef[ref] = &recordingScopeBinding{recordingID: "snapshot-failures"}
 	if _, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{
@@ -748,7 +748,7 @@ func newScopeAdapterFixture(artifacts artifactsexport.Service, replay recordings
 	}
 	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{"scope-adapter": {Status: status}}}
 	root := NewCombinedService(nil, nil, snapshots, artifacts, replay, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	ref := root.newRecordingScope()
 	root.scopeByRef[ref] = historicalScopeBinding("scope-adapter", status)
 	return root, ref
@@ -763,7 +763,7 @@ func TestBeginRecordingScopeCancellationWithZeroClockCleansUp(t *testing.T) {
 	}}
 	lifecycle := cancelAfterStartLifecycle{activeRuntimeLifecycle: owner, cancel: cancel}
 	root := NewCombinedService(nil, nil, lifecycle, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	request := recordings.BeginRecordingScopeRequest{Enabled: true, Scope: owner.status.Scope, Target: recordings.RecordingTargetRequest{HomeDir: "home"}}
 	result, err := root.BeginRecordingScope(ctx, request)
 	if !errors.Is(err, context.Canceled) || !result.Scope.IsZero() {
@@ -783,7 +783,7 @@ func TestRuntimeOpeningWithoutRecordingAllocatesUsableLedger(t *testing.T) {
 	now := func() time.Time { return time.Unix(1_700_000_500, 0).UTC() }
 	runtimeRoot := NewCombinedService(nil, nil, nil, nil, nil, nil, nil,
 		staticRecordingClock{at: now()}, logging.NoopLogger{}, newRuntimeLedgerRouter(now),
-		nil, nil, nil, nil,
+		nil, nil, nil, nil, unavailableTargetClaim, false,
 	)
 	opening, ok := runtimeRoot.(recordings.RuntimeScopeService)
 	if !ok || opening == nil {
