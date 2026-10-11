@@ -19,11 +19,9 @@ func TestOpenValidatesComposedServerAndInvocationStreams(t *testing.T) {
 	if _, err := Open(nil, strings.NewReader(""), &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "server") {
 		t.Fatalf("Open(nil server) error = %v, want composed-server validation", err)
 	}
-	server, err := mcpserver.New(mcpserver.Options{
-		ToolOperation: func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
-			return json.RawMessage(`{"result":{}}`), nil
-		},
-	})
+	server, err := mcpserver.New(func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"result":{}}`), nil
+	}, mcpserver.Options{})
 	if err != nil {
 		t.Fatalf("mcpserver.New() error = %v", err)
 	}

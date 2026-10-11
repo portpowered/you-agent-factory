@@ -66,24 +66,6 @@ func BindSubagentOperation(
 	}
 }
 
-// BindToolOperation binds the canonical tool registry to explicit Factory
-// Sessions and workflow roles without constructing an alternate MCP client.
-// Adapter tests bind root-shaped fakes directly instead of constructing real
-// session durability or live runtime state.
-func BindToolOperation(
-	recordingsService RecordingsInspection,
-	prepare RequestPreparation,
-	workflows factoryruntime.WorkflowPreviewOperation,
-	sessions factorysessionexecution.Service,
-	workingRoot string,
-	generateID factorysessionexecution.SessionIDGenerator,
-	resolveProvider ProviderIdentityResolver,
-) ToolOperation {
-	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-		return CallTool(ctx, prepare, workflows, name, input, recordingsService, sessions, workingRoot, generateID, resolveProvider)
-	}
-}
-
 func callToolJSON[Input any, Output any](
 	input json.RawMessage,
 	decodeErr string,

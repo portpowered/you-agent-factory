@@ -2,6 +2,7 @@ package stdio_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"os"
@@ -114,7 +115,7 @@ func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.
 	return startComposedMemoryMCPAt(t, lifetime, process, support.ScaffoldSingleStepFactory(lifetime, "composed-mcp"), lifetime.TempDir(), "http://127.0.0.1:1")
 }
 
-func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, projectRoot, home, host string) *composedMemoryMCP {
+func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, projectRoot, home, host string, callerEnv ...string) *composedMemoryMCP {
 	t.Helper()
 	stdin, input := io.Pipe()
 	output, stdout := io.Pipe()
@@ -130,7 +131,7 @@ func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, p
 	go func() {
 		err := process.Execute(root.Input{
 			Args:             []string{"you", "--server", host, "server", "mcp", "--project-root", projectRoot},
-			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(home),
+			Env:              append(builtcliacceptance.ProcessEnvForIsolatedHome(home), callerEnv...),
 			WorkingDirectory: projectRoot, Context: ctx,
 			Stdin: stdin, Stdout: stdout, Stderr: io.Discard,
 		})
@@ -189,7 +190,52 @@ func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process,
 		t.Fatal(err)
 	}
 	assertMCPHealthyProviderRecovery(t, call, runner, server.root)
+	assertMCPSelectedHostRefusal(t, process, localRunner, runner, server, host)
 	server.closeInput(t)
+}
+
+// These public RUN failures cross the selected host's real HTTP adapter. Both
+// provider command edges stay controlled, and the MCP connection remains usable.
+func assertMCPSelectedHostRefusal(t *testing.T, process support.Process, local, remote *mcpRootResultRunner, server *composedMemoryMCP, host *support.FunctionalAPIServer) {
+	t.Helper()
+	token := base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("/", 32)))
+	denied := startComposedMemoryMCPAt(t, t, process, server.root, server.home, host.URL(),
+		"YOU_WORKER_SESSION_ID=unregistered-caller", "YOU_WORKER_SESSION_TOKEN="+token)
+	initializeMCPClient(t, denied.client)
+	call := func(client *stdioMCPClient) mcpJSONRPCResponse {
+		return client.call("tools/call", map[string]any{"name": "you.subagent", "arguments": map[string]any{
+			"prompt": "This refused request must not run locally", "provider": "codex", "model": "gpt-5-codex",
+		}})
+	}
+	assertFailure := func(response mcpJSONRPCResponse, code string) {
+		t.Helper()
+		result := decodeComposedEnvelope[factorysessionmcp.SubagentResult](t, response)
+		if result.Result != nil || result.Error == nil || result.Error.Code != code || result.Error.Retryable {
+			t.Fatalf("selected host refusal result=%#v error=%+v, want %s", result.Result, result.Error, code)
+		}
+		encoded, err := json.Marshal(response)
+		if err != nil || strings.Contains(string(encoded), token) || strings.Contains(string(encoded), "unregistered-caller") {
+			t.Fatalf("selected host refusal leaked caller credentials: %s (%v)", encoded, err)
+		}
+		for _, runner := range []*mcpRootResultRunner{local, remote} {
+			if request, invoked := runner.requests.Load(filepath.Clean(server.root)); invoked {
+				t.Fatalf("refused RUN dispatched a provider: %#v", request)
+			}
+		}
+	}
+	assertFailure(call(denied.client), "WORKER_SESSION_CALLER_INVALID")
+	denied.closeInput(t)
+	host.Stop(t)
+	unavailable := call(server.client)
+	assertFailure(unavailable, "BAD_REQUEST")
+	if result := decodeComposedEnvelope[factorysessionmcp.SubagentResult](t, unavailable); result.Error.Message != "subagent host request failed" {
+		t.Fatalf("unavailable host message = %q", result.Error.Message)
+	}
+	// Host loss affects RUN only; discovery on the same connection still works.
+	tools := server.client.call("tools/list", map[string]any{})
+	if tools.Error != nil || len(tools.Result["tools"].([]any)) == 0 {
+		t.Fatalf("discovery after selected host loss = %#v", tools)
+	}
 }
 
 func assertMCPHealthyProviderRecovery(t *testing.T, call func(string) mcpJSONRPCResponse, runner *mcpRootResultRunner, workingRoot string) {

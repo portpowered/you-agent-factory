@@ -2,13 +2,11 @@ package wire
 
 import (
 	"context"
-	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"strings"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -46,20 +44,6 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 		t.Fatal("provideRecordingsRuntimeScopeService(nil) error = nil, want capability validation")
 	}
 
-	buildServer := provideMCPServerBuilder(platformfilesystem.Local{}, nil, nil, platformfilesystem.Local{}, func() (string, error) { return t.TempDir(), nil })
-	if buildServer == nil {
-		t.Fatal("provideMCPServerBuilder() returned nil")
-	}
-	if server, err := buildServer(processcontract.MCPIntent{ServerURL: "http://selected-host:7437"}, nil, nil, nil, nil); err != nil || server == nil {
-		t.Fatalf("buildServer(nil roles) = %v, %v; want inert protocol server", server, err)
-	}
-	if server, err := buildServer(processcontract.MCPIntent{ServerURL: "http://selected-host:7437"}, root, nil, nil, nil); err != nil || server == nil {
-		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
-	}
-
-	if _, err := provideHTTPRuntimeBindingWithMetrics(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil {
-		t.Fatal("provideHTTPRuntimeBindingWithMetrics(nil roles) error = nil, want required-owner validation")
-	}
 }
 
 func TestHTTPRuntimeBindingRejectsMissingRoot(t *testing.T) {

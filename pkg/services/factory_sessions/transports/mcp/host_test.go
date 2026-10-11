@@ -237,12 +237,9 @@ func TestSubagentHostLateActivationCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	started, finishOpen, deleted := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	run, err := NewHostOperation("http://selected.invalid", newRunHostLateTransport(t, started, finishOpen, deleted), "/root", func() string { return "late-request" }, func(_ context.Context, identity string) (string, error) { return identity, nil })
-	if err != nil {
-		t.Fatal(err)
-	}
+	run := NewHostOperation(newRunHostLateTransport(t, started, finishOpen, deleted), func() string { return "late-request" }, func(_ context.Context, identity string) (string, error) { return identity, nil })
 	returned := make(chan ToolResponse[SubagentResult], 1)
-	go func() { returned <- run(ctx, SubagentInput{Prompt: "late-start"}) }()
+	go func() { returned <- run(ctx, "http://selected.invalid", "/root", SubagentInput{Prompt: "late-start"}) }()
 	select {
 	case <-started:
 	case <-t.Context().Done():
@@ -288,6 +285,20 @@ func newRunHostLateTransport(t *testing.T, started chan<- struct{}, finishOpen <
 			return runHostResponse(204, ""), nil
 		default:
 			return nil, errors.New("unexpected late child operation")
+		}
+	}
+}
+
+func TestSubagentHostOperationRejectsInvalidEndpointWithoutExecution(t *testing.T) {
+	t.Parallel()
+	run := NewHostOperation(runHostTransport(func(*http.Request) (*http.Response, error) {
+		t.Error("invalid selection reached HTTP")
+		return nil, errors.New("unexpected request")
+	}), func() string { return "request" }, func(_ context.Context, id string) (string, error) { return id, nil })
+	for _, endpoint := range []string{"", "file:///local", "http://user:secret@host", "http://host?query=true", "http://host#fragment"} {
+		result := run(t.Context(), endpoint, "/root", SubagentInput{Prompt: "selected"})
+		if result.Error == nil || result.Result != nil || strings.Contains(result.Error.Message, "secret") {
+			t.Fatalf("invalid selection = %#v", result)
 		}
 	}
 }

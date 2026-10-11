@@ -17,17 +17,11 @@ type Adapter struct {
 	logger        *zap.Logger
 }
 
-// Dependencies are the exact injected roles used by the Factory Visualization HTTP
-// adapter. They are supplied by composition or focused fake-root tests.
-type Dependencies struct {
-	VisualizationRoot VisualizationRoot
-}
-
 // NewHandler constructs an inert Factory Visualization HTTP adapter.
 // The caller supplies the selected logger, including an explicit no-op for silence.
-func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
+func NewHandler(visualization VisualizationRoot, logger *zap.Logger) *Adapter {
 	return &Adapter{
-		visualization: deps.VisualizationRoot,
+		visualization: visualization,
 		logger:        logger,
 	}
 }

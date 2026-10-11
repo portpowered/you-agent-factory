@@ -44,7 +44,7 @@ func TestPackagedInitCommandCompositionUsesDefinitionsOwnedAdapter(t *testing.T)
 			Format:  interfaces.PackagedFactoryFormatJSON,
 		}, nil
 	}
-	factory := newTestCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(commandTestOperations{
 		InstallPackagedFactory: factorydefinitionscli.BindInstallPackagedFactory(install),
 	})
 	if factory.InstallPackagedFactory == nil {
@@ -79,7 +79,7 @@ func TestPackagedInitPreservesBehaviorThroughProductionComposition(t *testing.T)
 		"init", "--package", "@you/goal", "--dir", "alternate-factories",
 		"--format", "yaml", "--replace=true",
 	}
-	runPackagedInitCompositionCases(t, args, errors.New("packaged factory install failed"), func(result error) CommandOperations {
+	runPackagedInitCompositionCases(t, args, errors.New("packaged factory install failed"), func(result error) commandTestOperations {
 		install := func(
 			_ context.Context,
 			request interfaces.InstallPackagedFactoryRequest,
@@ -104,7 +104,7 @@ func TestPackagedInitPreservesBehaviorThroughProductionComposition(t *testing.T)
 				Format:  interfaces.PackagedFactoryFormatYAML,
 			}, nil
 		}
-		return CommandOperations{
+		return commandTestOperations{
 			InstallPackagedFactory: factorydefinitionscli.BindInstallPackagedFactory(install),
 		}
 	})
@@ -114,7 +114,7 @@ func runPackagedInitCompositionCases(
 	t *testing.T,
 	args []string,
 	wantError error,
-	operations func(error) CommandOperations,
+	operations func(error) commandTestOperations,
 ) {
 	t.Helper()
 	t.Run("success", func(t *testing.T) {
@@ -143,7 +143,7 @@ func runPackagedInitCompositionCases(
 
 func executePackagedInitComposition(
 	t *testing.T,
-	operations CommandOperations,
+	operations commandTestOperations,
 	args []string,
 ) (string, string, error) {
 	t.Helper()
@@ -169,7 +169,7 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	factory := newTestCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(commandTestOperations{
 		SessionsCLI: session.Bind(session.Operations{
 			Show: func(cfg session.ShowConfig) error {
 				called = true
@@ -200,7 +200,7 @@ func TestWorkCommandCompositionUsesResolvedOwnerAdapter(t *testing.T) {
 	t.Parallel()
 
 	var got workcmd.ListConfig
-	factory := newTestCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(commandTestOperations{
 		ListWork: func(cfg workcmd.ListConfig) error {
 			got = cfg
 			_, err := fmt.Fprintln(cfg.Output, "owner-list")
@@ -237,8 +237,8 @@ func TestSessionCreatePreservesBehaviorThroughProductionComposition(t *testing.T
 		"session", "create", "--dir", "/workspace/fleet",
 		"--validate-only", "--target-kind", "named", "--target-name", "alpha",
 	}
-	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) commandTestOperations {
+		return commandTestOperations{SessionsCLI: session.Bind(session.Operations{
 			Create: func(cfg session.CreateConfig) error {
 				if cfg.Server != "https://factory.example" || cfg.Dir != "/workspace/fleet" ||
 					!cfg.ValidateOnly || cfg.TargetKind != "named" || cfg.TargetName != "alpha" ||
@@ -255,8 +255,8 @@ func TestSessionDeletePreservesBehaviorThroughProductionComposition(t *testing.T
 	t.Parallel()
 
 	args := []string{"--verbose", "--json", "--server", "https://factory.example:9444", "session", "delete", "session-beta"}
-	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) commandTestOperations {
+		return commandTestOperations{SessionsCLI: session.Bind(session.Operations{
 			Delete: func(cfg session.DeleteConfig) error {
 				if cfg.SessionID != "session-beta" || cfg.Server != "https://factory.example:9444" || !cfg.JSON || !cfg.Verbose {
 					t.Fatalf("delete config = %#v", cfg)
@@ -274,8 +274,8 @@ func TestSessionListPreservesBehaviorThroughProductionComposition(t *testing.T) 
 		"--verbose", "--json", "--server", "https://factory.example",
 		"session", "list", "--scope", "live",
 	}
-	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) commandTestOperations {
+		return commandTestOperations{SessionsCLI: session.Bind(session.Operations{
 			List: func(cfg session.ListConfig) error {
 				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
 					cfg.Scope != "live" || !cfg.JSON || !cfg.Verbose {
@@ -294,8 +294,8 @@ func TestSessionShowPreservesBehaviorThroughProductionComposition(t *testing.T) 
 		"--verbose", "--json", "--server", "https://factory.example",
 		"session", "show", "session-beta",
 	}
-	runSessionCompositionCases(t, args, context.Canceled, func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+	runSessionCompositionCases(t, args, context.Canceled, func(result error) commandTestOperations {
+		return commandTestOperations{SessionsCLI: session.Bind(session.Operations{
 			Show: func(cfg session.ShowConfig) error {
 				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
 					cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
@@ -314,8 +314,8 @@ func TestSessionPausePreservesBehaviorThroughProductionComposition(t *testing.T)
 		"--verbose", "--json", "--server", "https://factory.example",
 		"session", "pause",
 	}
-	runSessionCompositionCases(t, args, errors.New("session lifecycle operation failed"), func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+	runSessionCompositionCases(t, args, errors.New("session lifecycle operation failed"), func(result error) commandTestOperations {
+		return commandTestOperations{SessionsCLI: session.Bind(session.Operations{
 			Pause: func(cfg session.LifecycleControlConfig) error {
 				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
 					cfg.SessionID != "" || !cfg.JSON || !cfg.Verbose {
@@ -334,8 +334,8 @@ func TestSessionResumePreservesBehaviorThroughProductionComposition(t *testing.T
 		"--verbose", "--json", "--server", "https://factory.example",
 		"session", "resume", "session-beta",
 	}
-	runSessionCompositionCases(t, args, context.Canceled, func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
+	runSessionCompositionCases(t, args, context.Canceled, func(result error) commandTestOperations {
+		return commandTestOperations{SessionsCLI: session.Bind(session.Operations{
 			Resume: func(cfg session.LifecycleControlConfig) error {
 				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
 					cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
@@ -351,7 +351,7 @@ func runSessionCompositionCases(
 	t *testing.T,
 	args []string,
 	wantError error,
-	operations func(error) CommandOperations,
+	operations func(error) commandTestOperations,
 ) {
 	t.Helper()
 	t.Run("success", func(t *testing.T) {
@@ -376,7 +376,7 @@ func runSessionCompositionCases(
 
 func executeSessionComposition(
 	t *testing.T,
-	operations CommandOperations,
+	operations commandTestOperations,
 	args []string,
 ) (string, string, error) {
 	t.Helper()
@@ -574,7 +574,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 func TestExecuteCommandUsageFailuresUseCentralCobraRenderer(t *testing.T) {
 	t.Parallel()
 
-	factory := newTestCommandFactory(CommandOperations{})
+	factory := newTestCommandFactory(commandTestOperations{})
 	for _, test := range []struct {
 		name         string
 		args         []string
@@ -702,7 +702,7 @@ func (injectedModelsCLIService) Remove(modelscli.RemoveConfig) error   { return 
 func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 	t.Parallel()
 
-	factory := newTestCommandFactory(CommandOperations{})
+	factory := newTestCommandFactory(commandTestOperations{})
 	if factory.SubmitWork != nil ||
 		factory.SessionsCLI != nil ||
 		factory.ModelsCLI != nil ||
@@ -734,7 +734,7 @@ func TestNewCommandFactoryPreservesInjectedModelsCLIAdapter(t *testing.T) {
 	adapter := modelscli.BindService(modelscli.Config{
 		Models: compositionModelsRootForFactoryTest{},
 	})
-	factory := newTestCommandFactory(CommandOperations{ModelsCLI: adapter})
+	factory := newTestCommandFactory(commandTestOperations{ModelsCLI: adapter})
 	if factory.ModelsCLI == nil {
 		t.Fatal("injected Models CLI adapter is missing from composed factory")
 	}
@@ -880,7 +880,7 @@ func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	batchFiles := batchInputFileSystemFakeForFactoryTest{}
 	directories := runDirectoryCreatorFakeForFactoryTest{}
 	browser := func(context.Context, string) error { return nil }
-	factory := newTestCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(commandTestOperations{
 		ResolveNamedFactoryRoots:          namedRoots,
 		ResolveNamedFactoryCandidatePaths: namedCandidates,
 		ResolveCurrentFactoryDir:          resolver,
@@ -980,4 +980,42 @@ func (batchInputFileSystemFakeForFactoryTest) Stat(string) (fs.FileInfo, error) 
 
 func (batchInputFileSystemFakeForFactoryTest) ReadFile(string) ([]byte, error) {
 	return nil, fs.ErrNotExist
+}
+
+// Each invocation owns its Cobra flags and streams while sharing the completed
+// command roles. This is component proof with a controlled Session adapter.
+func TestNewCommandFactoryPreservesConcurrentSessionSelectionAndFraming(t *testing.T) {
+	t.Parallel()
+	service := session.Bind(session.Operations{Show: func(cfg session.ShowConfig) error {
+		if cfg.SessionID == "canceled-session" {
+			return context.Canceled
+		}
+		if cfg.Server != "https://"+cfg.SessionID+".example" || !cfg.JSON {
+			return fmt.Errorf("wrong invocation selection: %s %s %t", cfg.SessionID, cfg.Server, cfg.JSON)
+		}
+		_, err := fmt.Fprintf(cfg.Output, "{\"sessionId\":\"%s\"}\n", cfg.SessionID)
+		return err
+	}})
+	factory := newTestCommandFactory(commandTestOperations{SessionsCLI: service, LocalSessionsCLI: service})
+	for _, id := range []string{"first-session", "second-session", "canceled-session"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			root := factory.NewCommand(context.Background(), nil, nil, nil)
+			var stdout, stderr bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+			root.SetArgs([]string{"--json", "--server", "https://" + id + ".example", "session", "show", id})
+			err := root.Execute()
+			if id == "canceled-session" {
+				if !errors.Is(err, context.Canceled) || stdout.Len() != 0 || stderr.String() != "Error: context canceled\n" {
+					t.Fatalf("canceled command = %v; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+				}
+				return
+			}
+			want := fmt.Sprintf("{\"sessionId\":\"%s\"}\n", id)
+			if err != nil || stdout.String() != want || stderr.Len() != 0 {
+				t.Fatalf("command = %v; stdout=%q stderr=%q; want %q", err, stdout.String(), stderr.String(), want)
+			}
+		})
+	}
 }
