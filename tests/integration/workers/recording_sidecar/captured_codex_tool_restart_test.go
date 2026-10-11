@@ -92,14 +92,41 @@ func readCapturedCodexRestart(t *testing.T, f invokeArtifactFixture, server stri
 
 func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtifactSnapshot) {
 	t.Helper()
-	row := snapshot.Observation
+	assertCapturedCodexRestartMetadata(t, snapshot.Observation)
+	assertCapturedCodexRestartLogs(t, snapshot.Logs)
+	if len(snapshot.Transcript.Entries) != 7 {
+		t.Fatal("restart lost or duplicated transcript entries")
+	}
+	for i, entry := range snapshot.Transcript.Entries[:6] {
+		id := []string{"success", "failure", "mcp"}[i/2]
+		if entry.CallId == nil || *entry.CallId != id {
+			t.Fatal("restart transcript lost first-seen tool order")
+		}
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"private-command", "private-output", "private-denial", "private-token", "private-reasoning"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatal("restart leaked sensitive native-shaped facts")
+		}
+	}
+}
+
+func assertCapturedCodexRestartMetadata(t *testing.T, row api.WorkerSessionObservation) {
+	t.Helper()
 	if row.State != "COMPLETED" || row.Model == nil || *row.Model != "t7-artifact-model" || row.ProviderSession == nil || row.ProviderSession.Id != "restart-tools-thread" || row.StartedAt == nil || row.EndedAt == nil || row.DurationMillis == nil || row.TerminalCause == nil || *row.TerminalCause != "COMPLETED" || row.TokenUsage == nil {
 		t.Fatal("tool restart lost recorded identity/model/usage/timing/cause")
 	}
+}
+
+func assertCapturedCodexRestartLogs(t *testing.T, logs api.WorkerSessionLogPage) {
+	t.Helper()
 	wantIDs := []string{"success", "success", "failure", "mcp", "mcp"}
 	wantStatuses := []string{"in_progress", "completed", "failed", "in_progress", "completed"}
 	index := 0
-	for i, record := range snapshot.Logs.Events {
+	for i, record := range logs.Events {
 		if record.Event.Position != int64(i+1) || record.Event.CapturedAt == nil {
 			t.Fatal("restart lost committed order/timestamp")
 		}
@@ -119,31 +146,22 @@ func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtif
 		if payload.ToolName != name {
 			t.Fatal("restart changed source-derived tool name")
 		}
-		if index == 1 || index == 2 {
-			var result map[string]any
-			if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != wantStatuses[index] {
-				t.Fatal("restart changed zero/sandbox-failed result")
-			}
-		}
+		assertCapturedCodexRestartResult(t, payload, index)
 		index++
 	}
-	if index != len(wantIDs) || snapshot.Logs.CommittedPosition != int64(len(snapshot.Logs.Events)) || len(snapshot.Transcript.Entries) != 7 {
-		t.Fatal("restart lost or duplicated captured lifecycle/transcript entries")
+	if index != len(wantIDs) || logs.CommittedPosition != int64(len(logs.Events)) {
+		t.Fatal("restart lost or duplicated captured lifecycle entries")
 	}
-	for i, entry := range snapshot.Transcript.Entries[:6] {
-		id := []string{"success", "failure", "mcp"}[i/2]
-		if entry.CallId == nil || *entry.CallId != id {
-			t.Fatal("restart transcript lost first-seen tool order")
-		}
+}
+
+func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload, index int) {
+	t.Helper()
+	if index != 1 && index != 2 {
+		return
 	}
-	raw, err := json.Marshal(snapshot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, secret := range []string{"private-command", "private-output", "private-denial", "private-token", "private-reasoning"} {
-		if strings.Contains(string(raw), secret) {
-			t.Fatal("restart leaked sensitive native-shaped facts")
-		}
+	var result map[string]any
+	if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != payload.Status {
+		t.Fatal("restart changed zero/sandbox-failed result")
 	}
 }
 

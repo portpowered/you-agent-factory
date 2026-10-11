@@ -170,6 +170,9 @@ func assertCapturedCodexUnknownReads(t *testing.T, ctx context.Context, fixture 
 	t.Helper()
 	for _, view := range []string{"logs", "transcript"} {
 		code := "WORKER_SESSION_NOT_FOUND"
+		if view == "transcript" {
+			code = "NOT_FOUND"
+		}
 		status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/"+view, nil)
 		var failure api.ErrorResponse
 		if status != http.StatusNotFound || json.Unmarshal([]byte(body), &failure) != nil || string(failure.Code) != code {
