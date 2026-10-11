@@ -698,7 +698,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	if err != nil {
 		return nil, err
 	}
-	v195 := provideRuntimeHostOperation(starter)
+	v195 := provideRuntimeHostOperation(starter, timerSource)
 	v196, err := provideProcessRuntimeFactory(v195)
 	if err != nil {
 		return nil, err
@@ -827,7 +827,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v225 := wire12.NewRuntimeSourceOpening(v209)
 	v226 := wire12.NewActivationOpening(recordingsService)
 	v227 := wire12.NewProjectionOpening(recordingsService)
-	v228 := provideResponsePresentation()
+	v228 := provideResponsePresentation(timerSource)
 	scopeOpening := wire12.NewScopeOpening(v226, v227, v228, recordingsService)
 	v229 := wire12.NewRuntimeSinkOwner()
 	runtimeOpening := provideFactoryVisualizationOpening(v209, v225, scopeOpening, v229, edges2)

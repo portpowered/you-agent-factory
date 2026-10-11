@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
@@ -84,6 +85,7 @@ func cloneRawMessages(events []json.RawMessage) []json.RawMessage {
 // durable start waits for terminal session state. Wire supplies the production
 // scheduler; the execution service never selects an ambient timer fallback.
 type SyncWaitScheduler interface {
+	NewTimer(time.Duration) platformclock.Timer
 	Now() time.Time
 	After(time.Duration) <-chan time.Time
 }

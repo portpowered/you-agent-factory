@@ -197,7 +197,7 @@ func provideModelHostClock(edges serviceedges.Edges) modelswire.HostClock {
 	if selected := edges.ModelHostClock; selected != nil {
 		return adaptModelHostClock(selected)
 	}
-	return adaptModelHostClock(modelsClock{source: edges.Clock})
+	return adaptModelHostClock(modelsClock{source: edges.Clock, scheduler: edges.ProcessScheduler})
 }
 func provideModelNow(edges serviceedges.Edges) modelNow {
 
@@ -756,24 +756,21 @@ func nvidiaGPUListed(output []byte) bool {
 	return false
 }
 
-type modelsClock struct{ source platformclock.Source }
+type modelsClock struct {
+	source    platformclock.Source
+	scheduler platformclock.TimerSource
+}
 
 func (clock modelsClock) Now() time.Time {
-	if clock.source != nil {
-		return clock.source.Now()
-	}
-	return time.Time{}
+	return clock.source.Now()
 }
-func (modelsClock) NewTimer(duration time.Duration) interface {
+func (clock modelsClock) NewTimer(duration time.Duration) interface {
 	C() <-chan time.Time
 	Stop() bool
 } {
-	return modelsTimer{Timer: time.NewTimer(duration)}
+	return clock.scheduler.NewTimer(duration)
 }
 
-type modelsTimer struct{ *time.Timer }
-
-func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
 func provideModelsCLIInvocationOperation(
 	invocation factorysessionwire.InvocationOperation,
 ) modelscli.InvocationOperation {

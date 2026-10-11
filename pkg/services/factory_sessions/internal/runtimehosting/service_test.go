@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -99,7 +100,7 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 		<-ctx.Done()
 		close(stopped)
 		return ctx.Err()
-	})
+	}, platformclock.Real{})
 	runtime := &lifecycleRuntime{}
 
 	err := host.Run(
@@ -155,7 +156,7 @@ func TestServiceRunDoesNotReportReadinessWhenRuntimeStartupFails(t *testing.T) {
 		request.OnBound(platformhttpserver.Binding{Port: request.Port})
 		<-ctx.Done()
 		return ctx.Err()
-	})
+	}, platformclock.Real{})
 	runtime := &lifecycleRuntime{completeErr: completeErr}
 
 	err := host.Run(
@@ -185,7 +186,7 @@ func TestServiceRunReadinessFailureTransitionsRuntimeStartupFailure(t *testing.T
 	observed := false
 	host := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return apiErr
-	})
+	}, platformclock.Real{})
 	runtime := &lifecycleRuntime{failErr: failErr}
 
 	err := host.Run(
@@ -226,7 +227,7 @@ func TestServiceRunDoesNotDuplicateTerminalBindFailureInLogger(t *testing.T) {
 	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
 	err := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return bindErr
-	}).Run(
+	}, platformclock.Real{}).Run(
 		context.Background(), http.NewServeMux(), runtime, logger,
 		factorysessions.RuntimeHostRequest{
 			RuntimeMode: interfaces.RuntimeModeService,
@@ -262,7 +263,7 @@ func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
 		hosted: hostedRuntime{logger: selectedLogger}}
 	err := New(func(context.Context, platformhttpserver.StartRequest) error {
 		return apiErr
-	}).Run(
+	}, platformclock.Real{}).Run(
 		context.Background(), http.NewServeMux(), runtime, logger,
 		factorysessions.RuntimeHostRequest{
 			RuntimeMode: interfaces.RuntimeModeService,
@@ -315,7 +316,7 @@ func TestServicePublishesAPIStartupFailureAfterLogging(t *testing.T) {
 		return nil
 	}))
 	apiErr := &fs.PathError{Op: "open", Path: "retained.json", Err: fs.ErrPermission}
-	host := New(func(context.Context, platformhttpserver.StartRequest) error { return apiErr })
+	host := New(func(context.Context, platformhttpserver.StartRequest) error { return apiErr }, platformclock.Real{})
 	exit := host.startAPI(t.Context(), &transport, http.NewServeMux(),
 		factorysessions.RuntimeHostRequest{Port: 8123}, logger, make(chan platformhttpserver.Binding, 1))
 	select {
@@ -339,7 +340,7 @@ func TestServiceRunReportsNonCancellationRuntimeFailure(t *testing.T) {
 
 	waitErr := errors.New("runtime stopped")
 	runtime := &lifecycleRuntime{waitErr: waitErr}
-	err := New(nil).Run(
+	err := New(nil, platformclock.Real{}).Run(
 		context.Background(),
 		http.NewServeMux(),
 		runtime,
@@ -357,7 +358,7 @@ func TestServiceRunRejectsMissingHTTPStarterWhenHostingIsRequested(t *testing.T)
 
 	failErr := errors.New("startup failure recorded")
 	runtime := &lifecycleRuntime{failErr: failErr}
-	err := New(nil).Run(
+	err := New(nil, platformclock.Real{}).Run(
 		context.Background(), http.NewServeMux(), runtime, zap.NewNop(),
 		factorysessions.RuntimeHostRequest{Port: 8123},
 		nil,
@@ -393,7 +394,7 @@ func TestServiceRunLogsHostedRuntimeDiagnostics(t *testing.T) {
 		request.OnBound(platformhttpserver.Binding{Port: request.Port + 1})
 		<-ctx.Done()
 		return ctx.Err()
-	}).Run(
+	}, platformclock.Real{}).Run(
 		context.Background(),
 		http.NewServeMux(),
 		runtime,
@@ -498,7 +499,7 @@ func TestServiceLogLifetimeThroughJoinedTransport(t *testing.T) {
 				<-ctx.Done()
 				request.Logger.Info("transport joined")
 				return fmt.Errorf("PRIVATE_PAYLOAD: %w", cause)
-			})
+			}, platformclock.Real{})
 			err := host.Run(t.Context(), http.NewServeMux(), runtime, logger, factorysessions.RuntimeHostRequest{Port: 8123}, nil)
 			if (mode == "flush failure" && !errors.Is(err, cause)) || (mode != "flush failure" && err != nil) {
 				t.Fatalf("Run = %v", err)
@@ -573,7 +574,7 @@ func TestServiceRunCancellationStopsRuntimeBeforeTransport(t *testing.T) {
 		<-ctx.Done()
 		close(transportDone)
 		return ctx.Err()
-	})
+	}, platformclock.Real{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	defer func() {
@@ -630,7 +631,7 @@ func TestServiceRunCancellationReportsRuntimeStopError(t *testing.T) {
 		request.OnBound(platformhttpserver.Binding{Host: "127.0.0.1", Port: request.Port})
 		<-ctx.Done()
 		return ctx.Err()
-	})
+	}, platformclock.Real{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	runDone := make(chan error, 1)
@@ -645,5 +646,82 @@ func TestServiceRunCancellationReportsRuntimeStopError(t *testing.T) {
 	close(runtime.releaseStop)
 	if err := <-runDone; !errors.Is(err, stopErr) {
 		t.Fatalf("Run() error = %v, want %v", err, stopErr)
+	}
+}
+
+type selectedStartupScheduler struct {
+	*platformclock.Deterministic
+	created chan *selectedStartupTimer
+}
+type selectedStartupTimer struct {
+	platformclock.Timer
+	stopped  bool
+	duration time.Duration
+}
+
+func (timer *selectedStartupTimer) Stop() bool { timer.stopped = true; return timer.Timer.Stop() }
+func (scheduler *selectedStartupScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	timer := &selectedStartupTimer{Timer: scheduler.Deterministic.NewTimer(d), duration: d}
+	scheduler.created <- timer
+	return timer
+}
+func TestServiceRunSelectedReadabilityTimer(t *testing.T) {
+	t.Parallel()
+	for _, action := range []string{"complete", "cancel", "api failure"} {
+		t.Run(action, func(t *testing.T) {
+			scheduler := &selectedStartupScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedStartupTimer, 1)}
+			service := New(func(context.Context, platformhttpserver.StartRequest) error { return nil }, scheduler)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			bound := make(chan platformhttpserver.Binding, 1)
+			bound <- platformhttpserver.Binding{Port: 7438}
+			api := make(chan error, 1)
+			cause := errors.New("selected API failure")
+			done := make(chan error, 1)
+			go func() {
+				_, err := service.waitForStartupReadability(ctx, true, "work.json", api, 7438, bound, nil, nil)
+				done <- err
+			}()
+			var timer *selectedStartupTimer
+			select {
+			case timer = <-scheduler.created:
+			case <-time.After(10 * time.Second):
+				t.Fatal("timer not created")
+			}
+			if timer.duration != 250*time.Millisecond {
+				t.Fatalf("duration %v", timer.duration)
+			}
+			scheduler.SetTick(249)
+			select {
+			case err := <-done:
+				t.Fatalf("early completion %v", err)
+			default:
+			}
+			switch action {
+			case "complete":
+				scheduler.SetTick(250)
+			case "cancel":
+				cancel()
+			case "api failure":
+				api <- cause
+			}
+			select {
+			case err := <-done:
+				if action == "complete" && err != nil {
+					t.Fatal(err)
+				}
+				if action == "cancel" && !errors.Is(err, context.Canceled) {
+					t.Fatal(err)
+				}
+				if action == "api failure" && !errors.Is(err, cause) {
+					t.Fatal(err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("startup not joined")
+			}
+			if !timer.stopped {
+				t.Fatal("startup timer not stopped")
+			}
+		})
 	}
 }

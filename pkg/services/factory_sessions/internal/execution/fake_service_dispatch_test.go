@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -946,5 +948,79 @@ func assertCanonicalOwnerListRead(t *testing.T, service *JavaScriptRuntimeServic
 	listed, err := service.ListCanonical(context.Background(), factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeLive})
 	if err != nil || len(listed.LiveSessions) != 1 || listed.LiveSessions[0].ID != sessionID {
 		t.Fatalf("ListCanonical = %#v, %v", listed, err)
+	}
+}
+
+type selectedCloseScheduler struct {
+	*platformclock.Deterministic
+	created chan *selectedCloseTimer
+}
+type selectedCloseTimer struct {
+	platformclock.Timer
+	stopped  bool
+	duration time.Duration
+}
+
+func (timer *selectedCloseTimer) Stop() bool { timer.stopped = true; return timer.Timer.Stop() }
+func (scheduler *selectedCloseScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	timer := &selectedCloseTimer{Timer: scheduler.Deterministic.NewTimer(d), duration: d}
+	scheduler.created <- timer
+	return timer
+}
+func TestSelectedDurableCloseTimerStopsOnCompletionAndTimeout(t *testing.T) {
+	t.Parallel()
+	for _, timeout := range []bool{false, true} {
+		t.Run(fmt.Sprint(timeout), func(t *testing.T) {
+			scheduler := &selectedCloseScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedCloseTimer, 1)}
+			service := &JavaScriptRuntimeService{durableRuntimeBehavior: &durableRuntimeBehavior{syncWaits: scheduler}, durableRuntimeState: &durableRuntimeState{}}
+			service.runWaitGroup.Add(1)
+			done := make(chan error, 1)
+			go func() { done <- service.closeWithTimeout(time.Second) }()
+			var timer *selectedCloseTimer
+			select {
+			case timer = <-scheduler.created:
+			case <-time.After(10 * time.Second):
+				t.Fatal("close timer missing")
+			}
+			if timer.duration != time.Second {
+				t.Fatal(timer.duration)
+			}
+			// Replay/fact progression is independent of the selected safety scheduler.
+			replay := platformclock.NewDeterministic(time.Unix(99, 0), time.Hour)
+			replay.SetTick(100)
+			scheduler.SetTick(999)
+			select {
+			case err := <-done:
+				t.Fatalf("premature close %v", err)
+			default:
+			}
+			if timeout {
+				scheduler.SetTick(1000)
+			} else {
+				service.runWaitGroup.Done()
+			}
+			var result error
+			select {
+			case result = <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("close not joined")
+			}
+			if timeout && !errors.Is(result, ErrDurableExecutionShutdownTimeout) {
+				t.Fatal(result)
+			}
+			if !timeout && result != nil {
+				t.Fatal(result)
+			}
+			if !timer.stopped {
+				t.Fatal("close timer not stopped")
+			}
+			if service.Close() != result {
+				t.Fatal("repeated close changed result")
+			}
+			if timeout {
+				service.runWaitGroup.Done()
+			}
+			service.runWaitGroup.Wait()
+		})
 	}
 }

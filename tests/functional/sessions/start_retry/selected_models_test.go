@@ -11,10 +11,16 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -209,7 +215,10 @@ func testSelectedModelsAcquisition(t *testing.T, sessions factorysessions.Servic
 
 func assertSelectedModelsObservations(t *testing.T, sessions factorysessions.Service, id string) {
 	t.Helper()
-	history := initialOpeningHistory(t, sessions, id)
+	assertSelectedModelsHistory(t, id, initialOpeningHistory(t, sessions, id))
+}
+func assertSelectedModelsHistory(t *testing.T, id string, history *factorydefinitions.FactoryEventStream) {
+	t.Helper()
 	seen := make(map[string]int)
 	for _, event := range history.History {
 		if event.Type != "MODEL_REQUEST" && event.Type != "MODEL_RESPONSE" {
@@ -222,5 +231,310 @@ func assertSelectedModelsObservations(t *testing.T, sessions factorysessions.Ser
 	}
 	if seen["MODEL_REQUEST"] == 0 || seen["MODEL_REQUEST"] != seen["MODEL_RESPONSE"] {
 		t.Fatalf("session %s model observations = %v, want paired scoped request/result events", id, seen)
+	}
+}
+
+// Each immutable specialization has one reusable process. Readiness polling is
+// acknowledged separately from model-health eligibility; no global clock switch.
+
+type selectedSchedulingTimer struct {
+	clock    *selectedSchedulingClock
+	duration time.Duration
+	deadline time.Time
+	channel  chan time.Time
+	stopped  atomic.Bool
+	fired    bool
+}
+
+func (timer *selectedSchedulingTimer) C() <-chan time.Time { return timer.channel }
+func (timer *selectedSchedulingTimer) Stop() bool {
+	timer.clock.mu.Lock()
+	defer timer.clock.mu.Unlock()
+	active := !timer.fired && !timer.stopped.Load()
+	timer.stopped.Store(true)
+	delete(timer.clock.pending, timer)
+	return active
+}
+
+type selectedSchedulingClock struct {
+	*platformclock.Deterministic
+	created chan *selectedSchedulingTimer
+	mu      sync.Mutex
+	pending map[*selectedSchedulingTimer]struct{}
+}
+
+func (clock *selectedSchedulingClock) NewTimer(d time.Duration) platformclock.Timer {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	timer := &selectedSchedulingTimer{clock: clock, duration: d, deadline: clock.Now().Add(d), channel: make(chan time.Time, 1)}
+	clock.pending[timer] = struct{}{}
+	clock.created <- timer
+	if d <= 0 {
+		clock.fireLocked(timer)
+	}
+	return timer
+}
+func (clock *selectedSchedulingClock) fireLocked(timer *selectedSchedulingTimer) {
+	if timer.fired || timer.stopped.Load() {
+		return
+	}
+	timer.fired = true
+	delete(clock.pending, timer)
+	timer.channel <- clock.Now()
+}
+func (clock *selectedSchedulingClock) acknowledge(timer *selectedSchedulingTimer) {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.fireLocked(timer)
+}
+func (clock *selectedSchedulingClock) SetTick(tick int) {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.Deterministic.SetTick(tick)
+	for timer := range clock.pending {
+		if !clock.Now().Before(timer.deadline) {
+			clock.fireLocked(timer)
+		}
+	}
+}
+func (clock *selectedSchedulingClock) After(d time.Duration) <-chan time.Time {
+	return clock.NewTimer(d).C()
+}
+func newSelectedSchedulingClock() *selectedSchedulingClock {
+	return &selectedSchedulingClock{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedSchedulingTimer, 512), pending: make(map[*selectedSchedulingTimer]struct{})}
+}
+func selectedSchedulingReceive[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case value := <-ch:
+		return value
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected scheduling observation missing")
+		var zero T
+		return zero
+	}
+}
+func selectedSchedulingActivate(t *testing.T, clock *selectedSchedulingClock, fn func() error) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- fn() }()
+	for {
+		select {
+		case err := <-done:
+			return err
+		case timer := <-clock.created:
+			// Readiness and invocation fallback polls are acknowledged independently
+			// of eligibility; a pending startup timer is retained by its scenario.
+			if timer.duration == 10*time.Millisecond || timer.duration == 250*time.Millisecond {
+				clock.acknowledge(timer)
+			}
+		case <-time.After(30 * time.Second):
+			t.Fatal("selected activation missing")
+			return context.DeadlineExceeded
+		}
+	}
+}
+
+type selectedSchedulingModels struct {
+	*selectedModelsScenario
+	health  atomic.Int32
+	failed  chan int
+	stopped chan string
+}
+
+func (scenario *selectedSchedulingModels) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
+	process, err := scenario.selectedModelsScenario.Start(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+	return &selectedSchedulingProcess{process: process, stopped: scenario.stopped}, nil
+}
+
+type selectedSchedulingProcess struct {
+	process interface {
+		HealthEndpoint() string
+		Wait() error
+		Stop(context.Context) error
+	}
+	stopped chan string
+	once    sync.Once
+}
+
+func (p *selectedSchedulingProcess) HealthEndpoint() string { return p.process.HealthEndpoint() }
+func (p *selectedSchedulingProcess) Wait() error            { return p.process.Wait() }
+func (p *selectedSchedulingProcess) Stop(ctx context.Context) error {
+	err := p.process.Stop(ctx)
+	p.once.Do(func() { p.stopped <- p.HealthEndpoint() })
+	return err
+}
+func TestSelectedSchedulingModelHealthAndCancellationPreservePeer(t *testing.T) {
+	t.Parallel()
+	for _, specialized := range []bool{false, true} {
+		t.Run(fmt.Sprint(specialized), func(t *testing.T) {
+			t.Parallel()
+			scenario := &selectedSchedulingModels{selectedModelsScenario: newSelectedModelsScenario(t), failed: make(chan int, 2), stopped: make(chan string, 16)}
+			facts := clockwork.NewFakeClockAt(time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC))
+			scheduler := newSelectedSchedulingClock()
+			modelClock := scheduler
+			if specialized {
+				modelClock = newSelectedSchedulingClock()
+			}
+			sessions := startSelectedSchedulingModels(t, scenario, facts, scheduler, modelClock)
+			request := scenario.request()
+			request.RuntimeSelection.ModelCacheDirectory = filepath.Join(scenario.home, ".agent-factory", "models")
+			if err := selectedSchedulingActivate(t, scheduler, func() error { _, err := sessions.Start(t.Context(), request); return err }); err != nil {
+				t.Fatal(err)
+			}
+			peer := scenario.request()
+			peer.SessionID = scenario.peerID
+			peer.FolderPath = scenario.peerDir
+			peer.RuntimeSelection.DefinitionSourcePath = filepath.Join(scenario.peerDir, "factory.json")
+			peer.RuntimeSelection.ExecutionBaseDir = scenario.peerDir
+			peer.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+			peer.RuntimeSelection.SystemConfigHome = scenario.peerHome
+			peer.RuntimeSelection.ModelCacheDirectory = filepath.Join(scenario.peerHome, ".agent-factory", "models")
+			if err := selectedSchedulingActivate(t, scheduler, func() error { _, err := sessions.Start(t.Context(), peer); return err }); err != nil {
+				t.Fatal(err)
+			}
+			if err := selectedSchedulingInvoke(t, scheduler, sessions, scenario.peerID); err != nil {
+				t.Fatal(err)
+			}
+			cancelSelectedSchedulingModel(t, sessions, scenario, facts, scheduler, modelClock)
+			request.SessionID = uuid.NewString()
+			request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
+			if err := selectedSchedulingActivate(t, scheduler, func() error { _, err := sessions.Start(t.Context(), request); return err }); err != nil {
+				t.Fatal(err)
+			}
+			if err := selectedSchedulingInvoke(t, scheduler, sessions, request.SessionID); err != nil {
+				t.Fatal(err)
+			}
+			assertSelectedModelsHistory(t, request.SessionID, initialOpeningHistoryAt(t, sessions, request.SessionID, facts.Now()))
+			for _, event := range initialOpeningHistoryAt(t, sessions, request.SessionID, facts.Now()).History {
+				if event.Type == "MODEL_RESPONSE" && event.Context.EventTime != facts.Now() {
+					t.Fatalf("model fact time %v want %v", event.Context.EventTime, facts.Now())
+				}
+			}
+
+			closeInitialOpeningSession(t, sessions, request.SessionID)
+			if err := selectedSchedulingInvoke(t, scheduler, sessions, scenario.peerID); err != nil {
+				t.Fatal(err)
+			}
+			closeInitialOpeningSession(t, sessions, scenario.peerID)
+
+		})
+	}
+}
+
+type selectedSchedulingHostClock struct{ *selectedSchedulingClock }
+
+func (clock selectedSchedulingHostClock) NewTimer(d time.Duration) interface {
+	C() <-chan time.Time
+	Stop() bool
+} {
+	return clock.selectedSchedulingClock.NewTimer(d)
+}
+
+func (scenario *selectedSchedulingModels) Negotiate(ctx context.Context, endpoint string, request serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	result, err := scenario.selectedModelsScenario.Negotiate(ctx, endpoint, request)
+	if endpoint == "http://"+scenario.candidateID+".invalid" && scenario.health.Add(1) <= 2 {
+		scenario.failed <- int(scenario.health.Load())
+		result.Ready = false
+	}
+	return result, err
+}
+
+func selectedSchedulingInvoke(t *testing.T, clock *selectedSchedulingClock, sessions factorysessions.Service, id string) error {
+	t.Helper()
+	return selectedSchedulingActivate(t, clock, func() error { return selectedProviderInvoke(t.Context(), sessions, id) })
+}
+
+func startSelectedSchedulingModels(t *testing.T, scenario *selectedSchedulingModels, facts *clockwork.FakeClock, scheduler, modelClock *selectedSchedulingClock) factorysessions.Service {
+	t.Helper()
+	api := support.NewProcessAPIServer()
+	edges := serviceedges.Edges{Clock: facts, ProcessScheduler: scheduler, RecordingReadFile: os.ReadFile, APIServerStarter: api.Start,
+		ModelAssetHTTPClient: scenario, ModelHostHTTPClient: scenario, ModelHostProcessLauncher: scenario, ModelHostProtocolNegotiator: scenario, ModelHostCompatibilityChecker: scenario, ModelInvocationProtocolClient: scenario,
+		ModelAssetHostPlatform:          models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveHuggingFaceRevision: func(context.Context, string) (string, error) { return selectedModelsRevision, nil },
+		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			return scenario.backend, nil
+		},
+	}
+	if modelClock != scheduler {
+		edges.ModelHostClock = selectedSchedulingHostClock{modelClock}
+	}
+	process, err := root.BuildProcess(t.Context(), edges)
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.CleanupProcess(t, process)
+	if len(scheduler.created) != 0 || len(modelClock.created) != 0 {
+		t.Fatal("construction scheduled timers")
+	}
+	hostDir := support.ScaffoldFactory(t, initialOpeningFactoryConfig())
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = hostDir
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, hostDir)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	if err := selectedSchedulingActivate(t, scheduler, func() error { api.WaitForURL(t); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { command.Stop(t) })
+	return process.FactorySessions().FactorySessions().(factorysessions.Service)
+}
+func cancelSelectedSchedulingModel(t *testing.T, sessions factorysessions.Service, scenario *selectedSchedulingModels, facts *clockwork.FakeClock, scheduler, modelClock *selectedSchedulingClock) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- selectedProviderInvoke(ctx, sessions, scenario.candidateID) }()
+	selectedSchedulingReceive(t, scenario.failed)
+	var timer *selectedSchedulingTimer
+	for timer == nil {
+		candidate := selectedSchedulingReceive(t, modelClock.created)
+		if candidate.duration == 100*time.Millisecond {
+			timer = candidate
+		}
+	}
+	facts.Advance(time.Millisecond)
+	if modelClock != scheduler {
+		scheduler.SetTick(1000)
+	}
+	if scenario.health.Load() != 1 {
+		t.Fatal("unselected advancement retried health")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("model returned before selected health scheduling: %v", err)
+	default:
+	}
+	// The selected source drives an actual second failed health action.
+	modelClock.SetTick(int(modelClock.Now().Sub(time.Unix(0, 0))/time.Millisecond) + 100)
+	selectedSchedulingReceive(t, scenario.failed)
+	if !timer.stopped.Load() {
+		t.Fatal("fired health timer was not retired")
+	}
+	for {
+		next := selectedSchedulingReceive(t, modelClock.created)
+		if next.duration == 100*time.Millisecond {
+			timer = next
+			break
+		}
+	}
+	// Closing the selected scope cancels its owned load; caller cancellation alone preserves shared loading.
+	cancel()
+	closeInitialOpeningSession(t, sessions, scenario.candidateID)
+	err := selectedSchedulingReceive(t, done)
+	if err == nil {
+		t.Fatal("cancelled model invocation succeeded")
+	}
+	selectedSchedulingReceive(t, scenario.stopped)
+	if !timer.stopped.Load() {
+		t.Fatal("cancelled model health timer remained active")
 	}
 }

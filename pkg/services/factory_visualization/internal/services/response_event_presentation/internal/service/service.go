@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
@@ -15,32 +16,32 @@ const progressDrainTimeout = 250 * time.Millisecond
 
 // Service keeps response/event presentation queue and drain behavior behind
 // the Visualization-owned response_event_presentation capability.
-type Service struct{}
+type Service struct{ scheduler platformclock.TimerSource }
 
 var _ responseeventpresentation.Service = (*Service)(nil)
 
 // New constructs the inert response/event presentation owner. No presentation
 // worker goroutines start until an output or stream is explicitly opened.
-func New() *Service {
-	return &Service{}
+func New(scheduler platformclock.TimerSource) *Service {
+	return &Service{scheduler: scheduler}
 }
 
-func (Service) OpenBestEffortOutput(writer io.Writer) contracts.Output {
-	return newBestEffortOutput(writer)
+func (service Service) OpenBestEffortOutput(writer io.Writer) contracts.Output {
+	return newBestEffortOutput(writer, service.scheduler)
 }
 
-func (Service) OpenLosslessOutput(writer io.Writer) contracts.Output {
+func (service Service) OpenLosslessOutput(writer io.Writer) contracts.Output {
 	return newLosslessOutput(writer)
 }
 
-func (Service) OpenBestEffortFactoryEventStream(
+func (service Service) OpenBestEffortFactoryEventStream(
 	writer io.Writer,
 	encode contracts.FactoryEventEncoder,
 ) contracts.FactoryEventStream {
-	return newSerializedFactoryEventStream(newBestEffortOutput(writer), encode)
+	return newSerializedFactoryEventStream(newBestEffortOutput(writer, service.scheduler), encode)
 }
 
-func (Service) OpenLosslessFactoryEventStream(
+func (service Service) OpenLosslessFactoryEventStream(
 	writer io.Writer,
 	encode contracts.FactoryEventEncoder,
 ) contracts.FactoryEventStream {
@@ -48,23 +49,25 @@ func (Service) OpenLosslessFactoryEventStream(
 }
 
 type bestEffortOutput struct {
-	mu       sync.Mutex
-	outputMu sync.Mutex
-	writer   io.Writer
-	queue    chan []byte
-	wg       sync.WaitGroup
-	closed   bool
-	abandon  bool
-	dropped  int
+	scheduler platformclock.TimerSource
+	mu        sync.Mutex
+	outputMu  sync.Mutex
+	writer    io.Writer
+	queue     chan []byte
+	wg        sync.WaitGroup
+	closed    bool
+	abandon   bool
+	dropped   int
 }
 
-func newBestEffortOutput(writer io.Writer) *bestEffortOutput {
+func newBestEffortOutput(writer io.Writer, scheduler platformclock.TimerSource) *bestEffortOutput {
 	if writer == nil {
 		panic("response presentation output is nil")
 	}
 	output := &bestEffortOutput{
-		writer: writer,
-		queue:  make(chan []byte, contracts.DefaultProgressQueueCapacity),
+		writer:    writer,
+		scheduler: scheduler,
+		queue:     make(chan []byte, contracts.DefaultProgressQueueCapacity),
 	}
 	output.wg.Add(1)
 	go output.run()
@@ -94,7 +97,7 @@ func (o *bestEffortOutput) CloseAndDrain() error {
 		close(o.queue)
 	}
 	o.mu.Unlock()
-	if !waitOutput(&o.wg, progressDrainTimeout) {
+	if !waitOutput(&o.wg, progressDrainTimeout, o.scheduler) {
 		o.mu.Lock()
 		o.abandon = true
 		o.mu.Unlock()
@@ -317,16 +320,18 @@ func appendLine(payload []byte) []byte {
 	return contracts.AppendLine(payload)
 }
 
-func waitOutput(wg *sync.WaitGroup, timeout time.Duration) bool {
+func waitOutput(wg *sync.WaitGroup, timeout time.Duration, scheduler platformclock.TimerSource) bool {
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
+	timer := scheduler.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-done:
 		return true
-	case <-time.After(timeout):
+	case <-timer.C():
 		return false
 	}
 }
