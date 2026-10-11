@@ -327,7 +327,7 @@ func diagnosticAdapter(root factoryvisualization.Root, logger *zap.Logger, fromR
 	if fromRoot {
 		return factoryvisualizationhttp.NewHandlerFromRoot(factoryvisualizationhttp.RootBinding{Visualization: root}, logger)
 	}
-	return factoryvisualizationhttp.NewHandler(factoryvisualizationhttp.Dependencies{VisualizationRoot: root}, logger)
+	return factoryvisualizationhttp.NewHandler(root, logger)
 }
 
 func assertObserveFailure(t *testing.T, rec *httptest.ResponseRecorder) {

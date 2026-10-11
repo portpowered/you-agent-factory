@@ -121,6 +121,7 @@ func newC06SharedHTTPFixture(t testing.TB) (*c06SharedHTTPFixture, error) {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			ledger.recordProcessStart()
+			request.Handler = c06DeadlineRequestHandler(request.Handler)
 			startErr := api.Start(ctx, request)
 			apiStopOnce.Do(func() { close(apiStopped) })
 			return startErr

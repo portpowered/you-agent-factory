@@ -2,6 +2,8 @@ package http
 
 import (
 	"context"
+	"errors"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -58,6 +60,9 @@ func NewAuthoringHandler(current apisurface.CurrentFactoryReader, definitions ap
 func NewInvocationHandler(invocation apisurface.InvocationAPI, logger *zap.Logger) *InvocationHandler {
 	return &InvocationHandler{responseWriter{logger}, invocation}
 }
+
+// NewObservationHandler binds the required completed status role and the
+// session observation roles supplied by canonical Wire.
 func NewObservationHandler(root sessionResponseOperations, live apisurface.LiveSessionAPI, status apisurface.FactoryStatusAPI, requests RequestPreparation, logger *zap.Logger) *ObservationHandler {
 	return &ObservationHandler{responseWriter{logger}, root, live, status, requests}
 }
@@ -74,7 +79,7 @@ func NewUnavailableInvocationHandler(logger *zap.Logger) *InvocationHandler {
 	return &InvocationHandler{responseWriter: responseWriter{logger}}
 }
 func NewDurableObservationHandler(root sessionResponseOperations, requests RequestPreparation, logger *zap.Logger) *ObservationHandler {
-	return &ObservationHandler{responseWriter: responseWriter{logger}, sessionsRoot: root, sessionRequests: requests}
+	return &ObservationHandler{responseWriter: responseWriter{logger}, sessionsRoot: root, factoryStatus: unavailableFactoryStatus{}, sessionRequests: requests}
 }
 
 // Each transport capability consumes owner-root request and detached result
@@ -99,4 +104,15 @@ type liveControlOperations interface {
 	ReadSessionDetail(context.Context, string) (factorysessions.SessionDetail, error)
 	PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error)
 	ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error)
+}
+
+// The durable HTTP profile serves status routes but has no live runtime status.
+// This completed role preserves its safe unavailable response without making
+// the live observation handler's required collaborator optional.
+type unavailableFactoryStatus struct{}
+
+var errFactoryStatusUnavailable = errors.New("factory status is unavailable")
+
+func (unavailableFactoryStatus) ProjectFactoryStatus(context.Context, string) (apisurface.FactorySessionStatus, error) {
+	return apisurface.FactorySessionStatus{}, errFactoryStatusUnavailable
 }

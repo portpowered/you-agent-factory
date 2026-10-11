@@ -1123,7 +1123,6 @@ pkg/services/factory_visualization/transports/http/root_binding.go: unreachable 
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: Adapter.OpenPresentation
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: Adapter.PresentProgress
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: Adapter.StopDrain
-pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: Adapter.requireVisualizationRoot
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: Adapter.writeVisualizationRequestError
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: Adapter.writeVisualizationRootError
 pkg/services/factory_visualization/transports/http/root_binding.go: unreachable func: NewHandlerFromRoot

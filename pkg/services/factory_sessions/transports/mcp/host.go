@@ -30,16 +30,17 @@ type hostSessions struct {
 	http   HostTransport
 }
 
-// NewHostOperation binds the existing public live routes to the selected host.
-func NewHostOperation(server string, transport HostTransport, workingRoot string, generateID factorysessions.SessionIDGenerator, resolveProvider ProviderIdentityResolver) (func(context.Context, SubagentInput) ToolResponse[SubagentResult], error) {
-	endpoint, err := url.Parse(server)
-	if err != nil || endpoint == nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || transport == nil {
-		return nil, errors.New("subagent host and HTTP transport are required")
-	}
-	host := &hostSessions{server: strings.TrimRight(server, "/"), http: transport}
-	return func(ctx context.Context, input SubagentInput) ToolResponse[SubagentResult] {
+// NewHostOperation stores completed roles once. Each call selects its own host
+// and working root, without constructing another service or falling back locally.
+func NewHostOperation(transport HostTransport, generateID factorysessions.SessionIDGenerator, resolveProvider ProviderIdentityResolver) func(context.Context, string, string, SubagentInput) ToolResponse[SubagentResult] {
+	return func(ctx context.Context, server, workingRoot string, input SubagentInput) ToolResponse[SubagentResult] {
+		endpoint, err := url.Parse(server)
+		if err != nil || endpoint == nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+			return subagentExecutionFailure(errors.New("subagent host and HTTP transport are required"))
+		}
+		host := &hostSessions{server: strings.TrimRight(server, "/"), http: transport}
 		return Subagent(ctx, host, workingRoot, generateID, resolveProvider, input)
-	}, nil
+	}
 }
 
 func (host *hostSessions) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {

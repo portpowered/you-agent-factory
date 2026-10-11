@@ -20,7 +20,8 @@ import (
 
 const testTimeout = 5 * time.Second
 
-const expectedProtocolVersion = "2025-11-25"
+// Both peers use the checked-in SDK default; v1.7.0 negotiates this version.
+const expectedProtocolVersion = "2026-07-28"
 
 func TestClientConnectsToRealServerThroughCallerSuppliedPipes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -72,7 +73,7 @@ func TestClientNegotiatesDiscoversAndCorrelatesToolTrafficOverRealStdio(t *testi
 	assertInitializeResult(t, client.InitializeResult())
 	listResult, callResult := runConcurrentOperations(t, ctx, client)
 	assertDiscoveredTool(t, listResult, mcpfactorysession.ToolListSessions)
-	assertSuccessfulTextToolResult(t, callResult)
+	assertUnavailableToolResult(t, callResult)
 	assertConversationFrames(t, requests.frames(), responses.frames())
 	if err := client.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -147,17 +148,25 @@ func runConcurrentOperations(t *testing.T, ctx context.Context, client *Client) 
 	return second.list, first.call
 }
 
-func assertSuccessfulTextToolResult(t *testing.T, result *mcp.CallToolResult) {
+func assertUnavailableToolResult(t *testing.T, result *mcp.CallToolResult) {
 	t.Helper()
-	if result == nil || result.IsError {
-		t.Fatalf("CallTool() result = %#v, want isError false", result)
+	if result == nil || !result.IsError || len(result.Content) != 1 {
+		t.Fatalf("CallTool() result = %#v, want one safe error message", result)
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok || text.Text != "Factory Session execution service is unavailable" {
+		t.Fatalf("tool text = %#v, want safe unavailable message", result.Content)
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var toolResponse mcpfactorysession.ToolResponse[json.RawMessage]
-	if err := DecodeTextResult(result, &toolResponse); err != nil {
-		t.Fatalf("DecodeTextResult() error = %v", err)
+	if err := json.Unmarshal(encoded, &toolResponse); err != nil {
+		t.Fatal(err)
 	}
-	if toolResponse.Error == nil || !strings.Contains(toolResponse.Error.Message, "unavailable") {
-		t.Fatalf("tool text payload = %#v, want current text-only Factory Session response", toolResponse)
+	if toolResponse.Result != nil || toolResponse.Error == nil || toolResponse.Error.Code != "SERVICE_UNAVAILABLE" || toolResponse.Error.Message != text.Text || toolResponse.Error.Retryable {
+		t.Fatalf("structured tool payload = %#v, want typed non-retryable unavailable error", toolResponse)
 	}
 }
 
@@ -188,8 +197,7 @@ func TestConnectClassifiesInitializationEOFAsProtocolExchange(t *testing.T) {
 
 func newRealServer(t *testing.T) *mcpserver.Server {
 	t.Helper()
-	server, err := mcpserver.New(mcpserver.Options{
-		ToolOperation: protocolTestToolOperation,
+	server, err := mcpserver.New(protocolTestToolOperation, mcpserver.Options{
 		ServerName:    "pipe-test-server",
 		ServerVersion: "1.0.0",
 	})
@@ -406,21 +414,21 @@ func assertDiscoveredTool(t *testing.T, result *mcp.ListToolsResult, name string
 func assertConversationFrames(t *testing.T, requests, responses [][]byte) {
 	t.Helper()
 	requestIDs := map[string]string{}
-	initialized := 0
+	discoveries := 0
 	for _, encoded := range requests {
 		var frame rpcFrame
 		if err := json.Unmarshal(encoded, &frame); err != nil {
 			t.Fatalf("decode SDK request %q: %v", encoded, err)
 		}
-		if frame.Method == "notifications/initialized" {
-			initialized++
+		if frame.Method == "server/discover" {
+			discoveries++
 		}
 		if frame.Method == "tools/list" || frame.Method == "tools/call" {
 			requestIDs[fmt.Sprint(frame.ID)] = frame.Method
 		}
 	}
-	if initialized != 1 {
-		t.Fatalf("initialized notification count = %d, want 1", initialized)
+	if discoveries != 1 {
+		t.Fatalf("server discovery count = %d, want 1", discoveries)
 	}
 	if len(requestIDs) != 2 {
 		t.Fatalf("operation request identities = %#v, want two distinct IDs", requestIDs)
@@ -439,6 +447,6 @@ func assertConversationFrames(t *testing.T, requests, responses [][]byte) {
 		}
 	}
 	if len(responses) != 3 {
-		t.Fatalf("server response count = %d, want initialize plus two operations and no notification response", len(responses))
+		t.Fatalf("server response count = %d, want discovery plus two operations and no notification response", len(responses))
 	}
 }
