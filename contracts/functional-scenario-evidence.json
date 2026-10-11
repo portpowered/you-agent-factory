@@ -2,14 +2,6 @@
   "formatVersion": 1,
   "declarations": [
     {
-      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestSubagentDirectStart",
-      "stableIds": [
-        "cli/you.worker-sessions.start",
-        "rest/startWorkerSession",
-        "cli/you.worker-sessions.show"
-      ]
-    },
-    {
       "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
       "stableIds": [
         "rest/getMetrics"
@@ -160,6 +152,13 @@
       ]
     },
     {
+      "test": "tests/functional/transport/mcp/worker_sessions/subagent_route_test.go::TestSubagentRouteDefaults",
+      "stableIds": [
+        "mcp/mcp.tool.you.subagent",
+        "rest/startWorkerSession"
+      ]
+    },
+    {
       "test": "tests/functional/work/admission/batch_contract_batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
       "stableIds": [
         "cli/you.submit.batch"
@@ -291,6 +290,14 @@
         "cli/you.worker-sessions.list",
         "cli/you.worker-sessions.show",
         "rest/readWorkerSessionLogs"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestSubagentDirectStart",
+      "stableIds": [
+        "cli/you.worker-sessions.show",
+        "cli/you.worker-sessions.start",
+        "rest/startWorkerSession"
       ]
     },
     {

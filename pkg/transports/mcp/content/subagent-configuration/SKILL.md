@@ -33,8 +33,9 @@ Direct START uses `defaults.subagent`, independently of generic worker defaults:
 ```
 
 Select an exact model advertised by the provider catalog; the model above is
-a placeholder. Use `you.operator_settings.set_subagent_defaults` to update
-the dedicated route while preserving sibling configuration.
+a placeholder. Edit `defaults.subagent` in the selected host's operator
+configuration file. Preserve the other configuration fields. Read the file
+again to confirm the dedicated route and unchanged generic worker defaults.
 
 Per-call provider, model and reasoning effort override the dedicated route.
 A different provider requires an explicit model. Missing or unavailable routes
