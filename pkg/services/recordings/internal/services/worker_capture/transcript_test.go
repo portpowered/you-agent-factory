@@ -106,3 +106,21 @@ func TestProjectWorkerTranscriptRejectsMalformedContentAndGaps(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectWorkerTranscriptCodexSnapshotsRetainEarlierFacts(t *testing.T) {
+	t.Parallel()
+	records := []WorkerCapturedRecord{
+		transcriptRecord(1, workers.KindTool, workers.PhaseStarted, "cmd", "turn", `{"toolCallId":"cmd","toolName":"command_execution","status":"in_progress","argumentsSummary":{"command":"<redacted>"}}`),
+		transcriptRecord(2, workers.KindTool, workers.PhaseStarted, "cmd", "turn", `{"toolCallId":"cmd","toolName":"command_execution","resultSummary":{"aggregated_output":"<redacted>"}}`),
+		transcriptRecord(3, workers.KindTool, workers.PhaseCompleted, "cmd", "turn", `{"toolCallId":"cmd","toolName":"command_execution","status":"completed","resultSummary":{"exit_code":0,"status":"completed"}}`),
+	}
+	got, err := (WorkerCapturedActivityPage{Records: records}).ProjectTranscript()
+	if err != nil || len(got) != 2 {
+		t.Fatalf("snapshot reduction: %v count %d", err, len(got))
+	}
+	var output map[string]any
+	var arguments map[string]string
+	if json.Unmarshal([]byte(*got[0].Arguments), &arguments) != nil || arguments["command"] != "<redacted>" || json.Unmarshal([]byte(*got[1].Output), &output) != nil || *got[0].Status != "completed" || !reflect.DeepEqual(output, map[string]any{"aggregated_output": "<redacted>", "exit_code": float64(0), "status": "completed"}) || got[0].Order != 1 || got[1].Order != 2 {
+		t.Fatal("snapshot erased or duplicated prior facts")
+	}
+}

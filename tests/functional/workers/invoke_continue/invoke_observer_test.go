@@ -172,7 +172,7 @@ func TestT7DetachedObserverLeavesHostedAttemptReadable(t *testing.T) {
 		t.Fatalf("detached live show: %v: %s %s", err, show.Stdout(), show.Stderr())
 	}
 	logs := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", "logs", "--worker-session-id", id)
-	if err := fixture.process.Execute(logs.Input); err != nil || !strings.Contains(logs.Stdout(), "T7 progress before detach") {
+	if err := fixture.process.Execute(logs.Input); err != nil || !strings.Contains(logs.Stdout(), "command_execution") || !strings.Contains(logs.Stdout(), "t7-progress") {
 		t.Fatalf("detached prefix: %v: %s %s", err, logs.Stdout(), logs.Stderr())
 	}
 	close(runner.release)
@@ -191,7 +191,7 @@ func TestT7DetachedObserverLeavesHostedAttemptReadable(t *testing.T) {
 func t7AssertDetachedTerminalCapture(t *testing.T, ctx context.Context, baseURL, id string) {
 	t.Helper()
 	status, body := t7HTTP(t, ctx, http.MethodGet, baseURL+"/worker-sessions/"+id+"/logs", nil)
-	if status != http.StatusOK || !strings.Contains(body, "T7 progress before detach") || !strings.Contains(body, `"health":"COMPLETE"`) {
+	if status != http.StatusOK || (!strings.Contains(body, "command_execution") || !strings.Contains(body, "t7-progress")) || !strings.Contains(body, `"health":"COMPLETE"`) {
 		t.Fatalf("detached terminal capture = %d %s", status, body)
 	}
 }

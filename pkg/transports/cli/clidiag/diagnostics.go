@@ -363,8 +363,8 @@ func diagnosticFields(err error) (fields, bool) {
 	if errors.As(err, &responseCoded) {
 		response := responseCoded.CLIErrorResponse()
 		return fields{
-			code:        strings.TrimSpace(string(response.Code)),
-			message:     strings.TrimSpace(response.Message),
+			code:        string(response.Code),
+			message:     response.Message,
 			family:      response.Family,
 			response:    response,
 			hasResponse: true,

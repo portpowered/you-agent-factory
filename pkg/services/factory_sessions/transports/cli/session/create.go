@@ -256,7 +256,7 @@ func formatTargetRef(ref factoryapi.FactorySessionTargetRef) string {
 func createStatusError(resp *http.Response) error {
 	var errResp factoryapi.ErrorResponse
 	if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
-		return fmt.Errorf("open factory session failed (%d): %s", resp.StatusCode, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(resp, errResp, fmt.Sprintf("open factory session failed (%d): %s", resp.StatusCode, errResp.Message), nil)
 	}
 	return fmt.Errorf("open factory session failed (%d)", resp.StatusCode)
 }

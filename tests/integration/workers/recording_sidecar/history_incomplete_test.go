@@ -164,7 +164,7 @@ func assertDeliveredHistoryFollow(t *testing.T, ctx context.Context, binary, pro
 	}()
 	for {
 		data := output.snapshot()
-		if bytes.HasSuffix(data, []byte("\n")) && bytes.Contains(data, []byte("history-restart partial")) {
+		if bytes.HasSuffix(data, []byte("\n")) && bytes.Contains(data, historyPrefixMarker(prefix.WorkerSessionId)) {
 			stop()
 			<-done
 			joined = true
@@ -315,7 +315,7 @@ func awaitHistoryPrefix(t *testing.T, ctx context.Context, binary, project strin
 				if err != nil {
 					t.Fatal(err)
 				}
-				if bytes.Contains(encoded, []byte("history-restart partial")) && page.Health == "INCOMPLETE" {
+				if bytes.Contains(encoded, historyPrefixMarker(rows[0].WorkerSessionId)) && page.Health == "INCOMPLETE" {
 					return rows[0], page
 				}
 			}
@@ -350,4 +350,11 @@ func historyLogPage(t *testing.T, ctx context.Context, binary, project string, e
 		t.Fatalf("captured prefix: %v: %s", err, data)
 	}
 	return page
+}
+
+func historyPrefixMarker(id string) []byte {
+	if id == "t7-artifact-session" {
+		return []byte(`"toolCallId":"progress"`)
+	}
+	return []byte("history-restart partial")
 }

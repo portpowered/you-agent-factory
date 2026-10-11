@@ -246,7 +246,8 @@ func openHTTPWatchEventStream(
 		defer resp.Body.Close()
 		message := ""
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			message = errResp.Message
+			statusErr := &watchHTTPStatusError{sessionID: sessionID, status: resp.StatusCode, message: errResp.Message}
+			return nil, clihttp.NewAPIErrorFromResponse(resp, errResp, statusErr.Error(), statusErr)
 		}
 		return nil, &watchHTTPStatusError{sessionID: sessionID, status: resp.StatusCode, message: message}
 	}

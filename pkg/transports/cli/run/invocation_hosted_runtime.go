@@ -785,7 +785,7 @@ func emitStartupMessages(cfg RunConfig, runtimeLog runtimeartifact.Diagnostics) 
 }
 
 func emitStartupDetails(cfg RunConfig, runtimeLog runtimeartifact.Diagnostics) bool {
-	if cfg.StartupOutput == nil {
+	if cfg.StartupOutput == nil || cfg.JSON || cfg.JSONOutput {
 		return false
 	}
 

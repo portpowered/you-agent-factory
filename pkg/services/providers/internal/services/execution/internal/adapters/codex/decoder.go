@@ -410,19 +410,63 @@ func (decoder *decoder) decodeItem(nativeType string, raw json.RawMessage) {
 	case "file_change":
 		decoder.addProgress("file_change."+phase, decoder.retainedDetail(fileChangeDetail(item.Changes)), metadata)
 	case "command_execution":
-		decoder.addProgress("tool."+phase, decoder.retainedDetail(
-			firstNonEmpty(item.AggregatedOutput, item.Command),
-		), toolMetadata(metadata, item.ID, "command_execution"))
+		decoder.addToolProgress(phase, item, raw, metadata)
 	case "mcp_tool_call", "collab_tool_call":
-		name := strings.Trim(strings.TrimSpace(item.Server)+"/"+strings.TrimSpace(item.Tool), "/")
-		decoder.addProgress("tool."+phase, decoder.retainedDetail(item.Message),
-			toolMetadata(metadata, item.ID, firstNonEmpty(name, item.Type)))
+		decoder.addToolProgress(phase, item, raw, metadata)
 	case "web_search":
 		decoder.addProgress("tool."+phase, decoder.retainedDetail(item.Query),
 			toolMetadata(metadata, item.ID, "web_search"))
 	default:
 		decoder.addDiagnostic("unsupported_item")
 	}
+}
+
+// Tool summaries retain field presence, including empty output and exit code
+// zero. Cumulative item updates are snapshots, never output increments.
+func (decoder *decoder) addToolProgress(phase string, item itemEnvelope, raw json.RawMessage, base map[string]string) {
+	name := item.Type
+	if item.Type == "mcp_tool_call" {
+		if target := strings.Trim(strings.TrimSpace(item.Server)+"/"+strings.TrimSpace(item.Tool), "/"); target != "" {
+			name += ":" + target
+		}
+	}
+	metadata := toolMetadata(base, item.ID, name)
+	if item.Status != "" {
+		metadata["status"] = boundedDetail(item.Status)
+	}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &fields)
+	input, output := map[string]json.RawMessage{}, map[string]json.RawMessage{}
+	for _, key := range []string{"command", "arguments"} {
+		if value, ok := fields[key]; ok {
+			input[key] = value
+		}
+	}
+	for _, key := range []string{"aggregated_output", "exit_code", "result", "status", "message"} {
+		if value, ok := fields[key]; ok {
+			output[key] = value
+		}
+	}
+	decoder.retainToolSummary(metadata, "raw_input", input)
+	decoder.retainToolSummary(metadata, "raw_output", output)
+	decoder.addProgress("tool."+phase, decoder.retainedDetail(firstNonEmpty(item.AggregatedOutput, item.Command, item.Message)), metadata)
+}
+
+func (decoder *decoder) retainToolSummary(metadata map[string]string, key string, fields map[string]json.RawMessage) {
+	if len(fields) == 0 {
+		return
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return
+	}
+	if len(encoded) > maxDetailBytes || int64(len(encoded)) > maxCodexRetainedText-decoder.retainedText {
+		decoder.retainedTextFull = true
+		decoder.addDiagnostic("tool_summary_limit")
+		return
+	}
+	decoder.retainedText += int64(len(encoded))
+	metadata[key] = string(encoded)
 }
 
 func (decoder *decoder) addProgress(
