@@ -27,7 +27,7 @@ func TestLoadReplayArtifactTypedFailuresAndSuccess(t *testing.T) {
 	t.Parallel()
 
 	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	if _, err := svc.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("missing artifact = %v, want ErrMissingReplayArtifact", err)
 	}
@@ -200,7 +200,7 @@ func TestRecordingScopeOperationsEmitStructuredLifecycleLogs(t *testing.T) {
 		State: recordings.RecordingActive,
 	}}
 	root := NewCombinedService(nil, nil, lifecycle, nil, nil, nil, nil,
-		staticRecordingClock{}, logger, nil, nil, nil, nil, nil)
+		staticRecordingClock{}, logger, nil, nil, nil, nil, nil, unavailableTargetClaim, false)
 	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
 		Enabled: true,
 		Scope:   recordings.CanonicalEventScope{FactorySessionID: "logged-scope"},
@@ -302,7 +302,7 @@ func TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes(t *testing.T)
 	snapshots := &plainOwnerSnapshots{byID: make(map[recordings.RecordingID]recordinglifecycle.Snapshot)}
 	projection := concurrentScopeProjection{expected: make(map[string]recordings.FactoryEvent)}
 	root := NewCombinedService(nil, projection, snapshots, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	opened := make([]openedScopedQuery, 2)
 	for index, sessionID := range []string{"query-scope-a", "query-scope-b"} {
 		eventScope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
@@ -378,7 +378,7 @@ func TestBindReplayExecutionPublishedSuccessShape(t *testing.T) {
 	t.Parallel()
 
 	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, nil,
-		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil, unavailableTargetClaim, false).(*combinedService)
 	if _, err := svc.BindReplayExecution(recordings.BindReplayExecutionRequest{}); !errors.Is(err, recordings.ErrUnsupportedReplayBinding) {
 		t.Fatalf("missing artifact = %v, want ErrUnsupportedReplayBinding", err)
 	}
