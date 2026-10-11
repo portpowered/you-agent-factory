@@ -238,6 +238,9 @@ func runRequesterProducedRestart(t *testing.T, batch bool) {
 	headEnv := requesterEnvironment(runner.Requests()[0].Env)
 	before := requesterObservation(t, fixture, lane, t.Context(), sourceEnv["YOU_WORKER_SESSION_ID"])
 	support.CloseFactorySessionAt(t, first.baseURL, opened.Session.Id)
+	closedSuccessor := requesterObservation(t, fixture, lane, t.Context(), headEnv["YOU_WORKER_SESSION_ID"])
+	assertRequesterRestoredListHistory(t, lane, closedSuccessor, "")
+	assertRequesterRestoredListHistory(t, lane, closedSuccessor, "all")
 	if err := first.command.stop(); err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +323,18 @@ func assertRequesterProducedResumeCommand(t *testing.T, command platformprocess.
 
 func assertRequesterRestoredList(t *testing.T, lane *invokeContinueScenario, expected api.WorkerSessionObservation) {
 	t.Helper()
-	args := []string{"list", "--scope", "all", "--history", "active"}
+	for _, history := range []string{"", "active"} {
+		assertRequesterRestoredListHistory(t, lane, expected, history)
+	}
+}
+
+func assertRequesterRestoredListHistory(t *testing.T, lane *invokeContinueScenario, expected api.WorkerSessionObservation, history string) {
+	t.Helper()
+	args := []string{"list", "--scope", "all"}
+	if history != "" {
+		args = append(args, "--history", history)
+	}
+	baseArgs := append([]string(nil), args...)
 	seen := make(map[string]bool)
 	for {
 		input := t7RemoteCLIInputs(lane, t.Context(), lane.fixture.baseURL, args...)
@@ -336,11 +350,11 @@ func assertRequesterRestoredList(t *testing.T, lane *invokeContinueScenario, exp
 			}
 		}
 		if page.PaginationContext == nil || page.PaginationContext.NextToken == nil || *page.PaginationContext.NextToken == "" || seen[*page.PaginationContext.NextToken] {
-			t.Fatal("restored successor absent from public fleet or cursor repeated")
+			t.Fatalf("restored successor %s absent from public fleet (history=%q) or cursor repeated", expected.WorkerSessionId, history)
 		}
 		next := *page.PaginationContext.NextToken
 		seen[next] = true
-		args = []string{"list", "--scope", "all", "--history", "active", "--next-token", next}
+		args = append(append([]string(nil), baseArgs...), "--next-token", next)
 	}
 }
 

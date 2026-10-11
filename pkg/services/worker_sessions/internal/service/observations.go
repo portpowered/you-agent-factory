@@ -23,6 +23,10 @@ func (r *registry) ListWorkerSessionObservations(
 	ctx context.Context,
 	req workersessions.ListWorkerSessionObservationsRequest,
 ) (workersessions.ListWorkerSessionObservationsResult, error) {
+	return r.listWorkerSessionObservations(ctx, req, false)
+}
+
+func (r *registry) listWorkerSessionObservations(ctx context.Context, req workersessions.ListWorkerSessionObservationsRequest, processOwned bool) (workersessions.ListWorkerSessionObservationsResult, error) {
 	if req.History != "" {
 		return r.listHistory(ctx, req)
 	}
@@ -32,7 +36,7 @@ func (r *registry) ListWorkerSessionObservations(
 		return workersessions.ListWorkerSessionObservationsResult{}, err
 	}
 	idCollectionStartedAt := r.clock.Now()
-	ids := r.observationListIDs(query.cursor, query.scope, req.States, req.FactorySessionID, req.RuntimeID)
+	ids := r.observationListIDs(query.cursor, query.scope, req.States, req.FactorySessionID, req.RuntimeID, processOwned)
 	idCollectionDuration := r.clock.Now().Sub(idCollectionStartedAt)
 	pageIDs := observationListPage(ids, query.limit)
 	projectionStartedAt := r.clock.Now()
@@ -105,11 +109,14 @@ func decodeObservationListCursor(value string) (string, error) {
 	return string(decoded), nil
 }
 
-func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State, factorySessionID, runtimeID string) []string {
+func (r *registry) observationListIDs(cursor string, scope workersessions.ObservationScope, states []workersessions.State, factorySessionID, runtimeID string, processOwned ...bool) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ids := make([]string, 0, len(r.observations))
 	for id, metadata := range r.observations {
+		if len(processOwned) > 0 && processOwned[0] && r.supervisions[id] == nil {
+			continue
+		}
 		if runtimeID != "" && (metadata == nil || metadata.runtimeID != runtimeID) {
 			continue
 		}

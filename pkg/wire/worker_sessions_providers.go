@@ -152,7 +152,11 @@ func provideFleetObservationCatalog(root *factorysessionwire.Root, logs workerse
 			return nil, err
 		}
 		// Direct successors remain owned here after their Factory runtime closes.
-		return append(selected, logs), nil
+		direct, err := workersessionswire.NewDirectFleetObservationSource(logs)
+		if err != nil {
+			return nil, err
+		}
+		return append(selected, direct), nil
 	}
 }
 
