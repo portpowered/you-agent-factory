@@ -5,7 +5,7 @@ flowchart TB
   subgraph input["Inputs"]
     s_services_automations["automations<br/>9177 LOC · 7 subservices"]
     s_services_chat_sessions["chat sessions<br/>4923 LOC · 0 subservices"]
-    s_services_webhooks["webhooks<br/>718 LOC · 0 subservices"]
+    s_services_webhooks["webhooks<br/>755 LOC · 0 subservices"]
     s_services_work["work<br/>19880 LOC · 5 subservices"]
   end
   subgraph configuration["Configuration"]
