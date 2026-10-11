@@ -78,7 +78,7 @@ func assertAgentScenarioWork(
 		}
 		item := listed.Results[0]
 		if support.StringPointerValue(item.WorkId) != workID || item.State == nil || item.State.Name != "init" || item.State.Type != factoryapi.WorkStateTypeINITIAL {
-			t.Fatalf("%s cancellation Work = %#v, want Work %q in init/INITIAL", scenario.name, item, workID)
+			t.Fatalf("%s cancellation Work ID = %q, state = %+v, want Work %q in init/INITIAL", scenario.name, support.StringPointerValue(item.WorkId), item.State, workID)
 		}
 		if item.FailureDetail != nil {
 			t.Fatalf("%s cancellation Work failure detail = %#v, want none", scenario.name, item.FailureDetail)
