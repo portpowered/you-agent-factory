@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -76,6 +77,29 @@ func TestCapturedFactsRedactEvenOneCharacterCredential(t *testing.T) {
 	}
 }
 
+func TestCapturedFactsSeparateTerminalCredentialsFromDiagnosticContext(t *testing.T) {
+	t.Parallel()
+	const sessionID = "8528a10f-6314-48ba-8230-542a4cf660f9"
+	request := providers.ExecuteRequest{
+		EnvVars:            map[string]string{"API_KEY": "api-credential"},
+		ProcessEnvironment: []string{"YOU_WORKER_SESSION_TOKEN=worker-credential"},
+	}
+	text := "safe " + sessionID + " api-credential worker-credential"
+	result, err := normalizeSuccess(providers.ExecuteResult{
+		Content:     text,
+		Diagnostics: &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{Detail: text}}},
+	}, providers.IDCodex, request, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "safe "+sessionID+" <redacted> <redacted>" {
+		t.Fatalf("terminal answer corrupted or exposed credentials: %q", result.Content)
+	}
+	if result.Diagnostics.Progress[0].Detail != "safe <redacted> <redacted> <redacted>" {
+		t.Fatalf("diagnostic context exposed: %+v", result.Diagnostics)
+	}
+}
+
 func TestCapturedFactsPreserveTypedFailureContext(t *testing.T) {
 	t.Parallel()
 	const id = "8528a10f-6314-48ba-8230-542a4cf660f9"
@@ -83,7 +107,10 @@ func TestCapturedFactsPreserveTypedFailureContext(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			t.Parallel()
 			request := providers.ExecuteRequest{SystemPrompt: "private-request", EnvVars: map[string]string{"API_KEY": "private-key", "VALIDATION_ENVIRONMENT": "1"}}
-			failure := normalizeDeclaredFailure(providers.ExecuteFailure{Kind: kind, Message: "safe " + id + " private-request private-key\xff"}, request).(providers.ExecuteFailure)
+			var failure providers.ExecuteFailure
+			if !errors.As(normalizeDeclaredFailure(providers.ExecuteFailure{Kind: kind, Message: "safe " + id + " private-request private-key\xff"}, request), &failure) {
+				t.Fatal("failure lost its typed classification")
+			}
 			wantKind := kind
 			if kind == "malformed-kind" {
 				wantKind = providers.ExecuteFailureKindUnknown
@@ -91,7 +118,10 @@ func TestCapturedFactsPreserveTypedFailureContext(t *testing.T) {
 			if failure.Kind != wantKind || failure.Message != "safe "+id+" <redacted> <redacted>" {
 				t.Fatalf("typed/safe failure changed: %+v", failure)
 			}
-			fallback := normalizeDeclaredFailure(providers.ExecuteFailure{Kind: kind}, request).(providers.ExecuteFailure)
+			var fallback providers.ExecuteFailure
+			if !errors.As(normalizeDeclaredFailure(providers.ExecuteFailure{Kind: kind}, request), &fallback) {
+				t.Fatal("empty failure lost its typed classification")
+			}
 			if fallback.Message == "" || fallback.Kind != wantKind {
 				t.Fatal("empty failure did not retain safe typed default")
 			}

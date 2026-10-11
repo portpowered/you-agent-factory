@@ -121,7 +121,9 @@ func normalizeSuccess(
 	}
 	// Ordinary content is preserved, but execution credentials must never be
 	// returned to Workers for output shaping or capture.
-	normalized.Content = sanitizeCapturedProgress(providers.ExecuteProgress{Detail: normalized.Content}, request, extraSecrets...).Detail
+	// Extra secrets are diagnostic-only context, such as a resumed session ID.
+	// Terminal answers may legitimately include that context.
+	normalized.Content = sanitizeCapturedProgress(providers.ExecuteProgress{Detail: normalized.Content}, request).Detail
 	if normalized.Diagnostics != nil {
 		diagnostics := normalizeDiagnostics(*normalized.Diagnostics, request, extraSecrets...)
 		normalized.Diagnostics = &diagnostics

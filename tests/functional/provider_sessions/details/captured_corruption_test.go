@@ -18,16 +18,18 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+type capturedCredentialCase struct {
+	name  string
+	fail  bool
+	flags []string
+}
+
 func TestCapturedCredentialRedaction(t *testing.T) {
 	t.Parallel()
 	home, dir := t.TempDir(), support.ScaffoldSingleStepFactory(t, "credential-capture")
 	support.ClearSeedInputs(t, dir)
 	tokens := map[string]chan string{}
-	cases := []struct {
-		name  string
-		fail  bool
-		flags []string
-	}{
+	cases := []capturedCredentialCase{
 		{"completed", false, []string{"--json"}},
 		{"normal", true, nil},
 		{"verbose", true, []string{"--verbose"}},
@@ -40,75 +42,101 @@ func TestCapturedCredentialRedaction(t *testing.T) {
 	}
 	host := startCapturedCodexHost(t, home, dir, capturedCredentialRunner{tokens: tokens}, nil)
 	for _, tc := range cases {
-		// Complete profile bootstrap before concurrent calls share the process.
-		clientHome := t.TempDir()
-		clientEnv := []string{"HOME=" + clientHome, "USERPROFILE=" + clientHome, "VALIDATION_ENVIRONMENT=1"}
-		bootstrap := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", filepath.Join(dir, "missing-initialization-factory.json")})
-		bootstrap.Env, bootstrap.WorkingDirectory = clientEnv, dir
-		if err := host.Execute(t, bootstrap.Input); err == nil || !strings.Contains(err.Error(), "missing-initialization-factory.json") {
-			t.Fatalf("bootstrap owned profile: %v", err)
-		}
+		clientEnv := bootstrapCapturedCredentialProfile(t, host, dir)
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			document := map[string]any{"requestId": "credential-request-" + tc.name, "workerSessionId": "credential-worker-" + tc.name,
-				"execution": map[string]any{"workstationName": "direct", "workingDirectory": dir, "workerType": "direct-worker",
-					"runnerId": "codex", "executorProvider": "codex", "modelProvider": "codex", "model": "functional-model",
-					"userMessage": "private-request-input", "envVars": map[string]string{"API_KEY": "planted-api-credential", "ACCESS_TOKEN": "planted-token-credential", "CAPTURE_SCENARIO": tc.name},
-					"dispatch": map[string]any{"dispatchId": "credential-attempt-" + tc.name, "workstationName": "direct", "workerType": "direct-worker"}}}
-			path := filepath.Join(dir, "credential-"+tc.name+".json")
-			if err := os.WriteFile(path, mustMarshalJSON(document), 0600); err != nil {
-				t.Fatal(err)
-			}
+			path := writeCapturedCredentialRequest(t, dir, tc.name)
 			args := append([]string{"you", "worker-sessions", "invoke"}, tc.flags...)
 			input := support.FakeInputs(t.Context(), append(args, "--execution", path))
 			input.Env, input.WorkingDirectory = clientEnv, dir
 			err := host.Execute(t, input.Input)
-			if (err != nil) != tc.fail {
-				t.Fatalf("failure classification changed: %v", err)
-			}
-			if tc.fail && strings.TrimSpace(input.Stdout()) != "" {
-				t.Fatalf("failure emitted success stdout: %q", input.Stdout())
-			}
-			if tc.fail {
-				var typed *workerscli.CLIError
-				if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_FAILED" {
-					t.Fatalf("typed failure lost: %v", err)
-				}
-			} else {
-				var result struct {
-					Accepted bool   `json:"accepted"`
-					State    string `json:"state"`
-				}
-				if json.Unmarshal([]byte(input.Stdout()), &result) != nil || !result.Accepted || result.State != "COMPLETED" {
-					t.Fatalf("completion did not return its typed success: %s", input.Stdout())
-				}
-			}
+			assertCapturedCredentialOutcome(t, tc.fail, err, input.Stdout())
 			detail := awaitCapturedCodexDetail(t, host, "credential-"+tc.name)
 			encoded := string(mustMarshalJSON(detail)) + input.Stdout() + input.Stderr()
 			if err != nil {
 				encoded += err.Error()
 			}
-			workerToken := <-tokens[tc.name]
-			if workerToken == "" {
-				t.Fatal("controlled command received no Worker Session credential")
-			}
-			for _, secret := range []string{"planted-api-credential", "planted-token-credential", "private-request-input", workerToken} {
-				if strings.Contains(encoded, secret) {
-					t.Fatalf("public captured credential/failure leaked %s", secret)
-				}
-			}
-			if !strings.Contains(encoded, "safe 8528a10f-6314-48ba-8230-542a4cf660f9") || !strings.Contains(encoded, "redacted") {
-				t.Fatal("redaction lost useful neighboring captured content")
-			}
-			if !strings.Contains(encoded, "tool-safe peer["+tc.name+"]") {
-				t.Fatal("redaction lost this peer's tool result")
-			}
-			for _, peer := range cases {
-				if peer.name != tc.name && strings.Contains(encoded, "peer["+peer.name+"]") {
-					t.Fatal("captured content leaked across concurrent peers")
-				}
-			}
+			assertCapturedCredentialPrivacy(t, encoded, <-tokens[tc.name])
+			assertCapturedCredentialPeer(t, encoded, tc.name, cases)
 		})
+	}
+}
+
+func bootstrapCapturedCredentialProfile(t *testing.T, host *support.FunctionalAPIServer, dir string) []string {
+	t.Helper()
+	// Complete profile bootstrap before concurrent calls share the process.
+	clientHome := t.TempDir()
+	clientEnv := []string{"HOME=" + clientHome, "USERPROFILE=" + clientHome, "VALIDATION_ENVIRONMENT=1"}
+	bootstrap := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", filepath.Join(dir, "missing-initialization-factory.json")})
+	bootstrap.Env, bootstrap.WorkingDirectory = clientEnv, dir
+	if err := host.Execute(t, bootstrap.Input); err == nil || !strings.Contains(err.Error(), "missing-initialization-factory.json") {
+		t.Fatalf("bootstrap owned profile: %v", err)
+	}
+	return clientEnv
+}
+
+func writeCapturedCredentialRequest(t *testing.T, dir, name string) string {
+	t.Helper()
+	document := map[string]any{"requestId": "credential-request-" + name, "workerSessionId": "credential-worker-" + name,
+		"execution": map[string]any{"workstationName": "direct", "workingDirectory": dir, "workerType": "direct-worker",
+			"runnerId": "codex", "executorProvider": "codex", "modelProvider": "codex", "model": "functional-model",
+			"userMessage": "private-request-input", "envVars": map[string]string{"API_KEY": "planted-api-credential", "ACCESS_TOKEN": "planted-token-credential", "CAPTURE_SCENARIO": name},
+			"dispatch": map[string]any{"dispatchId": "credential-attempt-" + name, "workstationName": "direct", "workerType": "direct-worker"}}}
+	path := filepath.Join(dir, "credential-"+name+".json")
+	if err := os.WriteFile(path, mustMarshalJSON(document), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func assertCapturedCredentialOutcome(t *testing.T, fail bool, err error, stdout string) {
+	t.Helper()
+	if (err != nil) != fail {
+		t.Fatalf("failure classification changed: %v", err)
+	}
+	if fail {
+		if strings.TrimSpace(stdout) != "" {
+			t.Fatalf("failure emitted success stdout: %q", stdout)
+		}
+		var typed *workerscli.CLIError
+		if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_FAILED" {
+			t.Fatalf("typed failure lost: %v", err)
+		}
+		return
+	}
+	var result struct {
+		Accepted bool   `json:"accepted"`
+		State    string `json:"state"`
+	}
+	if json.Unmarshal([]byte(stdout), &result) != nil || !result.Accepted || result.State != "COMPLETED" {
+		t.Fatalf("completion did not return its typed success: %s", stdout)
+	}
+}
+
+func assertCapturedCredentialPrivacy(t *testing.T, encoded, workerToken string) {
+	t.Helper()
+	if workerToken == "" {
+		t.Fatal("controlled command received no Worker Session credential")
+	}
+	for _, secret := range []string{"planted-api-credential", "planted-token-credential", "private-request-input", workerToken} {
+		if strings.Contains(encoded, secret) {
+			t.Fatalf("public captured credential/failure leaked %s", secret)
+		}
+	}
+	if !strings.Contains(encoded, "safe 8528a10f-6314-48ba-8230-542a4cf660f9") || !strings.Contains(encoded, "redacted") {
+		t.Fatal("redaction lost useful neighboring captured content")
+	}
+}
+
+func assertCapturedCredentialPeer(t *testing.T, encoded, name string, cases []capturedCredentialCase) {
+	t.Helper()
+	if !strings.Contains(encoded, "tool-safe peer["+name+"]") {
+		t.Fatal("redaction lost this peer's tool result")
+	}
+	for _, peer := range cases {
+		if peer.name != name && strings.Contains(encoded, "peer["+peer.name+"]") {
+			t.Fatal("captured content leaked across concurrent peers")
+		}
 	}
 }
 
