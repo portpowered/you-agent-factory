@@ -1036,7 +1036,7 @@ func (s *recordedWorkerSessionObservation) ReadTranscript(
 	if err := req.Validate(); err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
-	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
+	scope, err := s.retainedObservationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ReadTranscriptResult{}, err
 	}
@@ -1085,14 +1085,14 @@ func (s *recordedWorkerSessionObservation) readRecordedTranscriptForRequest(
 		}
 		return workersessions.ReadTranscriptResult{}, false, nil
 	}
-	if err := s.validateRecordingHealth(ctx); err != nil {
-		return workersessions.ReadTranscriptResult{}, true, err
-	}
 	if !fact.state.Terminal() {
 		return workersessions.ReadTranscriptResult{}, true, workersessions.ErrObservationTranscriptActive
 	}
 	if fact.provider == nil {
 		return workersessions.ReadTranscriptResult{}, true, workersessions.ErrObservationTranscriptUnavailable
+	}
+	if err := s.validateRecordingHealth(ctx); err != nil {
+		return workersessions.ReadTranscriptResult{}, true, err
 	}
 	readRequest := req
 	if readRequest.WorkerSessionID != "" {
@@ -1156,7 +1156,9 @@ func (s *recordedWorkerSessionObservation) readRecordedTranscript(
 			}
 			return historicalTranscriptResult(fact, live.Entries, providerSessionRef(*fact.provider))
 		}
-		if errors.Is(err, workersessions.ErrObservationCanceled) {
+		if errors.Is(err, workersessions.ErrObservationCanceled) ||
+			errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) ||
+			errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
 			return workersessions.ReadTranscriptResult{}, err
 		}
 	}
@@ -1199,9 +1201,26 @@ func historicalTranscriptResult(
 	return result, nil
 }
 
-// observationReadScopeForWorker preserves caller-supplied direct correlation.
-// Runtime aliases translate Factory Workers only; a direct Worker remains at
-// its process-owned address, with explicit foreign selectors rejected first.
+// retainedObservationReadScopeForWorker fences exact retained ownership before optional enrichment.
+func (s *recordedWorkerSessionObservation) retainedObservationReadScopeForWorker(ctx context.Context, workerSessionID, requested string) (string, error) {
+	scope, err := s.observationReadScope(requested)
+	if err != nil {
+		return "", err
+	}
+	// Exact retained membership already proves this adapter's scope. Do not
+	// enrich a live summary (capture/continuation IO) to rediscover that owner.
+	if s != nil && s.ledger != nil && s.projector != nil {
+		_, found, historyErr := s.recordedObservationForWorkerSessionID(ctx, strings.TrimSpace(workerSessionID))
+		if historyErr != nil {
+			return "", historyErr
+		}
+		if found {
+			return scope, nil
+		}
+	}
+	return s.observationReadScopeForWorker(ctx, workerSessionID, requested)
+}
+
 func (s *recordedWorkerSessionObservation) observationReadScopeForWorker(ctx context.Context, workerSessionID, requested string) (string, error) {
 	scope, err := s.observationReadScope(requested)
 	if err != nil || s == nil || s.Service == nil || strings.TrimSpace(workerSessionID) == "" {
@@ -1218,9 +1237,7 @@ func (s *recordedWorkerSessionObservation) observationReadScopeForWorker(ctx con
 	if !observation.Direct {
 		return scope, nil
 	}
-	// Retained history belongs to this adapter's owner. A shared direct ID
-	// must not redirect that owner's read to another Factory Session before
-	// the fleet can resolve candidate cardinality.
+	// A direct live ID must not redirect another owner's retained history.
 	if s.ledger != nil && s.projector != nil {
 		_, found, historyErr := s.recordedObservationForWorkerSessionID(ctx, strings.TrimSpace(workerSessionID))
 		if historyErr != nil {

@@ -5696,7 +5696,8 @@ func TestStreamObservationsMapsLookupAndSubscribeErrors(t *testing.T) {
 	if _, err := canceledReader.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
 		t.Fatalf("StreamObservations(canceled subscribe) error = %v", err)
 	}
-	terminal := newObservationRegistry(&observationEventReaderFake{subscription: events.Subscription(func(context.Context) events.Delivery { return events.Delivery{Kind: events.DeliveryClosed} })})
+	topic := workersessions.Topic("worker-1")
+	terminal := newObservationRegistry(&observationEventReaderFake{readResults: []events.ReadResult{{Outcome: events.ReadOutcomeAtHead, Next: events.Cursor{Topic: topic}, Retained: events.RetainedRange{Topic: topic}}}})
 	terminal.sessions["worker-1"] = observationSession("worker-1", workersessions.StateCompleted)
 	subscription, err := terminal.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref, Limit: 2})
 	if err != nil {

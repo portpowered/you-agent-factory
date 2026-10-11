@@ -448,23 +448,20 @@ func TestObservationStream_CancellationUnregistersSubscription(t *testing.T) {
 }
 
 func TestObservationStream_MapsRetainedSourceFailureToTypedOutcome(t *testing.T) {
-	source := events.Subscription(func(context.Context) events.Delivery {
-		return events.Delivery{Kind: events.DeliveryGap, Gap: &events.GapFacts{}}
-	})
-	appender := &observationEventsAppender{subscription: source}
+	appender := &observationEventsAppender{}
 	ref := sessionRef("source-failure-session")
 	execution := executionFor(&ref, workers.OutcomeAccepted, nil, nil)
 	registry := newObservationService(t, executionBoundary{execution: execution}, appender, platformclock.Real{})
 	if _, err := registry.InvokeSession(context.Background(), startRequest("source-failure-worker", "source-failure-dispatch", "source-failure-work")); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	subscription, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref})
-	if err != nil {
-		t.Fatalf("StreamObservations() error = %v", err)
+	// Terminal streams detect retained gaps during setup, before a live subscription.
+	_, err := registry.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: ref})
+	if !errors.Is(err, workersessions.ErrObservationSourceGap) {
+		t.Fatalf("StreamObservations() error = %v, want ErrObservationSourceGap", err)
 	}
-	got := subscription.Next(context.Background())
-	if got.Kind != workersessions.ObservationDeliverySourceFailure || !errors.Is(got.Err, workersessions.ErrObservationSourceGap) {
-		t.Fatalf("source failure delivery = %#v, want SOURCE_FAILURE wrapping ErrObservationSourceGap", got)
+	if appender.subscribeCalls != 0 {
+		t.Fatal("terminal replay acquired a live subscription")
 	}
 }
 
@@ -501,7 +498,7 @@ func TestObservationContract_MissingAndUnavailableIdentitiesAreTyped(t *testing.
 }
 
 type observationEventsAppender struct {
-	subscription events.Subscription
+	subscribeCalls int
 }
 
 func (a *observationEventsAppender) Append(context.Context, events.AppendRequest) (events.AppendResult, error) {
@@ -509,7 +506,14 @@ func (a *observationEventsAppender) Append(context.Context, events.AppendRequest
 }
 
 func (a *observationEventsAppender) Subscribe(context.Context, events.SubscribeRequest) (events.Subscription, error) {
-	return a.subscription, nil
+	a.subscribeCalls++
+	return nil, workersessions.ErrObservationSourceUnavailable
+}
+
+func (a *observationEventsAppender) Read(_ context.Context, req events.ReadRequest) (events.ReadResult, error) {
+	return events.ReadResult{Outcome: events.ReadOutcomeGap, Gap: &events.GapFacts{
+		Topic: req.Topic, Requested: req.From.Position, EarliestRetained: 2, Head: 2,
+	}}, nil
 }
 
 func awaitObservationDelivery(t *testing.T, deliveries <-chan workersessions.ObservationDelivery) workersessions.ObservationDelivery {

@@ -549,7 +549,7 @@ func TestRecordedWorkerSessionObservationStreamUsesAtomicSnapshotAndPreservesHis
 	}
 }
 
-func TestRecordedWorkerSessionObservation_WorkerIDReadsNoProviderHistory(t *testing.T) {
+func TestRecordedUnavailableTerminalReadDoesNotWait(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-no-provider"
 	dispatchID := "dispatch-no-provider"
@@ -596,9 +596,15 @@ func TestRecordedWorkerSessionObservation_WorkerIDReadsNoProviderHistory(t *test
 		t.Fatalf("no-provider observation = %#v, want canonical provider-neutral completion", show)
 	}
 
-	if _, err := service.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: workerSessionID}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
-		t.Fatalf("ReadTranscript(no provider) error = %v, want explicit unavailable result", err)
-	}
+	// Once exact terminal membership proves absence, optional live summary and
+	// capture-health effects cannot delay the typed unavailable outcome.
+	view := service.(*recordedWorkerSessionObservation)
+	view.Service = unavailableReadProbe{}
+	view.recordingID = "blocked-health"
+	view.recordingReader = unavailableRecordingProbe{}
+	requirePromptUnavailableTranscript(t, service, workerSessionID)
+	view.Service, view.recordingReader, view.recordingID = nil, nil, ""
+	ledger.SubscribeError = errors.New("finite inspection must not acquire live subscription")
 
 	subscription, err := service.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{WorkerSessionID: workerSessionID, ReplayOnly: true})
 	if err != nil {
@@ -617,6 +623,56 @@ func TestRecordedWorkerSessionObservation_WorkerIDReadsNoProviderHistory(t *test
 	if closed := subscription.Next(context.Background()); closed.Kind != workersessions.ObservationDeliveryClosed {
 		t.Fatalf("no-provider terminal delivery = %#v, want closed stream", closed)
 	}
+}
+
+func requirePromptUnavailableTranscript(t *testing.T, service workersessions.Service, workerSessionID string) {
+	t.Helper()
+	started := time.Now()
+
+	if _, err := service.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{WorkerSessionID: workerSessionID}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+		t.Fatalf("ReadTranscript(no provider) error = %v, want explicit unavailable result", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second { //nolint:testsleep // Operator 2026-10-11T20:11Z requires this one-second read/cleanup contract.
+		t.Fatalf("known unavailable transcript elapsed=%s", elapsed)
+	}
+}
+
+type unavailableReadProbe struct{ workersessions.Service }
+
+type unavailableTranscriptProbe struct {
+	workersessions.Service
+	err error
+}
+
+func (p unavailableTranscriptProbe) ReadTranscript(context.Context, workersessions.ReadTranscriptRequest) (workersessions.ReadTranscriptResult, error) {
+	return workersessions.ReadTranscriptResult{}, p.err
+}
+
+func TestRecordedUnavailableTranscriptPreservesKnownError(t *testing.T) {
+	t.Parallel()
+	for _, expected := range []error{workersessions.ErrObservationTranscriptUnavailable, workersessions.ErrObservationTranscriptProjectionUnavailable} {
+		fixture := newRecordedExactObservationFixture(t)
+		view := fixture.service.(*recordedWorkerSessionObservation)
+		view.Service = unavailableTranscriptProbe{err: expected}
+		fact, found, err := view.recordedObservationForProvider(t.Context(), fixture.ref)
+		if err != nil || !found {
+			t.Fatalf("recorded fact: found=%v err=%v", found, err)
+		}
+		_, err = view.readRecordedTranscript(t.Context(), workersessions.ReadTranscriptRequest{WorkerSessionID: fixture.workerSessionID}, fact)
+		if !errors.Is(err, expected) {
+			t.Fatalf("known captured failure fell through to provider projection: %v", err)
+		}
+	}
+}
+
+func (unavailableReadProbe) GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	panic("unavailable read attempted optional live summary")
+}
+
+type unavailableRecordingProbe struct{}
+
+func (unavailableRecordingProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	panic("unavailable read attempted optional capture health")
 }
 
 func TestRecordedWorkerSessionObservation_KnownWorkWithoutSessionsIsExplicitlyEmpty(t *testing.T) {

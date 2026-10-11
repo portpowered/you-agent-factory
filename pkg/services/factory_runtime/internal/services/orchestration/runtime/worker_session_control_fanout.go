@@ -248,7 +248,7 @@ func (s *recordedWorkerSessionObservation) StreamObservationsByWorkerSessionID(
 	if err := req.Validate(); err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
-	scope, err := s.observationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
+	scope, err := s.retainedObservationReadScopeForWorker(ctx, req.WorkerSessionID, req.FactorySessionID)
 	if err != nil {
 		return workersessions.ObservationSubscription{}, err
 	}
@@ -353,7 +353,11 @@ func (s *recordedWorkerSessionObservation) streamRecordedFact(
 	}
 	var source interfaces.FactoryEventStream
 	var subscribeErr error
-	if len(s.replayEvents) > 0 {
+	if replayOnly || fact.state.Terminal() {
+		// Finite inspection drains the retained head without acquiring a live
+		// subscription, including when the cursor already acknowledges it.
+		source, subscribeErr = s.subscribeReplayObservationEvents(streamContext, canonicalEvents, fact.dispatchID, limit, true)
+	} else if len(s.replayEvents) > 0 {
 		source, subscribeErr = s.subscribeReplayObservationEvents(
 			streamContext, canonicalEvents, fact.dispatchID, limit, replayOnly,
 		)
