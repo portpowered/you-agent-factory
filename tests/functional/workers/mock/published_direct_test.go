@@ -55,22 +55,7 @@ func TestRejectedMockCapturedOutput(t *testing.T) {
 				Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
 			}
 			host := support.StartFunctionalAPIServer(t, cfg)
-			document := publishedDirectExecutionDocument(t)
-			execution := document["execution"].(map[string]any)
-			execution["workingDirectory"] = dir
-			execution["envVars"] = map[string]string{"API_KEY": "declared-credential"}
-			execution["runnerId"], execution["executorProvider"], execution["modelProvider"] = provider, provider, provider
-			if provider == "claude" {
-				execution["model"] = "claude-test"
-			}
-			data, err := json.Marshal(document)
-			if err != nil {
-				t.Fatal(err)
-			}
-			path := filepath.Join(dir, "execution.json")
-			if err := os.WriteFile(path, data, 0o600); err != nil {
-				t.Fatal(err)
-			}
+			path := writeRejectedDirectExecution(t, dir, provider)
 			inputs := support.FakeInputs(t.Context(), []string{"you", "--server", host.URL(), "--remote", "--json", "worker-sessions", "invoke", "--execution", path, "--async"})
 			inputs.Input.WorkingDirectory, inputs.Input.Env = dir, environment
 			if err := host.Execute(t, inputs.Input); err != nil {
@@ -106,12 +91,16 @@ func TestRejectedMockCapturedOutput(t *testing.T) {
 			}
 			facts := assertRejectedCaptureFacts(t, host, "direct-example-session")
 			assertRejectedCapturePages(t, host, "direct-example-session", environment)
+			transcript := assertRejectedCaptureInspection(t, host, facts, "all", environment, "PRIVATE ordinary stdout 世界 <redacted>")
 			host.Close(t)
 			host = support.StartFunctionalAPIServer(t, cfg)
 			if restored := assertRejectedCaptureFacts(t, host, "direct-example-session"); !equalRejectedCaptureFacts(facts, restored) {
 				t.Fatalf("restart changed direct facts: before=%+v after=%+v", facts, restored)
 			}
 			assertRejectedCapturePages(t, host, "direct-example-session", environment)
+			if restored := assertRejectedCaptureInspection(t, host, facts, "archived", environment, "PRIVATE ordinary stdout 世界 <redacted>"); !reflect.DeepEqual(transcript, restored) {
+				t.Fatalf("restart changed direct transcript: before=%+v after=%+v", transcript, restored)
+			}
 			var original, restored any
 			if err := json.Unmarshal([]byte(before), &original); err != nil {
 				t.Fatal(err)
@@ -127,6 +116,27 @@ func TestRejectedMockCapturedOutput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func writeRejectedDirectExecution(t *testing.T, dir, provider string) string {
+	t.Helper()
+	document := publishedDirectExecutionDocument(t)
+	execution := document["execution"].(map[string]any)
+	execution["workingDirectory"] = dir
+	execution["envVars"] = map[string]string{"API_KEY": "declared-credential"}
+	execution["runnerId"], execution["executorProvider"], execution["modelProvider"] = provider, provider, provider
+	if provider == "claude" {
+		execution["model"] = "claude-test"
+	}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "execution.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // Factory origin owns an explicit session and named Work. Its private immutable
@@ -176,6 +186,7 @@ func TestRejectedMockCapturedOutputFactory(t *testing.T) {
 		t.Fatalf("rejected attribution: live=%+v ended=%+v", live.Sessions[0], facts)
 	}
 	logs := assertRejectedCapturePages(t, host, id, cfg.Env)
+	transcript := assertRejectedCaptureInspection(t, host, facts, "all", cfg.Env, "FACTORY rejected stdout 世界")
 	encoded, err := json.Marshal(logs.Events)
 	if err != nil {
 		t.Fatal(err)
@@ -196,8 +207,93 @@ func TestRejectedMockCapturedOutputFactory(t *testing.T) {
 	if restored := assertRejectedCapturePages(t, host, id, cfg.Env); !reflect.DeepEqual(logs, restored) {
 		t.Fatalf("restart changed Factory logs: before=%+v after=%+v", logs, restored)
 	}
+	if restored := assertRejectedCaptureInspection(t, host, facts, "archived", cfg.Env, "FACTORY rejected stdout 世界"); !reflect.DeepEqual(transcript, restored) {
+		t.Fatalf("restart changed Factory transcript: before=%+v after=%+v", transcript, restored)
+	}
 	if denied.calls.Load() != 0 {
 		t.Fatalf("native calls = %d", denied.calls.Load())
+	}
+}
+
+// LIST parity includes archived Factory selection as well as unscoped history.
+// Transcripts project message content; stderr stays a labelled progress record
+// in logs and must not become a fabricated assistant response.
+func assertRejectedCaptureInspection(t *testing.T, host *support.FunctionalAPIServer, facts factoryapi.WorkerSessionObservation, history string, environment []string, stdout string) factoryapi.WorkerSessionTranscriptResponse {
+	t.Helper()
+	connection, closeMCP := rejectedCaptureMCP(t, host, environment)
+	defer closeMCP()
+	scope := "direct"
+	if !facts.Direct {
+		scope = "factory"
+	}
+	for _, scoped := range []bool{false, true} {
+		query := url.Values{"history": {history}, "scope": {scope}}
+		arguments := map[string]any{"action": "LIST", "history": history, "scope": scope}
+		args := []string{"worker-sessions", "list", "--history", history, "--scope", scope}
+		if scoped && facts.FactorySessionId != nil {
+			query.Set("factorySessionId", *facts.FactorySessionId)
+			// MCP LIST has no Factory Session selector; compare its supported scope on this private host.
+			args = append(args, "--session", *facts.FactorySessionId)
+		}
+		page := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, host.URL()+"/worker-sessions?"+query.Encode())
+		var cli factoryapi.ListWorkerSessionsResponse
+		rejectedInspectionCLI(t, host, environment, args, &cli)
+		var remote factoryapi.ListWorkerSessionsResponse
+		rejectedInspectionMCP(t, connection, arguments, &remote)
+		if !reflect.DeepEqual(cli, page) || !reflect.DeepEqual(remote, page) || len(page.Sessions) != 1 || !equalRejectedCaptureFacts(facts, page.Sessions[0]) {
+			t.Fatalf("rejected LIST parity: HTTP=%+v CLI=%+v MCP=%+v original=%+v", page, cli, remote, facts)
+		}
+	}
+	id := facts.WorkerSessionId
+	transcript := support.GetJSON[factoryapi.WorkerSessionTranscriptResponse](t, host.URL()+"/worker-sessions/"+url.PathEscape(id)+"/transcript")
+	var cli, remote factoryapi.WorkerSessionTranscriptResponse
+	rejectedInspectionCLI(t, host, environment, []string{"worker-sessions", "read", "--worker-session-id", id, "--view", "transcript"}, &cli)
+	rejectedInspectionMCP(t, connection, map[string]any{"action": "READ", "workerSessionId": id, "view": "transcript"}, &remote)
+	if !reflect.DeepEqual(transcript, cli) || !reflect.DeepEqual(transcript, remote) || transcript.State != "FAILED" || transcript.WorkerSessionId != id || transcript.AttemptId != facts.AttemptId || !reflect.DeepEqual(transcript.WorkIds, facts.WorkIds) || len(transcript.Entries) != 1 {
+		t.Fatalf("rejected transcript parity/attribution: HTTP=%+v CLI=%+v MCP=%+v", transcript, cli, remote)
+	}
+	entry := transcript.Entries[0]
+	if entry.Text == nil || *entry.Text != stdout || entry.Type != "assistant_message" || entry.Timestamp == nil {
+		t.Fatalf("rejected message projection: %+v", entry)
+	}
+	return transcript
+}
+
+func rejectedInspectionCLI(t *testing.T, host *support.FunctionalAPIServer, environment, args []string, result any) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you", "--server", host.URL(), "--json"}, args...))
+	inputs.Input.Env = environment
+	if err := host.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("CLI inspection: %v %s", err, inputs.Stderr())
+	}
+	if err := json.Unmarshal([]byte(inputs.Stdout()), result); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func rejectedInspectionMCP(t *testing.T, connection *mcp.ClientSession, args map[string]any, result any) {
+	t.Helper()
+	response, err := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "you.subagent", Arguments: args})
+	if err != nil || response.IsError || len(response.Content) != 1 {
+		t.Fatalf("MCP inspection: %v %+v", err, response)
+	}
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(response.Content[0].(*mcp.TextContent).Text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if args["action"] == "READ" {
+		var read struct {
+			Transcript json.RawMessage `json:"transcript"`
+		}
+		if err := json.Unmarshal(envelope.Result, &read); err != nil {
+			t.Fatal(err)
+		}
+		envelope.Result = read.Transcript
+	}
+	if err := json.Unmarshal(envelope.Result, result); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -212,6 +308,73 @@ func assertRejectedCaptureFacts(t *testing.T, host *support.FunctionalAPIServer,
 		t.Fatalf("rejected synthetic usage: %+v", row)
 	}
 	return row
+}
+
+// Cancel owns a private gate before the mock produces either configured stream.
+// Joining and reopening verifies that cancellation cannot turn into rejection
+// output during teardown or archived reconstruction.
+func TestRejectedMockCapturedOutputCanceledBeforeRelease(t *testing.T) {
+	t.Parallel()
+	dir := publishedDirectMockFactory(t)
+	gate := support.NewMockWorkerGate(t)
+	config := map[string]any{"mockWorkers": []any{map[string]any{
+		"runType": "reject", "gateConfig": gate.Config(30 * time.Second),
+		"rejectConfig": map[string]any{"stdout": "NEVER rejected stdout", "stderr": "NEVER rejected stderr", "exitCode": 42},
+	}}}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "mock-workers.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	denied := &directExampleDeniedRunner{}
+	cfg := support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env:   builtcliacceptance.ProcessEnvForIsolatedHome(publishedDirectMockHome(t)),
+		Args:  []string{"--with-mock-workers", path},
+		Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
+	}
+	host := support.StartFunctionalAPIServer(t, cfg)
+	executionPath := writeRejectedDirectExecution(t, dir, "codex")
+	var admitted any
+	rejectedInspectionCLI(t, host, cfg.Env, []string{"--remote", "worker-sessions", "invoke", "--execution", executionPath, "--async"}, &admitted)
+	gate.WaitForArrival(t, 30*time.Second)
+	id := "direct-example-session"
+	endpoint := host.URL() + "/worker-sessions/" + id
+	live := support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
+	if live.State != "RUNNING" {
+		t.Fatalf("gated state: %+v", live)
+	}
+	var canceled any
+	rejectedInspectionCLI(t, host, cfg.Env, []string{"worker-sessions", "cancel", id}, &canceled)
+	// The public committed capture is the terminal barrier, independent of the
+	// cancel response. Waiting for that exact head cannot fabricate mock output.
+	logs, err := support.WaitForObservation(30*time.Second, func() (factoryapi.WorkerSessionLogPage, error) {
+		return support.GetJSON[factoryapi.WorkerSessionLogPage](t, endpoint+"/logs"), nil
+	}, func(page factoryapi.WorkerSessionLogPage) bool { return page.Health == "COMPLETE" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts := support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
+	if facts.State != "CANCELED" || facts.TerminalCause == nil || *facts.TerminalCause != "OPERATOR_CANCEL" || facts.AttemptId != live.AttemptId {
+		t.Fatalf("canceled facts: %+v", facts)
+	}
+	encoded, err := json.Marshal(logs)
+	if err != nil || strings.Contains(string(encoded), "NEVER rejected") {
+		t.Fatalf("cancellation fabricated declared output: %s %v", encoded, err)
+	}
+	host.Close(t)
+	gate.Release()
+	host = support.StartFunctionalAPIServer(t, cfg)
+	restored := support.GetJSON[factoryapi.WorkerSessionLogPage](t, host.URL()+"/worker-sessions/"+id+"/logs")
+	if !reflect.DeepEqual(logs, restored) {
+		t.Fatalf("canceled replay changed logs: before=%+v after=%+v", logs, restored)
+	}
+	if denied.calls.Load() != 0 {
+		t.Fatalf("native calls = %d", denied.calls.Load())
+	}
 }
 
 func equalRejectedCaptureFacts(before, after factoryapi.WorkerSessionObservation) bool {

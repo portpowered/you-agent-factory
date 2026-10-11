@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -15,7 +16,9 @@ import (
 func TestCodexRejectedOutputObservedBeforeFailure(t *testing.T) {
 	t.Parallel()
 	var progress []providers.ExecuteProgress
-	returned := false
+	observed := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
 	runner := providerservice.CommandRunner{RunStreaming: func(_ context.Context, _ providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
 		if err := observe(providerservice.OutputStreamStdout, []byte("{\"type\":\"item.updated\",\"item\":{\"id\":\"partial\",\"type\":\"agent_message\",\"text\":\"PRIVATE ordinary output\"}}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"rejected\"}}\n")); err != nil {
 			t.Fatal(err)
@@ -27,16 +30,40 @@ func TestCodexRejectedOutputObservedBeforeFailure(t *testing.T) {
 	}}
 	effect := codex.NewCommandEffect(runner, platformclock.Real{}, nil, nil)
 	registration := codex.NewRegistration(effect)
-	result, err := registration.Attempt(t.Context(), providers.ExecuteRequest{
-		Provider: providers.IDCodex, AttemptID: "rejected-attempt", UserMessage: "ordinary",
-		ProgressObserver: func(fact providers.ExecuteProgress) {
-			if returned {
-				t.Fatal("progress after attempt returned")
-			}
-			progress = append(progress, fact)
-		},
-	})
-	returned = true
+	var result providers.ExecuteResult
+	var err error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result, err = registration.Attempt(t.Context(), providers.ExecuteRequest{
+			Provider: providers.IDCodex, AttemptID: "rejected-attempt", UserMessage: "ordinary",
+			ProgressObserver: func(fact providers.ExecuteProgress) {
+				progress = append(progress, fact)
+				if fact.Detail == "PRIVATE ordinary stderr" {
+					close(observed)
+					<-release
+				}
+			},
+		})
+	}()
+	select {
+	case <-observed:
+	case <-done:
+		t.Fatal("attempt returned before live stderr observation")
+	case <-time.After(5 * time.Second):
+		t.Fatal("live observation did not arrive")
+	}
+	select {
+	case <-done:
+		t.Fatal("finalization overtook the live callback")
+	default:
+	}
+	release <- struct{}{}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("attempt did not join after callback release")
+	}
 	if err == nil || result.Content != "" {
 		t.Fatalf("rejection returned accepted content: %q %v", result.Content, err)
 	}
