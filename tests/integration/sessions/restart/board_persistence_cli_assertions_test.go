@@ -138,6 +138,8 @@ type boardPersistenceDispatchState struct {
 	WorkIDs            map[string]struct{}
 	RequestEvents      int
 	ResponseEvents     int
+	Responses          []factoryapi.DispatchResponseEventPayload
+	TransitionID       string
 	InterruptedEvents  int
 	ReconciledStatuses []factoryapi.FactoryDispatchStatus
 	WorkerSessionIDs   []string
@@ -184,14 +186,15 @@ func waitForBoardRearmedDispatch(t *testing.T, baseURL, workID, oldDispatchID st
 			last = states
 			old, oldFound := states[oldDispatchID]
 			active := activeBoardDispatches(states, workID)
-			if oldFound && old.InterruptedEvents == 1 && len(active) == 1 && active[0].ID != oldDispatchID {
+			if oldFound && old.ResponseEvents == 1 && len(active) == 1 && active[0].ID != oldDispatchID {
+				assertBoardJoinedCancellation(t, old, workID)
 				if active[0].RequestEvents != 1 {
 					t.Fatalf("re-armed dispatch %q request events = %d, want exactly one", active[0].ID, active[0].RequestEvents)
 				}
 				return active[0].ID
 			}
-			if oldFound && old.InterruptedEvents > 1 {
-				t.Fatalf("original dispatch %q interruption events = %d, want exactly one", oldDispatchID, old.InterruptedEvents)
+			if oldFound && (old.ResponseEvents > 1 || old.InterruptedEvents > 0) {
+				t.Fatalf("original graceful-stop dispatch %q has conflicting closure: %#v", oldDispatchID, old)
 			}
 		} else {
 			lastErr = err
@@ -199,7 +202,7 @@ func waitForBoardRearmedDispatch(t *testing.T, baseURL, workID, oldDispatchID st
 		select {
 		case <-ticker.C:
 		case <-deadline.C:
-			t.Fatalf("timed out waiting for dispatch %q interruption and one re-armed dispatch for Work %q; last=%#v, error=%v", oldDispatchID, workID, last, lastErr)
+			t.Fatalf("timed out waiting for dispatch %q joined cancellation and one re-armed dispatch for Work %q; last=%#v, error=%v", oldDispatchID, workID, last, lastErr)
 		}
 	}
 }
@@ -283,6 +286,7 @@ func readBoardDispatchStates(ctx context.Context, baseURL string) (map[string]bo
 				return nil, fmt.Errorf("decode public dispatch request %q: %w", dispatchID, decodeErr)
 			}
 			state.RequestEvents++
+			state.TransitionID = payload.TransitionId
 			if state.WorkIDs == nil {
 				state.WorkIDs = make(map[string]struct{})
 			}
@@ -292,10 +296,12 @@ func readBoardDispatchStates(ctx context.Context, baseURL string) (map[string]bo
 				}
 			}
 		case factoryapi.FactoryEventTypeDispatchResponse:
-			if _, decodeErr := event.Payload.AsDispatchResponseEventPayload(); decodeErr != nil {
+			payload, decodeErr := event.Payload.AsDispatchResponseEventPayload()
+			if decodeErr != nil {
 				return nil, fmt.Errorf("decode public dispatch response %q: %w", dispatchID, decodeErr)
 			}
 			state.ResponseEvents++
+			state.Responses = append(state.Responses, payload)
 		case factoryapi.FactoryEventTypeDispatchInterrupted:
 			if _, decodeErr := event.Payload.AsDispatchInterruptedEventPayload(); decodeErr != nil {
 				return nil, fmt.Errorf("decode public dispatch interruption %q: %w", dispatchID, decodeErr)
@@ -396,5 +402,34 @@ func assertBoardCLIListAndShows(
 			t.Fatalf("decode you work show %s: %v\noutput:\n%s", workID, err, showOutput)
 		}
 		assertBoardWork(t, shown, want)
+	}
+}
+
+// Graceful stop joins the worker and records its canceled result. An unanswered
+// hard-killed attempt has a separate DISPATCH_INTERRUPTED recovery contract.
+func assertBoardJoinedCancellation(t *testing.T, state boardPersistenceDispatchState, workID string) {
+	t.Helper()
+	if state.RequestEvents != 1 || state.ResponseEvents != 1 || len(state.Responses) != 1 || state.InterruptedEvents != 0 || len(state.ReconciledStatuses) != 0 || !boardPersistenceDispatchIncludesWork(state, workID) {
+		t.Fatalf("graceful-stop dispatch = %#v, want one correlated request and joined response without unresolved recovery", state)
+	}
+	response := state.Responses[0]
+	if response.Outcome != factoryapi.WorkOutcomeCanceled || response.Cancellation == nil || response.Cancellation.Reason != factoryapi.DispatchCancellationReasonCANCELED || response.TransitionId != state.TransitionID || state.TransitionID == "" {
+		t.Fatalf("joined response = %#v, want correlated CANCELED outcome and cancellation reason", response)
+	}
+	assertBoardCanceledResponseHasNoOutput(t, response, workID)
+}
+
+func assertBoardCanceledResponseHasNoOutput(t *testing.T, response factoryapi.DispatchResponseEventPayload, workID string) {
+	t.Helper()
+	if boardPersistenceStringPointerValue(response.Output) != "" || response.StructuredResult != nil {
+		t.Fatalf("joined canceled response contains success output: %#v", response)
+	}
+	// Returned input Work and resource tokens are preserved for retry, not success output.
+	if response.OutputWork == nil || len(*response.OutputWork) != 1 {
+		t.Fatalf("joined cancellation must retain exactly one input Work: %#v", response.OutputWork)
+	}
+	retained := (*response.OutputWork)[0]
+	if boardPersistenceStringPointerValue(retained.WorkId) != workID || retained.State == nil || retained.State.Name != "processing" || retained.State.Type == factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("joined cancellation did not preserve unfinished input Work %q: %#v", workID, retained)
 	}
 }
