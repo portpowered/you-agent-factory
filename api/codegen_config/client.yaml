@@ -12,6 +12,9 @@ output-options:
     path: ../../../api/codegen_config/factory-codegen-overlay.yaml
     strict: false
   include-operation-ids:
+    - sendAgentMessage
+    - listAgentMessages
+    - getAgentMessage
     - readWorkerSessionLogs
     - getStatus
     - shutdownServer

@@ -1,0 +1,5 @@
+description: Messaging is disabled, or its store or observation stream is unavailable.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

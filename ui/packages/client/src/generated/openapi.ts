@@ -10,6 +10,50 @@
  */
 
 export interface paths {
+  "/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read permitted Agent Messages
+     * @description Filters combine with AND after read authorization. Store sequence orders pages ascending. toMe includes the verified continuation chain and exact own-Work identity, never a matching project label alone. markRead affects only messages the caller is permitted to receive. follow uses source-native Events and ends on process reconstruction. Each message frame uses the message SSE event; typed stream failures use the error SSE event with an ErrorResponse payload.
+     */
+    get: operations["listAgentMessages"];
+    put?: never;
+    /**
+     * Send an Agent Message to a Worker Session
+     * @description Worker Sessions validates the exact active RUNNING caller. Messaging permits only the caller's evidenced lead/requester chain or a lead's own Project workers. Persist before returning success. Messages remain queued. Revival and interruption are unavailable.
+     */
+    post: operations["sendAgentMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/messages/{message_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one Agent Message
+     * @description A permitted recipient reading QUEUED marks it READ durably. Sender and operator observation never marks another recipient's message. REPLIED and EXPIRED do not regress to READ.
+     */
+    get: operations["getAgentMessage"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/metrics": {
     parameters: {
       query?: never;
@@ -8065,6 +8109,62 @@ export interface components {
     };
   };
   responses: {
+    /** @description The caller lacks authority for this Agent Message operation. */
+    AgentMessageNotPermitted: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The recipient or Agent Message does not exist. */
+    AgentMessageNotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The request identity conflicts, or the recipient identity is ambiguous. */
+    AgentMessageConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Messaging is disabled, or its store or observation stream is unavailable. */
+    AgentMessagingUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The source-native observation stream has a retention gap. Pull the inbox before following again. */
+    AgentMessageStreamGap: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description A configured successful-send or thread limit prevents admission. */
+    AgentMessageLimitExceeded: {
+      headers: {
+        /** @description Seconds until a rolling sender limit permits another send. */
+        "Retry-After"?: number;
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Request payload or parameter was invalid. */
     BadRequest: {
       headers: {
@@ -8386,6 +8486,10 @@ export interface components {
     };
   };
   parameters: {
+    /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+    AgentMessageCallerId: string;
+    /** @description Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority. */
+    AgentMessageFactorySessionId: string;
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
     SessionID: string;
     /** @description Stable pending human-approval identifier. */
@@ -8463,6 +8567,117 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  listAgentMessages: {
+    parameters: {
+      query?: {
+        /** @description Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority. */
+        factorySessionId?: components["parameters"]["AgentMessageFactorySessionId"];
+        toMe?: boolean;
+        toWorkerSessionId?: string;
+        fromWorkerSessionId?: string;
+        threadId?: string;
+        correlationWorkId?: string;
+        correlationFactorySessionId?: string;
+        status?: components["schemas"]["AgentMessageDeliveryStatus"][];
+        maxResults?: number;
+        nextToken?: string;
+        markRead?: boolean;
+        follow?: boolean;
+      };
+      header?: {
+        /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+        "X-You-Worker-Session-Id"?: components["parameters"]["AgentMessageCallerId"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized page or filtered source-native observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentMessageListResponse"];
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      403: components["responses"]["AgentMessageNotPermitted"];
+      409: components["responses"]["AgentMessageConflict"];
+      410: components["responses"]["AgentMessageStreamGap"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["AgentMessagingUnavailable"];
+    };
+  };
+  sendAgentMessage: {
+    parameters: {
+      query?: {
+        /** @description Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority. */
+        factorySessionId?: components["parameters"]["AgentMessageFactorySessionId"];
+      };
+      header?: {
+        /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+        "X-You-Worker-Session-Id"?: components["parameters"]["AgentMessageCallerId"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentMessageSendRequest"];
+      };
+    };
+    responses: {
+      /** @description Persisted message, including an idempotent replay */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentMessageSendResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      403: components["responses"]["AgentMessageNotPermitted"];
+      404: components["responses"]["AgentMessageNotFound"];
+      409: components["responses"]["AgentMessageConflict"];
+      429: components["responses"]["AgentMessageLimitExceeded"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["AgentMessagingUnavailable"];
+    };
+  };
+  getAgentMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+        "X-You-Worker-Session-Id"?: components["parameters"]["AgentMessageCallerId"];
+      };
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized message with its current durable status */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentMessage"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      403: components["responses"]["AgentMessageNotPermitted"];
+      404: components["responses"]["AgentMessageNotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["AgentMessagingUnavailable"];
+    };
+  };
   getMetrics: {
     parameters: {
       query?: {

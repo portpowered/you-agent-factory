@@ -20,6 +20,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 )
 
+const (
+	WorkerSessionCallerScopes = "WorkerSessionCaller.Scopes"
+)
+
 // Defines values for AgentMessageDelivery.
 const (
 	AgentMessageDeliveryINTERRUPT AgentMessageDelivery = "INTERRUPT"
@@ -10136,6 +10140,12 @@ type AfterEventId = string
 // AfterSequence defines model for AfterSequence.
 type AfterSequence = int
 
+// AgentMessageCallerId defines model for AgentMessageCallerId.
+type AgentMessageCallerId = string
+
+// AgentMessageFactorySessionId defines model for AgentMessageFactorySessionId.
+type AgentMessageFactorySessionId = string
+
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
@@ -10225,6 +10235,24 @@ type WorkerSessionLimit = int
 
 // WorkerSessionStreamGenerationID defines model for WorkerSessionStreamGenerationID.
 type WorkerSessionStreamGenerationID = string
+
+// AgentMessageConflict defines model for AgentMessageConflict.
+type AgentMessageConflict = ErrorResponse
+
+// AgentMessageLimitExceeded defines model for AgentMessageLimitExceeded.
+type AgentMessageLimitExceeded = ErrorResponse
+
+// AgentMessageNotFound defines model for AgentMessageNotFound.
+type AgentMessageNotFound = ErrorResponse
+
+// AgentMessageNotPermitted defines model for AgentMessageNotPermitted.
+type AgentMessageNotPermitted = ErrorResponse
+
+// AgentMessageStreamGap defines model for AgentMessageStreamGap.
+type AgentMessageStreamGap = ErrorResponse
+
+// AgentMessagingUnavailable defines model for AgentMessagingUnavailable.
+type AgentMessagingUnavailable = ErrorResponse
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -10371,6 +10399,41 @@ type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
+// ListAgentMessagesParams defines parameters for ListAgentMessages.
+type ListAgentMessagesParams struct {
+	// FactorySessionId Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
+	FactorySessionId            *AgentMessageFactorySessionId `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+	ToMe                        *bool                         `form:"toMe,omitempty" json:"toMe,omitempty"`
+	ToWorkerSessionId           *string                       `form:"toWorkerSessionId,omitempty" json:"toWorkerSessionId,omitempty"`
+	FromWorkerSessionId         *string                       `form:"fromWorkerSessionId,omitempty" json:"fromWorkerSessionId,omitempty"`
+	ThreadId                    *string                       `form:"threadId,omitempty" json:"threadId,omitempty"`
+	CorrelationWorkId           *string                       `form:"correlationWorkId,omitempty" json:"correlationWorkId,omitempty"`
+	CorrelationFactorySessionId *string                       `form:"correlationFactorySessionId,omitempty" json:"correlationFactorySessionId,omitempty"`
+	Status                      *[]AgentMessageDeliveryStatus `form:"status,omitempty" json:"status,omitempty"`
+	MaxResults                  *int                          `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+	NextToken                   *string                       `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+	MarkRead                    *bool                         `form:"markRead,omitempty" json:"markRead,omitempty"`
+	Follow                      *bool                         `form:"follow,omitempty" json:"follow,omitempty"`
+
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// SendAgentMessageParams defines parameters for SendAgentMessage.
+type SendAgentMessageParams struct {
+	// FactorySessionId Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
+	FactorySessionId *AgentMessageFactorySessionId `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// GetAgentMessageParams defines parameters for GetAgentMessage.
+type GetAgentMessageParams struct {
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // GetMetricsParams defines parameters for GetMetrics.
 type GetMetricsParams struct {
 	// SessionId Optional discoverable live Factory Session identity.
@@ -10452,6 +10515,9 @@ type TerminateWorkerSessionJSONBody struct {
 	Force     *bool   `json:"force,omitempty"`
 	RequestId *string `json:"requestId,omitempty"`
 }
+
+// SendAgentMessageJSONRequestBody defines body for SendAgentMessage for application/json ContentType.
+type SendAgentMessageJSONRequestBody = AgentMessageSendRequest
 
 // InterruptWorkerSessionJSONRequestBody defines body for InterruptWorkerSession for application/json ContentType.
 type InterruptWorkerSessionJSONRequestBody = WorkerSessionInterruptRequest
@@ -19356,6 +19422,17 @@ type ClientInterface interface {
 	// StreamWorkerSessionEventsByWorkerSessionId request
 	StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListAgentMessages request
+	ListAgentMessages(ctx context.Context, params *ListAgentMessagesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SendAgentMessageWithBody request with any body
+	SendAgentMessageWithBody(ctx context.Context, params *SendAgentMessageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SendAgentMessage(ctx context.Context, params *SendAgentMessageParams, body SendAgentMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAgentMessage request
+	GetAgentMessage(ctx context.Context, messageId string, params *GetAgentMessageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetrics request
 	GetMetrics(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19423,6 +19500,54 @@ func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessio
 
 func (c *Client) StreamWorkerSessionEventsByWorkerSessionId(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewStreamWorkerSessionEventsByWorkerSessionIdRequest(c.Server, sessionId, workerSessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListAgentMessages(ctx context.Context, params *ListAgentMessagesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAgentMessagesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendAgentMessageWithBody(ctx context.Context, params *SendAgentMessageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendAgentMessageRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendAgentMessage(ctx context.Context, params *SendAgentMessageParams, body SendAgentMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendAgentMessageRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAgentMessage(ctx context.Context, messageId string, params *GetAgentMessageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAgentMessageRequest(c.Server, messageId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -19867,6 +19992,372 @@ func NewStreamWorkerSessionEventsByWorkerSessionIdRequest(server string, session
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAgentMessagesRequest generates requests for ListAgentMessages
+func NewListAgentMessagesRequest(server string, params *ListAgentMessagesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/messages")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.FactorySessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "factorySessionId", runtime.ParamLocationQuery, *params.FactorySessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ToMe != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "toMe", runtime.ParamLocationQuery, *params.ToMe); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ToWorkerSessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "toWorkerSessionId", runtime.ParamLocationQuery, *params.ToWorkerSessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.FromWorkerSessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "fromWorkerSessionId", runtime.ParamLocationQuery, *params.FromWorkerSessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ThreadId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "threadId", runtime.ParamLocationQuery, *params.ThreadId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.CorrelationWorkId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "correlationWorkId", runtime.ParamLocationQuery, *params.CorrelationWorkId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.CorrelationFactorySessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "correlationFactorySessionId", runtime.ParamLocationQuery, *params.CorrelationFactorySessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.MaxResults != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "maxResults", runtime.ParamLocationQuery, *params.MaxResults); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.NextToken != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "nextToken", runtime.ParamLocationQuery, *params.NextToken); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.MarkRead != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "markRead", runtime.ParamLocationQuery, *params.MarkRead); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Follow != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "follow", runtime.ParamLocationQuery, *params.Follow); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.XYouWorkerSessionId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-You-Worker-Session-Id", runtime.ParamLocationHeader, *params.XYouWorkerSessionId)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-You-Worker-Session-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewSendAgentMessageRequest calls the generic SendAgentMessage builder with application/json body
+func NewSendAgentMessageRequest(server string, params *SendAgentMessageParams, body SendAgentMessageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSendAgentMessageRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewSendAgentMessageRequestWithBody generates requests for SendAgentMessage with any type of body
+func NewSendAgentMessageRequestWithBody(server string, params *SendAgentMessageParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/messages")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.FactorySessionId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "factorySessionId", runtime.ParamLocationQuery, *params.FactorySessionId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.XYouWorkerSessionId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-You-Worker-Session-Id", runtime.ParamLocationHeader, *params.XYouWorkerSessionId)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-You-Worker-Session-Id", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetAgentMessageRequest generates requests for GetAgentMessage
+func NewGetAgentMessageRequest(server string, messageId string, params *GetAgentMessageParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "message_id", runtime.ParamLocationPath, messageId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/messages/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		if params.XYouWorkerSessionId != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-You-Worker-Session-Id", runtime.ParamLocationHeader, *params.XYouWorkerSessionId)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("X-You-Worker-Session-Id", headerParam0)
+		}
+
 	}
 
 	return req, nil
@@ -20615,6 +21106,17 @@ type ClientWithResponsesInterface interface {
 	// StreamWorkerSessionEventsByWorkerSessionIdWithResponse request
 	StreamWorkerSessionEventsByWorkerSessionIdWithResponse(ctx context.Context, sessionId SessionID, workerSessionId WorkerSessionID, params *StreamWorkerSessionEventsByWorkerSessionIdParams, reqEditors ...RequestEditorFn) (*StreamWorkerSessionEventsByWorkerSessionIdClientResponse, error)
 
+	// ListAgentMessagesWithResponse request
+	ListAgentMessagesWithResponse(ctx context.Context, params *ListAgentMessagesParams, reqEditors ...RequestEditorFn) (*ListAgentMessagesClientResponse, error)
+
+	// SendAgentMessageWithBodyWithResponse request with any body
+	SendAgentMessageWithBodyWithResponse(ctx context.Context, params *SendAgentMessageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendAgentMessageClientResponse, error)
+
+	SendAgentMessageWithResponse(ctx context.Context, params *SendAgentMessageParams, body SendAgentMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*SendAgentMessageClientResponse, error)
+
+	// GetAgentMessageWithResponse request
+	GetAgentMessageWithResponse(ctx context.Context, messageId string, params *GetAgentMessageParams, reqEditors ...RequestEditorFn) (*GetAgentMessageClientResponse, error)
+
 	// GetMetricsWithResponse request
 	GetMetricsWithResponse(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsClientResponse, error)
 
@@ -20725,6 +21227,90 @@ func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) Status() strin
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r StreamWorkerSessionEventsByWorkerSessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListAgentMessagesClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AgentMessageListResponse
+	JSON400      *BadRequest
+	JSON403      *AgentMessageNotPermitted
+	JSON409      *AgentMessageConflict
+	JSON410      *AgentMessageStreamGap
+	JSON500      *InternalError
+	JSON503      *AgentMessagingUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAgentMessagesClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAgentMessagesClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SendAgentMessageClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *AgentMessageSendResponse
+	JSON400      *BadRequest
+	JSON403      *AgentMessageNotPermitted
+	JSON404      *AgentMessageNotFound
+	JSON409      *AgentMessageConflict
+	JSON429      *AgentMessageLimitExceeded
+	JSON500      *InternalError
+	JSON503      *AgentMessagingUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r SendAgentMessageClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SendAgentMessageClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAgentMessageClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AgentMessage
+	JSON400      *BadRequest
+	JSON403      *AgentMessageNotPermitted
+	JSON404      *AgentMessageNotFound
+	JSON500      *InternalError
+	JSON503      *AgentMessagingUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAgentMessageClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAgentMessageClientResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -21063,6 +21649,41 @@ func (c *ClientWithResponses) StreamWorkerSessionEventsByWorkerSessionIdWithResp
 	return ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp)
 }
 
+// ListAgentMessagesWithResponse request returning *ListAgentMessagesClientResponse
+func (c *ClientWithResponses) ListAgentMessagesWithResponse(ctx context.Context, params *ListAgentMessagesParams, reqEditors ...RequestEditorFn) (*ListAgentMessagesClientResponse, error) {
+	rsp, err := c.ListAgentMessages(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAgentMessagesClientResponse(rsp)
+}
+
+// SendAgentMessageWithBodyWithResponse request with arbitrary body returning *SendAgentMessageClientResponse
+func (c *ClientWithResponses) SendAgentMessageWithBodyWithResponse(ctx context.Context, params *SendAgentMessageParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendAgentMessageClientResponse, error) {
+	rsp, err := c.SendAgentMessageWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendAgentMessageClientResponse(rsp)
+}
+
+func (c *ClientWithResponses) SendAgentMessageWithResponse(ctx context.Context, params *SendAgentMessageParams, body SendAgentMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*SendAgentMessageClientResponse, error) {
+	rsp, err := c.SendAgentMessage(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendAgentMessageClientResponse(rsp)
+}
+
+// GetAgentMessageWithResponse request returning *GetAgentMessageClientResponse
+func (c *ClientWithResponses) GetAgentMessageWithResponse(ctx context.Context, messageId string, params *GetAgentMessageParams, reqEditors ...RequestEditorFn) (*GetAgentMessageClientResponse, error) {
+	rsp, err := c.GetAgentMessage(ctx, messageId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAgentMessageClientResponse(rsp)
+}
+
 // GetMetricsWithResponse request returning *GetMetricsClientResponse
 func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, params *GetMetricsParams, reqEditors ...RequestEditorFn) (*GetMetricsClientResponse, error) {
 	rsp, err := c.GetMetrics(ctx, params, reqEditors...)
@@ -21321,6 +21942,213 @@ func ParseStreamWorkerSessionEventsByWorkerSessionIdClientResponse(rsp *http.Res
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest WorkerSessionRecordingUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAgentMessagesClientResponse parses an HTTP response from a ListAgentMessagesWithResponse call
+func ParseListAgentMessagesClientResponse(rsp *http.Response) (*ListAgentMessagesClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAgentMessagesClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentMessageListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest AgentMessageNotPermitted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest AgentMessageConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 410:
+		var dest AgentMessageStreamGap
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON410 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest AgentMessagingUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	case rsp.StatusCode == 200:
+		// Content-type (text/event-stream) unsupported
+
+	}
+
+	return response, nil
+}
+
+// ParseSendAgentMessageClientResponse parses an HTTP response from a SendAgentMessageWithResponse call
+func ParseSendAgentMessageClientResponse(rsp *http.Response) (*SendAgentMessageClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SendAgentMessageClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest AgentMessageSendResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest AgentMessageNotPermitted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest AgentMessageNotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest AgentMessageConflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest AgentMessageLimitExceeded
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest AgentMessagingUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAgentMessageClientResponse parses an HTTP response from a GetAgentMessageWithResponse call
+func ParseGetAgentMessageClientResponse(rsp *http.Response) (*GetAgentMessageClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAgentMessageClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest AgentMessageNotPermitted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest AgentMessageNotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest AgentMessagingUnavailable
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

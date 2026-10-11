@@ -10147,6 +10147,12 @@ type AfterEventId = string
 // AfterSequence defines model for AfterSequence.
 type AfterSequence = int
 
+// AgentMessageCallerId defines model for AgentMessageCallerId.
+type AgentMessageCallerId = string
+
+// AgentMessageFactorySessionId defines model for AgentMessageFactorySessionId.
+type AgentMessageFactorySessionId = string
+
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
@@ -10236,6 +10242,24 @@ type WorkerSessionLimit = int
 
 // WorkerSessionStreamGenerationID defines model for WorkerSessionStreamGenerationID.
 type WorkerSessionStreamGenerationID = string
+
+// AgentMessageConflict defines model for AgentMessageConflict.
+type AgentMessageConflict = ErrorResponse
+
+// AgentMessageLimitExceeded defines model for AgentMessageLimitExceeded.
+type AgentMessageLimitExceeded = ErrorResponse
+
+// AgentMessageNotFound defines model for AgentMessageNotFound.
+type AgentMessageNotFound = ErrorResponse
+
+// AgentMessageNotPermitted defines model for AgentMessageNotPermitted.
+type AgentMessageNotPermitted = ErrorResponse
+
+// AgentMessageStreamGap defines model for AgentMessageStreamGap.
+type AgentMessageStreamGap = ErrorResponse
+
+// AgentMessagingUnavailable defines model for AgentMessagingUnavailable.
+type AgentMessagingUnavailable = ErrorResponse
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -10550,6 +10574,41 @@ type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
+// ListAgentMessagesParams defines parameters for ListAgentMessages.
+type ListAgentMessagesParams struct {
+	// FactorySessionId Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
+	FactorySessionId            *AgentMessageFactorySessionId `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+	ToMe                        *bool                         `form:"toMe,omitempty" json:"toMe,omitempty"`
+	ToWorkerSessionId           *string                       `form:"toWorkerSessionId,omitempty" json:"toWorkerSessionId,omitempty"`
+	FromWorkerSessionId         *string                       `form:"fromWorkerSessionId,omitempty" json:"fromWorkerSessionId,omitempty"`
+	ThreadId                    *string                       `form:"threadId,omitempty" json:"threadId,omitempty"`
+	CorrelationWorkId           *string                       `form:"correlationWorkId,omitempty" json:"correlationWorkId,omitempty"`
+	CorrelationFactorySessionId *string                       `form:"correlationFactorySessionId,omitempty" json:"correlationFactorySessionId,omitempty"`
+	Status                      *[]AgentMessageDeliveryStatus `form:"status,omitempty" json:"status,omitempty"`
+	MaxResults                  *int                          `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+	NextToken                   *string                       `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+	MarkRead                    *bool                         `form:"markRead,omitempty" json:"markRead,omitempty"`
+	Follow                      *bool                         `form:"follow,omitempty" json:"follow,omitempty"`
+
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// SendAgentMessageParams defines parameters for SendAgentMessage.
+type SendAgentMessageParams struct {
+	// FactorySessionId Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
+	FactorySessionId *AgentMessageFactorySessionId `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// GetAgentMessageParams defines parameters for GetAgentMessage.
+type GetAgentMessageParams struct {
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // GetMetricsParams defines parameters for GetMetrics.
 type GetMetricsParams struct {
 	// SessionId Optional discoverable live Factory Session identity.
@@ -10724,6 +10783,9 @@ type MoveWorkBySessionIdJSONRequestBody = MoveWorkRequest
 
 // ValidateFactoryJSONRequestBody defines body for ValidateFactory for application/json ContentType.
 type ValidateFactoryJSONRequestBody = Factory
+
+// SendAgentMessageJSONRequestBody defines body for SendAgentMessage for application/json ContentType.
+type SendAgentMessageJSONRequestBody = AgentMessageSendRequest
 
 // InvokeGenericModelJSONRequestBody defines body for InvokeGenericModel for application/json ContentType.
 type InvokeGenericModelJSONRequestBody = GenericModelInvocationRequest
@@ -19704,6 +19766,15 @@ type ServerInterface interface {
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
+	// Read permitted Agent Messages
+	// (GET /messages)
+	ListAgentMessages(w http.ResponseWriter, r *http.Request, params ListAgentMessagesParams)
+	// Send an Agent Message to a Worker Session
+	// (POST /messages)
+	SendAgentMessage(w http.ResponseWriter, r *http.Request, params SendAgentMessageParams)
+	// Read one Agent Message
+	// (GET /messages/{message_id})
+	GetAgentMessage(w http.ResponseWriter, r *http.Request, messageId string, params GetAgentMessageParams)
 	// Get canonical runtime metrics
 	// (GET /metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, params GetMetricsParams)
@@ -21601,6 +21672,257 @@ func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListAgentMessages operation middleware
+func (siw *ServerInterfaceWrapper) ListAgentMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAgentMessagesParams
+
+	// ------------- Optional query parameter "factorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "factorySessionId", r.URL.Query(), &params.FactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factorySessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "toMe" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "toMe", r.URL.Query(), &params.ToMe)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "toMe", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "toWorkerSessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "toWorkerSessionId", r.URL.Query(), &params.ToWorkerSessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "toWorkerSessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "fromWorkerSessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "fromWorkerSessionId", r.URL.Query(), &params.FromWorkerSessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "fromWorkerSessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "threadId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "threadId", r.URL.Query(), &params.ThreadId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "threadId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "correlationWorkId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "correlationWorkId", r.URL.Query(), &params.CorrelationWorkId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "correlationWorkId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "correlationFactorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "correlationFactorySessionId", r.URL.Query(), &params.CorrelationFactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "correlationFactorySessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "maxResults" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nextToken" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "markRead" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "markRead", r.URL.Query(), &params.MarkRead)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "markRead", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "follow" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "follow", r.URL.Query(), &params.Follow)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "follow", Err: err})
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId AgentMessageCallerId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAgentMessages(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendAgentMessage operation middleware
+func (siw *ServerInterfaceWrapper) SendAgentMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SendAgentMessageParams
+
+	// ------------- Optional query parameter "factorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "factorySessionId", r.URL.Query(), &params.FactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factorySessionId", Err: err})
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId AgentMessageCallerId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendAgentMessage(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentMessage operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", mux.Vars(r)["message_id"], &messageId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentMessageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId AgentMessageCallerId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentMessage(w, r, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMetrics operation middleware
 func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Request) {
 
@@ -22542,6 +22864,12 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/messages", wrapper.ListAgentMessages).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/messages", wrapper.SendAgentMessage).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/messages/{message_id}", wrapper.GetAgentMessage).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/metrics", wrapper.GetMetrics).Methods("GET")
 

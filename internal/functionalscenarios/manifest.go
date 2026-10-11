@@ -32,9 +32,11 @@ const (
 	workerSessionEventsStableID                  = "sse/streamWorkerSessionEventsBySessionId"
 	workerSessionEventsByWorkerSessionIDStableID = "sse/streamWorkerSessionEventsByWorkerSessionId"
 	topLevelWorkerSessionEventsStableID          = "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
+	agentMessageEventsStableID                   = "sse/listAgentMessages"
 
 	sessionEventsScope       = "session Factory Event stream, including recovery after malformed JSON data"
 	workerSessionEventsScope = "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
+	agentMessageEventsScope  = "authorized Agent Message observations, including live delivery, privacy, stream gaps, backpressure, and cancellation"
 )
 
 // Manifest is the reviewed functional-coverage projection of canonical public components.
@@ -113,6 +115,8 @@ func missingScenario(component Component) Scenario {
 
 func applyReviewedEvidence(scenario *Scenario) {
 	switch scenario.StableID {
+	case agentMessageEventsStableID:
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: agentMessageEventsScope}
 	case "cli/you.docs":
 		markCovered(scenario, LaneShort, "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN", InterfaceCLI)
 	case "cli/you.providers.list":
@@ -363,6 +367,8 @@ func validateSSE(prefix string, scenario Scenario) error {
 	}
 	wantRequired, wantDisposition, wantScope := false, "", ""
 	switch scenario.StableID {
+	case agentMessageEventsStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, agentMessageEventsScope
 	case sessionEventsStableID:
 		wantRequired, wantDisposition, wantScope = true, SSERequired, sessionEventsScope
 	case globalEventsStableID:

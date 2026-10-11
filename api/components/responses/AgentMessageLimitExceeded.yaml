@@ -1,0 +1,9 @@
+description: A configured successful-send or thread limit prevents admission.
+headers:
+  Retry-After:
+    description: Seconds until a rolling sender limit permits another send.
+    schema: {type: integer, minimum: 1}
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

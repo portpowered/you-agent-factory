@@ -1,0 +1,5 @@
+description: The caller lacks authority for this Agent Message operation.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
