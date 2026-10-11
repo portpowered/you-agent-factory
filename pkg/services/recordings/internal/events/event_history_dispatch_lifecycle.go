@@ -884,31 +884,24 @@ func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRun
 	), recordingSecretsFromJSONPointers(event.DeclaredSecretJSONPointers))
 }
 
-// AddEventTypeRecorderWithReady registers a type recorder and invokes ready
-// while the history lock still excludes concurrent appends. Runtime consumers
-// use this boundary to arm live-tail behavior without leaving a replay-to-live
-// handoff window.
-func (h *FactoryEventHistory) AddEventTypeRecorderWithReady(
-	recorder func(interfaces.FactoryEventType),
-	ready func(),
-) {
+// AddEventTypeRecorderWithReady replays types and arms live delivery under the
+// delivery barrier, leaving materialized reads free to proceed during callbacks.
+func (h *FactoryEventHistory) AddEventTypeRecorderWithReady(recorder func(interfaces.FactoryEventType), ready func()) {
 	if h == nil || recorder == nil {
 		return
 	}
-
+	h.deliveryMu.Lock()
+	defer h.deliveryMu.Unlock()
 	h.mu.Lock()
-	eventTypes := make([]interfaces.FactoryEventType, len(h.events))
-	for index, event := range h.events {
-		eventTypes[index] = event.Type
-	}
+	prefix := h.events
 	h.eventTypeRecorders = append(h.eventTypeRecorders, recorder)
-	for _, eventType := range eventTypes {
-		recorder(eventType)
+	h.mu.Unlock()
+	for _, event := range prefix {
+		recorder(event.Type)
 	}
 	if ready != nil {
 		ready()
 	}
-	h.mu.Unlock()
 }
 
 func (h *FactoryEventHistory) restoreSeedEventStateLocked(event interfaces.FactoryEvent) {

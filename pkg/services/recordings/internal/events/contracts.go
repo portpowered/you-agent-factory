@@ -192,8 +192,8 @@ func (h *FactoryEventHistory) AppendRecordedEventWithResult(event interfaces.Fac
 
 // AppendRecordedEventWithValidation assigns the canonical sequence and lets
 // the owner validate the detached event before this history publishes it.
-// The validation callback runs while the history write lock is held, so a
-// rejected owner proposal cannot leave a partially appended event behind.
+// Validation runs under the delivery barrier, outside the state lock. A
+// rejection publishes no event, and independent fact readers can proceed.
 func (h *FactoryEventHistory) AppendRecordedEventWithValidation(
 	event interfaces.FactoryEvent,
 	validate func(interfaces.FactoryEvent) error,

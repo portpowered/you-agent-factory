@@ -192,6 +192,8 @@ func (h *FactoryEventHistory) SeedCanonicalEvents(events []interfaces.FactoryEve
 	if len(events) == 0 {
 		return nil
 	}
+	h.deliveryMu.Lock()
+	defer h.deliveryMu.Unlock()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.events) > 0 {
@@ -744,17 +746,21 @@ func (h *FactoryEventHistory) appendEventWithValidationAndProvenance(
 	if h == nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("factory event history is unavailable")
 	}
+	h.deliveryMu.Lock()
+	defer h.deliveryMu.Unlock()
+	event = event.Clone()
 	h.mu.Lock()
 	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
 	event.Context.Sequence = len(h.events)
 	h.assignLiveChangeSessionSequenceLocked(&event)
 	event = enrichFactoryChangeSequence(event)
+	h.mu.Unlock()
 	if validate != nil {
 		if err := validate(event.Clone()); err != nil {
-			h.mu.Unlock()
 			return interfaces.FactoryEvent{}, err
 		}
 	}
+	h.mu.Lock()
 	h.events = append(h.events, event)
 	h.recordAppendedEventFactsLocked(event, provenance)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
@@ -771,17 +777,14 @@ func (h *FactoryEventHistory) appendEventWithValidationAndProvenance(
 			stream.signalOverflow()
 		}
 	}
-	// Recorder callbacks must share the append critical section. They feed
-	// durable recording state, and invoking them after unlock lets concurrent
-	// appenders acquire the recorder in a different order than the canonical
-	// event sequence.
+	h.mu.Unlock()
+	// deliveryMu preserves synchronous durable callback order independently of reads.
 	for _, recorder := range recorders {
 		recorder(event.Clone())
 	}
 	for _, recorder := range eventTypeRecorders {
 		recorder(event.Type)
 	}
-	h.mu.Unlock()
 	return event.Clone(), nil
 }
 
@@ -950,13 +953,13 @@ func (h *FactoryEventHistory) SecretProvenanceForEvent(
 }
 
 // SecretProvenanceDuringAppend returns provenance to the synchronous recorder
-// callback while the append lock is already held. It deliberately does not
-// acquire h.mu; callers outside that callback must use SecretProvenanceForEvent.
+// callback. Provenance is protected independently of ordered delivery and the
+// returned slice is detached from canonical state.
 func (h *FactoryEventHistory) SecretProvenanceDuringAppend(
 	event interfaces.FactoryEvent,
 ) []recordings.RecordingSecret {
 	if h == nil {
 		return nil
 	}
-	return append([]recordings.RecordingSecret(nil), h.secretProvenance[event.Id]...)
+	return h.SecretProvenanceForEvent(event)
 }

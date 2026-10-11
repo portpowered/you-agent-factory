@@ -114,6 +114,9 @@ func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
+	// deliveryMu orders append validation, recorder replay and callbacks. Reads
+	// acquire only mu; no external callback runs while mu is held.
+	deliveryMu              sync.Mutex
 	mu                      sync.RWMutex
 	initialStructure        interfaces.InitialStructurePayload
 	runtimeConfig           interfaces.RuntimeDefinitionLookup
@@ -200,8 +203,9 @@ func (h *FactoryEventHistory) CanonicalEvents() []interfaces.FactoryEvent {
 	h.mu.RLock()
 	h.canonicalEventsCalls.Add(1)
 	h.canonicalEventsCopied.Add(uint64(len(h.events)))
-	events := cloneFactoryEvents(h.events)
+	prefix := h.events
 	h.mu.RUnlock()
+	events := cloneFactoryEvents(prefix)
 	h.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
 		Name:   "factory_runtime.read.canonical_history",
 		Labels: map[string]string{"canonical_events_copied": strconv.Itoa(len(events))},
@@ -222,26 +226,23 @@ func (h *FactoryEventHistory) Subscribe(
 	}
 
 	h.mu.Lock()
-	events := cloneFactoryEventsForStream(h.events, scope)
+	prefix := h.events
 	streamGenerationID := h.streamGenerationID
-	if reconnect != nil {
-		replayed, err := buildDomainReconnectReplay(cloneFactoryEvents(h.events), *reconnect, scope)
-		if err != nil {
-			h.mu.Unlock()
-			return interfaces.FactoryEventStream{}, err
-		}
-		events = cloneFactoryEventsForStream(replayed, scope)
-	}
 	if h.liveClosed {
 		closed := make(chan interfaces.FactoryEvent)
 		close(closed)
 		h.mu.Unlock()
+		events, err := replayStreamPrefix(prefix, reconnect, scope)
+		if err != nil {
+			return interfaces.FactoryEventStream{}, err
+		}
 		return interfaces.FactoryEventStream{
 			StreamGenerationID: streamGenerationID,
 			History:            events,
 			Events:             closed,
 		}, nil
 	}
+	streamContext, cancel := context.WithCancel(ctx)
 	bufferSize := scope.Limit
 	if bufferSize <= 0 {
 		bufferSize = eventHistoryStreamBufferSize
@@ -251,7 +252,7 @@ func (h *FactoryEventHistory) Subscribe(
 	subscription := &eventHistorySubscription{
 		events:     make(chan interfaces.FactoryEvent),
 		inbox:      make(chan interfaces.FactoryEvent, bufferSize),
-		done:       ctx.Done(),
+		done:       streamContext.Done(),
 		overflow:   make(chan struct{}),
 		terminal:   make(chan struct{}),
 		drained:    make(chan struct{}),
@@ -261,13 +262,35 @@ func (h *FactoryEventHistory) Subscribe(
 	h.streams[id] = subscription
 	h.mu.Unlock()
 
-	go h.relayLiveSubscription(id, subscription)
+	go func() {
+		defer cancel()
+		h.relayLiveSubscription(id, subscription)
+	}()
+	events, err := replayStreamPrefix(prefix, reconnect, scope)
+	if err != nil {
+		cancel()
+		<-subscription.drained
+		return interfaces.FactoryEventStream{}, err
+	}
 
 	return interfaces.FactoryEventStream{
 		StreamGenerationID: streamGenerationID,
 		History:            events,
 		Events:             subscription.events,
 	}, nil
+}
+
+// Captured event prefixes are immutable: appends only extend the slice and all
+// public observations are cloned before exposure.
+func replayStreamPrefix(prefix []interfaces.FactoryEvent, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) ([]interfaces.FactoryEvent, error) {
+	if reconnect != nil {
+		replayed, err := buildDomainReconnectReplay(cloneFactoryEvents(prefix), *reconnect, scope)
+		if err != nil {
+			return nil, err
+		}
+		return cloneFactoryEventsForStream(replayed, scope), nil
+	}
+	return cloneFactoryEventsForStream(prefix, scope), nil
 }
 
 // AddEventRecorder registers a callback invoked for every future canonical
@@ -278,36 +301,23 @@ func (h *FactoryEventHistory) AddEventRecorder(recorder func(interfaces.FactoryE
 		return
 	}
 
+	h.deliveryMu.Lock()
+	defer h.deliveryMu.Unlock()
 	h.mu.Lock()
-	events := cloneFactoryEvents(h.events)
+	prefix := h.events
 	h.recorders = append(h.recorders, recorder)
-	// Replay under the history lock so a newly registered recorder observes
-	// the existing prefix before any later append can be delivered to it.
-	for _, event := range events {
+	h.mu.Unlock()
+	// The delivery barrier keeps prefix replay ahead of future callbacks.
+	for _, event := range cloneFactoryEvents(prefix) {
 		recorder(event)
 	}
-	h.mu.Unlock()
 }
 
 // AddEventTypeRecorder registers a transport-independent callback for the type
 // of every future canonical Factory event. Existing event types are replayed
 // first so late Factory Session lifecycle bindings observe terminal history.
 func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.FactoryEventType)) {
-	if h == nil || recorder == nil {
-		return
-	}
-
-	h.mu.Lock()
-	eventTypes := make([]interfaces.FactoryEventType, len(h.events))
-	for index, event := range h.events {
-		eventTypes[index] = event.Type
-	}
-	h.eventTypeRecorders = append(h.eventTypeRecorders, recorder)
-	// Keep the replayed prefix and future type notifications in append order.
-	for _, eventType := range eventTypes {
-		recorder(eventType)
-	}
-	h.mu.Unlock()
+	h.AddEventTypeRecorderWithReady(recorder, nil)
 }
 
 // RecordInitialStructure records the static topology before work events.

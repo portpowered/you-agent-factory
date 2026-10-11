@@ -19,6 +19,7 @@ import (
 	platformhttp "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -127,10 +128,15 @@ func writeColdFile(t *testing.T, path, data string) {
 	}
 }
 
-func coldListingHost(t *testing.T, dir, home string) http.Handler {
+func coldListingHost(t *testing.T, dir, home string, observers ...func(recordings.Service)) http.Handler {
 	t.Helper()
 	ready := make(chan http.Handler, 1)
 	process, err := root.BuildProcess(t.Context(), edges.Edges{
+		RecordingsRootObserver: func(service recordings.Service) {
+			for _, observe := range observers {
+				observe(service)
+			}
+		},
 		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 		APIServerStarter: func(ctx context.Context, req platformhttp.StartRequest) error {
 			ready <- req.Handler
@@ -150,8 +156,12 @@ func coldListingHost(t *testing.T, dir, home string) http.Handler {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	var hostErr error
+	args := []string{"you", "run", "--dir", dir, "--continuously", "--with-server", "--quiet"}
+	if len(observers) == 0 {
+		args = append(args, "--no-record")
+	}
 	go func() {
-		hostErr = process.Execute(application.Input{Args: []string{"you", "run", "--no-record", "--dir", dir, "--continuously", "--with-server", "--quiet"}, Env: env, WorkingDirectory: dir, Context: ctx, Stdout: io.Discard, Stderr: io.Discard})
+		hostErr = process.Execute(application.Input{Args: args, Env: env, WorkingDirectory: dir, Context: ctx, Stdout: io.Discard, Stderr: io.Discard})
 		close(done)
 	}()
 	t.Cleanup(func() {
