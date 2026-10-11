@@ -20,6 +20,16 @@ func TestCapturedCodexToolJoinedRestart(t *testing.T) {
 	t.Parallel()
 	f := newInvokeArtifactFixture(t)
 	f.env = capturedCodexRestartEnvironment(f.env)
+	raw, err := os.ReadFile(f.document)
+	var document map[string]any
+	if err != nil || json.Unmarshal(raw, &document) != nil {
+		t.Fatal("restart execution unavailable")
+	}
+	document["execution"].(map[string]any)["envVars"].(map[string]any)["API_KEY"] = "wsv-key-fixture"
+	raw, err = json.Marshal(document)
+	if err != nil || os.WriteFile(f.document, raw, 0o600) != nil {
+		t.Fatal("restart credential fixture unavailable")
+	}
 	if err := os.WriteFile(filepath.Join(f.project, "provider", "shim.cjs"), []byte(capturedCodexRestartShim), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +135,7 @@ func assertCapturedCodexRestartFacts(t *testing.T, snapshot capturedSummaryArtif
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{"private-command", "private-output", "private-denial", "private-token", "private-reasoning"} {
+	for _, secret := range []string{"private-command", "private-output", "private-denial", "private-token", "private-reasoning", "wsv-key-fixture", "private-key-value"} {
 		if strings.Contains(string(raw), secret) {
 			t.Fatal("restart leaked sensitive native-shaped facts")
 		}
@@ -183,6 +193,17 @@ func decodeCapturedCodexRestartTool(t *testing.T, value map[string]interface{}) 
 
 func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload, index int) {
 	t.Helper()
+	if index == 4 {
+		var result map[string]any
+		if json.Unmarshal(payload.ResultSummary, &result) != nil {
+			t.Fatal("restart MCP result invalid")
+		}
+		want := map[string]any{"status": "completed", "result": map[string]any{"value": "visible", "private_reasoning": "<redacted>", "nested": map[string]any{"safe": float64(0)}}}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatal("restart MCP result lost safe numeric facts or retained private keys")
+		}
+		return
+	}
 	if index != 1 && index != 2 {
 		return
 	}
@@ -225,7 +246,7 @@ emit({type:'item.started', item:{id:'success',type:'command_execution',command:'
 emit({type:'item.completed', item:{id:'success',type:'command_execution',aggregated_output:'private-output',exit_code:0,status:'completed'}});
 emit({type:'item.completed', item:{id:'failure',type:'command_execution',aggregated_output:'private-denial',exit_code:1,status:'failed'}});
 emit({type:'item.started', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',arguments:{query:'visible',api_key:'private-token'},status:'in_progress'}});
-emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible',private_reasoning:'private-reasoning'},status:'completed'}});
+emit({type:'item.completed', item:{id:'mcp',type:'mcp_tool_call',server:'docs',tool:'lookup',result:{value:'visible',private_reasoning:'private-reasoning','wsv-key-fixture':'private-key-value',nested:{'prefix-wsv-key-fixture':'private-key-value',safe:0}},status:'completed'}});
 emit({type:'item.completed', item:{id:'answer',type:'agent_message',text:'restart tools COMPLETE'}});
 emit({type:'turn.completed',usage:{input_tokens:5,output_tokens:2}});
 `

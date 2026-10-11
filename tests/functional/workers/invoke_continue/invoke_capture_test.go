@@ -138,7 +138,7 @@ func TestRequesterExecutionTokenPrivacy(t *testing.T) {
 			}
 			t19AwaitSignal(t, ctx, runner.started, "credential echo progress")
 			token := requesterSourceToken(t, runner, id)
-			awaitRequesterPrivacyLogs(t, fixture, ctx, id, "public credential progress", token)
+			awaitRequesterPrivacyLogs(t, fixture, ctx, id, "credential-progress", token)
 			close(runner.release)
 			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
 			joinErr := fixture.process.Execute(join.Input)
@@ -167,6 +167,10 @@ func requesterPrivacyProgress(request platformprocess.CommandRequest, observe pl
 		"command": "public credential command " + token, "aggregated_output": "public credential progress " + token,
 	}})
 	observe(platformprocess.OutputStreamStdout, append(item, '\n'))
+	message, _ := json.Marshal(map[string]any{"type": "item.updated", "item": map[string]any{
+		"id": "credential-message", "type": "agent_message", "text": "public credential message " + token,
+	}})
+	observe(platformprocess.OutputStreamStdout, append(message, '\n'))
 	observe(platformprocess.OutputStreamStderr, []byte("public credential diagnostic "+token+"\n"))
 }
 
@@ -203,6 +207,35 @@ func awaitRequesterPrivacyLogs(t *testing.T, fixture *invokeContinuePackageFixtu
 	if err != nil || !strings.Contains(body, "redacted") {
 		t.Fatal("public capture did not retain sanitized credential echo evidence")
 	}
+	assertRequesterPrivacyTool(t, body)
+}
+
+func assertRequesterPrivacyTool(t *testing.T, body string) {
+	t.Helper()
+	var page api.WorkerSessionLogPage
+	if json.Unmarshal([]byte(body), &page) != nil {
+		t.Fatal("invalid credential capture")
+	}
+	for _, event := range page.Events {
+		if event.Event.Payload["kind"] != "TOOL" {
+			continue
+		}
+		raw, err := json.Marshal(event.Event.Payload)
+		var draft workers.Draft
+		var payload workers.ToolPayload
+		if err != nil || json.Unmarshal(raw, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+			t.Fatal("invalid credential tool")
+		}
+		if payload.ToolCallID != "credential-progress" {
+			continue
+		}
+		var result map[string]any
+		if payload.ToolName != "command_execution" || json.Unmarshal(payload.ResultSummary, &result) != nil || result["aggregated_output"] != "<redacted>" || result["exit_code"] != float64(0) {
+			t.Fatal("credential tool lost typed redacted facts")
+		}
+		return
+	}
+	t.Fatal("credential capture omitted structured tool")
 }
 
 func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, id, token, outcome string) {
@@ -232,7 +265,7 @@ func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFix
 			t.Fatalf("public privacy HTTP %s read failed: %d", suffix, status)
 		}
 		assertRequesterTokenAbsent(t, token, body)
-		if strings.HasPrefix(suffix, "/events") && !strings.Contains(body, "public credential progress") {
+		if strings.HasPrefix(suffix, "/events") && (!strings.Contains(body, "credential-progress") || !strings.Contains(body, "command_execution") || !strings.Contains(body, "redacted")) {
 			t.Fatal("retained Events replay lost the observed credential echo")
 		}
 	}

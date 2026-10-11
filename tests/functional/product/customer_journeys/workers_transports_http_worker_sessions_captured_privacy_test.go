@@ -20,7 +20,7 @@ type capturedPrivacyCommand struct{ *functionalWorkerGate }
 func (runner capturedPrivacyCommand) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	result, err := runner.functionalWorkerGate.Run(ctx, request)
 	if err == nil {
-		result.Stdout = append([]byte(`{"type":"item.completed","item":{"id":"visible-call","type":"command_execution","aggregated_output":"visible-tool visible-result classified-tool-token classified-environment-token"}}`+"\n"), support.CodexSuccessStdout("visible completion. COMPLETE")...)
+		result.Stdout = append([]byte(`{"type":"item.completed","item":{"id":"visible-call","type":"command_execution","aggregated_output":"visible-tool visible-result classified-tool-token classified-environment-token"}}`+"\n"), append([]byte(`{"type":"item.completed","item":{"id":"visible-mcp","type":"mcp_tool_call","server":"docs","tool":"lookup","result":{"visible":"visible-result","classified-tool-token":"private-key-value","nested":{"prefix-classified-environment-token":"private-key-value","safe":0}},"status":"completed"}}`+"\n"), support.CodexSuccessStdout("visible-tool completion. COMPLETE")...)...)
 	}
 	return result, err
 }
@@ -106,7 +106,7 @@ func TestWorkerSessionCapturedLogsLivePrivacy(t *testing.T) {
 func assertCapturedPublicPrivacy(t *testing.T, output string) {
 	t.Helper()
 	assertCapturedSecretsAbsent(t, output)
-	for _, visible := range []string{"visible-tool", "visible-result", "redacted"} {
+	for _, visible := range []string{"visible-tool", "visible-result", "visible-call", "command_execution", "redacted"} {
 		if !strings.Contains(output, visible) {
 			t.Fatalf("public captured read lost %s", visible)
 		}
@@ -115,7 +115,7 @@ func assertCapturedPublicPrivacy(t *testing.T, output string) {
 
 func assertCapturedSecretsAbsent(t *testing.T, output string) {
 	t.Helper()
-	for _, secret := range []string{"classified-environment-token", "classified-tool-token", "DeclaredSecretJSONPointers"} {
+	for _, secret := range []string{"classified-environment-token", "classified-tool-token", "private-key-value", "DeclaredSecretJSONPointers"} {
 		if strings.Contains(output, secret) {
 			t.Fatalf("public captured read exposed planted fixture %s", secret)
 		}

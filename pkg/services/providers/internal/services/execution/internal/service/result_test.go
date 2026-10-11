@@ -319,6 +319,8 @@ func TestSanitizeCodexToolSummaryBoundaries(t *testing.T) {
 		{"output array", "raw_output", `["private output",0,false]`, `["<redacted>",0,false]`},
 		{"output scalar", "raw_output", `"private output"`, `"<redacted>"`},
 		{"private reasoning", "raw_input", `{"private_reasoning":"private thought","encrypted_content":"private blob"}`, `{"encrypted_content":"<redacted>","private_reasoning":"<redacted>"}`},
+		{"credential input keys", "raw_input", `{"arguments":{"planted\u002dsecret":"private value","prefix-planted-secret":1,"safe":0}}`, `{"arguments":{"safe":0}}`},
+		{"credential output key collisions", "raw_output", `{"result":{"planted-secret":"private value","prefix-planted-secret":1,"prefix-<redacted>":2,"<redacted>":3,"nested":[{"planted-secret":false,"safe":true}]},"exit_code":0,"status":"completed"}`, `{"result":{"prefix-<redacted>":2,"<redacted>":3,"nested":[{"safe":true}]},"exit_code":0,"status":"completed"}`},
 		{"malformed input", "raw_input", `{"value":"planted-secret"`, `{"value":"<redacted>"`},
 		{"malformed output", "raw_output", `{"value":"private output"`, `<redacted>`},
 	} {

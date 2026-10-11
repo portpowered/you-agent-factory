@@ -256,6 +256,13 @@ func redactToolValue(value any, redact func(string) string, sensitive bool) any 
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
+			// Omit credential-bearing keys rather than renaming them: multiple
+			// private keys can redact to the same name, or collide with a real
+			// public key. Neither their names nor their values are public facts.
+			if redact(key) != key {
+				delete(typed, key)
+				continue
+			}
 			privateKey := strings.ToLower(strings.ReplaceAll(key, "_", ""))
 			if containsSensitiveMetadataTerm(key) || strings.Contains(privateKey, "privatereasoning") || strings.Contains(privateKey, "encryptedcontent") {
 				typed[key] = redactedValue
