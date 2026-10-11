@@ -257,6 +257,7 @@ func assertPeerRecordingIsolatedArtifacts(t *testing.T, service recordings.Servi
 		if err != nil || len(history.Dispatches) == 0 {
 			t.Fatalf("peer %s retained dispatches=%+v error=%v", id, history.Dispatches, err)
 		}
+		assertPeerRecordingRetainedEventOrder(t, id, history.Events)
 		for _, dispatch := range history.Dispatches {
 			if i == 0 && dispatch.Status == recordings.FactoryDispatchStatusCompleted {
 				t.Fatal("held canceled dispatch became complete in retained history")
@@ -265,6 +266,28 @@ func assertPeerRecordingIsolatedArtifacts(t *testing.T, service recordings.Servi
 				t.Fatalf("peer %s lost completed dispatch: %+v", id, dispatch)
 			}
 		}
+	}
+}
+
+func assertPeerRecordingRetainedEventOrder(t *testing.T, id string, events []recordings.CanonicalEvent) {
+	t.Helper()
+	started := false
+	for i, event := range events {
+		if event.Scope.FactorySessionID != "" && event.Scope.FactorySessionID != id {
+			t.Fatalf("retained peer %s contains foreign event scope: %+v", id, event.Scope)
+		}
+		if i > 0 && event.Sequence <= events[i-1].Sequence {
+			t.Fatal("retained peer event order regressed")
+		}
+		if event.Kind == "SESSION_STARTED" {
+			started = true
+		}
+		if event.Kind == "DISPATCH_REQUEST" && !started {
+			t.Fatal("retained peer dispatched before activation")
+		}
+	}
+	if !started {
+		t.Fatal("retained peer lost activation event")
 	}
 }
 
