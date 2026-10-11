@@ -6,9 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
-	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -25,6 +23,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -939,4 +940,8 @@ func (fixtureResponseStreams) NewEventStore(id string, clock factory.Clock) (*re
 }
 func (fixtureResponseStreams) Publish(store *responseeventstore.SessionResponseEventStore, event responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
 	return store.Publish(event)
+}
+
+func (fixtureSyncWaitScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	return platformclock.Real{}.NewTimer(d)
 }

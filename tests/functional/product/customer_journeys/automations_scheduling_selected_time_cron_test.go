@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -12,7 +11,7 @@ import (
 
 // F-T04/F-T08 retain the public nominal/due/expiry/identity observer from the
 // legacy journey while selecting a TimerSource that is not a clockwork.Clock.
-func assertSelectedCronTime(t *testing.T, url string, facts *platformclock.Deterministic, scheduler *selectedTimeScheduler,
+func assertSelectedCronTime(t *testing.T, url string, facts *selectedTimeFactSource, scheduler *selectedTimeScheduler,
 	routes map[string]chan work.FactorySubmissionRecord,
 ) {
 	t.Helper()

@@ -5,12 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,6 +13,14 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewFakeServiceRequiresExplicitClockBeforeFixtureIO(t *testing.T) {
@@ -1007,4 +1009,12 @@ func (workflows *blockingWorkflowDefinitions) ResolveSource(
 	close(workflows.entered)
 	<-workflows.release
 	return workflows.JavaScriptWorkflows.ResolveSource(request, context)
+}
+
+func (testSyncWaitScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	return platformclock.Real{}.NewTimer(d)
+}
+
+func (c *controlledSyncWaitClock) NewTimer(d time.Duration) platformclock.Timer {
+	panic("unexpected timer in synchronous wait fixture")
 }

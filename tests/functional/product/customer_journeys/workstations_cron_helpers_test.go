@@ -28,7 +28,13 @@ func withSubmissionRecorder(recorder recordings.SubmissionRecorder) cronRuntimeO
 }
 
 func withClock(clock platformclock.Source) cronRuntimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		if controlled, ok := clock.(*clockwork.FakeClock); ok {
+			cfg.Edges.Clock = cronReadinessClock{controlled}
+		} else {
+			cfg.Edges.Clock = clock
+		}
+	}
 }
 
 func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunner) cronRuntimeOption {
@@ -807,4 +813,18 @@ func generatedWorkStateName(state *factoryapi.WorkState) string {
 		return ""
 	}
 	return state.Name
+}
+
+// Acknowledge process activation polls independently of cron eligibility. This
+// keeps the legacy Clock-only caller while all cron timers use its fake clock.
+type cronReadinessClock struct{ *clockwork.FakeClock }
+
+func (clock cronReadinessClock) NewTimer(d time.Duration) clockwork.Timer {
+	if d == 10*time.Millisecond {
+		d = 0
+	}
+	return clock.FakeClock.NewTimer(d)
+}
+func (clock cronReadinessClock) After(d time.Duration) <-chan time.Time {
+	return clock.NewTimer(d).Chan()
 }

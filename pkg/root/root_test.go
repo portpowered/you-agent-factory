@@ -3,11 +3,13 @@ package root
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -299,5 +301,62 @@ func TestConstructionOverridesAllowOmissionAndValidEffects(t *testing.T) {
 		if err := validateConstructionOverrides(edges); err != nil {
 			t.Fatalf("validateConstructionOverrides = %v", err)
 		}
+	}
+}
+
+func TestSelectedFullClockSchedulingCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicit), func(t *testing.T) {
+			facts := clockwork.NewFakeClockAt(time.Unix(42, 0))
+			controlled := platformclock.NewDeterministic(time.Unix(99, 0), time.Second)
+			var selected platformclock.TimerSource
+			if explicit {
+				selected = controlled
+			}
+			clock, scheduler, err := normalizeProcessTime(facts, selected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			timer := scheduler.NewTimer(time.Second)
+			after := scheduler.After(time.Second)
+			stopped := scheduler.NewTimer(2 * time.Second)
+			if !stopped.Stop() {
+				t.Fatal("timer did not stop")
+			}
+			facts.Advance(time.Second)
+			if clock.Now() != facts.Now() {
+				t.Fatal("fact origin changed")
+			}
+			if explicit {
+				select {
+				case <-timer.C():
+					t.Fatal("fact clock fired explicit scheduler")
+				default:
+				}
+				controlled.SetTick(1)
+			}
+			select {
+			case instant := <-timer.C():
+				if instant != scheduler.Now() {
+					t.Fatal("timer origin changed")
+				}
+			default:
+				t.Fatal("selected advancement did not fire timer")
+			}
+			select {
+			case <-after:
+			default:
+				t.Fatal("After did not delegate")
+			}
+			facts.Advance(time.Second)
+			controlled.SetTick(2)
+			select {
+			case <-stopped.C():
+				t.Fatal("stopped timer fired")
+			default:
+			}
+			timer.Stop()
+		})
 	}
 }

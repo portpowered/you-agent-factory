@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -25,7 +24,7 @@ func assertSelectedWatcherEmpty(t *testing.T, url, id string) {
 
 // F-T05/F-T06/F-T09 observe real filesystem delivery and controlled scheduling.
 // Read gates replace only FactoryRuntimeInputs, never the fsnotify implementation.
-func assertSelectedWatcherTime(t *testing.T, url string, facts *platformclock.Deterministic,
+func assertSelectedWatcherTime(t *testing.T, url string, facts *selectedTimeFactSource,
 	scheduler *selectedTimeScheduler, files *selectedTimeFiles,
 ) {
 	t.Helper()

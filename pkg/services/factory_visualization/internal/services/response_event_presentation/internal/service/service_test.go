@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 	presentationservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service"
@@ -46,7 +47,7 @@ func (w *gatedPresentationWriter) String() string {
 
 func TestNewServiceIsInert(t *testing.T) {
 	before := runtime.NumGoroutine()
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	if service == nil {
 		t.Fatal("NewService() returned nil")
 	}
@@ -59,7 +60,7 @@ func TestNewServiceIsInert(t *testing.T) {
 func TestResponsePresentation_BestEffortOutputDoesNotBlockAndBoundsBacklog(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	writer := newGatedPresentationWriter()
 	output := service.OpenBestEffortOutput(writer)
 	done := make(chan struct{})
@@ -87,7 +88,7 @@ func TestResponsePresentation_BestEffortOutputDoesNotBlockAndBoundsBacklog(t *te
 func TestResponsePresentation_LosslessOutputPreservesOrderThroughSlowWriter(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	writer := newGatedPresentationWriter()
 	output := service.OpenLosslessOutput(writer)
 	for _, record := range []string{"first", "second", "terminal"} {
@@ -115,7 +116,7 @@ func TestResponsePresentation_LosslessOutputPreservesOrderThroughSlowWriter(t *t
 func TestResponsePresentation_BestEffortDrainAbandonsSlowWriter(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	writer := newGatedPresentationWriter()
 	output := service.OpenBestEffortOutput(writer)
 	if err := output.Enqueue([]byte("progress")); err != nil {
@@ -135,7 +136,7 @@ func TestResponsePresentation_BestEffortDrainAbandonsSlowWriter(t *testing.T) {
 func TestResponsePresentation_FactoryEventStreamsDrainEventsBeforeTerminal(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	for _, mode := range []struct {
 		name string
 		open func(io.Writer, contracts.FactoryEventEncoder) contracts.FactoryEventStream
@@ -190,7 +191,7 @@ func TestResponsePresentation_FactoryEventStreamsDrainEventsBeforeTerminal(t *te
 func TestResponsePresentation_OutputsProvideExclusiveTerminalWrite(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	for _, mode := range []struct {
 		name string
 		open func(io.Writer) contracts.Output
@@ -270,7 +271,7 @@ func assertTerminalAfterAcceptedProgress(t *testing.T, content, terminal string)
 func TestResponsePresentation_LosslessConcurrentEnqueueDrainAndFinalizeRace(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	writer := &syncWriter{}
 	output := service.OpenLosslessOutput(writer)
 
@@ -328,7 +329,7 @@ func TestResponsePresentation_LosslessConcurrentEnqueueDrainAndFinalizeRace(t *t
 func TestResponsePresentation_FactoryEventStreamConcurrentPresentFinalizeRace(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	writer := &syncWriter{}
 	stream := service.OpenLosslessFactoryEventStream(writer, func(event factorydefinitions.FactoryEvent) ([]byte, bool) {
 		return []byte(event.Id), true
@@ -382,7 +383,7 @@ func TestResponsePresentation_FactoryEventStreamConcurrentPresentFinalizeRace(t 
 func TestResponsePresentation_BestEffortConcurrentEnqueuePressureRace(t *testing.T) {
 	t.Parallel()
 
-	service := presentationservice.New()
+	service := presentationservice.New(platformclock.Real{})
 	writer := newGatedPresentationWriter()
 	output := service.OpenBestEffortOutput(writer)
 	if err := output.Enqueue([]byte("progress")); err != nil {
@@ -442,5 +443,94 @@ func TestResponsePresentation_BestEffortConcurrentEnqueuePressureRace(t *testing
 	}
 	if output.Dropped() == 0 {
 		t.Fatal("best-effort output did not report drops under concurrent backlog pressure")
+	}
+}
+
+type selectedDrainScheduler struct {
+	*platformclock.Deterministic
+	created chan *selectedDrainTimer
+}
+type selectedDrainTimer struct {
+	platformclock.Timer
+	stopped  bool
+	duration time.Duration
+}
+
+func (timer *selectedDrainTimer) Stop() bool { timer.stopped = true; return timer.Timer.Stop() }
+func (scheduler *selectedDrainScheduler) NewTimer(d time.Duration) platformclock.Timer {
+	timer := &selectedDrainTimer{Timer: scheduler.Deterministic.NewTimer(d), duration: d}
+	scheduler.created <- timer
+	return timer
+}
+func TestResponsePresentationSelectedDrainTimer(t *testing.T) {
+	t.Parallel()
+	for _, timeout := range []bool{false, true} {
+		t.Run(fmt.Sprint(timeout), func(t *testing.T) {
+			assertSelectedDrain(t, timeout)
+		})
+	}
+}
+
+func assertSelectedDrain(t *testing.T, timeout bool) {
+	t.Helper()
+	scheduler := &selectedDrainScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedDrainTimer, 2)}
+	writer := newGatedPresentationWriter()
+	output := presentationservice.New(scheduler).OpenBestEffortOutput(writer)
+	if err := output.Enqueue([]byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- output.CloseAndDrain() }()
+	var timer *selectedDrainTimer
+	select {
+	case timer = <-scheduler.created:
+	case <-time.After(10 * time.Second):
+		t.Fatal("drain timer missing")
+	}
+	if timer.duration != 250*time.Millisecond {
+		t.Fatal(timer.duration)
+	}
+	scheduler.SetTick(249)
+	select {
+	case <-done:
+		t.Fatal("early drain")
+	default:
+	}
+	if timeout {
+		scheduler.SetTick(250)
+	} else {
+		writer.release()
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("drain not joined")
+	}
+	if !timer.stopped {
+		t.Fatal("drain timer not stopped")
+	}
+	if timeout {
+		writer.release()
+	}
+	assertRepeatedSelectedDrain(t, output, scheduler, writer, timeout)
+}
+
+func assertRepeatedSelectedDrain(t *testing.T, output contracts.Output, scheduler *selectedDrainScheduler, writer *gatedPresentationWriter, timeout bool) {
+	t.Helper()
+	if err := output.CloseAndDrain(); err != nil {
+		t.Fatal(err)
+	}
+	if repeated := <-scheduler.created; !repeated.stopped {
+		t.Fatal("repeated drain timer remained active")
+	}
+	// Exclusive terminal writes preserve serialized writer access.
+	if err := output.WithWriterExclusive(func(io.Writer) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !timeout && writer.String() != "first\n" {
+		t.Fatalf("ordered output %q", writer.String())
 	}
 }

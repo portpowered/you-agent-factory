@@ -500,8 +500,9 @@ func provideAPIServerStarter(
 
 func provideRuntimeHostOperation(
 	starter platformhttpserver.Starter,
+	scheduler platformclock.TimerSource,
 ) factorysessionwire.RuntimeHostOperation {
-	return factorysessionwire.NewRuntimeHostService(starter)
+	return factorysessionwire.NewRuntimeHostService(starter, scheduler)
 }
 
 func provideProcessRuntimeFactory(
@@ -740,8 +741,8 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 	return factorysessionwire.NewWorkStopSummaryProjector()
 }
 
-func provideResponsePresentation() factoryvisualization.ResponsePresentation {
-	return factoryvisualizationwire.NewResponsePresentation()
+func provideResponsePresentation(scheduler platformclock.TimerSource) factoryvisualization.ResponsePresentation {
+	return factoryvisualizationwire.NewResponsePresentation(scheduler)
 }
 
 // provideProcessLogger selects the process backend once, independently of CLI output policy.

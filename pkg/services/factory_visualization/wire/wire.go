@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
@@ -87,8 +88,8 @@ func NewRuntimeOpening(reader factoryvisualization.RuntimeReader,
 
 // NewResponsePresentation constructs the inert response/event presentation
 // capability used by transport composition.
-func NewResponsePresentation() factoryvisualization.ResponsePresentation {
-	return responseeventpresentationwire.NewService()
+func NewResponsePresentation(scheduler platformclock.TimerSource) factoryvisualization.ResponsePresentation {
+	return responseeventpresentationwire.NewService(scheduler)
 }
 
 // ActivationOpening allocates subscription state over the fixed activation owner.

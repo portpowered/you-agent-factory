@@ -3,7 +3,10 @@ package start_retry_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,7 +18,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jonboulle/clockwork"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -814,4 +821,147 @@ func openingPolicyArgs(scenario initialOpeningScenario, serverURL string, i int)
 		args = append(args, "--json")
 	}
 	return args
+}
+
+// The sequence shares process safety time while separate invocation-local
+// directories, identities and starters keep the live peer useful during replay.
+func TestSelectedSchedulingStartupReplayCancellationAndRetry(t *testing.T) {
+	t.Parallel()
+	facts := clockwork.NewFakeClockAt(time.Date(2041, 2, 3, 4, 5, 6, 0, time.UTC))
+	scheduler := newSelectedSchedulingClock()
+	ready := make(chan struct{}, 16)
+	bound := make(chan int, 16)
+	joined := make(chan int, 16)
+	failures := map[int]chan error{7438: make(chan error, 1), 7439: make(chan error, 1), 7440: make(chan error, 1), 7441: make(chan error, 1)}
+	effects := &initialOpeningEffects{calls: make(map[string]int)}
+	logCore, _ := observer.New(zap.InfoLevel)
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{Clock: facts, ProcessScheduler: scheduler, RecordingReadFile: os.ReadFile,
+		ScriptCommandRunner: initialOpeningScriptRunner{effects: effects},
+		ProcessLogger: zap.New(logCore).WithOptions(zap.Hooks(func(entry zapcore.Entry) error {
+			if entry.Message == "factory started" {
+				ready <- struct{}{}
+			}
+			return nil
+		})),
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			defer func() { joined <- request.Port }()
+			request.OnBound(platformhttpserver.Binding{Host: "localhost", Port: request.Port})
+			bound <- request.Port
+			select {
+			case <-ctx.Done():
+				return nil
+			case err := <-failures[request.Port]:
+				return err
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	support.CleanupProcess(t, process)
+	scenario := newInitialOpeningScenario(t)
+	home := t.TempDir()
+	hostDir := support.ScaffoldFactory(t, initialOpeningFactoryConfig())
+	makeInputs := func(dir string, args ...string) *support.CapturedInputs {
+		inputs := support.FakeInputs(t.Context(), append([]string{"you", "run", "--session", uuid.NewString(), "--dir", dir}, args...))
+		inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+		inputs.Input.WorkingDirectory = dir
+		return inputs
+	}
+	boot := makeInputs(hostDir, "--continuously", "--with-server", "--listen", "localhost:7438", "--quiet", "--no-record")
+	support.InitializeCustomerHomeWithProcess(t, process, boot.Input.Env, hostDir)
+	host := support.StartProcessCommand(t, process, boot.Input)
+	if err := selectedSchedulingActivate(t, scheduler, func() error { selectedSchedulingReceive(t, bound); selectedSchedulingReceive(t, ready); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { host.Stop(t) })
+	sessions := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	var peerHistory *factorydefinitions.FactoryEventStream
+	if err := selectedSchedulingActivate(t, scheduler, func() error { peerHistory = scenario.startPeer(t, sessions); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	closeInitialOpeningSession(t, sessions, scenario.peerID)
+	livePeer := newInitialOpeningScenario(t)
+	if err := selectedSchedulingActivate(t, scheduler, func() error { livePeer.startPeer(t, sessions); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	for index, action := range []string{"complete", "api failure", "cancel", "retry"} {
+		assertSelectedStartupSequence(t, process, sessions, makeInputs, facts, scheduler, ready, joined, failures, scenario, livePeer, peerHistory, index, action)
+	}
+	host.Stop(t)
+	selectedSchedulingReceive(t, joined)
+}
+
+// All values belong to this one scenario; no invocation-wide lock gates peers.
+func assertSelectedStartupSequence(t *testing.T, process support.Process, sessions factorysessions.Service, makeInputs func(string, ...string) *support.CapturedInputs, facts *clockwork.FakeClock, scheduler *selectedSchedulingClock, ready <-chan struct{}, joined <-chan int, failures map[int]chan error, scenario, livePeer initialOpeningScenario, peerHistory *factorydefinitions.FactoryEventStream, index int, action string) {
+	t.Helper()
+	// Each local CLI run opens its own Factory Session; addressed peer sessions
+	// use the public Start identity contract above.
+	dir := newInitialOpeningScenario(t).candidateDir
+	workPath := filepath.Join(t.TempDir(), "startup.json")
+	if err := os.WriteFile(workPath, []byte(`{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"startup","workTypeName":"task","state":"init","payload":"selected"}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	port := 7439 + index%3
+	inputs := makeInputs(dir, "--work", workPath, "--continuously", "--with-server", "--listen", "localhost:"+fmt.Sprint(port), "--no-record")
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	timer := waitSelectedStartupTimer(t, scheduler, command, inputs)
+	facts.Advance(time.Hour)
+	if err := selectedSchedulingActivate(t, scheduler, func() error { assertInitialOpeningInvocation(t, sessions, livePeer.peerID); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	assertInitialOpeningReplay(t, process, filepath.Join(scenario.peerDir, "peer.jsonl"), scenario.peerID, peerHistory)
+	select {
+	case <-ready:
+		t.Fatal("replay/fact progression published readiness")
+	default:
+	}
+	if action == "api failure" {
+		cause := errors.New("selected startup API failure")
+		failures[port] <- cause
+		command.AcceptError()
+		selectedSchedulingReceive(t, command.Done())
+		if !errors.Is(command.Err(), cause) {
+			t.Fatalf("startup cause %v", command.Err())
+		}
+	} else if action == "cancel" {
+		command.Stop(t)
+	} else {
+		scheduler.SetTick(int(scheduler.Now().Sub(time.Unix(0, 0))/time.Millisecond) + 250)
+		select {
+		case <-ready:
+		case <-command.Done():
+			t.Fatalf("startup failed after selected advance: %v stdout=%s stderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
+		case <-time.After(10 * time.Second):
+			t.Fatalf("readiness output missing stdout=%s stderr=%s", inputs.Stdout(), inputs.Stderr())
+		}
+		command.Stop(t)
+	}
+	if !timer.stopped.Load() {
+		t.Fatal("startup timer survived joined command")
+	}
+	if stopped := selectedSchedulingReceive(t, joined); stopped != port {
+		t.Fatalf("joined port %d want %d", stopped, port)
+	}
+}
+
+func waitSelectedStartupTimer(t *testing.T, scheduler *selectedSchedulingClock, command *support.ProcessCommand, inputs *support.CapturedInputs) *selectedSchedulingTimer {
+	t.Helper()
+	var timer *selectedSchedulingTimer
+	for timer == nil {
+		select {
+		case candidate := <-scheduler.created:
+			if candidate.duration == 10*time.Millisecond {
+				scheduler.acknowledge(candidate)
+			}
+			if candidate.duration == 250*time.Millisecond && !candidate.stopped.Load() {
+				timer = candidate
+			}
+		case <-command.Done():
+			t.Fatalf("startup ended before timer: %v stdout=%s stderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
+		case <-time.After(30 * time.Second):
+			t.Fatal("startup readability timer missing")
+		}
+	}
+	return timer
 }
