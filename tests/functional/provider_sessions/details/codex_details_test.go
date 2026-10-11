@@ -155,7 +155,7 @@ func startCapturedCodexHost(t *testing.T, home, dir string, runner platformproce
 	}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: dir, WaitForServiceModeRuntime: true,
-		Env:   []string{"HOME=" + home, "USERPROFILE=" + home},
+		Env:   []string{"HOME=" + home, "USERPROFILE=" + home, "VALIDATION_ENVIRONMENT=1", "CAPTURE_ENVIRONMENT=10"},
 		Edges: serviceedges.Edges{ProviderCommandRunner: runner, RecordingReadFile: readFile},
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
 			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
@@ -177,7 +177,7 @@ func invokeCapturedCodex(t *testing.T, host *support.FunctionalAPIServer, home, 
 		t.Fatal(err)
 	}
 	input := support.FakeInputs(t.Context(), []string{"you", "--json", "worker-sessions", "invoke", "--execution", path})
-	input.Input.Env, input.Input.WorkingDirectory = []string{"HOME=" + home, "USERPROFILE=" + home}, dir
+	input.Input.Env, input.Input.WorkingDirectory = []string{"HOME=" + home, "USERPROFILE=" + home, "VALIDATION_ENVIRONMENT=1", "CAPTURE_ENVIRONMENT=10"}, dir
 	if err := host.Execute(t, input.Input); err != nil {
 		t.Fatalf("invoke: %v stdout=%s stderr=%s", err, input.Stdout(), input.Stderr())
 	}

@@ -345,13 +345,9 @@ func (fixture costsSessionFixture) assertCLIFailure(t *testing.T, id, code strin
 }
 
 func costsHomeEnvironment(home string) []string {
-	env := []string{}
-	for _, entry := range os.Environ() {
-		key := strings.SplitN(entry, "=", 2)[0]
-		if !strings.EqualFold(key, "HOME") && !strings.EqualFold(key, "USERPROFILE") && !strings.EqualFold(key, "HOMEDRIVE") && !strings.EqualFold(key, "HOMEPATH") {
-			env = append(env, entry)
-		}
-	}
+	// Explicit scenario environment never inherits developer credentials. Keep
+	// 1 and a longer causal literal: neither environment flag is a credential.
+	env := []string{"VALIDATION_ENVIRONMENT=1", "CAPTURE_ENVIRONMENT=1000000"}
 	drive := filepath.VolumeName(home)
 	env = append(env, "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE="+drive, "HOMEPATH="+strings.TrimPrefix(home, drive))
 	return env
