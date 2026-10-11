@@ -237,9 +237,12 @@ func NewServerWithRecordingsAndMetricsAndCosts(
 	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
 	costsHTTP *costshttp.Handler,
 	shutdown ShutdownOperation,
+	messagesHTTP *agentmessageshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, shutdown, workerSessions...)
+	server := newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, shutdown, workerSessions...)
+	server.agentMessagesHTTP = messagesHTTP
+	return server
 }
 
 func newServer(

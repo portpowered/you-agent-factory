@@ -161,30 +161,45 @@
       "name": "you message",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.message.list",
       "name": "you message list",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.message.reply",
       "name": "you message reply",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.metrics",
@@ -1359,10 +1374,15 @@
       "name": "getAgentMessage",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/getCurrentFactoryBySessionId",
@@ -1735,10 +1755,15 @@
       "name": "listAgentMessages",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/listFactorySessionArtifacts",
@@ -2102,10 +2127,15 @@
       "name": "sendAgentMessage",
       "interface": "rest",
       "classification": "operation",
-      "status": "missing",
+      "status": "covered",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/setFactorySessionResourceCapacity",

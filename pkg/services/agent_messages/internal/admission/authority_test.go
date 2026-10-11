@@ -123,6 +123,9 @@ func TestAuthorizerRequesterPolicy(t *testing.T) {
 				"foreign-lead": authorityObservation("foreign-lead", "other", "foreign-project-work", ""),
 				"root":         authorityObservation("root", "factory", "root-work", ""),
 			}}
+			lead := reader.observations["lead"]
+			lead.Requester = &workersessions.Requester{Kind: "OPERATOR"}
+			reader.observations["lead"] = lead
 			authorizer := NewAuthorizer(nil, reader.read)
 			sender, err := authorizer.Recipient(context.Background(), cell.sender, "")
 			if err != nil {

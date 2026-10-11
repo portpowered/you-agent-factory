@@ -170,6 +170,11 @@ func (a *Authorizer) hasRequester(ctx context.Context, child, target Identity) (
 		if requester == nil {
 			return matched, nil
 		}
+		// Operator is a real requester-chain terminus. It grants no message
+		// address or write authority, but preserves an evidenced worker link.
+		if requester.Kind == "OPERATOR" {
+			return matched, nil
+		}
 		if requester.Kind != "WORKER_SESSION" || !validID(requester.WorkerSessionID) {
 			return false, agentmessages.ErrNotPermitted
 		}

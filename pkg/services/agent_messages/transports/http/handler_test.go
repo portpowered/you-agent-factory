@@ -207,6 +207,30 @@ func TestResponseWriteFailureHasContentFreeDiagnostic(t *testing.T) {
 
 var _ io.Writer = (*failedResponse)(nil)
 
+func TestRejectedProfileCannotExposeAnotherHostsInbox(t *testing.T) {
+	t.Parallel()
+	h := NewHandler(messageService{
+		get: func(context.Context, agentmessages.GetRequest) (agentmessages.Message, error) {
+			return agentmessages.Message{MessageID: "selected"}, nil
+		},
+	}, logging.NoopLogger{})
+	bound := h.ForProfile(agentmessages.ErrBadRequest)
+	for _, operation := range []func(http.ResponseWriter, *http.Request){
+		bound.Send, bound.List, func(w http.ResponseWriter, r *http.Request) { bound.Get(w, r, "selected") },
+	} {
+		w := httptest.NewRecorder()
+		operation(w, httptest.NewRequest("GET", "/messages", nil))
+		if w.Code != 503 || !strings.Contains(w.Body.String(), "MESSAGE_STORE_UNAVAILABLE") || strings.Contains(w.Body.String(), "selected") {
+			t.Fatal("rejected profile exposed selected inbox")
+		}
+	}
+	w := httptest.NewRecorder()
+	h.Get(w, httptest.NewRequest("GET", "/messages/selected", nil), "selected")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "selected") {
+		t.Fatal("foreign host quarantined original adapter")
+	}
+}
+
 func TestMalformedBodyNeverLeaksToJSONErrorResponse(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()

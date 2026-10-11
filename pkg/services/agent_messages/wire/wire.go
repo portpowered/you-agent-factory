@@ -13,6 +13,7 @@ import (
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/admission"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
@@ -28,6 +29,8 @@ type (
 	Ledger            = admission.Ledger
 	EventAppender     = admission.EventAppender
 	ObservationReader = admission.ObservationReader
+	Engine            = admission.Engine
+	ConfiguredService = admission.Configured
 )
 
 func NewJournal(files agentmessages.StoreFileSystem, path string) (*Journal, error) {
@@ -61,12 +64,21 @@ func NewQuota(sendsPerHour, threadMessages, maxHop int) (Quota, error) {
 	return admission.Limits{SendsPerHour: sendsPerHour, ThreadMessages: threadMessages, HopLimit: &maxHop}, nil
 }
 
-func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger) (agentmessages.Service, error) {
+func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger) (*Engine, error) {
 	if authority == nil || validator == nil || quota == nil || ledger == nil || now == nil ||
 		newID == nil || len(cursorKey) < sha256.Size || stream == nil || logger == nil {
 		return nil, agentmessages.ErrBadRequest
 	}
 	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, newID, cursorKey, stream, logger), nil
+}
+
+// NewConfiguredService supplies selected-profile lifecycle over the same Engine
+// injected into Messaging's transports. It constructs no collaborators later.
+func NewConfiguredService(engine *Engine, startup *Startup, load operatorsettings.ConfigLoader) (*ConfiguredService, error) {
+	if engine == nil || startup == nil || load == nil {
+		return nil, agentmessages.ErrBadRequest
+	}
+	return admission.NewConfigured(engine, startup, load)
 }
 
 func NewStartup(enabled bool, journal *Journal, now func() time.Time, retention time.Duration, logger logging.Logger) (*Startup, error) {

@@ -30,9 +30,21 @@ const maxSendEnvelopeBytes = 64 * 1024
 type strictSendRequest factoryapi.AgentMessageSendRequest
 
 type Handler struct {
-	service agentmessages.Service
-	logger  logging.Logger
-	mapper  agentmessage.Mapper
+	service      agentmessages.Service
+	logger       logging.Logger
+	mapper       agentmessage.Mapper
+	profileError error
+}
+
+// ForProfile binds a host's activation outcome without constructing or
+// replacing a service. A rejected profile cannot expose the selected inbox;
+// the host's unrelated Factory routes remain available.
+func (h *Handler) ForProfile(activationErr error) *Handler {
+	bound := *h
+	if activationErr != nil {
+		bound.profileError = agentmessages.ErrStoreUnavailable
+	}
+	return &bound
 }
 
 func NewHandler(service agentmessages.Service, logger logging.Logger) *Handler {
@@ -43,6 +55,10 @@ func NewHandler(service agentmessages.Service, logger logging.Logger) *Handler {
 }
 
 func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
+	if h.profileError != nil {
+		h.writeError(w, h.profileError)
+		return
+	}
 	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
 	if err != nil {
 		h.writeError(w, err)
@@ -78,6 +94,10 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request, messageID string) {
+	if h.profileError != nil {
+		h.writeError(w, h.profileError)
+		return
+	}
 	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
 	if err != nil {
 		h.writeError(w, err)
@@ -92,6 +112,10 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request, messageID string) 
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	if h.profileError != nil {
+		h.writeError(w, h.profileError)
+		return
+	}
 	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
 	if err != nil {
 		h.writeError(w, err)
