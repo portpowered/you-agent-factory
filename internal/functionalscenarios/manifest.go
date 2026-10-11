@@ -139,6 +139,8 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/product/cli_rest_journeys/provider_sessions_cli_journeys_test.go::TestProviderSessionCLIJourneys", InterfaceCLI)
 	case "cli/you.worker-sessions.pause", "cli/you.worker-sessions.resume", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.terminate":
 		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess", InterfaceCLI)
+	case "cli/you.worker-sessions.follow":
+		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/terminal_follow_test.go::TestManySessionTerminalFollowCompletionOrder", InterfaceCLI)
 	case "cli/you.worker-sessions.continue", "cli/you.worker-sessions.interrupt", "cli/you.worker-sessions.invoke":
 		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess", InterfaceCLI)
 	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
@@ -168,6 +170,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "rest/streamWorkerSessionEventsByWorkerSessionId":
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceREST)
 		appendEvidence(scenario, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart", InterfaceREST)
+		appendEvidence(scenario, "tests/functional/workers/invoke_continue/terminal_follow_test.go::TestManySessionTerminalFollowCompletionOrder", InterfaceREST)
 	case "rest/getWorkerSessionObservationBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
 	case "rest/readWorkerSessionTranscriptBySessionId":

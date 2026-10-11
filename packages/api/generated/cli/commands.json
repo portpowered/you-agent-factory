@@ -12133,6 +12133,210 @@
         ]
       }
     },
+    "you.worker-sessions.follow": {
+      "id": "you.worker-sessions.follow",
+      "name": "follow",
+      "path": "you worker-sessions follow",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.follow",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.follow.title",
+            "canonicalEnglish": "Follow many Worker Sessions until terminal"
+          },
+          "description": {
+            "id": "you.worker-sessions.follow.description",
+            "canonicalEnglish": "Observe distinct selected-host IDs through retained/live event streams without polling. Required --terminal=true. Flush one escaped ID/state/short published result line per terminal session; --json selects NDJSON. Exit 0 after all reach COMPLETED, FAILED, CANCELED or TERMINATED; exit 1 on invalid selection, observation or output failure; exit 130 on observer cancellation. Detach leaves attempts running. Stream opening is bounded to 15 seconds; open streams have no lifetime deadline. No fallback host or transcript output."
+          }
+        },
+        "examples": [
+          "you --server http://localhost:8080 worker-sessions follow --terminal direct-a direct-b"
+        ],
+        "visibility": "public",
+        "sourceHash": "d0754b43721f59f6a99ede4138a1b473d5d4bf317fd0b8a7019f7d35740d341a"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.follow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "remote-only",
+      "usage": {
+        "line": "follow --terminal <worker-session-id> [worker-session-id...]",
+        "example": "  you --server http://localhost:8080 worker-sessions follow --terminal direct-a direct-b"
+      },
+      "flags": {
+        "you.worker-sessions.follow.flag.terminal": {
+          "id": "you.worker-sessions.follow.flag.terminal",
+          "long": "terminal",
+          "usage": "required: follow until each selected session is terminal",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": true,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.follow.flag.terminal",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "handler": {
+        "id": "you.worker-sessions.follow.handler",
+        "operationId": "streamWorkerSessionEventsByWorkerSessionId"
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.worker-sessions.follow.output.human": {
+          "id": "you.worker-sessions.follow.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.worker-sessions.follow.output.json": {
+          "id": "you.worker-sessions.follow.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.worker-sessions.follow.error.invalid": {
+          "id": "you.worker-sessions.follow.error.invalid",
+          "code": "WORKER_SESSION_FOLLOW_INVALID"
+        },
+        "you.worker-sessions.follow.error.not-found": {
+          "id": "you.worker-sessions.follow.error.not-found",
+          "code": "WORKER_SESSION_NOT_FOUND"
+        },
+        "you.worker-sessions.follow.error.unavailable": {
+          "id": "you.worker-sessions.follow.error.unavailable",
+          "code": "WORKER_SESSION_STREAM_UNAVAILABLE"
+        },
+        "you.worker-sessions.follow.error.closed": {
+          "id": "you.worker-sessions.follow.error.closed",
+          "code": "WORKER_SESSION_STREAM_CLOSED"
+        },
+        "you.worker-sessions.follow.error.failed": {
+          "id": "you.worker-sessions.follow.error.failed",
+          "code": "WORKER_SESSION_STREAM_FAILED"
+        },
+        "you.worker-sessions.follow.error.gap": {
+          "id": "you.worker-sessions.follow.error.gap",
+          "code": "WORKER_SESSION_STREAM_GAP"
+        },
+        "you.worker-sessions.follow.error.remote": {
+          "id": "you.worker-sessions.follow.error.remote",
+          "code": "FACTORY_UNREACHABLE"
+        },
+        "you.worker-sessions.follow.error.output": {
+          "id": "you.worker-sessions.follow.error.output",
+          "code": "WORKER_SESSION_FOLLOW_OUTPUT_FAILED"
+        },
+        "you.worker-sessions.follow.error.interrupted": {
+          "id": "you.worker-sessions.follow.error.interrupted",
+          "code": "WORKER_SESSION_STREAM_INTERRUPTED"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.follow.exit.success": {
+          "id": "you.worker-sessions.follow.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.follow.exit.failure": {
+          "id": "you.worker-sessions.follow.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.follow.exit.usage": {
+          "id": "you.worker-sessions.follow.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        },
+        "you.worker-sessions.follow.exit.cancel": {
+          "id": "you.worker-sessions.follow.exit.cancel",
+          "code": 130,
+          "kind": "cancel"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.follow.side-effect.network": {
+          "id": "you.worker-sessions.follow.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "arguments": {
+        "you.worker-sessions.follow.arg.0": {
+          "id": "you.worker-sessions.follow.arg.0",
+          "name": "worker-session-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "stringArray",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": -1,
+          "variadic": true,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      }
+    },
     "you.worker-sessions.stream": {
       "id": "you.worker-sessions.stream",
       "name": "stream",
