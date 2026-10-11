@@ -132,7 +132,13 @@ func unavailableRuntimeSnapshot(
 	ctx context.Context,
 	request factorydefinitions.ResolveRuntimeSnapshotRequest,
 ) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
-	return factorydefinitions.UnimplementedService{}.ResolveRuntimeSnapshot(ctx, request)
+	return factorydefinitions.ResolveRuntimeSnapshotResult{}, &factorydefinitions.RuntimeSnapshotResolutionError{
+		Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{
+			Code:    factorydefinitions.RuntimeSnapshotDiagnosticUnavailable,
+			Message: "test snapshot resolver unavailable",
+		},
+		Cause: factorydefinitions.ErrRuntimeSnapshotResolverUnavailable,
+	}
 }
 
 func (*mcpDefinitionsRootFake) ResolveRuntimeSnapshot(

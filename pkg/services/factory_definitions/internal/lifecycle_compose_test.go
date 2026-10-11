@@ -40,9 +40,9 @@ func TestCompletedLifecycleDelegatesRuntimeSnapshot(t *testing.T) {
 			called = true
 			return factorydefinitions.ResolveRuntimeSnapshotResult{Snapshot: factorydefinitions.RuntimeSnapshot{FactoryDir: request.FactoryDir}}, nil
 		}),
-		factorydefinitions.UnimplementedService{}, nil,
-		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
-		factorydefinitions.UnimplementedService{},
+		unusedDefinitionsOwner{}, nil,
+		unusedDefinitionsOwner{}.ListEffectiveFactories,
+		unusedDefinitionsOwner{},
 	)
 	if called {
 		t.Fatal("construction queried snapshot owner")
@@ -93,9 +93,9 @@ func TestCompletedLifecycleDelegatesCompilation(t *testing.T) {
 			})
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 				nil, nil, nil, nil, nil, nil,
-				factorydefinitions.UnimplementedService{}, owner, nil,
-				factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
-				factorydefinitions.UnimplementedService{},
+				unusedDefinitionsOwner{}, owner, nil,
+				unusedDefinitionsOwner{}.ListEffectiveFactories,
+				unusedDefinitionsOwner{},
 			)
 			if calls != 0 {
 				t.Fatal("construction invoked compilation")
@@ -137,11 +137,11 @@ func TestCompletedLifecycleDelegatesEffectiveCatalog(t *testing.T) {
 				}
 				return expected, operationError
 			}
-			disabled := factorydefinitions.UnimplementedService{}
+			unused := unusedDefinitionsOwner{}
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-				nil, nil, disabled, disabled, disabled, disabled,
-				disabled, disabled, nil, listEffective,
-				factorydefinitions.UnimplementedService{},
+				nil, nil, unused, unused, unused, unused,
+				unused, unused, nil, listEffective,
+				unusedDefinitionsOwner{},
 			)
 			if calls != 0 {
 				t.Fatal("construction queried effective catalog")
@@ -152,4 +152,13 @@ func TestCompletedLifecycleDelegatesEffectiveCatalog(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Unselected ports must never be queried by these component delegation tests.
+type unusedDefinitionsOwner struct {
+	factorydefinitions.Service
+}
+
+func (unusedDefinitionsOwner) ListEffectiveFactories(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	panic("unexpected effective catalog query")
 }

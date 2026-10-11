@@ -10,10 +10,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 )
 
-// Only the selected component ports are active. Unselected operations retain the
-// disabled contract, so none of these cases assembles another service owner.
+// Unselected ports panic if called; tests supply only the behavior they exercise.
+type unusedDefinitionsOwner struct {
+	definitions.Service
+}
+
+// Each operation records its input and returns the configured result and cause.
 type delegatedOwner struct {
-	definitions.UnimplementedService
+	unusedDefinitionsOwner
 	ctx           context.Context
 	request       any
 	err           error
@@ -110,9 +114,9 @@ func TestInjectedDelegationPreservesResultsRequestsAndErrorIdentity(t *testing.T
 						installed:     definitions.InstallPackagedFactoryResult{Definition: definitions.DistributedFactoryDefinitionFacts{Name: "@you/alpha", FactoryDir: "alpha"}},
 						scaffolded:    definitions.CreateFactoryScaffoldResult{Definition: definitions.DistributedFactoryDefinitionFacts{Name: "alpha", FactoryDir: "alpha"}},
 					}
-					disabled := definitions.UnimplementedService{}
+					unused := unusedDefinitionsOwner{}
 					service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-						nil, lifecycle.StubActivationGateway(), disabled, owner, owner, owner, owner, owner, nil, disabled.ListEffectiveFactories,
+						nil, lifecycle.StubActivationGateway(), unused, owner, owner, owner, owner, owner, nil, unused.ListEffectiveFactories,
 						owner,
 					)
 					if owner.ctx != nil {
@@ -215,20 +219,26 @@ func (o *delegatedOwner) MaterializeFactorySnapshot(ctx context.Context, request
 	return o.materialize, o.err
 }
 
-func TestExplicitlyDisabledSnapshotOwnerRetainsDisabledResults(t *testing.T) {
+func TestSnapshotOwnerRetainsTypedFailures(t *testing.T) {
 	t.Parallel()
-	disabled := definitions.UnimplementedService{}
-	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled, nil, disabled, nil, disabled.ListEffectiveFactories, disabled)
-	for _, subject := range []*lifecycle.Service{service} {
-		captured, captureErr := subject.CaptureFactorySnapshot(t.Context(), definitions.CaptureFactorySnapshotRequest{})
-		expectedCapture, expectedCaptureErr := disabled.CaptureFactorySnapshot(t.Context(), definitions.CaptureFactorySnapshotRequest{})
-		imported, importErr := subject.PrepareFactorySnapshotImport(t.Context(), definitions.PrepareFactorySnapshotImportRequest{})
-		expectedImport, expectedImportErr := disabled.PrepareFactorySnapshotImport(t.Context(), definitions.PrepareFactorySnapshotImportRequest{})
-		materialized, materializeErr := subject.MaterializeFactorySnapshot(t.Context(), definitions.MaterializeFactorySnapshotRequest{})
-		expectedMaterialize, expectedMaterializeErr := disabled.MaterializeFactorySnapshot(t.Context(), definitions.MaterializeFactorySnapshotRequest{})
-		if !reflect.DeepEqual(captured, expectedCapture) || !errors.Is(captureErr, expectedCaptureErr) || !reflect.DeepEqual(imported, expectedImport) || !errors.Is(importErr, expectedImportErr) || !reflect.DeepEqual(materialized, expectedMaterialize) || !errors.Is(materializeErr, expectedMaterializeErr) {
-			t.Fatalf("disabled snapshot owner changed contract: %v, %v, %v", captureErr, importErr, materializeErr)
-		}
+	for _, cause := range []error{definitions.ErrInvalidFactorySnapshotPayload, definitions.ErrUnsafeFactorySnapshotMaterialize} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			owner := &delegatedOwner{err: cause}
+			svc := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(nil, lifecycle.StubActivationGateway(), owner, owner, owner, owner, owner, owner, nil, owner.ListEffectiveFactories, owner)
+			captured, captureErr := svc.CaptureFactorySnapshot(t.Context(), definitions.CaptureFactorySnapshotRequest{})
+			imported, importErr := svc.PrepareFactorySnapshotImport(t.Context(), definitions.PrepareFactorySnapshotImportRequest{})
+			materialized, materializeErr := svc.MaterializeFactorySnapshot(t.Context(), definitions.MaterializeFactorySnapshotRequest{})
+			if captured.Snapshot != nil || !reflect.DeepEqual(imported, definitions.PrepareFactorySnapshotImportResult{}) || !reflect.DeepEqual(materialized, definitions.MaterializeFactorySnapshotResult{}) {
+				t.Fatal("failed snapshot operation returned a result")
+			}
+			for _, err := range []error{captureErr, importErr, materializeErr} {
+				assertForwardedErrorIdentity(t, err, cause)
+				if !errors.Is(err, cause) {
+					t.Fatalf("snapshot failure = %v, want %v", err, cause)
+				}
+			}
+		})
 	}
 }
 
@@ -254,43 +264,87 @@ func (o *delegatedOwner) ReplaceNamedFactory(ctx context.Context, request defini
 	return o.replaced, o.err
 }
 
-func TestDisabledOwnersRetainTypedOperationFailures(t *testing.T) {
+func TestOwnersRetainTypedOperationFailures(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	disabled := definitions.UnimplementedService{}
-	svc := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
-		nil, disabled, nil, disabled.ListEffectiveFactories, disabled,
-	)
+	for _, tc := range []struct {
+		name  string
+		cause error
+		call  func(*lifecycle.Service, context.Context) error
+	}{
+		{"list", errors.New("catalog read failed"), func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.ListNamedFactories(ctx, definitions.ListNamedFactoriesRequest{})
+			return err
+		}},
+		{"get", definitions.ErrNamedFactoryNotFound, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.GetNamedFactory(ctx, definitions.GetNamedFactoryRequest{Name: "missing"})
+			return err
+		}},
+		{"current", definitions.ErrCurrentFactoryNotFound, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.GetCurrentFactoryPointer(ctx, definitions.GetCurrentFactoryPointerRequest{})
+			return err
+		}},
+		{"set-current", definitions.ErrNamedFactoryNotFound, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.SetCurrentFactoryPointer(ctx, definitions.SetCurrentFactoryPointerRequest{Name: "alpha"})
+			return err
+		}},
+		{"prepare", definitions.ErrMalformedFactoryLayoutPayload, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.PrepareFactoryLayout(ctx, definitions.PrepareFactoryLayoutRequest{})
+			return err
+		}},
+		{"compile", definitions.ErrInvalidAuthoredFactorySource, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.CompileEffectiveFactorySource(ctx, definitions.CompileEffectiveFactorySourceRequest{})
+			return err
+		}},
+		{"validate", definitions.ErrInvalidFactoryDefinitionPayload, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.ValidateStructuralFactoryDefinition(ctx, definitions.ValidateStructuralFactoryDefinitionRequest{})
+			return err
+		}},
+		{"capture", definitions.ErrInvalidFactorySnapshotPayload, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.CaptureFactorySnapshot(ctx, definitions.CaptureFactorySnapshotRequest{})
+			return err
+		}},
+		{"install", definitions.ErrUnknownPackagedFactoryIdentity, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.InstallPackagedFactory(ctx, definitions.InstallPackagedFactoryRequest{Name: "@you/missing"})
+			return err
+		}},
+		{"scaffold", definitions.ErrFactoryDistributeFailed, func(svc *lifecycle.Service, ctx context.Context) error {
+			_, err := svc.CreateFactoryScaffold(ctx, definitions.CreateFactoryScaffoldRequest{})
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			owner := &delegatedOwner{err: tc.cause}
+			svc := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(nil, lifecycle.StubActivationGateway(), owner, owner, owner, owner, owner, owner, nil, owner.ListEffectiveFactories, owner)
+			err := tc.call(svc, t.Context())
+			assertForwardedErrorIdentity(t, err, tc.cause)
+			if !errors.Is(err, tc.cause) || owner.ctx == nil {
+				t.Fatalf("operation failure = %v, want owner cause %v", err, tc.cause)
+			}
+		})
+	}
+}
 
-	if _, err := svc.ListNamedFactories(ctx, definitions.ListNamedFactoriesRequest{}); err == nil {
-		t.Fatal("promoted ListNamedFactories: expected collaborator-required error")
-	}
-	if _, err := svc.GetNamedFactory(ctx, definitions.GetNamedFactoryRequest{Name: "missing"}); !errors.Is(err, definitions.ErrNamedFactoryNotFound) {
-		t.Fatalf("promoted GetNamedFactory: got %v", err)
-	}
-	if _, err := svc.GetCurrentFactoryPointer(ctx, definitions.GetCurrentFactoryPointerRequest{}); !errors.Is(err, definitions.ErrCurrentFactoryNotFound) {
-		t.Fatalf("promoted GetCurrentFactoryPointer: got %v", err)
-	}
-	if _, err := svc.SetCurrentFactoryPointer(ctx, definitions.SetCurrentFactoryPointerRequest{Name: "alpha"}); !errors.Is(err, definitions.ErrNamedFactoryNotFound) {
-		t.Fatalf("promoted SetCurrentFactoryPointer: got %v", err)
-	}
-	if _, err := svc.PrepareFactoryLayout(ctx, definitions.PrepareFactoryLayoutRequest{}); !errors.Is(err, definitions.ErrMalformedFactoryLayoutPayload) {
-		t.Fatalf("promoted PrepareFactoryLayout: got %v", err)
-	}
-	if _, err := svc.CompileEffectiveFactorySource(ctx, definitions.CompileEffectiveFactorySourceRequest{}); !errors.Is(err, definitions.ErrInvalidAuthoredFactorySource) {
-		t.Fatalf("promoted CompileEffectiveFactorySource: got %v", err)
-	}
-	if _, err := svc.ValidateStructuralFactoryDefinition(ctx, definitions.ValidateStructuralFactoryDefinitionRequest{}); !errors.Is(err, definitions.ErrInvalidFactoryDefinitionPayload) {
-		t.Fatalf("promoted ValidateStructuralFactoryDefinition: got %v", err)
-	}
-	if _, err := svc.CaptureFactorySnapshot(ctx, definitions.CaptureFactorySnapshotRequest{}); !errors.Is(err, definitions.ErrInvalidFactorySnapshotPayload) {
-		t.Fatalf("promoted CaptureFactorySnapshot: got %v", err)
-	}
-	if _, err := svc.InstallPackagedFactory(ctx, definitions.InstallPackagedFactoryRequest{Name: "@you/missing"}); !errors.Is(err, definitions.ErrUnknownPackagedFactoryIdentity) {
-		t.Fatalf("promoted InstallPackagedFactory: got %v", err)
-	}
-	if _, err := svc.CreateFactoryScaffold(ctx, definitions.CreateFactoryScaffoldRequest{}); !errors.Is(err, definitions.ErrFactoryDistributeFailed) {
-		t.Fatalf("promoted CreateFactoryScaffold: got %v", err)
-	}
+func (o *delegatedOwner) ListNamedFactories(ctx context.Context, request definitions.ListNamedFactoriesRequest) (definitions.ListNamedFactoriesResult, error) {
+	o.ctx, o.request = ctx, request
+	return definitions.ListNamedFactoriesResult{}, o.err
+}
+
+func (o *delegatedOwner) GetNamedFactory(ctx context.Context, request definitions.GetNamedFactoryRequest) (definitions.GetNamedFactoryResult, error) {
+	o.ctx, o.request = ctx, request
+	return definitions.GetNamedFactoryResult{}, o.err
+}
+
+func (o *delegatedOwner) GetCurrentFactoryPointer(ctx context.Context, request definitions.GetCurrentFactoryPointerRequest) (definitions.GetCurrentFactoryPointerResult, error) {
+	o.ctx, o.request = ctx, request
+	return definitions.GetCurrentFactoryPointerResult{}, o.err
+}
+
+func (o *delegatedOwner) SetCurrentFactoryPointer(ctx context.Context, request definitions.SetCurrentFactoryPointerRequest) (definitions.SetCurrentFactoryPointerResult, error) {
+	o.ctx, o.request = ctx, request
+	return definitions.SetCurrentFactoryPointerResult{}, o.err
+}
+
+func (unusedDefinitionsOwner) ListEffectiveFactories(context.Context, definitions.ListEffectiveFactoriesRequest) (definitions.ListEffectiveFactoriesResult, error) {
+	panic("unexpected effective catalog query")
 }
