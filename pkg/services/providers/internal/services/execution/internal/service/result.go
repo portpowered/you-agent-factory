@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,7 +59,9 @@ func sanitizeCapturedProgress(progress providers.ExecuteProgress, request provid
 	if progress.Metadata != nil {
 		metadata := make(map[string]string, len(progress.Metadata))
 		for key, value := range progress.Metadata {
-			if containsSensitiveMetadataTerm(key) {
+			if safe, ok := sanitizeToolSummary(key, value, redact); ok {
+				metadata[key] = safe
+			} else if containsSensitiveMetadataTerm(key) {
 				metadata[key] = redactedValue
 			} else {
 				metadata[key] = redact(value)
@@ -206,6 +209,16 @@ func sanitizeMetadata(
 		if safeKey == "" {
 			continue
 		}
+		redact := func(value string) string {
+			return sanitizeDiagnosticText(value, maxDiagnosticRunes, request, extraSecrets...)
+		}
+		if safe, ok := sanitizeToolSummary(safeKey, metadata[key], redact); ok {
+			if len([]rune(safe)) > maxDiagnosticRunes {
+				safe = `"<redacted>"`
+			}
+			sanitized[safeKey] = safe
+			continue
+		}
 		if containsSensitiveMetadataTerm(safeKey) {
 			sanitized[safeKey] = redactedValue
 			continue
@@ -218,6 +231,56 @@ func sanitizeMetadata(
 		)
 	}
 	return sanitized
+}
+
+// Redact typed summaries before encoding, so escaped secrets and sensitive
+// nested keys cannot bypass policy or turn the published summary into invalid
+// JSON. Classification still hides command/output values, preserving only
+// nonsensitive structured facts such as status and numeric exit codes.
+func sanitizeToolSummary(key, value string, redact func(string) string) (string, bool) {
+	if key != "raw_input" && key != "raw_output" {
+		return "", false
+	}
+	var summary any
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	if !json.Valid([]byte(value)) || decoder.Decode(&summary) != nil {
+		return "", false
+	}
+	summary = redactToolValue(summary, redact, containsSensitiveMetadataTerm(key))
+	encoded, err := json.Marshal(summary)
+	return string(encoded), err == nil
+}
+
+func redactToolValue(value any, redact func(string) string, sensitive bool) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			// Omit credential-bearing keys rather than renaming them: multiple
+			// private keys can redact to the same name, or collide with a real
+			// public key. Neither their names nor their values are public facts.
+			if redact(key) != key {
+				delete(typed, key)
+				continue
+			}
+			privateKey := strings.ToLower(strings.ReplaceAll(key, "_", ""))
+			if containsSensitiveMetadataTerm(key) || strings.Contains(privateKey, "privatereasoning") || strings.Contains(privateKey, "encryptedcontent") {
+				typed[key] = redactedValue
+			} else {
+				typed[key] = redactToolValue(child, redact, false)
+			}
+		}
+	case []any:
+		for index, child := range typed {
+			typed[index] = redactToolValue(child, redact, sensitive)
+		}
+	case string:
+		if sensitive {
+			return redactedValue
+		}
+		return redact(typed)
+	}
+	return value
 }
 
 func sanitizeDiagnosticText(

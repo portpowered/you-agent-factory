@@ -3,6 +3,7 @@ package cli_rest_journeys_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -107,9 +108,10 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 	if transcript.WorkerSessionID != terminal.WorkerSessionID || transcript.ProviderSession != *terminal.ProviderSession || transcript.State != "COMPLETED" || len(transcript.WorkIDs) != 1 || transcript.WorkIDs[0] != workID {
 		t.Fatalf("read changed terminal association: %#v", transcript)
 	}
-	if len(transcript.Entries) != 2 || transcript.Entries[0].Type != "tool_call" || transcript.Entries[1].Text != test.text || transcript.Entries[1].Type != "assistant_message" {
-		t.Fatalf("captured transcript = %#v, want ordered tool call and captured answer", transcript.Entries)
+	if len(transcript.Entries) != 3 || transcript.Entries[0].Type != "tool_call" || transcript.Entries[2].Text != test.text || transcript.Entries[1].Type != "tool_output" || transcript.Entries[2].Type != "assistant_message" {
+		t.Fatalf("captured transcript = %#v, want ordered tool call, safe output and captured answer", transcript.Entries)
 	}
+	assertFixtureCapturedTool(t, transcript.transcriptJSON)
 	assertProviderSessionReadSafe(t, inputs.Stdout()+shownInputs.Stdout(), fixture.homeDir)
 	// Captured reads leave the terminal association intact despite native faults.
 	finalInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
@@ -145,4 +147,21 @@ func resetprovidersessionscli3State() {
 		{"F11-U5 Codex open fault", "codex", "session_fixture_codex_open_fault_read", "Codex fixture answer COMPLETE"},
 	}
 	providerSessionReadCases = freshProviderSessionReadCases
+}
+
+func assertFixtureCapturedTool(t *testing.T, transcript transcriptJSON) {
+	t.Helper()
+	call, output := transcript.Entries[0], transcript.Entries[1]
+	if call.CallID != "tool_fixture_1" || output.CallID != call.CallID || call.Name != "mcp_tool_call:docs/lookup" || call.Status != "completed" || output.Status != "completed" {
+		t.Fatal("captured tool identity or status changed")
+	}
+	for _, pair := range [][2]string{
+		{call.Arguments, `{"arguments":{"query":"fixture"}}`},
+		{output.Output, `{"result":{"content":[{"type":"text","text":"fixture lookup result"}]},"status":"completed"}`},
+	} {
+		var got, want any
+		if json.Unmarshal([]byte(pair[0]), &got) != nil || json.Unmarshal([]byte(pair[1]), &want) != nil || !reflect.DeepEqual(got, want) {
+			t.Fatal("captured tool lost exact safe arguments or result")
+		}
+	}
 }

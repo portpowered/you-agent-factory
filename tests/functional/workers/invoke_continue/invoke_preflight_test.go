@@ -371,7 +371,7 @@ func TestT7AdmittedTimeoutRetainsHistoryAndRetryBudget(t *testing.T) {
 				t.Fatalf("lost unconfirmed retry classification: %s", body)
 			}
 			status, body = t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
-			if status != http.StatusOK || !strings.Contains(body, "T7 retained progress before timeout") {
+			if status != http.StatusOK || (!strings.Contains(body, "command_execution") || !strings.Contains(body, "t7-progress")) {
 				t.Fatalf("failed captured prefix HTTP %d: %s", status, body)
 			}
 			t7AssertRetryHistory(t, body, cell.attempts)

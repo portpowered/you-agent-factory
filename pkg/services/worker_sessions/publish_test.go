@@ -803,3 +803,32 @@ func TestPublish_CoversTheRemainingPhaseVocabulary(t *testing.T) {
 		})
 	}
 }
+
+func TestPublishCodexToolSnapshotsRespectNativePhaseAndName(t *testing.T) {
+	t.Parallel()
+	spy := &workerRecordSpy{}
+	publisher := newCapturedPublisher(spy, func(workers.ProgressFragment) {})
+	for _, native := range []string{"item.started", "item.updated", "item.completed"} {
+		phase, status := "tool.started", "in_progress"
+		if native == "item.updated" {
+			phase = "tool.updated"
+		}
+		if native == "item.completed" {
+			phase, status = "tool.completed", "completed"
+		}
+		publisher.Publish(workers.ProgressFragment{DispatchID: "d1", Kind: workers.ProgressFragmentKind, Type: phase, Payload: "output is not a tool name", Metadata: map[string]string{"native_event": native, "item_id": "cmd", "tool_name": "command_execution", "status": status, "raw_output": `{"exit_code":0}`}})
+	}
+	if len(spy.published) != 3 {
+		t.Fatalf("snapshot facts = %d", len(spy.published))
+	}
+	for i, got := range spy.published {
+		want := workers.PhaseStarted
+		if i == 2 {
+			want = workers.PhaseCompleted
+		}
+		var payload workers.ToolPayload
+		if json.Unmarshal(got.Draft.Payload, &payload) != nil || got.Draft.Phase != want || payload.ToolName != "command_execution" || payload.ToolCallID != "cmd" || string(payload.ResultSummary) != `{"exit_code":0}` {
+			t.Fatal("native snapshot lost tool facts")
+		}
+	}
+}

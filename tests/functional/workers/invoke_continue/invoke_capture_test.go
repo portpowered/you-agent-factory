@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -139,7 +138,7 @@ func TestRequesterExecutionTokenPrivacy(t *testing.T) {
 			}
 			t19AwaitSignal(t, ctx, runner.started, "credential echo progress")
 			token := requesterSourceToken(t, runner, id)
-			awaitRequesterPrivacyLogs(t, fixture, ctx, id, "public credential progress", token)
+			awaitRequesterPrivacyLogs(t, fixture, ctx, id, "credential-progress", token)
 			close(runner.release)
 			join := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "invoke", "--execution", path)
 			joinErr := fixture.process.Execute(join.Input)
@@ -168,6 +167,10 @@ func requesterPrivacyProgress(request platformprocess.CommandRequest, observe pl
 		"command": "public credential command " + token, "aggregated_output": "public credential progress " + token,
 	}})
 	observe(platformprocess.OutputStreamStdout, append(item, '\n'))
+	message, _ := json.Marshal(map[string]any{"type": "item.updated", "item": map[string]any{
+		"id": "credential-message", "type": "agent_message", "text": "public credential message " + token,
+	}})
+	observe(platformprocess.OutputStreamStdout, append(message, '\n'))
 	observe(platformprocess.OutputStreamStderr, []byte("public credential diagnostic "+token+"\n"))
 }
 
@@ -204,6 +207,35 @@ func awaitRequesterPrivacyLogs(t *testing.T, fixture *invokeContinuePackageFixtu
 	if err != nil || !strings.Contains(body, "redacted") {
 		t.Fatal("public capture did not retain sanitized credential echo evidence")
 	}
+	assertRequesterPrivacyTool(t, body)
+}
+
+func assertRequesterPrivacyTool(t *testing.T, body string) {
+	t.Helper()
+	var page api.WorkerSessionLogPage
+	if json.Unmarshal([]byte(body), &page) != nil {
+		t.Fatal("invalid credential capture")
+	}
+	for _, event := range page.Events {
+		if event.Event.Payload["kind"] != "TOOL" {
+			continue
+		}
+		raw, err := json.Marshal(event.Event.Payload)
+		var draft workers.Draft
+		var payload workers.ToolPayload
+		if err != nil || json.Unmarshal(raw, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+			t.Fatal("invalid credential tool")
+		}
+		if payload.ToolCallID != "credential-progress" {
+			continue
+		}
+		var result map[string]any
+		if payload.ToolName != "command_execution" || json.Unmarshal(payload.ResultSummary, &result) != nil || result["aggregated_output"] != "<redacted>" || result["exit_code"] != float64(0) {
+			t.Fatal("credential tool lost typed redacted facts")
+		}
+		return
+	}
+	t.Fatal("credential capture omitted structured tool")
 }
 
 func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, id, token, outcome string) {
@@ -233,7 +265,7 @@ func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFix
 			t.Fatalf("public privacy HTTP %s read failed: %d", suffix, status)
 		}
 		assertRequesterTokenAbsent(t, token, body)
-		if strings.HasPrefix(suffix, "/events") && !strings.Contains(body, "public credential progress") {
+		if strings.HasPrefix(suffix, "/events") && (!strings.Contains(body, "credential-progress") || !strings.Contains(body, "command_execution") || !strings.Contains(body, "redacted")) {
 			t.Fatal("retained Events replay lost the observed credential echo")
 		}
 	}
@@ -242,12 +274,12 @@ func assertRequesterPrivacyReads(t *testing.T, fixture *invokeContinuePackageFix
 type recordingPrivateProfile struct {
 	host                         invokeContinueStartedProcess
 	home, dir, id, marker, token string
-	runner                       *testutil.ProviderCommandRunner
+	runner                       invokeContinueProviderCommandRunner
 }
 
 // FC6 needs two independently owned profiles: a shared host cannot prove that
 // a cursor for the same Worker ID is fenced by the durable profile owner.
-func TestRecordingContentPrivateProfilesFenceReadsAndCursors(t *testing.T) {
+func TestRecordingContentCapturedCodexToolPrivateProfilesFenceReadsAndCursors(t *testing.T) {
 	t.Parallel()
 	profiles := make([]recordingPrivateProfile, 2)
 	for i, name := range []string{"private-alpha", "private-beta"} {
@@ -257,8 +289,10 @@ func TestRecordingContentPrivateProfilesFenceReadsAndCursors(t *testing.T) {
 			t.Fatal(err)
 		}
 		marker := name + "-captured-content"
-		result := platformprocess.CommandResult{Stdout: directCodexSessionOutput(name+"-thread", marker)}
-		runner := testutil.NewProviderCommandRunner(result, result)
+		output := strings.ReplaceAll(string(capturedCodexToolOutput()), "captured-tools-thread", name+"-thread")
+		output = strings.ReplaceAll(output, "captured tools COMPLETE", marker)
+		result := platformprocess.CommandResult{Stdout: []byte(output)}
+		runner := &recordingStreamingRetryRunner{newInvokeContinueResettableProviderCommandRunner(result, result)}
 		route := &invokeContinueStaticCommandRoute{routes: []invokeContinueStaticCommandRouteEntry{{workingDirectory: dir, runner: runner}}}
 		started := startContinuationRestartHost(t, root, host, home, route)
 		for _, id := range []string{name, "same-worker-id"} {
@@ -303,6 +337,15 @@ func assertRecordingPrivateProfileReadable(t *testing.T, profile, foreign record
 			body := summaryRestartCLI(t, profile.host, profile.home, profile.dir, args...)
 			if strings.Contains(body, foreign.marker) || strings.Contains(body, foreign.id) || (view != "summary" && !strings.Contains(body, profile.marker)) {
 				t.Fatalf("private peer read changed or leaked: %s", body)
+			}
+			if view == "transcript" {
+				assertCapturedCodexToolTranscript(t, body)
+			} else if view == "logs" {
+				var page api.WorkerSessionLogPage
+				if err := json.Unmarshal([]byte(body), &page); err != nil {
+					t.Fatal(err)
+				}
+				assertCapturedCodexToolLogs(t, page)
 			}
 		}
 	}
@@ -771,7 +814,9 @@ func runRecordingContentSecrets(t *testing.T, name string) {
 	body, err := support.WaitForObservation(60*time.Second, func() (string, error) {
 		_, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/logs", nil)
 		return body, nil
-	}, func(body string) bool { return strings.Contains(body, "public progress") })
+	}, func(body string) bool {
+		return strings.Contains(body, "t7-private-progress") && strings.Contains(body, "command_execution")
+	})
 	if err != nil {
 		t.Fatalf("private capture: %v: %s", err, body)
 	}
@@ -811,7 +856,7 @@ func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *inv
 		t.Fatal(err)
 	}
 	t7AssertSecretsAbsent(t, string(encoded))
-	if !strings.Contains(string(encoded), "ordinary prefix") || !strings.Contains(string(encoded), "public progress") {
+	if !strings.Contains(string(encoded), "ordinary prefix") || !strings.Contains(string(encoded), "t7-private-progress") || !strings.Contains(string(encoded), "command_execution") {
 		t.Fatal("failed attempt lost ordinary captured neighbors")
 	}
 	read := t7RemoteCLIInputs(scenario, ctx, fixture.baseURL, "read", "--view", "transcript", "--worker-session-id", id)
@@ -824,7 +869,7 @@ func assertRecordingFailedPrefix(t *testing.T, ctx context.Context, fixture *inv
 		t.Fatalf("failed transcript parity: error=%v transcript=%s", err, read.Stdout())
 	}
 	t7AssertSecretsAbsent(t, read.Stdout())
-	if !strings.Contains(read.Stdout(), "ordinary prefix") || !strings.Contains(read.Stdout(), "public progress") {
+	if !strings.Contains(read.Stdout(), "ordinary prefix") || !strings.Contains(read.Stdout(), "t7-private-progress") || !strings.Contains(read.Stdout(), "command_execution") {
 		t.Fatal("failed transcript lost committed prefix")
 	}
 }

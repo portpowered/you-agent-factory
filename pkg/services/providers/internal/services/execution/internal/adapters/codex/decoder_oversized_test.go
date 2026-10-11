@@ -79,3 +79,36 @@ func assertRecoveredAfterSkip(t *testing.T, decoder *decoder) {
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
+
+func TestCodexToolFactsPreservePresenceAndIdentity(t *testing.T) {
+	t.Parallel()
+	decoder := newDecoder(nil)
+	stream := `{"type":"item.started","item":{"id":"cmd","type":"command_execution","command":"owned command","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"cmd","type":"command_execution","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"denied","type":"command_execution","aggregated_output":"sandbox denial","exit_code":1,"status":"failed"}}
+{"type":"item.completed","item":{"id":"mcp","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"safe"},"result":{"value":"safe"},"status":"completed"}}
+{"type":"item.completed","item":{"id":"collab","type":"collab_tool_call"}}
+`
+	if err := decoder.observe([]byte(stream)); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoder.progress) != 5 {
+		t.Fatalf("facts = %d", len(decoder.progress))
+	}
+	names := []string{"command_execution", "command_execution", "command_execution", "mcp_tool_call:docs/lookup", "collab_tool_call"}
+	phases := []string{"tool.started", "tool.completed", "tool.failed", "tool.completed", "tool.completed"}
+	for i, fact := range decoder.progress {
+		if fact.Metadata["tool_name"] != names[i] || fact.Phase != phases[i] {
+			t.Fatalf("wrong identity/phase at %d", i)
+		}
+	}
+	if decoder.progress[0].Metadata["raw_input"] != `{"command":"owned command"}` || decoder.progress[1].Metadata["raw_output"] != `{"aggregated_output":"","exit_code":0,"status":"completed"}` || decoder.progress[2].Metadata["raw_output"] != `{"aggregated_output":"sandbox denial","exit_code":1,"status":"failed"}` {
+		t.Fatal("native command facts lost")
+	}
+	if decoder.progress[3].Metadata["raw_input"] != `{"arguments":{"query":"safe"}}` || decoder.progress[3].Metadata["raw_output"] != `{"result":{"value":"safe"},"status":"completed"}` {
+		t.Fatal("MCP facts lost")
+	}
+	if _, ok := decoder.progress[4].Metadata["raw_output"]; ok {
+		t.Fatal("invented collab result")
+	}
+}

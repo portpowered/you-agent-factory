@@ -391,9 +391,14 @@ type transcriptJSON struct {
 }
 
 type transcriptEntryJSON struct {
-	Text    string `json:"text"`
-	Summary string `json:"summary"`
-	Type    string `json:"type"`
+	CallID    string `json:"callId"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Arguments string `json:"arguments"`
+	Output    string `json:"output"`
+	Text      string `json:"text"`
+	Summary   string `json:"summary"`
+	Type      string `json:"type"`
 }
 
 type workerSessionsCLIPublicState struct {
