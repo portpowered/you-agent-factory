@@ -4,6 +4,7 @@ package factorydefinition
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -31,10 +32,15 @@ func (s *Service) Save(ctx context.Context, sessionID string, mode factoryapi.Fa
 	if s == nil || s.domain == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	editable, err := editableFactoryFromAPI(request)
+	payload, err := json.Marshal(request)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return factoryapi.Factory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
 	}
+	imported, err := s.domain.PrepareFactorySnapshotImport(ctx, factorydefinitions.PrepareFactorySnapshotImportRequest{Payload: payload})
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
+	}
+	editable := factorydefinitions.EditableFactory{Name: string(request.Name), Snapshot: imported.Snapshot, Version: factoryVersionFromAPI(request.Version)}
 	saved, err := s.domain.Save(ctx, sessionID, saveModeFromAPI(mode), editable)
 	if err != nil {
 		return factoryapi.Factory{}, err
@@ -93,14 +99,6 @@ func saveModeFromAPI(mode factoryapi.FactorySaveMode) factorydefinitions.SaveMod
 		return factorydefinitions.SaveModeUpsertNamedAndActivate
 	}
 	return factorydefinitions.SaveModeReplaceCurrent
-}
-
-func editableFactoryFromAPI(request factoryapi.Factory) (factorydefinitions.EditableFactory, error) {
-	snapshot, err := interfaces.NewFactorySnapshot(request)
-	if err != nil {
-		return factorydefinitions.EditableFactory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
-	}
-	return factorydefinitions.EditableFactory{Name: string(request.Name), Snapshot: snapshot, Version: factoryVersionFromAPI(request.Version)}, nil
 }
 
 func editableFactoryToAPI(editable factorydefinitions.EditableFactory) (factoryapi.Factory, error) {

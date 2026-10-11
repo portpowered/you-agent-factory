@@ -309,10 +309,14 @@ func (fake *httpDefinitionsRootFake) CaptureFactorySnapshot(
 }
 
 func (fake *httpDefinitionsRootFake) PrepareFactorySnapshotImport(
-	context.Context,
-	factorydefinitions.PrepareFactorySnapshotImportRequest,
+	_ context.Context,
+	request factorydefinitions.PrepareFactorySnapshotImportRequest,
 ) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
-	return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	var snapshot factorydefinitions.FactorySnapshot
+	if err := snapshot.UnmarshalJSON(request.Payload); err != nil {
+		return factorydefinitions.PrepareFactorySnapshotImportResult{}, err
+	}
+	return factorydefinitions.PrepareFactorySnapshotImportResult{Snapshot: &snapshot}, nil
 }
 
 func (fake *httpDefinitionsRootFake) MaterializeFactorySnapshot(

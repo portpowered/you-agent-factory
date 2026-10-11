@@ -13,7 +13,6 @@ import (
 
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli"
-	workpolicy "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -31,13 +30,22 @@ func testHTTPProtocol(t *testing.T) clihttp.Protocol {
 	return protocol
 }
 
+type listPreparationFunc func(context.Context, workdomain.ListOptions) (workdomain.PreparedListRequest, error)
+
+func (prepare listPreparationFunc) PrepareListRequest(ctx context.Context, options workdomain.ListOptions) (workdomain.PreparedListRequest, error) {
+	return prepare(ctx, options)
+}
+
 type testListRequestPreparation struct{}
 
 func (testListRequestPreparation) PrepareListRequest(
-	_ context.Context,
+	ctx context.Context,
 	options workdomain.ListOptions,
 ) (workdomain.PreparedListRequest, error) {
-	return workdomain.PreparedListRequest{Options: options}, nil
+	if err := ctx.Err(); err != nil {
+		return workdomain.PreparedListRequest{}, err
+	}
+	return workdomain.PreparedListRequest{Options: options, FilterSummary: "none"}, nil
 }
 
 func constructedWorkCLIService(
@@ -71,7 +79,7 @@ func TestConstructedService_ListRequiresListPreparation(t *testing.T) {
 func TestConstructedService_RequiresCallerOwnedOutput(t *testing.T) {
 	t.Parallel()
 
-	prepare := workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy())
+	prepare := testListRequestPreparation{}
 	service := constructedWorkCLIService(t, prepare, nil)
 
 	tests := map[string]func() error{
@@ -99,7 +107,7 @@ func TestConstructedService_RequiresCallerOwnedOutput(t *testing.T) {
 func TestConstructedService_ShowRequiresCallerContext(t *testing.T) {
 	t.Parallel()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	err := service.Show(workcli.ShowConfig{Output: &bytes.Buffer{}, HTTP: testHTTPProtocol(t)})
 	if err == nil || err.Error() != "context is required" {
 		t.Fatalf("error = %v, want context is required", err)
@@ -109,7 +117,7 @@ func TestConstructedService_ShowRequiresCallerContext(t *testing.T) {
 func TestConstructedService_VisualizeRequiresOperationAndOutput(t *testing.T) {
 	t.Parallel()
 
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), nil)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, nil)
 	if err := service.Visualize(workcli.VisualizeConfig{Output: &bytes.Buffer{}}); err == nil ||
 		!strings.Contains(err.Error(), "operation is required") {
 		t.Fatalf("missing operation error = %v", err)
@@ -125,7 +133,7 @@ func TestConstructedService_ListHonorsCancelledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	prepare := workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy())
+	prepare := testListRequestPreparation{}
 	service := constructedWorkCLIService(t, prepare, nil)
 	var out bytes.Buffer
 	err := service.List(workcli.ListConfig{
@@ -182,7 +190,7 @@ func TestConstructedService_VisualizeSuccessPath(t *testing.T) {
 		}
 		return "flowchart TD\n", nil
 	}
-	service := constructedWorkCLIService(t, workdomain.NewListRequestPreparation(workpolicy.NewListRequestPolicy()), operation)
+	service := constructedWorkCLIService(t, testListRequestPreparation{}, operation)
 	var out bytes.Buffer
 	err := service.Visualize(workcli.VisualizeConfig{
 		BatchFile: "batch.json",

@@ -410,6 +410,7 @@ func provideFactoryDefinitionCompilation(
 func provideFactoryDefinitionsHost(
 	router *factorysessions.DefinitionRuntimeRouter,
 	persistence factorydefinitions.Persistence,
+	authoring factorydefinitionswire.AuthoringLayout,
 	loader *factorydefinitionswire.Loader,
 	paths factorydefinitions.NamedPathResolver,
 	prepare factorydefinitions.PortableFactoryConfigPreparer,
@@ -418,7 +419,7 @@ func provideFactoryDefinitionsHost(
 	if router == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: runtime router is required")
 	}
-	return factorydefinitionswire.NewLifecycleHost(router.Host(), persistence, loader, paths, prepare, capture)
+	return factorydefinitionswire.NewLifecycleHost(router.Host(), persistence, authoring, loader, paths, prepare, capture)
 }
 
 func provideFactoryDefinitionsRoot(
