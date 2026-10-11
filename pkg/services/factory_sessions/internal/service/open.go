@@ -675,7 +675,9 @@ func (operation *RuntimeOpeningCompletion) Complete(ctx context.Context, request
 	if request.PublishCurrentBoard != nil {
 		lifecycle = &successorBoardStartup{LifecycleRuntime: session, publish: request.PublishCurrentBoard}
 	}
-	process, err := operation.host.Bind(lifecycle, request.Host, logger)
+	transportLogger := logger.With(zap.String("session_id", request.Facts.FactorySessionID),
+		zap.String("runtime_instance_id", request.Facts.RuntimeID), zap.String("generation_id", request.Facts.GenerationID))
+	process, err := operation.host.Bind(lifecycle, request.Host, transportLogger)
 	if err != nil {
 		return RuntimeCompletionResult{}, err
 	}
