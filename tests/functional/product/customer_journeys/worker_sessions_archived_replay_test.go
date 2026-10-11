@@ -397,22 +397,112 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 		}
 		cursors[index] = *page.NextToken
 	}
+	emptyWorks := submitArchivedPeerNamedWork(t, server, cases, names)
 	server.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".latest.json", ".reopened.json")
 	latest := support.StartFunctionalAPIServer(t, config)
 	assertArchivedResumedBoard(t, latest, before, logs, names, cursors, transcripts, true)
+	assertArchivedEmptyWorkParity(t, latest, emptyWorks, true)
 	latest.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".restored.json")
 	reopened := support.StartFunctionalAPIServer(t, config)
 	assertArchivedResumedBoard(t, reopened, before, logs, names, cursors, transcripts, false)
+	assertArchivedEmptyWorkParity(t, reopened, emptyWorks, false)
 	reopened.Close(t)
 	// The retained original Factory need not have a reopened runtime at all.
 	// Its capture remains read-only, exact-scope authority on the same profile.
 	config.BeforeStart = nil
 	closedScopes := support.StartFunctionalAPIServer(t, config)
 	assertArchivedClosedScopeParity(t, closedScopes, before, logs, names, transcripts)
+	assertArchivedEmptyWorkParity(t, closedScopes, emptyWorks, false)
 	closedScopes.Close(t)
 	assertArchivedPrivateProfileFence(t, config, before)
+}
+
+// Admit terminal Work through the public batch boundary while both Factories
+// are paused, then resume to drain admission without starting another attempt.
+// A peer's shared name is no evidence of captured membership. Latest recovery
+// retains the Work; older recovery does not.
+func submitArchivedPeerNamedWork(t *testing.T, server *support.FunctionalAPIServer, cases []committedTerminalCase, names []string) map[string]string {
+	t.Helper()
+	works := make(map[string]string, len(cases))
+	for index, cell := range cases {
+		name := names[2*((index+1)%len(cases))]
+		works[cell.scope] = submitArchivedAttemptFreeWork(t, server, cell.scope, name)
+		postLiveRuntimeLifecycleControl(t, server.URL(), cell.scope, factoryapi.FactorySessionLifecycleControlKindResume)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		_, err := readWorkAtState(ctx, server.URL()+"/factory-sessions/"+cell.scope+"/work", "complete", works[cell.scope])
+		cancel()
+		if err != nil {
+			t.Fatalf("terminal Work admission: %v", err)
+		}
+		postLiveRuntimeLifecycleControl(t, server.URL(), cell.scope, factoryapi.FactorySessionLifecycleControlKindPause)
+	}
+	assertArchivedEmptyWorkParity(t, server, works, true)
+	return works
+}
+
+func submitArchivedAttemptFreeWork(t *testing.T, server *support.FunctionalAPIServer, scope, name string) string {
+	t.Helper()
+	id, requestID, workType := uuid.NewString(), uuid.NewString(), "task"
+	works := []factoryapi.Work{{Name: name, WorkId: &id, WorkTypeName: &workType, State: &factoryapi.WorkState{Name: "complete"}}}
+	body, err := json.Marshal(factoryapi.WorkRequest{RequestId: requestID, Type: factoryapi.WorkRequestTypeFactoryRequestBatch, Works: &works})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, server.URL()+"/factory-sessions/"+scope+"/work-requests/"+requestID, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var result factoryapi.UpsertWorkRequestResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil || response.StatusCode != http.StatusCreated || len(result.Works) != 1 || result.Works[0].WorkId != id {
+		t.Fatalf("terminal Work submission: status=%d result=%+v error=%v", response.StatusCode, result, err)
+	}
+	return id
+}
+
+func assertArchivedEmptyWorkParity(t *testing.T, server *support.FunctionalAPIServer, works map[string]string, retained bool) {
+	t.Helper()
+	for scope, workID := range works {
+		endpoint := server.URL() + "/factory-sessions/" + scope + "/worker-sessions?workId=" + url.QueryEscape(workID)
+		response, err := http.Get(endpoint)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "worker-sessions", "list", "--session", scope, "--work-id", workID, "--output", "json"})
+		cliErr := server.Execute(t, input.Input)
+		if retained {
+			var list, cli factoryapi.ListWorkerSessionsResponse
+			if err := json.Unmarshal(data, &list); err != nil || response.StatusCode != http.StatusOK || list.Sessions == nil || len(list.Sessions) != 0 {
+				t.Fatalf("known attempt-free Work: status=%d body=%s error=%v", response.StatusCode, data, err)
+			}
+			if err := json.Unmarshal([]byte(input.Stdout()), &cli); err != nil || cliErr != nil || !reflect.DeepEqual(cli, list) {
+				t.Fatalf("empty Work CLI/HTTP differs: stdout=%s stderr=%s error=%v decode=%v", input.Stdout(), input.Stderr(), cliErr, err)
+			}
+		} else {
+			var failure factoryapi.ErrorResponse
+			if err := json.Unmarshal(data, &failure); err != nil || response.StatusCode != http.StatusNotFound || (failure.Code != "WORK_NOT_FOUND" && failure.Code != "NOT_FOUND") {
+				t.Fatalf("absent Work acquired peer-name membership: status=%d body=%s error=%v", response.StatusCode, data, err)
+			}
+			var cli struct {
+				Code string `json:"code"`
+			}
+			if err := json.Unmarshal([]byte(input.Stderr()), &cli); err != nil || cliErr == nil || cli.Code != "WORK_NOT_FOUND" || input.Stdout() != "" {
+				t.Fatalf("absent Work CLI/HTTP differs: stdout=%s stderr=%s error=%v decode=%v", input.Stdout(), input.Stderr(), cliErr, err)
+			}
+		}
+	}
 }
 
 func assertArchivedClosedScopeParity(t *testing.T, server *support.FunctionalAPIServer, attempts []factoryapi.WorkerSessionObservation, logs []factoryapi.WorkerSessionLogPage, names []string, transcripts []*factoryapi.WorkerSessionTranscriptResponse) {
@@ -499,7 +589,11 @@ func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServe
 		scope := support.StringPointerValue(original.FactorySessionId)
 		board := support.GetJSON[factoryapi.ListWorkResponse](t, server.URL()+"/factory-sessions/"+scope+"/work")
 		if retainsWork {
-			if len(board.Results) != 1 || support.StringPointerValue(board.Results[0].WorkId) != support.StringPointerValue(original.WorkId) {
+			found := false
+			for _, work := range board.Results {
+				found = found || support.StringPointerValue(work.WorkId) == support.StringPointerValue(original.WorkId)
+			}
+			if len(board.Results) != 2 || !found {
 				t.Fatalf("latest recording lost original Work: %+v", board)
 			}
 		} else if len(board.Results) != 0 {
@@ -550,12 +644,43 @@ func assertArchivedStopHasNoEffect(t *testing.T, server *support.FunctionalAPISe
 			t.Fatalf("archived CLI/HTTP control differs: cli=%+v http=%+v error=%v", cli, result, err)
 		}
 	}
+	assertArchivedStaleForceDenied(t, server, original.WorkerSessionId)
 	shown := support.GetJSON[factoryapi.WorkerSessionObservation](t, server.URL()+"/worker-sessions/"+original.WorkerSessionId)
 	after := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions?history=all")
 	if !reflect.DeepEqual(shown, original) || !reflect.DeepEqual(after, before) {
 		t.Fatalf("archived stop changed identity, facts or fleet: before=%+v after=%+v", before, after)
 	}
 	assertRestoredCapturedEvents(t, assertCommittedTerminalCapture(t, server, original.WorkerSessionId), logs)
+}
+
+func assertArchivedStaleForceDenied(t *testing.T, server *support.FunctionalAPIServer, id string) {
+	t.Helper()
+	requestID, stale, force := uuid.NewString(), "foreign-attempt-"+uuid.NewString(), true
+	body, err := json.Marshal(factoryapi.TerminateWorkerSessionJSONRequestBody{
+		Force: &force, RequestId: &requestID, ExpectedAttemptId: &stale,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.Post(server.URL()+"/worker-sessions/"+id+"/terminate", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var failure factoryapi.ErrorResponse
+	err = json.NewDecoder(response.Body).Decode(&failure)
+	_ = response.Body.Close()
+	if err != nil || response.StatusCode != http.StatusNotFound || failure.Code != "NOT_FOUND" {
+		t.Fatalf("archive gained force authority: status=%d failure=%+v error=%v", response.StatusCode, failure, err)
+	}
+	input := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "--json", "worker-sessions", "terminate", id,
+		"--force", "--request-id", requestID, "--expected-attempt-id", stale})
+	cliErr := server.Execute(t, input.Input)
+	var cli struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(input.Stderr()), &cli); err != nil || cliErr == nil || cli.Code != "NOT_FOUND" || input.Stdout() != "" {
+		t.Fatalf("archive CLI gained force authority: stdout=%s stderr=%s error=%v decode=%v", input.Stdout(), input.Stderr(), cliErr, err)
+	}
 }
 
 // A second private profile has no permission to the first profile's captures,
