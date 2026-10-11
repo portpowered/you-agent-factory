@@ -111,7 +111,11 @@ func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemo
 // connection context belong to the cohort that joins the reusable process.
 func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.Process) *composedMemoryMCP {
 	t.Helper()
-	projectRoot := support.ScaffoldSingleStepFactory(lifetime, "composed-mcp")
+	return startComposedMemoryMCPAt(t, lifetime, process, support.ScaffoldSingleStepFactory(lifetime, "composed-mcp"), lifetime.TempDir(), "http://127.0.0.1:1")
+}
+
+func startComposedMemoryMCPAt(t, lifetime *testing.T, process support.Process, projectRoot, home, host string) *composedMemoryMCP {
+	t.Helper()
 	stdin, input := io.Pipe()
 	output, stdout := io.Pipe()
 	ctx, cancel := context.WithTimeout(lifetime.Context(), time.Minute)
@@ -123,10 +127,9 @@ func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.
 		_ = stdout.Close()
 		_ = output.Close()
 	})
-	home := lifetime.TempDir()
 	go func() {
 		err := process.Execute(root.Input{
-			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
+			Args:             []string{"you", "--server", host, "server", "mcp", "--project-root", projectRoot},
 			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(home),
 			WorkingDirectory: projectRoot, Context: ctx,
 			Stdin: stdin, Stdout: stdout, Stderr: io.Discard,
@@ -141,12 +144,20 @@ func startComposedMemoryMCPWithLifetime(t, lifetime *testing.T, process support.
 // not enter the provider command edge; a subsequent valid request remains usable.
 func assertMCPConfiguredProviderSelection(t *testing.T, process support.Process, runner *mcpRootResultRunner) {
 	t.Helper()
-	server := startComposedMemoryMCP(t, process)
+	localRunner := runner
+	runner = &mcpRootResultRunner{}
+	workingRoot, profile := support.ScaffoldSingleStepFactory(t, "configured-subagent"), t.TempDir()
+	t.Cleanup(func() {
+		if _, invoked := localRunner.requests.Load(filepath.Clean(workingRoot)); invoked {
+			t.Error("selected-host RUN executed a local provider")
+		}
+	})
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(profile)
+	source := support.InstallPackagedFactoryWithProcess(t, process, env, workingRoot, "@you/subagent")
+	support.CreateNamedFactoryAtRootWithProcess(t, process, env, workingRoot, filepath.Join(workingRoot, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
+	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: support.ScaffoldSingleStepFactory(t, "configured-host"), WorkingDirectory: workingRoot, Env: env, Edges: serviceedges.Edges{ProviderCommandRunner: runner}})
+	server := startComposedMemoryMCPAt(t, t, process, workingRoot, profile, host.URL())
 	initializeMCPClient(t, server.client)
-	env := builtcliacceptance.ProcessEnvForIsolatedHome(server.home)
-	source := support.InstallPackagedFactoryWithProcess(t, process, env, server.root, "@you/subagent")
-	support.CreateNamedFactoryAtRootWithProcess(t, process, env, server.root,
-		filepath.Join(server.root, "factory"), "@you/subagent", filepath.Join(source, "factory.json"))
 	configPath := filepath.Join(server.home, ".you-agent-factory", "config.json")
 	before, err := os.ReadFile(configPath)
 	if err != nil {

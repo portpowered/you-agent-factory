@@ -19,8 +19,12 @@ import (
 // used by one-shot invocation while retaining the selected live session's
 // request-scoped worker capabilities.
 func (r *Root) Invoke(ctx context.Context, request factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.InvocationResult{}, err
 	}
 	sessionID := strings.TrimSpace(request.SessionID)
 	if sessionID != "" && !factorysessions.SessionIdentity(sessionID).Valid() {
@@ -37,8 +41,12 @@ func (r *Root) Invoke(ctx context.Context, request factorysessions.SessionInvoke
 // HTTP and remote CLI. Resolve JavaScript through the same scoped owner as
 // Invoke so it retains the opened session's worker and progress capabilities.
 func (r *Root) InvokeFactorySession(ctx context.Context, sessionID string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.InvocationResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.InvocationResult{}, err
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if !factorysessions.SessionIdentity(sessionID).Valid() {
@@ -71,7 +79,7 @@ func (r *Root) invokeJavaScriptSession(ctx context.Context, sessionID string, re
 		func(start *factorysessions.StartRequest) {
 			start.MockWorkers = bound.MockWorkersConfig()
 			start.WorkerSettings = bound.WorkerSettingsSnapshot()
-			start.WorkerAttemptStarter = factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(bound.Instance))
+			start.WorkerAttemptStarter = runtimeCallerAttemptStarter(bound.Instance)
 			start.WorkerProgressPublisher = runtimeProgressPublisher(bound.Instance)
 			start.WorkerResourceAdmission = resourceAdmission
 		},

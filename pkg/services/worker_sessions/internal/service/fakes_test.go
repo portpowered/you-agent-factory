@@ -3,6 +3,9 @@ package service_test
 import (
 	"context"
 	"errors"
+	"io"
+	"math/rand"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -52,7 +55,7 @@ func newServiceWithClock(
 	logger logging.Logger,
 	clock platformclock.Source,
 ) (workersessions.Service, error) {
-	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{})
+	return workersessionservice.New(asCanonicalExecution(execution), eventsAppender, logging.EnsureLogger(logger), clock, testSchedulerForClock(clock), nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, continuationInspectionFake{}, newTestTokenEntropy())
 }
 
 // fakeExecution is a controlled legacy-shaped test double. The
@@ -481,6 +484,10 @@ func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testin
 		ID:       "provider-session-exact",
 	}
 
+	metadata := requesterMetadata()
+	if _, err := registry.Reserve(context.Background(), workersessions.ReserveRequest{ID: "source-session", Metadata: metadata}); err != nil {
+		t.Fatal(err)
+	}
 	sourceResult := startControlledSession(t, registry, boundary, "source-session", "dispatch-source")
 	boundary.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
 	eventsSvc.waitForTerminalAppend(t, sourceTopic)
@@ -500,6 +507,12 @@ func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testin
 		t.Fatalf("Continue() error = %v, want nil", err)
 	}
 	assertContinuationAdmission(t, continued, request)
+	if !reflect.DeepEqual(continued.Session.Metadata, metadata) {
+		t.Fatalf("successor metadata = %+v, want source %+v", continued.Session.Metadata, metadata)
+	}
+	continued.Session.Metadata.Requester.WorkerSessionID = "mutated successor result"
+	continued.Session.Metadata.Correlation.WorkID = "mutated successor result"
+	continued.Session.Metadata.Labels[0] = "mutated successor result"
 
 	handoff := boundary.requestFor(t, continued.Session.ProviderSessionAssociation.DispatchID)
 	assertContinuationHandoff(t, handoff, request, reference, source)
@@ -509,12 +522,18 @@ func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testin
 		t.Fatalf("Get(source) error = %v", err)
 	}
 	assertSourceLineage(t, sourceAfter, request, reference)
+	if !reflect.DeepEqual(sourceAfter.Metadata, metadata) {
+		t.Fatalf("source metadata changed: %+v", sourceAfter.Metadata)
+	}
 
 	successorAfter, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
 	if err != nil {
 		t.Fatalf("Get(successor) error = %v", err)
 	}
 	assertSuccessorLineage(t, successorAfter, request, reference)
+	if !reflect.DeepEqual(successorAfter.Metadata, metadata) {
+		t.Fatalf("successor retained mutated metadata: %+v", successorAfter.Metadata)
+	}
 
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
 	eventsSvc.waitForTerminalAppend(t, successorTopic)
@@ -1022,4 +1041,8 @@ func (cancellationResultExecution) ValidateExecution(ctx context.Context, _ work
 }
 func (*cancellationObserverExecution) ValidateExecution(ctx context.Context, _ workers.ExecuteRequest) error {
 	return ctx.Err()
+}
+
+func newTestTokenEntropy() io.Reader {
+	return rand.New(rand.NewSource(17))
 }

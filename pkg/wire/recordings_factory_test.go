@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"strings"
 	"testing"
 	"time"
@@ -49,10 +50,10 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	if buildServer == nil {
 		t.Fatal("provideMCPServerBuilder() returned nil")
 	}
-	if server, err := buildServer("", "http://selected-host:7437", nil, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer(processcontract.MCPIntent{ServerURL: "http://selected-host:7437"}, nil, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(nil roles) = %v, %v; want inert protocol server", server, err)
 	}
-	if server, err := buildServer("", "http://selected-host:7437", root, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer(processcontract.MCPIntent{ServerURL: "http://selected-host:7437"}, root, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -505,6 +506,130 @@ func TestExecuteForwardsTargetTimeoutToRunner(t *testing.T) {
 	}
 	if got := (<-captured).PrintTimeout; got != 8*time.Minute {
 		t.Fatalf("runner PrintTimeout = %s, want 8m", got)
+	}
+}
+
+func TestExecuteEnvironmentStripsInheritedWorkerIdentity(t *testing.T) {
+	// This unit owns its ambient environment; Setenv restores it before the
+	// package's parallel tests resume. The runner is a controlled collaborator.
+	for _, name := range []string{
+		"YOU_SERVER", "YOU_WORKER_SESSION_ID", "YOU_WORKER_SESSION_TOKEN",
+		"YOU_MESSAGE_TARGET", "YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID",
+	} {
+		t.Setenv(name, "parent-only")
+		t.Setenv(strings.ToLower(name), "parent-only")
+	}
+	t.Setenv("YOU_CUSTOM_ENV", "ordinary=value")
+	t.Setenv("YOU_WORKER_SESSION_ID_EXTRA", "ordinary")
+	var got workers.RunnerExecutionRequest
+	service := mustExecuteService(t, &stubRunner{execute: func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+		got = request
+		return workers.RunnerExecutionResult{Content: "done"}, nil
+	}}, nil)
+	if _, err := service.Execute(context.Background(), validExecuteRequest("dispatch-env", "attempt-env")); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range got.ProcessEnvironment {
+		name, _, _ := strings.Cut(entry, "=")
+		switch strings.ToUpper(name) {
+		case "YOU_SERVER", "YOU_WORKER_SESSION_ID", "YOU_WORKER_SESSION_TOKEN",
+			"YOU_MESSAGE_TARGET", "YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID":
+			t.Fatalf("runner inherited reserved identity key %s", name)
+		}
+	}
+	for _, want := range []string{"YOU_CUSTOM_ENV=ordinary=value", "YOU_WORKER_SESSION_ID_EXTRA=ordinary"} {
+		if !slices.Contains(got.ProcessEnvironment, want) {
+			t.Fatalf("ordinary environment entry %s was lost", want)
+		}
+	}
+}
+
+func TestExecuteEnvironmentReservesSupervisorIdentity(t *testing.T) {
+	t.Parallel()
+	for _, supplied := range []bool{false, true} {
+		t.Run(fmt.Sprintf("supplied=%t", supplied), func(t *testing.T) {
+			t.Parallel()
+			request := validExecuteRequest("dispatch-env", "attempt-env")
+			request.Target.Environment.SkipProcessInheritance = true
+			request.Target.Environment.Vars = map[string]string{
+				"you_worker_session_id": "authored", "YOU_WORKER_SESSION_TOKEN": "authored",
+				"YOU_MESSAGE_TARGET": "authored", "YOU_MESSAGE_TARGET_WORK_ID": "authored",
+				"YOU_WORK_ID": "authored", "YOU_FACTORY_SESSION_ID": "authored", "YOU_SERVER": "authored",
+				"CUSTOM": "target",
+			}
+			request.Input.WorkflowContext = &workers.Context{EnvVars: map[string]string{
+				"YOU_WORKER_SESSION_ID": "workflow", "you_message_target": "workflow", "WORKFLOW": "ordinary",
+			}}
+			if supplied {
+				request.Target.Environment.ProcessEnvironment = []string{
+					"YOU_WORKER_SESSION_ID=child", "YOU_WORKER_SESSION_TOKEN=execution-only", "CUSTOM=process",
+				}
+			}
+			var got workers.RunnerExecutionRequest
+			service := mustExecuteService(t, &stubRunner{execute: func(_ context.Context, req workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				got = req
+				return workers.RunnerExecutionResult{Content: "done"}, nil
+			}}, nil)
+			if _, err := service.Execute(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]string{"CUSTOM": "target", "WORKFLOW": "ordinary"}
+			if !reflect.DeepEqual(got.EnvVars, want) || !reflect.DeepEqual(got.WorkflowContext.EnvVars, want) {
+				t.Fatal("runner did not receive only ordinary authored environment")
+			}
+			if !reflect.DeepEqual(got.ProcessEnvironment, request.Target.Environment.ProcessEnvironment) {
+				t.Fatal("explicit supervisor environment changed or inheritance was enabled")
+			}
+			if request.Target.Environment.Vars["YOU_WORKER_SESSION_TOKEN"] != "authored" || request.Input.WorkflowContext.EnvVars["YOU_WORKER_SESSION_ID"] != "workflow" {
+				t.Fatal("caller-owned environment was mutated")
+			}
+		})
+	}
+}
+
+func TestExecuteSupervisedEnvironmentPreservesProcessInheritanceAndDetachesOverlay(t *testing.T) {
+	// Environment mutation requires a serialized component test; no process or
+	// application is assembled. The runner is this component's controlled edge.
+	t.Setenv("YOU_TEST_ORDINARY", "inherited")
+	t.Setenv("YOU_MESSAGE_TARGET", "ambient-parent")
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit=%t", explicit), func(t *testing.T) {
+			request := validExecuteRequest("dispatch-identity", "attempt-identity")
+			request.Target.Environment.SkipProcessInheritance = explicit
+			if explicit {
+				request.Target.Environment.ProcessEnvironment = []string{"PATH=explicit-path", "you_worker_session_id=stale", "YOU_MESSAGE_TARGET=stale"}
+			}
+			request.Target.Environment.SupervisedEnvironment = []string{"YOU_WORKER_SESSION_ID=child", "YOU_WORK_ID=source"}
+			var got []string
+			service := mustExecuteService(t, &stubRunner{execute: func(_ context.Context, req workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+				got = append([]string(nil), req.ProcessEnvironment...)
+				req.ProcessEnvironment[len(req.ProcessEnvironment)-1] = "mutated-by-runner"
+				return workers.RunnerExecutionResult{Content: "done"}, nil
+			}}, nil)
+			if _, err := service.Execute(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range []string{"YOU_WORKER_SESSION_ID=child", "YOU_WORK_ID=source"} {
+				if !slices.Contains(got, entry) {
+					t.Fatalf("runner did not receive %s", entry)
+				}
+			}
+			for _, entry := range got {
+				if strings.HasPrefix(strings.ToUpper(entry), "YOU_MESSAGE_TARGET=") || strings.Contains(entry, "stale") {
+					t.Fatal("execution retained a parent identity")
+				}
+			}
+			ordinary := "YOU_TEST_ORDINARY=inherited"
+			if explicit {
+				ordinary = "PATH=explicit-path"
+			}
+			if !slices.Contains(got, ordinary) || (explicit && slices.Contains(got, "YOU_TEST_ORDINARY=inherited")) {
+				t.Fatal("identity overlay changed ordinary process inheritance")
+			}
+			if request.Target.Environment.SupervisedEnvironment[1] != "YOU_WORK_ID=source" {
+				t.Fatal("runner overlay aliases caller state")
+			}
+		})
 	}
 }
 

@@ -13,6 +13,41 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestMockUsagePreservesExecutionModelAndNativeEnrichment(t *testing.T) {
+	t.Parallel()
+	for _, origin := range []string{"SYNTHETIC", ""} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+			model := "execution-model"
+			observed := workersessions.Observation{AttemptID: "physical", Model: &model}
+			payload, err := json.Marshal(workers.UsagePayload{Origin: origin, Model: "usage-model", TotalTokens: 22})
+			if err != nil {
+				t.Fatal(err)
+			}
+			draft := workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, DispatchID: "stale", Payload: payload}
+			applyCapturedUsageFacts(&observed, draft)
+			if observed.TokenUsage != nil || *observed.Model != model {
+				t.Fatal("stale usage changed execution facts")
+			}
+			draft.DispatchID = "physical"
+			applyCapturedUsageFacts(&observed, draft)
+			wantModel := "usage-model"
+			if origin == "SYNTHETIC" {
+				wantModel = model
+			}
+			if observed.TokenUsage == nil || *observed.TokenUsage.TotalTokens != 22 || *observed.Model != wantModel {
+				t.Fatalf("captured model/usage = %+v", observed)
+			}
+			r := &registry{observations: map[string]*observation{"worker": {}}}
+			r.updateUsageProjection("worker", draft)
+			metadata := r.observations["worker"]
+			if metadata.tokenUsage == nil || (metadata.usageModel == "usage-model") != (origin != "SYNTHETIC") {
+				t.Fatalf("live usage identity = %+v", metadata)
+			}
+		})
+	}
+}
+
 func TestCapturedSelectedAndCatalogTimingRequireCommittedTerminalStamp(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"recorded", "zero-duration", "legacy", "no-start", "unfinished", "uncaptured-terminal", "clock-reversal"} {

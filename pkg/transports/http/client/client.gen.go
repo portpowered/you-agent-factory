@@ -175,6 +175,7 @@ const (
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONAMBIGUOUS                         ErrorResponseCode = "WORKER_SESSION_AMBIGUOUS"
+	ErrorResponseCodeWORKERSESSIONCALLERINVALID                     ErrorResponseCode = "WORKER_SESSION_CALLER_INVALID"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONCONFLICT              ErrorResponseCode = "WORKER_SESSION_CONTINUATION_CONFLICT"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT     ErrorResponseCode = "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT"
@@ -1572,6 +1573,11 @@ const (
 	WorkerSessionObservationRecordingHealthComplete   WorkerSessionObservationRecordingHealth = "COMPLETE"
 	WorkerSessionObservationRecordingHealthDegraded   WorkerSessionObservationRecordingHealth = "DEGRADED"
 	WorkerSessionObservationRecordingHealthIncomplete WorkerSessionObservationRecordingHealth = "INCOMPLETE"
+)
+
+// Defines values for WorkerSessionObservationRequesterKind.
+const (
+	WORKERSESSION WorkerSessionObservationRequesterKind = "WORKER_SESSION"
 )
 
 // Defines values for WorkerSessionObservationState.
@@ -5955,6 +5961,9 @@ type InvocationResponse struct {
 	// ErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
 	ErrorCode *InvocationResponseErrorCode `json:"errorCode,omitempty"`
 
+	// FailureReason Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	FailureReason *WorkFailureType `json:"failureReason,omitempty"`
+
 	// Message Human-readable failure summary when status is not `COMPLETED`.
 	Message *string `json:"message,omitempty"`
 
@@ -6822,11 +6831,16 @@ type NameValueType string
 
 // OpenFactorySessionRequest defines model for OpenFactorySessionRequest.
 type OpenFactorySessionRequest struct {
-	FolderPath string `json:"folderPath"`
+	// FactoryId Packaged Factory name, such as @you/subagent, resolved by the host. Cannot be combined with target or initNewFactory. folderPath remains the working root.
+	FactoryId  *string `json:"factoryId,omitempty"`
+	FolderPath string  `json:"folderPath"`
 
 	// InitNewFactory When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly.
-	InitNewFactory *bool                    `json:"initNewFactory,omitempty"`
-	Target         *FactorySessionTargetRef `json:"target,omitempty"`
+	InitNewFactory *bool `json:"initNewFactory,omitempty"`
+
+	// RequestId Idempotency key for live activation. Repeating the key returns the existing live session.
+	RequestId *string                  `json:"requestId,omitempty"`
+	Target    *FactorySessionTargetRef `json:"target,omitempty"`
 
 	// ValidateOnly When true, validate the folder and optional target selection without creating a live session.
 	ValidateOnly *bool `json:"validateOnly,omitempty"`
@@ -9269,6 +9283,12 @@ type WorkerSessionObservation struct {
 	// ContinuationHeadWorkerSessionId Newest validated Worker Session in this continuation chain. Omitted when the chain cannot be resolved.
 	ContinuationHeadWorkerSessionId *string `json:"continuationHeadWorkerSessionId,omitempty"`
 
+	// Correlation Work and Factory Session identities recorded at admission, when known.
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+
 	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
 	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`
@@ -9280,6 +9300,9 @@ type WorkerSessionObservation struct {
 	// FactorySessionId Explicit Factory Session scope used for this observation.
 	FactorySessionId *string               `json:"factorySessionId,omitempty"`
 	Failure          *WorkerSessionFailure `json:"failure,omitempty"`
+
+	// Labels Descriptive labels recorded at admission.
+	Labels *[]string `json:"labels,omitempty"`
 
 	// Model Model identifier resolved for the provider invocation, when recorded.
 	Model *string                       `json:"model,omitempty"`
@@ -9303,6 +9326,13 @@ type WorkerSessionObservation struct {
 
 	// RecordingHealthReason Stable safe reason when recording health is DEGRADED or INCOMPLETE.
 	RecordingHealthReason *string `json:"recordingHealthReason,omitempty"`
+
+	// Requester Recorded requester, when verified at admission. Null or absent when no requester was recorded.
+	Requester *struct {
+		Kind            WorkerSessionObservationRequesterKind `json:"kind"`
+		WorkId          *string                               `json:"workId,omitempty"`
+		WorkerSessionId string                                `json:"workerSessionId"`
+	} `json:"requester"`
 
 	// Revivable Whether the validated continuation head can currently admit a direct successor using an available exact provider reference.
 	Revivable *bool                         `json:"revivable,omitempty"`
@@ -9341,6 +9371,9 @@ type WorkerSessionObservationDurationBasis string
 
 // WorkerSessionObservationRecordingHealth Recordings-owned capture health, independent of Worker execution outcome.
 type WorkerSessionObservationRecordingHealth string
+
+// WorkerSessionObservationRequesterKind defines model for WorkerSessionObservation.Requester.Kind.
+type WorkerSessionObservationRequesterKind string
 
 // WorkerSessionObservationState defines model for WorkerSessionObservation.State.
 type WorkerSessionObservationState string

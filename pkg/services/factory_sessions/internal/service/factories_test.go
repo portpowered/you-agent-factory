@@ -91,7 +91,7 @@ func (fixture runtimeOpeningFixture) newFactory() (*runtimeOpeningTestRoot, erro
 		fixture.GenerateRuntimeInstanceID, fixture.ResolveHome, fixture.Definitions, inventory)
 	root, err := NewRoot(fixture.Assembly, durable, opening.Start, fixture.LiveChangeCoordinator,
 		opening.InspectHistoricalApplication, fixture.Definitions, fixture.RecordingsService,
-		nil, fixture.GenerateSessionID)
+		nil, fixture.GenerateSessionID, nil)
 	if err != nil {
 		return nil, err
 	}

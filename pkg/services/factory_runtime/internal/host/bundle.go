@@ -15,6 +15,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -137,6 +138,7 @@ func (r *Bundle) RuntimeProgressPublisher() workers.ProgressPublisher {
 func (r *Bundle) BeginWorkerAttempt(
 	ctx context.Context,
 	request *workers.ExecuteRequest,
+	caller *workersessions.CallerIdentity,
 ) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error) {
 	if r == nil || r.Factory == nil {
 		return nil, factory.ErrNotRunning
@@ -145,12 +147,13 @@ func (r *Bundle) BeginWorkerAttempt(
 		BeginWorkerAttempt(
 			context.Context,
 			*workers.ExecuteRequest,
+			*workersessions.CallerIdentity,
 		) (func(context.Context, workers.ExecuteResult, error) (workers.ExecuteResult, error), error)
 	})
 	if provider == nil {
 		return nil, factory.ErrNotRunning
 	}
-	return provider.BeginWorkerAttempt(ctx, request)
+	return provider.BeginWorkerAttempt(ctx, request, caller)
 }
 
 func (r *Bundle) Directory() string {

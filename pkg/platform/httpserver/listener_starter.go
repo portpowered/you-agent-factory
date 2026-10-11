@@ -44,3 +44,38 @@ func StarterWithListener(
 		return Serve(ctx, HandlerWithDiagnostics(request.Handler, request.Pprof, commitReader, commandLineReader), listener, request.Logger)
 	}
 }
+
+// BindingObserver attaches an already-bound endpoint to a handler's owner.
+// The returned release removes that binding when this host exits.
+type BindingObserver interface {
+	ObserveHostBinding(Binding) func()
+}
+
+// NewObservedStarter reports the concrete binding to participating handlers
+// before readiness, and releases it after the selected starter joins. Handlers
+// without a binding observer preserve their original lifecycle.
+func NewObservedStarter(starter Starter) Starter {
+	return func(ctx context.Context, request StartRequest) error {
+		owner, ok := request.Handler.(BindingObserver)
+		if !ok {
+			return starter(ctx, request)
+		}
+		onBound := request.OnBound
+		var release func()
+		defer func() {
+			if release != nil {
+				release()
+			}
+		}()
+		request.OnBound = func(binding Binding) {
+			if release != nil {
+				release()
+			}
+			release = owner.ObserveHostBinding(binding)
+			if onBound != nil {
+				onBound(binding)
+			}
+		}
+		return starter(ctx, request)
+	}
+}

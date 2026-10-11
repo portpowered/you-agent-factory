@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -52,6 +53,47 @@ func TestFleetObservationServiceRejectsAbsentOrCanceledContext(t *testing.T) {
 				t.Fatalf("canceled context: %v", err)
 			}
 		})
+	}
+}
+
+// Origin is retained from the source; a directly supervised continuation of
+// a Factory attempt is still a Factory-origin observation.
+func TestProcessOwnedFleetSelectionRetainsFactoryContinuations(t *testing.T) {
+	t.Parallel()
+	r := &registry{
+		sessions: map[string]workersessions.Session{
+			"direct":    {ID: "direct", State: workersessions.StateCompleted},
+			"runtime":   {ID: "runtime", State: workersessions.StateCompleted},
+			"successor": {ID: "successor", State: workersessions.StateRunning},
+		},
+		observations: map[string]*observation{
+			"direct": {direct: true}, "runtime": {}, "successor": {},
+		},
+		supervisions: map[string]*supervision{"direct": {}, "successor": {}},
+	}
+	for _, test := range []struct {
+		name   string
+		scope  workersessions.ObservationScope
+		states []workersessions.State
+		cursor string
+		want   []string
+	}{
+		{name: "default", want: []string{"direct", "successor"}},
+		{name: "all", scope: workersessions.ObservationScopeAll, want: []string{"direct", "successor"}},
+		{name: "direct", scope: workersessions.ObservationScopeDirect, want: []string{"direct"}},
+		{name: "factory", scope: workersessions.ObservationScopeFactory, want: []string{"successor"}},
+		{name: "completed", states: []workersessions.State{workersessions.StateCompleted}, want: []string{"direct"}},
+		{name: "cursor", cursor: "direct", want: []string{"successor"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := r.observationListIDs(test.cursor, test.scope, test.states, "", "", true)
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("selected IDs = %v, want %v", got, test.want)
+			}
+		})
+	}
+	if got := r.observationListIDs("", workersessions.ObservationScopeAll, nil, "", ""); !slices.Equal(got, []string{"direct", "runtime", "successor"}) {
+		t.Fatalf("ordinary owner selection = %v", got)
 	}
 }
 

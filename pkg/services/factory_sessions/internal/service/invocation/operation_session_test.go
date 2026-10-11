@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -14,6 +15,7 @@ import (
 
 type recordingInvocationSessions struct {
 	factorysessions.Service
+	onStart func()
 	start   factorysessions.SessionStartRequest
 	invoke  factorysessions.SessionInvokeRequest
 	control factorysessions.SessionControlRequest
@@ -21,6 +23,9 @@ type recordingInvocationSessions struct {
 
 func (s *recordingInvocationSessions) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	s.start = request
+	if s.onStart != nil {
+		s.onStart()
+	}
 	return factorysessions.SessionStartResult{SessionID: request.SessionID}, nil
 }
 
@@ -74,5 +79,23 @@ func TestInvokeFactoryUsesCanonicalSessionCommands(t *testing.T) {
 	}
 	if outcome.Result.Status != factorydefinitions.InvocationTerminalStatusCompleted {
 		t.Fatalf("outcome status = %q, want completed", outcome.Result.Status)
+	}
+}
+
+func TestInvokeFactoryCallerSnapshotSurvivesOpeningMutation(t *testing.T) {
+	t.Parallel()
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact-caller", Token: "planted-before-opening"}
+	sessions := &recordingInvocationSessions{onStart: func() { caller.WorkerSessionID = "changed-caller"; caller.Token = "changed-token" }}
+	op := &operation{sessions: sessions, artifactRoots: func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, presentations: invocationPresentationOwnerStub{}, logger: zap.NewNop()}
+	_, err := op.InvokeFactory(t.Context(), roles.InvocationTarget{FactorySessionID: "selected", FactoryDir: "/project"}, factorysessions.InvocationRequest{Caller: caller})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := sessions.invoke.Caller
+	if got == nil || got == caller || got.WorkerSessionID != "exact-caller" || got.Token != "planted-before-opening" {
+		t.Fatal("opening mutated invocation caller authority")
+	}
+	if sessions.control.SessionID != "selected" || sessions.control.Operation != factorysessions.SessionControlClose {
+		t.Fatal("caller forwarding changed session cleanup")
 	}
 }

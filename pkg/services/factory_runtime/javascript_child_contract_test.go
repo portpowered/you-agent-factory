@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 type rootOnlyPeer struct {
@@ -15,6 +17,10 @@ type rootOnlyPeer struct {
 }
 
 var _ factory.Service = (*rootOnlyPeer)(nil)
+
+func (p *rootOnlyPeer) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
+	return request, nil, p.err
+}
 
 func (p *rootOnlyPeer) ControlPause(context.Context, factory.PauseRequest) (factory.PauseResult, error) {
 	return factory.PauseResult{Outcome: factory.ControlOutcomeAccepted}, p.err

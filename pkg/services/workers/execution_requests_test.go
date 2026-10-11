@@ -174,8 +174,9 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 		Target: workerexecution.ExecutionTarget{
 			RunnerID: workerexecution.RunnerIDCodex,
 			Environment: workerexecution.EnvironmentPolicy{
-				Vars:               map[string]string{"SECRET": "value"},
-				ProcessEnvironment: []string{"TOKEN=raw"},
+				Vars:                  map[string]string{"SECRET": "value"},
+				ProcessEnvironment:    []string{"TOKEN=raw"},
+				SupervisedEnvironment: []string{"YOU_WORKER_SESSION_ID=child"},
 			},
 			Tools: workerexecution.ToolPolicy{
 				RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
@@ -208,6 +209,7 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 	clone := original.Clone()
 	clone.Target.Environment.Vars["SECRET"] = "mutated"
 	clone.Target.Environment.ProcessEnvironment[0] = "mutated"
+	clone.Target.Environment.SupervisedEnvironment[0] = "mutated"
 	clone.Target.Tools.RequiredOptionalCapabilities[0] = workerexecution.RunnerOptionalCapabilityWorktree
 	clone.Input.Work[0].Content[0].Text = "mutated"
 	clone.Input.Work[0].Tags["k"] = "mutated"
@@ -219,6 +221,9 @@ func TestExecuteRequestCloneDetachesNestedMutableValues(t *testing.T) {
 	}
 	if original.Target.Environment.ProcessEnvironment[0] != "TOKEN=raw" {
 		t.Fatalf("original process environment mutated: %#v", original.Target.Environment.ProcessEnvironment)
+	}
+	if original.Target.Environment.SupervisedEnvironment[0] != "YOU_WORKER_SESSION_ID=child" {
+		t.Fatal("cloned supervised environment aliases caller state")
 	}
 	if original.Target.Tools.RequiredOptionalCapabilities[0] !=
 		workerexecution.RunnerOptionalCapabilityWorkingDirectory {

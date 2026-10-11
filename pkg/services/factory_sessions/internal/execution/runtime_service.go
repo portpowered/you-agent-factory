@@ -902,7 +902,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
 		WorkerSettings: workerSettings,
-	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.modeForSession(sessionID), normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.modeForSession(sessionID), normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher, normalized.Caller))
 }
 
 func workflowRunContext(parent context.Context, policy factory.JavaScriptPolicy) (context.Context, context.CancelFunc) {

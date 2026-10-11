@@ -19,6 +19,40 @@ properties:
   workerSessionId:
     type: string
     description: Stable Worker Session identity.
+  requester:
+    type: object
+    nullable: true
+    additionalProperties: false
+    required: [kind, workerSessionId]
+    description: Recorded requester, when verified at admission. Null or absent when no requester was recorded.
+    properties:
+      kind:
+        type: string
+        enum: [WORKER_SESSION]
+      workerSessionId:
+        type: string
+        minLength: 1
+      workId:
+        type: string
+        minLength: 1
+  correlation:
+    type: object
+    additionalProperties: false
+    description: Work and Factory Session identities recorded at admission, when known.
+    properties:
+      workId:
+        type: string
+        minLength: 1
+      factorySessionId:
+        type: string
+        minLength: 1
+  labels:
+    type: array
+    maxItems: 32
+    description: Descriptive labels recorded at admission.
+    items:
+      type: string
+      maxLength: 200
   direct:
     type: boolean
     description: Whether this observation was admitted through the direct top-level Worker Session surface.

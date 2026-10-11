@@ -1,0 +1,3 @@
+type: http
+scheme: bearer
+bearerFormat: base64url-32-bytes-unpadded

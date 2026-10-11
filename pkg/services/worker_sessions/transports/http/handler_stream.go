@@ -173,6 +173,8 @@ func (h *Handler) writeMappedError(w http.ResponseWriter, err error) {
 
 func (h *Handler) writeMappedStartError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, workersessions.ErrCallerInvalid):
+		writeError(w, http.StatusForbidden, "Worker Session caller credentials are invalid", string(factoryapi.ErrorResponseCodeWORKERSESSIONCALLERINVALID))
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return
 	case errors.Is(err, workersessions.ErrInvalidStartRequestID),
@@ -352,7 +354,7 @@ func writeError(w http.ResponseWriter, status int, message, code string) {
 
 func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	switch status {
-	case http.StatusBadRequest:
+	case http.StatusBadRequest, http.StatusForbidden:
 		return factoryapi.ErrorFamilyBadRequest
 	case http.StatusConflict:
 		return factoryapi.ErrorFamilyConflict

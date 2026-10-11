@@ -473,6 +473,7 @@ func (r *registry) storeContinuationReservationLocked(
 	r.sessions[req.SuccessorWorkerSessionID] = workersessions.Session{
 		ID:                         req.SuccessorWorkerSessionID,
 		State:                      workersessions.StateReserved,
+		Metadata:                   source.Metadata.Clone(),
 		ProviderSessionAssociation: interruptContinuationAssociation(req, continuation, snapshot),
 	}
 	if r.continuationSources == nil {

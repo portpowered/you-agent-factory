@@ -8,21 +8,23 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 type sessionOwnerFixture struct {
-	FactoryConfig   func(string) (*interfaces.FactoryConfig, error)
-	SubmitWork      func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
-	Observe         func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
-	WaitNext        func(context.Context) error
-	WaitSession     func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
-	Telemetry       SessionInvocationTelemetry
-	SpecialCase     SessionInvocationSpecialCase
-	Interpolation   interfaces.InvocationInterpolationService
-	WorkTypes       interfaces.InvocationWorkTypeService
-	InputFiles      fileeffects.InvocationInputReader
-	Work            work.Service
-	CancelOnTimeout func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	FactoryConfig    func(string) (*interfaces.FactoryConfig, error)
+	SubmitWork       func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+	SubmitInvocation func(context.Context, string, work.SubmitRequest, *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error)
+	Observe          func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	WaitNext         func(context.Context) error
+	WaitSession      func(context.Context, string) (SessionInvocationWaiter, ReleaseSessionInvocationWaiter)
+	Telemetry        SessionInvocationTelemetry
+	SpecialCase      SessionInvocationSpecialCase
+	Interpolation    interfaces.InvocationInterpolationService
+	WorkTypes        interfaces.InvocationWorkTypeService
+	InputFiles       fileeffects.InvocationInputReader
+	Work             work.Service
+	CancelOnTimeout  func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }
 
 func newTestSessionOwner(fixture sessionOwnerFixture) *SessionOwner {
@@ -84,6 +86,10 @@ func (a fixtureAuthority) FactoryConfig(id string) (*interfaces.FactoryConfig, e
 }
 func (a fixtureAuthority) SubmitWork(ctx context.Context, id string, req work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 	return a.fixture.SubmitWork(ctx, id, req)
+}
+
+func (a fixtureAuthority) SubmitInvocation(ctx context.Context, id string, req work.SubmitRequest, caller *workersessions.CallerIdentity) (work.WorkRequestSubmitResult, func() error, error) {
+	return a.fixture.SubmitInvocation(ctx, id, req, caller)
 }
 func (a fixtureAuthority) Observe(ctx context.Context, id string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 	return a.fixture.Observe(ctx, id, input)

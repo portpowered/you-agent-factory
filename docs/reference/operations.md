@@ -486,6 +486,13 @@ HTTP callers can select the same owner with
 or the existing `GET /factory-sessions/{session_id}/worker-sessions/{worker_session_id}`.
 A scope that does not own the ID returns not-found without falling back to a peer.
 
+Worker Session show and list JSON include `requester`, `correlation`, and
+`labels` when those facts were recorded at admission. A requester identifies
+the recorded requesting Worker Session and, when known, its Work. Correlation
+identifies the recorded Work and Factory Session. Labels describe the session.
+These facts do not grant messaging permission. Legacy sessions can omit these
+fields; an absent or null requester supplies no target.
+
 Use `worker-sessions list --history active` to discover owned nonterminal Worker Sessions.
 Use `--history archived` for retained ended or owner-lost sessions after a host restart.
 Use `--history all` to combine both views. Omission preserves the process-local compatibility view.

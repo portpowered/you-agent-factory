@@ -345,7 +345,7 @@ func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventCo
 		WorkItems:     cloneWorkItems(workItems),
 	}
 	for _, item := range workItems {
-		r.stateValue.PayloadLineage.RecordWorkRequestSnapshot(context.Tick, requestID, item)
+		r.stateValue.PayloadLineage.RecordWorkRequestSnapshot(context.Tick, requestID, item, stringValue(context.DispatchID))
 		r.stateValue.WorkItemsByID[item.ID] = item
 		r.stateValue.ActiveWorkItemsByID[item.ID] = item
 		r.addWorkToken(item.ID, r.placeForWorkTypeState(item.WorkTypeID, item.State), item)

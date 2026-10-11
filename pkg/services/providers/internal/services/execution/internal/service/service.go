@@ -92,17 +92,18 @@ func (s *service) Continue(
 	request execution.ContinuationRequest,
 ) (result providers.ExecuteResult, executeErr error) {
 	detached := request.Clone()
+	redactionRequest := detached.ExecuteRequest.Clone()
 	secret := continuationDiagnosticSecrets(detached.ResumeSession)
 	defer func() {
-		if contextErr := normalizeContextFailureWithExisting(ctx, detached.ExecuteRequest, executeErr, secret...); contextErr != nil {
+		if contextErr := normalizeContextFailureWithExisting(ctx, redactionRequest, executeErr, secret...); contextErr != nil {
 			executeErr = contextErr
 		}
 	}()
-	if contextErr := normalizeContextFailure(ctx, detached.ExecuteRequest, secret...); contextErr != nil {
+	if contextErr := normalizeContextFailure(ctx, redactionRequest, secret...); contextErr != nil {
 		return providers.ExecuteResult{}, contextErr
 	}
 	if err := detached.Validate(); err != nil {
-		return providers.ExecuteResult{}, normalizeValidationFailure(detached.ExecuteRequest, secret...)
+		return providers.ExecuteResult{}, normalizeValidationFailure(redactionRequest, secret...)
 	}
 	resolved, err := s.catalog.GetProvider(ctx, providers.GetProviderRequest{ID: detached.Provider})
 	if err != nil {
@@ -119,17 +120,18 @@ func (s *service) Continue(
 		}
 	}
 	detached.Provider = resolved.Provider.ID
+	redactionRequest.Provider = resolved.Provider.ID
 	if detached.ResumeSession != nil {
 		detached.ResumeSession.Provider = resolved.Provider.ID
 	}
 	detached.ExecuteRequest = safeProgressRequest(detached.ExecuteRequest, secret...)
 	result, err = binding.continueAttempt(ctx, detached)
-	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, detached.ExecuteRequest, secret...)
+	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, redactionRequest, secret...)
 	if resultErr != nil {
-		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, resultErr, detached.ExecuteRequest, secret...)
+		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, resultErr, redactionRequest, secret...)
 	}
 	if err != nil {
-		return normalizedResult, normalizeAttemptFailure(ctx, err, detached.ExecuteRequest, secret...)
+		return normalizedResult, normalizeAttemptFailure(ctx, err, redactionRequest, secret...)
 	}
 	return normalizedResult, nil
 }
@@ -139,16 +141,17 @@ func (s *service) Execute(
 	request providers.ExecuteRequest,
 ) (result providers.ExecuteResult, executeErr error) {
 	detached := request.Clone()
+	redactionRequest := detached.Clone()
 	defer func() {
-		if contextErr := normalizeContextFailureWithExisting(ctx, detached, executeErr); contextErr != nil {
+		if contextErr := normalizeContextFailureWithExisting(ctx, redactionRequest, executeErr); contextErr != nil {
 			executeErr = contextErr
 		}
 	}()
-	if contextErr := normalizeContextFailure(ctx, detached); contextErr != nil {
+	if contextErr := normalizeContextFailure(ctx, redactionRequest); contextErr != nil {
 		return providers.ExecuteResult{}, contextErr
 	}
 	if err := detached.Validate(); err != nil {
-		return providers.ExecuteResult{}, normalizeValidationFailure(detached)
+		return providers.ExecuteResult{}, normalizeValidationFailure(redactionRequest)
 	}
 	resolved, err := s.catalog.GetProvider(
 		ctx,
@@ -168,14 +171,15 @@ func (s *service) Execute(
 		}
 	}
 	detached.Provider = resolved.Provider.ID
+	redactionRequest.Provider = resolved.Provider.ID
 	detached = safeProgressRequest(detached)
 	result, err = binding.attempt(ctx, detached)
-	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, detached)
+	normalizedResult, resultErr := normalizeSuccess(result, resolved.Provider.ID, redactionRequest)
 	if resultErr != nil {
-		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, resultErr, detached)
+		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, resultErr, redactionRequest)
 	}
 	if err != nil {
-		return normalizedResult, normalizeAttemptFailure(ctx, err, detached)
+		return normalizedResult, normalizeAttemptFailure(ctx, err, redactionRequest)
 	}
 	return normalizedResult, nil
 }

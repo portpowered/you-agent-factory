@@ -456,18 +456,19 @@ func (r *watchReducer) workRequestObservation(
 	if workTypeName == "" {
 		return "", watchWorkObservation{}, false, fmt.Errorf("event %q Work %q has no workTypeName", event.Id, workID)
 	}
-	if item.State == nil {
-		// A WORK_REQUEST without state metadata does not establish an
-		// observable Work cohort yet. The first WORK_STATE_CHANGE supplies
-		// the authoritative state and records the Work then; retaining an
-		// empty observation here would make a complete session replay wait
-		// forever on unrelated submitted Work.
-		return "", watchWorkObservation{}, false, nil
-	}
 	if len(r.stateTypes) > 0 {
 		if _, ok := r.stateTypes[workTypeName]; !ok {
 			return "", watchWorkObservation{}, false, nil
 		}
+	}
+	if item.State == nil {
+		// Admission establishes membership even before the first transition.
+		// Unknown state cannot prove completion of an admitted customer Work.
+		return workID, watchWorkObservation{
+			workTypeName:            workTypeName,
+			structuredResult:        item.StructuredResult,
+			structuredResultPending: item.StructuredResult != nil,
+		}, true, nil
 	}
 	if strings.TrimSpace(item.State.Name) == "" {
 		return "", watchWorkObservation{}, false, fmt.Errorf("event %q Work %q has a state without a name", event.Id, workID)

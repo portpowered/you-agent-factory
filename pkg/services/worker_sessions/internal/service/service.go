@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"slices"
 	"sort"
@@ -60,13 +61,19 @@ type EventsRetainedReader interface {
 }
 
 type registry struct {
-	historySnapshots observationSnapshots
-	logs             *LogReader
-	mu               sync.RWMutex
-	sessions         map[string]workersessions.Session
-	publications     map[string]*publication
-	supervisions     map[string]*supervision
-	observations     map[string]*observation
+	tokenEntropy          io.Reader
+	tokenEntropyMu        sync.Mutex
+	executionTokens       map[string]string
+	executionSecrets      map[string][]string
+	executionEndpoints    map[uint64]string
+	nextExecutionEndpoint uint64
+	historySnapshots      observationSnapshots
+	logs                  *LogReader
+	mu                    sync.RWMutex
+	sessions              map[string]workersessions.Session
+	publications          map[string]*publication
+	supervisions          map[string]*supervision
+	observations          map[string]*observation
 	// observationIDsBySessionWork lets a runtime list only the Worker Session
 	// attempts associated with its exact Factory Session and Work.
 	observationIDsBySessionWork map[observationWorkKey]map[string]struct{}
@@ -133,6 +140,37 @@ type registry struct {
 // broader API.
 var _ workersessions.Service = (*registry)(nil)
 
+// ExecutionEndpointBinding exposes only the live-host binding operation.
+func (r *registry) ExecutionEndpointBinding() workersessions.ExecutionEndpointBinding {
+	return r.bindExecutionEndpoint
+}
+
+func (r *registry) bindExecutionEndpoint(endpoint string) func() {
+	r.mu.Lock()
+	r.nextExecutionEndpoint++
+	binding := r.nextExecutionEndpoint
+	if r.executionEndpoints == nil {
+		r.executionEndpoints = make(map[uint64]string)
+	}
+	r.executionEndpoints[binding] = endpoint
+	r.mu.Unlock()
+	return func() {
+		r.mu.Lock()
+		delete(r.executionEndpoints, binding)
+		r.mu.Unlock()
+	}
+}
+
+func (r *registry) executionEndpointLocked() string {
+	var latest uint64
+	for binding := range r.executionEndpoints {
+		if binding > latest {
+			latest = binding
+		}
+	}
+	return r.executionEndpoints[latest]
+}
+
 func runtimeProgressMetadataAgrees(actual, expected workers.ExecutionCorrelation) bool {
 	// Legacy fragments may omit metadata, but supplied values must belong to
 	// the admitted execution before association or downstream publication.
@@ -181,6 +219,7 @@ func New(
 	operations recordings.WorkerControlOperationStore,
 	restart recordings.WorkerRestartInputStore,
 	inspection providersessions.Service,
+	tokenEntropy io.Reader,
 ) (workersessions.Service, error) {
 	if missingControlOperationStore(operations) {
 		return nil, recordings.ErrMissingWorkerControlOperationStore
@@ -188,10 +227,16 @@ func New(
 	if restart == nil || (reflect.ValueOf(restart).Kind() == reflect.Pointer && reflect.ValueOf(restart).IsNil()) {
 		return nil, recordings.ErrMissingWorkerRestartInputStore
 	}
+	if tokenEntropy == nil {
+		return nil, errors.New("worker sessions: token entropy is required")
+	}
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	startsDone := make(chan struct{})
 	close(startsDone)
 	registry := &registry{
+		tokenEntropy:                tokenEntropy,
+		executionTokens:             make(map[string]string),
+		executionSecrets:            make(map[string][]string),
 		historySnapshots:            newObservationSnapshots(new(HistorySnapshotBudget)),
 		sessions:                    make(map[string]workersessions.Session),
 		publications:                make(map[string]*publication),
@@ -308,6 +353,15 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		callerCtx = context.Background()
 	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
+	metadata, callerErr := r.resolveCallerMetadata(req.Caller, req.Metadata)
+	if callerErr != nil {
+		return workersessions.StartResult{}, callerErr
+	}
+	req.Metadata = metadata
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
 		return workersessions.StartResult{}, err
@@ -352,6 +406,8 @@ func (r *registry) AdmitRuntimeAttemptAsync(
 		return result, replayErr
 	}
 
+	// Keep a detached caller only through execution admission. It never enters
+	// the replay tuple, supervision, or retained restart execution.
 	outcomes := make(chan asyncStartCompletion, 1)
 	go func() {
 		result, startErr := r.startReservedWithEffects(req, executor, clock, scheduler)
@@ -380,6 +436,10 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 	tuple := startTupleFor(req)
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	metadata, err := r.callerMetadataLocked(req.Caller, req.Metadata)
+	if err != nil {
+		return nil, false, err
+	}
 
 	if r.startReplays == nil {
 		r.startReplays = make(map[string]*startReplay)
@@ -410,7 +470,7 @@ func (r *registry) reserveStart(req workersessions.StartRequest) (*startReplay, 
 		r.startsDone = make(chan struct{})
 	}
 	r.activeStarts++
-	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	r.sessions[req.ID] = workersessions.Session{ID: req.ID, State: workersessions.StateReserved, Metadata: metadata}
 	r.publications[req.ID] = &publication{}
 	r.startReplays[req.RequestID] = replay
 	r.logger.Info("worker session start", "sessionID", publicWorkerID(req.ID), "attemptID", req.Execution.Execution.Dispatch.DispatchID, "requestID", req.RequestID, "outcome", "reserved", "state", string(workersessions.StateReserved))
@@ -429,11 +489,11 @@ func (r *registry) Reserve(_ context.Context, req workersessions.ReserveRequest)
 		r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "duplicate")
 		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
 	}
-	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved}
+	session := workersessions.Session{ID: req.ID, State: workersessions.StateReserved, Metadata: req.Metadata.Clone()}
 	r.sessions[req.ID] = session
 	r.publications[req.ID] = &publication{}
 	r.logger.Info("worker session reserve", "sessionID", publicWorkerID(req.ID), "outcome", "reserved")
-	return session, nil
+	return cloneSession(session), nil
 }
 
 func (r *registry) Get(_ context.Context, req workersessions.GetRequest) (workersessions.Session, error) {
@@ -489,14 +549,17 @@ func matchesFilter(session workersessions.Session, filter workersessions.Filter)
 // reserveIfAbsent exposes a newly reserved identity before the separate
 // STARTING transition. Existing identities remain unchanged; the transition
 // reports conflicts before any Workers call.
-func (r *registry) reserveIfAbsent(id string) {
+func (r *registry) reserveIfAbsent(id string, metadata *workersessions.SessionMetadata) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.reserveIfAbsentLocked(id, metadata)
+}
 
+func (r *registry) reserveIfAbsentLocked(id string, metadata *workersessions.SessionMetadata) {
 	if _, exists := r.sessions[id]; exists {
 		return
 	}
-	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateReserved}
+	r.sessions[id] = workersessions.Session{ID: publicWorkerID(id), State: workersessions.StateReserved, Metadata: metadata.Clone()}
 	r.publications[id] = &publication{}
 }
 
@@ -526,6 +589,7 @@ func (r *registry) commitTerminal(id string, state workersessions.State, result 
 
 	session := existing
 	session.State = state
+	delete(r.executionTokens, id)
 	session.Result = cloneTerminalResult(&result)
 	r.sessions[id] = session
 	r.finishObservationLocked(id, r.observationClockLocked(id).Now())
@@ -558,6 +622,7 @@ func (r *registry) commitControlTerminal(id string, state workersessions.State) 
 		return cloneSession(existing), false
 	}
 	existing.State = state
+	delete(r.executionTokens, id)
 	existing.Result = nil
 	r.sessions[id] = existing
 	r.finishObservationLocked(id, r.observationClockLocked(id).Now())

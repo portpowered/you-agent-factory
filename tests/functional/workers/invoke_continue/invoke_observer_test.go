@@ -91,12 +91,16 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 			observer(platformprocess.OutputStreamStdout, []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"t7-lost-progress\",\"type\":\"command_execution\",\"command\":\"synthetic lost inspection\",\"exit_code\":0}}\n"))
 		}
 	}
+	requesterPrivacyProgress(request, observer)
 	close(r.started)
 	defer close(r.stopped)
 	select {
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-r.release:
+		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-privacy-") {
+			return requesterPrivacyResult(request, observer)
+		}
 		if filepath.Base(request.WorkDir) == "recording-failure" {
 			terminal := []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"controlled provider failure\"}}\n")
 			if observer != nil {
@@ -112,6 +116,9 @@ func (r *t7GatedProviderRunner) RunStreaming(ctx context.Context, request platfo
 			output = "T7 Factory sibling COMPLETE"
 		}
 		terminal := directCodexOutputWithoutSession(output)
+		if strings.HasPrefix(filepath.Base(request.WorkDir), "requester-factory-lane") || strings.HasPrefix(filepath.Base(request.WorkDir), "requester-batch-lane") {
+			terminal = directCodexSessionOutput("requester-lineage-thread", "Requester lane COMPLETE")
+		}
 		if strings.HasPrefix(filepath.Base(request.WorkDir), "recording-") {
 			terminal = []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"unassociated-message\",\"type\":\"agent_message\",\"text\":\"DIRECT_CAPTURE_BETA\"}}\n{\"type\":\"turn.completed\"}\n")
 		}

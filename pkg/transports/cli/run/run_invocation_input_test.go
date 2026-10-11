@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -218,6 +219,7 @@ func TestResolveFactoryInvocationRequestForRun_WorkFileStaysBatchInputOutsideCle
 }
 
 func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *testing.T) {
+	caller := &workersessions.CallerIdentity{WorkerSessionID: "exact/caller", Token: strings.Repeat("A", 43)}
 	prepared := work.PreparedInvocationInput{
 		NormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
 			"input": {
@@ -246,7 +248,7 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 	err := runFactoryInvocation(
 		context.Background(),
 		RunConfig{
-			Logger: zap.NewNop(), PreparedInvocationInput: &prepared, Output: &output},
+			Logger: zap.NewNop(), PreparedInvocationInput: &prepared, Output: &output, Caller: caller},
 		factorysessions.InvocationTarget{},
 		*apiRequest,
 		operation,
@@ -258,6 +260,13 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 	}
 	if captured.Args != nil || captured.ContentProvided {
 		t.Fatalf("execution request retained plain API carriers: %#v", captured)
+	}
+	if captured.Caller == caller || captured.Caller == nil || *captured.Caller != *caller {
+		t.Fatal("local invocation lost detached caller")
+	}
+	caller.Token = "changed"
+	if captured.Caller.Token == caller.Token {
+		t.Fatal("local invocation aliased caller")
 	}
 	if captured.PreparedInvocationInput == nil ||
 		!reflect.DeepEqual(

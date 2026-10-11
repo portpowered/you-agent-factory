@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,61 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func requesterMetadata() *workersessions.SessionMetadata {
+	return &workersessions.SessionMetadata{
+		Requester:   &workersessions.Requester{Kind: "WORKER_SESSION", WorkerSessionID: "lead", WorkID: "project"},
+		Correlation: &workersessions.Correlation{WorkID: "lane", FactorySessionID: "factory"},
+		Labels:      []string{"tag:project=example"},
+	}
+}
+
+func TestReserve_MetadataIsDetachedAcrossAdmissionAndReads(t *testing.T) {
+	t.Parallel()
+	registry := newRegistry()
+	ctx := context.Background()
+	metadata := requesterMetadata()
+	want := metadata.Clone()
+	session, err := registry.Reserve(ctx, workersessions.ReserveRequest{ID: "lane", Metadata: metadata})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata.Requester.WorkerSessionID = "changed input"
+	metadata.Correlation.WorkID = "changed input"
+	metadata.Labels[0] = "changed input"
+	session.Metadata.Requester.WorkID = "changed result"
+	session.Metadata.Correlation.FactorySessionID = "changed result"
+	session.Metadata.Labels[0] = "changed result"
+	got, err := registry.Get(ctx, workersessions.GetRequest{ID: "lane"})
+	if err != nil || !reflect.DeepEqual(got.Metadata, want) {
+		t.Fatalf("Get metadata = %+v, %v; want %+v", got.Metadata, err, want)
+	}
+	got.Metadata.Labels[0] = "changed Get"
+	listed, err := registry.List(ctx, workersessions.ListRequest{})
+	if err != nil || len(listed.Sessions) != 1 || !reflect.DeepEqual(listed.Sessions[0].Metadata, want) {
+		t.Fatalf("List = %+v, %v; want original metadata", listed, err)
+	}
+	listed.Sessions[0].Metadata.Requester.WorkerSessionID = "changed List"
+	got, err = registry.Get(ctx, workersessions.GetRequest{ID: "lane"})
+	if err != nil || !reflect.DeepEqual(got.Metadata, want) {
+		t.Fatalf("Get after List mutation = %+v, %v", got, err)
+	}
+}
+
+func TestReserve_MetadataRefusalDoesNotConsumeIdentity(t *testing.T) {
+	t.Parallel()
+	registry := newRegistry()
+	ctx := context.Background()
+	bad := requesterMetadata()
+	bad.Requester.Kind = "OPERATOR"
+	if _, err := registry.Reserve(ctx, workersessions.ReserveRequest{ID: "lane", Metadata: bad}); !errors.Is(err, workersessions.ErrInvalidSessionMetadata) {
+		t.Fatalf("Reserve = %v; want metadata refusal", err)
+	}
+	session, err := registry.Reserve(ctx, workersessions.ReserveRequest{ID: "lane"})
+	if err != nil || session.Metadata != nil {
+		t.Fatalf("unattributed reservation = %+v, %v", session, err)
+	}
+}
 
 func newRegistry() workersessions.Service {
 	return newRegistryWithExecution(succeedingExecution())

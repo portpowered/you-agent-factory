@@ -126,6 +126,10 @@ func (r *registry) publishRuntimeProgress(
 	if !runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
 		return workersessions.ErrProviderBindingAttemptMismatch
 	}
+	fragment, err = r.redactExecutionFragment(ownerID, fragment)
+	if err != nil {
+		return err
+	}
 	attemptID := correlation.AttemptID
 	physicalID := strings.TrimSpace(fragment.Correlation.AttemptID)
 	if physicalID == "" {
@@ -432,6 +436,15 @@ func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 // req.Execution.WorkstationName routes into the runtime binding already
 // assembled by Workers, allowing Petri and JavaScript children to share it.
 func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
+	metadata, callerErr := r.resolveCallerMetadata(req.Caller, req.Metadata)
+	if callerErr != nil {
+		return workersessions.InvokeSessionResult{}, callerErr
+	}
+	req.Metadata = metadata
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	if err := req.Validate(); err != nil {
 		r.logger.Info("worker session start rejected", "sessionID", publicWorkerID(req.ID), "attemptID", attemptID, "outcome", "invalid")
@@ -465,6 +478,13 @@ func (r *registry) InvokeRuntimeSession(
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 ) (workersessions.InvokeSessionResult, error) {
+	if req.Caller != nil {
+		caller := *req.Caller
+		req.Caller = &caller
+	}
+	if _, err := r.resolveCallerMetadata(req.Caller, nil); err != nil {
+		return workersessions.InvokeSessionResult{}, err
+	}
 	if err := req.Validate(); err != nil {
 		return workersessions.InvokeSessionResult{}, err
 	}
@@ -529,9 +549,13 @@ func (r *registry) driveRegisteredInvocation(ctx context.Context, req workersess
 	}
 	for {
 		result, retry := r.publishRegisteredAttempt(
-			ctx, req.ID, handoff, supervision, r.beginExecutionPublish(req.ID, supervision),
+			ctx, req.ID, handoff, supervision, r.beginExecutionPublish(req.ID, supervision), req.Caller,
 		)
+		req.Caller = nil // Caller authority is needed only for the initial admission.
 		if !retry {
+			if errors.Is(result.DispatchErr, workersessions.ErrCallerInvalid) {
+				return result, workersessions.ErrCallerInvalid
+			}
 			result.Attempts = supervision.attemptCount()
 			return result, nil
 		}
@@ -592,6 +616,7 @@ func (r *registry) publishRegisteredAttempt(
 	handoff workers.WorkstationDispatchRequest,
 	supervision *supervision,
 	canPublish bool,
+	caller *workersessions.CallerIdentity,
 ) (workersessions.InvokeSessionResult, bool) {
 	attemptID := handoff.Execution.Dispatch.DispatchID
 	if !canPublish {
@@ -611,6 +636,7 @@ func (r *registry) publishRegisteredAttempt(
 		sessionID,
 		handoff,
 		supervision,
+		caller,
 	)
 	if publishErr != nil {
 		r.finishSupervisionPublication(supervision)

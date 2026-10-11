@@ -17,6 +17,103 @@ const (
 	terminalResumeID     = "resume-session-secret"
 )
 
+func TestExecutionOnlyWorkerTokenRemainsSecretAfterAdapterMutation(t *testing.T) {
+	t.Parallel()
+	for _, route := range []string{"execute", "continue"} {
+		for _, outcome := range []string{"success", "failure", "cancel"} {
+			t.Run(route+"/"+outcome, func(t *testing.T) {
+				t.Parallel()
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				const token = "planted-execution-only-worker-token"
+				var observed providers.ExecuteProgress
+				attempt := func(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+					if request.ProcessEnvironment[0] != "YOU_WORKER_SESSION_TOKEN="+token {
+						t.Fatal("execution did not receive the token")
+					}
+					request.ProcessEnvironment[0] = "YOU_WORKER_SESSION_TOKEN=changed-by-adapter"
+					request.ObserveProgress(providers.ExecuteProgress{Phase: "delta", Detail: "visible " + token})
+					result := terminalResultFixture("accepted "+token+" visible result", "visible "+token, token)
+					result.Diagnostics.Metadata["safe"] = token
+					if outcome == "success" {
+						return result, nil
+					}
+					if outcome == "cancel" {
+						cancel()
+					}
+					failure := terminalFailureFixture("failure "+token, token)
+					failure.Diagnostics.Metadata["safe"] = token
+					return result, failure
+				}
+				service, err := executionwire.NewService(mustCatalog(t), execution.Registration{
+					Provider: providers.IDCodex, Attempt: attempt,
+					Continue: func(ctx context.Context, request execution.ContinuationRequest) (providers.ExecuteResult, error) {
+						return attempt(ctx, request.ExecuteRequest)
+					},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				request := providers.ExecuteRequest{
+					Provider: providers.IDCodex, AttemptID: "token-privacy",
+					ProcessEnvironment: []string{"YOU_WORKER_SESSION_TOKEN=" + token},
+					ProgressObserver:   func(progress providers.ExecuteProgress) { observed = progress },
+				}
+				var result providers.ExecuteResult
+				if route == "continue" {
+					result, err = service.Continue(ctx, execution.ContinuationRequest{
+						ExecuteRequest: request,
+						ResumeSession:  &providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "resume-source"},
+					})
+				} else {
+					result, err = service.Execute(ctx, request)
+				}
+				assertWorkerTokenDiagnostics(t, result, err, observed, outcome, token)
+				if request.ProcessEnvironment[0] != "YOU_WORKER_SESSION_TOKEN="+token {
+					t.Fatal("adapter mutated caller-owned environment")
+				}
+			})
+		}
+	}
+}
+
+func assertWorkerTokenDiagnostics(t *testing.T, result providers.ExecuteResult, err error, observed providers.ExecuteProgress, outcome, token string) {
+	t.Helper()
+	assertWorkerTokenResult(t, result, observed)
+	if outcome == "success" {
+		if err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want := providers.ErrExecuteFailed
+	if outcome == "cancel" {
+		want = providers.ErrExecuteCancelled
+	}
+	var failure providers.ExecuteFailure
+	if !errors.Is(err, want) || !errors.As(err, &failure) || strings.Contains(err.Error(), token) {
+		t.Fatal("failure lost its typed outcome or leaked the worker token")
+	}
+	// Cancellation intentionally discards adapter failure diagnostics. A
+	// declared failure preserves them, with the same secret classification.
+	if outcome == "failure" && (failure.Diagnostics == nil || failure.Diagnostics.Metadata["safe"] != "<redacted>") {
+		t.Fatal("declared failure diagnostics lost worker token redaction")
+	}
+	if failure.Diagnostics != nil && strings.Contains(failure.Diagnostics.Metadata["stderr"], token) {
+		t.Fatal("failure diagnostics leaked the worker token")
+	}
+}
+
+func assertWorkerTokenResult(t *testing.T, result providers.ExecuteResult, observed providers.ExecuteProgress) {
+	t.Helper()
+	if result.Content != "accepted <redacted> visible result" {
+		t.Fatal("returned content leaked the worker token or lost neighboring text")
+	}
+	if observed.Detail != "visible <redacted>" || result.Diagnostics == nil || result.Diagnostics.Progress[0].Detail != "visible <redacted>" || result.Diagnostics.Metadata["safe"] != "<redacted>" {
+		t.Fatal("live or returned progress leaked the worker token")
+	}
+}
+
 func TestContinueRejectsInvalidAdapterResult(t *testing.T) {
 	t.Parallel()
 	for _, session := range []providers.SessionRef{

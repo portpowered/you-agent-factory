@@ -48,6 +48,10 @@ func TestCompletedFactoryCaptureFailedWorkIdleRestart(t *testing.T) {
 	before := readHistorySnapshot(t, ctx, binary, project, env, reader.url)
 	want := before.Observation
 	assertCompletedFailedWorkArtifact(t, want)
+	assertRecordingIntegrityCapturedCounters(t, before.Logs, map[string]any{
+		"origin": "SYNTHETIC", "model": "gpt-5",
+		"inputTokens": float64(11), "outputTokens": float64(7), "totalTokens": float64(18),
+	})
 	reader.stop(t, ctx, binary, project, env)
 	host := startHistoryHost(t, ctx, binary, project, env, "--dir", factory, "--record", record, "--continuously")
 	after := readCompletedFactorySnapshot(t, ctx, binary, project, env, host.url, want.WorkerSessionId)
@@ -122,9 +126,11 @@ func assertCompletedFailedWorkArtifact(t *testing.T, got api.WorkerSessionObserv
 
 func assertCompletedArtifactIdentity(t *testing.T, got api.WorkerSessionObservation) {
 	t.Helper()
+	// The script executor configures no model; codex/gpt-5 are usage declaration facts.
 	if got.FactorySessionId == nil || got.WorkId == nil || got.AttemptId == "" ||
-		got.Provider == nil || *got.Provider != "codex" || got.Model == nil || *got.Model != "gpt-5" {
-		t.Fatalf("completed capture lost facts: %+v", got)
+		got.Provider == nil || *got.Provider != "script" || got.Model != nil {
+		encoded, err := json.Marshal(got)
+		t.Fatalf("completed capture lost identity: %s (marshal error=%v)", encoded, err)
 	}
 }
 
@@ -140,7 +146,7 @@ func assertCompletedArtifactTerminal(t *testing.T, got api.WorkerSessionObservat
 func assertCompletedArtifactUsage(t *testing.T, got api.WorkerSessionObservation) {
 	t.Helper()
 	u := got.TokenUsage
-	if u == nil || u.InputTokens == nil || *u.InputTokens != 11 || u.OutputTokens == nil || *u.OutputTokens != 7 || u.TotalTokens == nil || *u.TotalTokens != 18 {
+	if u == nil || u.Origin == nil || *u.Origin != api.ProviderSessionTokenUsageOriginSYNTHETIC || u.InputTokens == nil || *u.InputTokens != 11 || u.OutputTokens == nil || *u.OutputTokens != 7 || u.TotalTokens == nil || *u.TotalTokens != 18 {
 		t.Fatalf("completed capture usage: %+v", u)
 	}
 }

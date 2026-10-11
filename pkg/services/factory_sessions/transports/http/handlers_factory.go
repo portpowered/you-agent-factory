@@ -220,6 +220,11 @@ func (s *LifecycleHandler) InterruptFactorySessionDispatch(w http.ResponseWriter
 }
 
 func (s *LifecycleHandler) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeSessionsRootError(w, "", err)
+		return
+	}
 	if !requestAcceptsJSONContentType(r.Header.Get("Content-Type")) {
 		s.writeUnsupportedMediaTypeError(w)
 		return
@@ -248,7 +253,13 @@ func (s *LifecycleHandler) OpenFactorySession(w http.ResponseWriter, r *http.Req
 	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	start, err := s.sessionsRoot.Start(r.Context(), factorysession.SessionStartRequestFromAPI(req))
+	mapped, err := factorysession.SessionStartRequestFromAPI(req)
+	if err != nil {
+		s.writeOpenFactorySessionRejected(w, err)
+		return
+	}
+	mapped.Caller = caller
+	start, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {
 		s.writeOpenFactorySessionRejected(w, err)
 		return
@@ -263,6 +274,9 @@ func (s *LifecycleHandler) OpenFactorySession(w http.ResponseWriter, r *http.Req
 }
 
 func (s *LifecycleHandler) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
+	if s.writeWorkerCallerError(w, err) {
+		return
+	}
 	if s.writeSessionsRequestContextOutcome(w, err) {
 		return
 	}
@@ -399,6 +413,11 @@ func (s *LifecycleHandler) durableProjectRoot(ctx context.Context) (string, erro
 }
 
 func (s *LifecycleHandler) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeSessionsRootError(w, "", err)
+		return
+	}
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -429,6 +448,7 @@ func (s *LifecycleHandler) StartDurableFactorySessionAsync(w http.ResponseWriter
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
+	mapped.Caller = caller
 	started, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {
 		if s.writeSessionsRootError(w, "", err) {
@@ -450,6 +470,11 @@ func (s *LifecycleHandler) StartDurableFactorySessionAsync(w http.ResponseWriter
 }
 
 func (s *LifecycleHandler) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
+	caller, err := apisurface.WorkerSessionCallerFromHeaders(r.Header)
+	if err != nil {
+		s.writeSessionsRootError(w, "", err)
+		return
+	}
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -480,6 +505,7 @@ func (s *LifecycleHandler) StartDurableFactorySessionSync(w http.ResponseWriter,
 		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
+	mapped.Caller = caller
 	started, err := s.sessionsRoot.Start(r.Context(), mapped)
 	if err != nil {
 		if s.writeSessionsRootError(w, "", err) {

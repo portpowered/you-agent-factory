@@ -583,6 +583,7 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 	if name == "completed" {
 		captured := readCapturedRestartTranscript(t, first, home, dir)
 		transcript = &captured
+		assertAbsentRequesterRestart(t, first, home, dir, sourceID, runner.Requests()[0])
 	}
 
 	if err := first.command.stop(); err != nil {
@@ -598,6 +599,7 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 			t.Fatalf("restart changed committed transcript: %+v / %+v", *transcript, captured)
 		}
 		assertCapturedRestartScopeDenial(t, fresh)
+		assertAbsentRequesterRestart(t, fresh, home, dir, sourceID, runner.Requests()[0])
 	}
 
 	if sourceID != "restart-source" {
@@ -624,6 +626,14 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		assertContinuationRestartResult(t, continued.Stdout(), runner.Requests(), dir)
 	}
 	logs := awaitContinuationRestartLogs(t, fresh, home, dir, "restart-successor")
+	if name == "completed" {
+		assertAbsentRequesterRestart(t, fresh, home, dir, "restart-successor", runner.Requests()[1])
+		before := requesterEnvironment(runner.Requests()[0].Env)["YOU_WORKER_SESSION_TOKEN"]
+		after := requesterEnvironment(runner.Requests()[1].Env)["YOU_WORKER_SESSION_TOKEN"]
+		if before == after {
+			t.Fatal("metadata-free revival restored the source credential")
+		}
+	}
 	if !strings.Contains(logs, sourceID) {
 		t.Fatalf("successor logs omitted predecessor: %s", logs)
 	}
@@ -633,6 +643,46 @@ func runCapturedProviderContinueAfterHostRestart(t *testing.T, name string) {
 		t.Fatalf("archived source lost public successor link: %v stdout=%s stderr=%s", err, show.Stdout(), show.Stderr())
 	}
 	assertCompletedContinuationReplayAfterRestart(t, fresh, root, host, home, dir, route, runner, failed, requestID)
+}
+
+// M14: an ordinary direct source writes no optional session metadata. Public
+// reads before/after reconstruction and continuation must keep that absence,
+// even though a new execution receives its own supervised identity.
+func assertAbsentRequesterRestart(t *testing.T, host invokeContinueStartedProcess, home, dir, id string, command platformprocess.CommandRequest) {
+	t.Helper()
+	var row factoryapi.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, summaryRestartCLI(t, host, home, dir, "show", "--worker-session-id", id), &row)
+	if row.WorkerSessionId != id || row.Requester != nil || row.Correlation != nil || row.Labels != nil {
+		t.Fatal("metadata-free source acquired inferred requester facts")
+	}
+	var rows factoryapi.ListWorkerSessionsResponse
+	decodeDirectWorkerSessionResult(t, summaryRestartCLI(t, host, home, dir, "list", "--history", "all"), &rows)
+	found := false
+	for _, listed := range rows.Sessions {
+		if listed.WorkerSessionId == id {
+			found = true
+			if listed.Requester != nil || listed.Correlation != nil || listed.Labels != nil || listed.State != row.State {
+				t.Fatal("metadata-free list inferred requester facts or changed state")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("metadata-free list omitted captured source")
+	}
+	assertAbsentRequesterEnvironment(t, id, command)
+}
+
+func assertAbsentRequesterEnvironment(t *testing.T, id string, command platformprocess.CommandRequest) {
+	t.Helper()
+	environment := requesterEnvironment(command.Env)
+	if environment["YOU_WORKER_SESSION_ID"] != id || environment["YOU_WORKER_SESSION_TOKEN"] == "" {
+		t.Fatal("metadata-free execution lost its supervised identity")
+	}
+	for _, key := range []string{"YOU_MESSAGE_TARGET", "YOU_MESSAGE_TARGET_WORK_ID", "YOU_WORK_ID", "YOU_FACTORY_SESSION_ID"} {
+		if _, exists := environment[key]; exists {
+			t.Fatalf("metadata-free execution inferred %s", key)
+		}
+	}
 }
 
 func continuationRestartCommandResult(failed bool) platformprocess.CommandResult {

@@ -38,7 +38,7 @@ func newSelectedHostClientProcess(t *testing.T) selectedHostClientProcess {
 	environment = append(environment, "HOME="+home, "USERPROFILE="+home,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, "models"))
 	process := selectedHostClientProcess{
-		Process:     support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: subagentScenarioRunner{t: t}}),
+		Process:     support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectLocalProvider{t: t}}),
 		environment: environment,
 	}
 	// Finish bootstrap before any parallel connection can use this home.

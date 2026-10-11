@@ -12,6 +12,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -409,5 +410,219 @@ func t7AssertRetryHistory(t *testing.T, body string, attempts int) {
 	terminal := logs.Events[len(logs.Events)-1].Event.Payload.Payload.Status
 	if terminal != "FAILED" {
 		t.Fatalf("last captured state = %s, want FAILED", terminal)
+	}
+}
+
+// HTTP parity: a caller learned at the controlled native edge opens and invokes
+// a JavaScript Factory through the same public process used by CLI scenarios.
+func TestRequesterFactoryCLICaller(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	parent, child := fixture.scenario(t, "requester-cli-parent"), fixture.scenario(t, "requester-cli-child")
+	defer parent.close(t)
+	defer child.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := parent.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	parentID := scenarioScopedID(parent, "cli-parent")
+	start := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.started, "Factory CLI caller running")
+	token := requesterSourceToken(t, runner, parentID)
+	writeInvokeContinueJSON(t, filepath.Join(child.workingDirectory, "factory.json"), map[string]any{
+		"name": "requester-cli-factory", "orchestrator": map[string]any{"kind": "JAVASCRIPT", "javascript": map[string]any{"inlineSource": map[string]any{"encoding": "utf-8", "inline": `return (async function () { await agent.run({prompt: "CLI requester child", executorProvider: "codex", modelProvider: "codex"}); return "factory caller finished"; })();`}}},
+	})
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, child.workingDirectory)
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	invoke := requesterFactoryCLIInputs(child, ctx, fixture.baseURL, opened.Session.Id, parentID, token)
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("Factory CLI invoke: %v: %s", err, invoke.Stderr())
+	}
+	if strings.Contains(invoke.Stdout()+invoke.Stderr(), token) || child.providerRunner.CallCount() != 1 {
+		t.Fatal("Factory CLI leaked caller or duplicated provider")
+	}
+	var result api.InvocationResponse
+	if err := json.Unmarshal([]byte(invoke.Stdout()), &result); err != nil || result.Status != api.InvocationTerminalStatusCompleted || result.SessionId == nil {
+		t.Fatalf("CLI result not completed: %s", invoke.Stdout())
+	}
+	assertRequesterFactoryHTTPChild(t, fixture, child, ctx, result, parentID, token)
+	assertRequesterMCPStartupRefused(t, fixture, child, ctx, parentID)
+	assertRequesterFactoryCLIRefused(t, fixture, child, ctx, opened.Session.Id, parentID, strings.Repeat("A", 43))
+	stop := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "cancel", parentID)
+	if err := fixture.process.Execute(stop.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.stopped, "Factory CLI caller ended")
+	assertRequesterFactoryCLIRefused(t, fixture, child, ctx, opened.Session.Id, parentID, token)
+	functionalevidence.Covers(t, "cli/you.run", "cli/you.server.mcp")
+}
+
+func assertRequesterMCPStartupRefused(t *testing.T, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, ctx context.Context, callerID string) {
+	t.Helper()
+	const token = "planted-malformed-mcp-token"
+	before := scenario.providerRunner.CallCount()
+	input := support.FakeInputs(ctx, []string{"you", "--server", fixture.baseURL, "server", "mcp"})
+	input.Input.Env = append(scenario.environment(), "YOU_WORKER_SESSION_ID="+callerID, "YOU_WORKER_SESSION_TOKEN="+token)
+	input.Input.WorkingDirectory = scenario.workingDirectory
+	err := fixture.process.Execute(input.Input)
+	if err == nil || !strings.Contains(input.Stderr(), "WORKER_SESSION_CALLER_INVALID") || scenario.providerRunner.CallCount() != before {
+		t.Fatalf("malformed MCP caller: error=%v stderr=%s calls=%d before=%d", err, strings.ReplaceAll(input.Stderr(), token, "[REDACTED]"), scenario.providerRunner.CallCount(), before)
+	}
+	if strings.Contains(input.Stdout()+input.Stderr()+err.Error(), token) {
+		t.Fatal("MCP startup refusal exposed execution credential")
+	}
+}
+
+func requesterFactoryCLIInputs(child *invokeContinueScenario, ctx context.Context, server, sessionID, callerID, token string) *support.CapturedInputs {
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "--remote", "--server", server, "--session", sessionID, "run", "--factory", filepath.Join(child.workingDirectory, "factory.json"), "--no-record", "--output", "primary", "CLI invocation input"})
+	invoke.Input.Env = append(child.environment(), "YOU_WORKER_SESSION_ID="+callerID, "YOU_WORKER_SESSION_TOKEN="+token)
+	invoke.Input.WorkingDirectory = child.workingDirectory
+	return invoke
+}
+
+func assertRequesterFactoryCLIRefused(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, sessionID, callerID, token string) {
+	t.Helper()
+	before := child.providerRunner.CallCount()
+	invoke := requesterFactoryCLIInputs(child, ctx, fixture.baseURL, sessionID, callerID, token)
+	err := fixture.process.Execute(invoke.Input)
+	if err == nil || !strings.Contains(invoke.Stderr(), "WORKER_SESSION_CALLER_INVALID") || child.providerRunner.CallCount() != before {
+		t.Fatal("Factory CLI caller refusal launched a provider or lost typed code")
+	}
+	if strings.Contains(invoke.Stdout()+invoke.Stderr()+err.Error(), token) {
+		t.Fatal("Factory CLI refusal exposed credential")
+	}
+}
+
+func TestRequesterFactoryHTTPCaller(t *testing.T) {
+	t.Parallel()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	parent, child := fixture.scenario(t, "requester-http-parent"), fixture.scenario(t, "requester-http-child")
+	defer parent.close(t)
+	defer child.close(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	runner := parent.providerRunner.(*t7GatedProviderRunner)
+	defer t7ReleaseAndJoin(t, ctx, runner)()
+	parentID := scenarioScopedID(parent, "http-parent")
+	start := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "invoke", "--execution", requesterExecutionPath(t, parent, parentID), "--async")
+	if err := fixture.process.Execute(start.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.started, "HTTP caller running")
+	token := requesterSourceToken(t, runner, parentID)
+	writeInvokeContinueJSON(t, filepath.Join(child.workingDirectory, "factory.json"), map[string]any{
+		"name": "requester-http-factory", "orchestrator": map[string]any{"kind": "JAVASCRIPT", "javascript": map[string]any{"inlineSource": map[string]any{"encoding": "utf-8", "inline": `return (async function () { await agent.run({prompt: "HTTP requester child", executorProvider: "codex", modelProvider: "codex"}); return "factory caller finished"; })();`}}},
+	})
+	status, body := requesterFactoryHTTP(t, ctx, fixture.baseURL+"/factory-sessions", map[string]any{"folderPath": child.workingDirectory}, parentID, token)
+	if status != http.StatusOK {
+		t.Fatalf("caller open: %d %s", status, body)
+	}
+	var opened api.OpenFactorySessionResponse
+	if err := json.Unmarshal([]byte(body), &opened); err != nil || opened.Session == nil {
+		t.Fatal("open did not return a live session")
+	}
+	defer support.CloseFactorySessionAt(t, fixture.baseURL, opened.Session.Id)
+	status, body = requesterFactoryHTTP(t, ctx, fixture.baseURL+"/factory-sessions/"+opened.Session.Id+"/invocations", map[string]any{"requestId": scenarioScopedID(child, "http-invoke"), "sourceKind": "text", "content": []map[string]any{{"type": "TEXT", "text": "HTTP invocation input"}}}, parentID, token)
+	if status != http.StatusOK {
+		t.Fatalf("caller invocation: %d %s", status, body)
+	}
+	var result api.InvocationResponse
+	if err := json.Unmarshal([]byte(body), &result); err != nil || result.Status != api.InvocationTerminalStatusCompleted || result.SessionId == nil {
+		t.Fatalf("Factory result not completed: %s", body)
+	}
+	if strings.Contains(body, token) || child.providerRunner.CallCount() != 1 {
+		t.Fatal("Factory invocation leaked caller or duplicated provider")
+	}
+	assertRequesterFactoryHTTPChild(t, fixture, child, ctx, result, parentID, token)
+	assertRequesterFactoryHTTPRefusals(t, fixture, parent, child, ctx, opened.Session.Id, parentID, token)
+	stop := t7RemoteCLIInputs(parent, ctx, fixture.baseURL, "cancel", parentID)
+	if err := fixture.process.Execute(stop.Input); err != nil {
+		t.Fatal(err)
+	}
+	t19AwaitSignal(t, ctx, runner.stopped, "Factory caller ended")
+	assertRequesterFactoryHTTPEnded(t, fixture, child, ctx, opened.Session.Id, parentID, token)
+
+	functionalevidence.Covers(t, "rest/openFactorySession", "rest/invokeFactorySessionBySessionId", "rest/startDurableFactorySessionAsync", "rest/startDurableFactorySessionSync")
+}
+
+func requesterFactoryHTTP(t testing.TB, ctx context.Context, endpoint string, document any, id, token string) (int, string) {
+	t.Helper()
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if id != "" {
+		req.Header.Set("X-You-Worker-Session-Id", id)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response.StatusCode, string(body)
+}
+
+func assertRequesterFactoryHTTPRefusals(t *testing.T, fixture *invokeContinuePackageFixture, parent, child *invokeContinueScenario, ctx context.Context, sessionID, callerID, token string) {
+	t.Helper()
+	for _, pair := range []struct{ id, token string }{{callerID, strings.Repeat("A", 43)}, {callerID, ""}, {"foreign-worker", token}} {
+		for _, route := range []string{"", "/async", "/sync", "/" + sessionID + "/invocations"} {
+			status, body := requesterFactoryHTTP(t, ctx, fixture.baseURL+"/factory-sessions"+route, map[string]any{"folderPath": child.workingDirectory, "requestId": scenarioScopedID(child, "refused"), "source": map[string]any{"kind": "INLINE_WORKFLOW", "inlineWorkflow": map[string]any{"inlineSource": map[string]any{"encoding": "utf-8", "inline": "return 1;"}}}, "args": map[string]any{}}, pair.id, pair.token)
+			if status != http.StatusForbidden || !strings.Contains(body, `"code":"WORKER_SESSION_CALLER_INVALID"`) {
+				t.Fatalf("Factory caller refusal %s: %d %s", route, status, body)
+			}
+			assertRequesterTokenAbsent(t, token, body)
+		}
+	}
+	if child.providerRunner.CallCount() != 1 || parent.providerRunner.CallCount() != 1 {
+		t.Fatal("Factory caller refusal launched or changed a provider attempt")
+	}
+}
+
+func assertRequesterFactoryHTTPChild(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, result api.InvocationResponse, parentID, token string) {
+	t.Helper()
+
+	environment := requesterEnvironment(child.providerRunner.Requests()[0].Env)
+	show := t7RemoteCLIInputs(child, ctx, fixture.baseURL, "show", "--session", *result.SessionId, "--worker-session-id", environment["YOU_WORKER_SESSION_ID"])
+	if err := fixture.process.Execute(show.Input); err != nil {
+		t.Fatal(err)
+	}
+	var observation api.WorkerSessionObservation
+	decodeDirectWorkerSessionResult(t, show.Stdout(), &observation)
+	assertRequesterSuccessorEnvironment(t, environment, observation.WorkerSessionId, parentID, token)
+	if observation.Requester == nil || observation.Requester.WorkerSessionId != parentID || observation.Correlation == nil || observation.Correlation.FactorySessionId == nil || *observation.Correlation.FactorySessionId != *result.SessionId {
+		t.Fatal("Factory child lost requester or actual child session correlation")
+	}
+	assertRequesterEndpoint(t, environment, fixture.baseURL)
+	assertRequesterTokenAbsent(t, token, show.Stdout()+show.Stderr())
+	assertRequesterTokenAbsent(t, environment["YOU_WORKER_SESSION_TOKEN"], show.Stdout()+show.Stderr())
+}
+
+func assertRequesterFactoryHTTPEnded(t *testing.T, fixture *invokeContinuePackageFixture, child *invokeContinueScenario, ctx context.Context, sessionID, callerID, token string) {
+	t.Helper()
+	for _, route := range []string{"", "/async", "/sync", "/" + sessionID + "/invocations"} {
+		document := map[string]any{"folderPath": child.workingDirectory, "requestId": scenarioScopedID(child, "ended"), "source": map[string]any{"kind": "INLINE_WORKFLOW", "inlineWorkflow": map[string]any{"inlineSource": map[string]any{"encoding": "utf-8", "inline": "return 1;"}}}, "args": map[string]any{}}
+		status, body := requesterFactoryHTTP(t, ctx, fixture.baseURL+"/factory-sessions"+route, document, callerID, token)
+		if status != http.StatusForbidden || !strings.Contains(body, `"code":"WORKER_SESSION_CALLER_INVALID"`) {
+			t.Fatalf("ended Factory caller %s: %d %s", route, status, body)
+		}
+		assertRequesterTokenAbsent(t, token, body)
+	}
+	if child.providerRunner.CallCount() != 1 {
+		t.Fatal("ended Factory caller launched a provider")
 	}
 }

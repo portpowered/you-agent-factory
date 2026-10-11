@@ -595,7 +595,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 		return nil, err
 	}
 	v158 := provideWorkerHistorySnapshotBudget()
-	workersessionsService, err := provideWorkerSessionsService(workersService, eventsService, loggingLogger, source, timerSource, v153, v155, v156, v157, v158, service, providersessionsService)
+	workersessionsService, err := provideWorkerSessionsService(edges2, workersService, eventsService, loggingLogger, source, timerSource, v153, v155, v156, v157, v158, service, providersessionsService)
 	if err != nil {
 		return nil, err
 	}
@@ -679,7 +679,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	v194 := provideRuntimeModelFactoryConfigReader(v121)
 	v195 := provideRuntimeModelWorkerExecution(workersService)
 	v196 := wire3.NewRuntimeModelInvocation(modelsService, v194, v195)
-	v197, err := wire3.NewRoot(v121, v79, v192, liveChangeCoordinator, v193, factorydefinitionsService, recordingsService, v196, v13)
+	callerValidator, err := wire9.CallerValidation(workersessionsService)
+	if err != nil {
+		return nil, err
+	}
+	v197, err := wire3.NewRoot(v121, v79, v192, liveChangeCoordinator, v193, factorydefinitionsService, recordingsService, v196, v13, callerValidator)
 	if err != nil {
 		return nil, err
 	}
@@ -810,7 +814,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges, acpWireLogSettings AC
 	}
 	v218 := provideWorkerWorkAttributionReader(edges2, v142, v134, v197, v127)
 	workerOwnerRecoveryOperation := wire5.NewWorkerOwnerRecoveryOperation(v180, v218)
-	v219 := provideFleetObservationCatalog(v197)
+	v219 := provideFleetObservationCatalog(v197, workersessionsService)
 	v220 := wire9.NewFleetHistory(v219, v155, source, loggingLogger, v158, workersessionsService)
 	v221 := wire9.NewFleetObservationService(v219, v220)
 	wireHttpRuntimeBinding, err := provideHTTPRuntimeBindingWithMetrics(v197, serviceService, factorydefinitionsService, workService, modelsService, recordingsService, workflowPreviewOperation, promptTemplates, factoryStatusProjector, handler, contentPreparation, v202, invocationWorkTypeService, requestPreparation, runtimeMetricsQuery, costsQuery, workersessionsService, workerOwnerRecoveryOperation, v221, v219, v218, logger)
@@ -1008,8 +1012,7 @@ var servicesSet = wire13.NewSet(
 	provideWorkerSessionRecorder, wire5.NewWorkerControlOperationStore, wire5.NewWorkerRestartInputStore, wire5.NewWorkerOwnerRecoveryOperation, wire5.NewWorkerCapturePreparationOperation, provideWorkerRecordingReader,
 	provideWorkerWorkAttributionReader,
 	provideFleetCapturedActivity,
-	provideFleetObservationCatalog, wire9.NewLogReader, wire9.NewFleetHistory, wire9.NewFleetObservationService, provideWorkerSessionsService,
-	provideWorkerHistorySnapshotBudget,
+	provideFleetObservationCatalog, wire9.NewLogReader, wire9.NewFleetHistory, wire9.NewFleetObservationService, provideWorkerSessionsService, wire9.CallerValidation, provideWorkerHistorySnapshotBudget,
 	provideWorkerAttemptOpener,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,

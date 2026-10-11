@@ -98,7 +98,7 @@ func (p *WorkPayloadLineageProjection) ensureMaps() {
 
 // RecordWorkRequestSnapshot captures a canonical payload-bearing WORK_REQUEST
 // snapshot. This is the precedence owner for initial-submission lookups.
-func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick int, requestID string, item WorkItem) {
+func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick int, requestID string, item WorkItem, producingDispatchID ...string) {
 	if item.ID == "" {
 		return
 	}
@@ -128,6 +128,9 @@ func (p *WorkPayloadLineageProjection) RecordWorkRequestSnapshot(observedTick in
 		ParentWorkIDs:        parentWorkIDs,
 		ParentLogicalWorkIDs: parentLogicalWorkIDs,
 		WorkItem:             cloneWorkItem(item),
+	}
+	if len(producingDispatchID) > 0 {
+		snapshot.DispatchID = producingDispatchID[0]
 	}
 	p.SnapshotsByID[snapshot.SnapshotID] = snapshot
 	if _, exists := p.InitialSnapshotIDByWorkID[item.ID]; !exists {

@@ -77,20 +77,10 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	}
 	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
 	if err != nil {
-		// A closed runtime does not invalidate the original captured scope.
-		// The capture reader validates physical membership before returning facts.
+		// A direct successor may still run in the original scope after its
+		// runtime closes. The fleet view checks admitted owners before capture.
 		if errors.Is(err, workersessions.ErrObservationSessionNotFound) && a.logs != nil {
-			observation, readErr := a.logs.GetCapturedObservation(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
-				WorkerSessionID: workerSessionID, FactorySessionID: strings.TrimSpace(sessionID),
-			})
-			if readErr != nil {
-				return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get captured Worker Session observation: %w", readErr)
-			}
-			observation, readErr = scopeWorkerSessionObservation(observation, workerSessionScope{effectiveID: strings.TrimSpace(sessionID)})
-			if readErr != nil {
-				return factoryapi.WorkerSessionObservation{}, readErr
-			}
-			return a.presentWorkerSessionObservation(ctx, observation)
+			return a.closedScopeWorkerSessionObservation(ctx, workerSessionID, strings.TrimSpace(sessionID))
 		}
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
@@ -107,6 +97,25 @@ func (a *Adapter) GetWorkerSessionObservationByWorkerSessionID(
 	}
 	if observation, err = scopeWorkerSessionObservation(observation, scope); err != nil {
 		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("scope Worker Session observation: %w", err)
+	}
+	return a.presentWorkerSessionObservation(ctx, observation)
+}
+
+func (a *Adapter) closedScopeWorkerSessionObservation(ctx context.Context, workerID, sessionID string) (factoryapi.WorkerSessionObservation, error) {
+	request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerID, FactorySessionID: sessionID}
+	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, request)
+	if errors.Is(err, workersessions.ErrObservationSessionNotFound) || (err == nil && observation.State.Terminal()) {
+		captured, captureErr := a.logs.GetCapturedObservation(ctx, request)
+		if !errors.Is(captureErr, workersessions.ErrObservationSessionNotFound) || err != nil {
+			observation, err = captured, captureErr
+		}
+	}
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, fmt.Errorf("get closed-scope Worker Session observation: %w", err)
+	}
+	observation, err = scopeWorkerSessionObservation(observation, workerSessionScope{effectiveID: sessionID})
+	if err != nil {
+		return factoryapi.WorkerSessionObservation{}, err
 	}
 	return a.presentWorkerSessionObservation(ctx, observation)
 }

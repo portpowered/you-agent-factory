@@ -23,8 +23,12 @@ import (
 
 // Start delegates admission and opening to the injected operation.
 func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.SessionStartResult{}, err
 	}
 	return r.start(ctx, request)
 }
@@ -32,6 +36,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 // Start admits a Factory Session through fixed opening collaborators.
 // The selected runtime is published to the canonical Assembly registry.
 func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.assembly == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("factory sessions opening owner is required")
 	}
@@ -52,6 +57,9 @@ func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.Sess
 	if request.ValidateOnly && request.InitNewFactory {
 		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "initNewFactory", Message: "initNewFactory cannot be combined with validateOnly"}
 	}
+	if err := validatePackagedStartSelection(request); err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
 	requestID := strings.TrimSpace(request.Correlation.RequestID)
 	if request.ActivationOnly && requestID != "" {
 		if existing, ok := r.startedForRequestID(requestID); ok {
@@ -69,6 +77,23 @@ func (r *RuntimeOpening) Start(ctx context.Context, request factorysessions.Sess
 		return value.(factorysessions.SessionStartResult), nil
 	}
 	return r.startLive(ctx, request)
+}
+
+func validatePackagedStartSelection(request factorysessions.SessionStartRequest) error {
+	name := strings.TrimSpace(request.Source.FactoryID)
+	if request.Source.Kind != factoryruntime.WorkflowSourceKindFactoryID || !strings.HasPrefix(name, "@") {
+		return nil
+	}
+	if err := factorydefinitions.ValidateName(name); err != nil {
+		return &factorysessions.DetachedRequestError{Field: "factoryId", Message: "must be a packaged Factory name in @scope/name form"}
+	}
+	if definition := strings.TrimSpace(request.Definition.FactoryID); definition != "" && definition != name {
+		return &factorysessions.DetachedRequestError{Field: "factoryId", Message: "source and definition must select the same Factory"}
+	}
+	if request.Target != nil || request.InitNewFactory {
+		return &factorysessions.DetachedRequestError{Field: "factoryId", Message: "cannot be combined with target or initNewFactory"}
+	}
+	return nil
 }
 
 func (r *RuntimeOpening) startDurable(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
@@ -131,7 +156,7 @@ func currentWorkerAttemptStarter(selected *livesession.LiveSession) factorysessi
 	if selected == nil {
 		return nil
 	}
-	return factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(runtimebinding.BundleFromSession(selected)))
+	return runtimeCallerAttemptStarter(runtimebinding.BundleFromSession(selected))
 }
 
 func currentWorkerResourceAdmission(selected *livesession.LiveSession) factoryruntime.ResourceCapacityLeaseAdmission {
@@ -153,8 +178,12 @@ func currentWorkerResourceAdmission(selected *livesession.LiveSession) factoryru
 // StartSync carries the opened Factory's operator worker settings to the
 // process-owned durable service as one detached request value.
 func (r *Root) StartSync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.SyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.SyncStartResult{}, err
 	}
 	if request.WorkerSettings == nil {
 		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))
@@ -169,8 +198,12 @@ func (r *Root) StartSync(ctx context.Context, request factorysessions.StartReque
 }
 
 func (r *Root) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	request.Caller = request.Caller.Clone()
 	if r == nil || r.Assembly == nil {
 		return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	if err := r.validateCaller(ctx, request.Caller); err != nil {
+		return factorysessions.AsyncStartResult{}, err
 	}
 	if request.WorkerSettings == nil {
 		request.WorkerSettings = currentWorkerSettings(r.Resolve(factorysessions.DefaultSessionID))

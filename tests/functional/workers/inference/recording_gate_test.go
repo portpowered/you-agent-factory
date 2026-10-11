@@ -609,11 +609,11 @@ func (unavailableWorkerControlStore) ReadWorkerControlInput(context.Context, rec
 // explicit unavailable recipe, preserving ordinary invocation without claiming
 // that restart input was saved. Durable recovery fixtures delegate to the real
 // Recordings store instead.
-func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest) error {
+func (unavailableWorkerControlStore) ValidateWorkerRestartRecipe(context.Context, string, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return recordings.ErrMissingWorkerRestartInputStore
 }
 
-func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest) error {
+func (unavailableWorkerControlStore) SaveWorkerRestartRecipe(context.Context, recordings.WorkerControlTarget, workers.WorkstationDispatchRequest, ...json.RawMessage) error {
 	return recordings.ErrInvalidRecordingRedactionRequest
 }
 

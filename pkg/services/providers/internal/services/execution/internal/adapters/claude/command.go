@@ -12,6 +12,7 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/commandenv"
 )
 
 const (
@@ -122,7 +123,7 @@ func deliverPrompt(command string, args []string, prompt string) ([]string, []by
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
 	return platformprocess.MergeCommandEnv(
 		processEnvironment,
-		platformprocess.CommandEnvEntriesFromMap(envVars),
+		commandenv.ProviderVariables(envVars),
 		commandAutomationDefaults,
 	)
 }

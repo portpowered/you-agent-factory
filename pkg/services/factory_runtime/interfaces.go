@@ -7,6 +7,7 @@ import (
 	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
 // Scheduler is the replaceable Factory Runtime transition-selection policy.
@@ -17,6 +18,11 @@ type Scheduler = scheduler.Scheduler
 type WorkflowContextProvider interface {
 	WorkflowContext() *factorycontext.FactoryContext
 }
+
+// InvocationWork and InvocationCaller retain their owning service values at
+// Runtime's invocation admission boundary without a second representation.
+type InvocationWork = work.SubmitRequest
+type InvocationCaller = workersessions.CallerIdentity
 
 // APIFactory is the migration-only factory boundary required by legacy HTTP
 // API and Factory Sessions adapters. New cross-service peers use Service and
@@ -38,6 +44,13 @@ type APIFactory interface {
 // strategy seams. A service may route these operations to a replaceable hosted
 // engine and therefore does not expose the engine run loop.
 type Service interface {
+	// PrepareInvocation retains execution-only caller authority before ordinary
+	// Work submission. Release ends that invocation's authority and must run on
+	// every exit from invocation waiting. Credentials never enter durable state.
+	// PrepareInvocation retains execution-only caller scope. Its release clears
+	// credentials and returns any typed admission refusal recorded by dispatch.
+	PrepareInvocation(context.Context, InvocationWork, *InvocationCaller) (InvocationWork, func() error, error)
+
 	// ControlPause pauses the factory loop. No transitions fire until resumed.
 	// Returns ErrNotRunning when the instance is not running.
 	ControlPause(ctx context.Context, req PauseRequest) (PauseResult, error)

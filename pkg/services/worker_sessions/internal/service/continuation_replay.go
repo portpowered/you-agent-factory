@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -45,6 +46,11 @@ func (r *registry) readTerminalContinuationReplay(req workersessions.ContinueReq
 	if err != nil || !completedContinuationMatches(page, input) {
 		return nil, workersessions.ErrContinuationExecutionUnavailable
 	}
+	opening, _ := completedContinuationOpening(page.Opening.Payload)
+	metadata, metadataErr := decodeSessionMetadata(opening.SessionMetadata)
+	if metadataErr != nil || !reflect.DeepEqual(metadata, source.snapshot.session.Metadata) {
+		return nil, workersessions.ErrContinuationExecutionUnavailable
+	}
 	result, err := r.readContinuationTerminalResult(ctx, page, input)
 	if err != nil {
 		return nil, err
@@ -52,7 +58,8 @@ func (r *registry) readTerminalContinuationReplay(req workersessions.ContinueReq
 	addressed := req
 	req.SourceWorkerSessionID = target.WorkerSessionID
 	session := workersessions.Session{
-		ID: req.SuccessorWorkerSessionID, State: workersessions.State(page.Terminal.Status),
+		Metadata: metadata,
+		ID:       req.SuccessorWorkerSessionID, State: workersessions.State(page.Terminal.Status),
 		Result:                     result,
 		PredecessorWorkerSessionID: req.SourceWorkerSessionID,
 		SuccessorWorkerSessionID:   page.SuccessorWorkerSessionID,

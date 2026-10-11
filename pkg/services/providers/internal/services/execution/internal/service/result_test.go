@@ -113,3 +113,52 @@ func TestNormalizeDiagnosticsPreservesUsageTokenMetadataKeys(t *testing.T) {
 		t.Fatalf("api-token = %q, want redacted", usage["api-token"])
 	}
 }
+
+func TestLiveProgressRedactsExecutionOnlyWorkerTokenBeforeAdapterMutation(t *testing.T) {
+	t.Parallel()
+	var observed providers.ExecuteProgress
+	request := providers.ExecuteRequest{
+		ProcessEnvironment: []string{
+			"YOU_WORKER_SESSION_TOKEN=planted-worker-token",
+			"you_worker_session_token=second-worker-token",
+			"YOU_WORKER_SESSION_ID=visible-worker",
+		},
+		EnvVars:          map[string]string{"API_KEY": "planted-api-key"},
+		ProgressObserver: func(progress providers.ExecuteProgress) { observed = progress },
+	}
+	safe := safeProgressRequest(request)
+	safe.ProcessEnvironment[0] = "YOU_WORKER_SESSION_TOKEN=changed-worker-token"
+	safe.EnvVars["API_KEY"] = "changed-api-key"
+	progress := providers.ExecuteProgress{
+		Phase:    "delta",
+		Detail:   "visible-worker planted-worker-token second-worker-token planted-api-key",
+		Metadata: map[string]string{"safe": "planted-worker-token"},
+	}
+	safe.ObserveProgress(progress)
+	if observed.Detail != "visible-worker <redacted> <redacted> <redacted>" || observed.Metadata["safe"] != "<redacted>" {
+		t.Fatalf("execution-only token was not redacted")
+	}
+	if progress.Metadata["safe"] != "planted-worker-token" {
+		t.Fatal("redaction mutated producer progress")
+	}
+}
+
+func TestWorkerTokenClassificationPreservesNonsecretEnvironmentFacts(t *testing.T) {
+	t.Parallel()
+	request := providers.ExecuteRequest{ProcessEnvironment: []string{
+		"YOU_WORKER_SESSION_TOKEN=planted-worker-token",
+		"YOU_WORKER_SESSION_TOKEN=", "YOU_WORKER_SESSION_TOKEN",
+		"OTHER_YOU_WORKER_SESSION_TOKEN=visible-other-value",
+		"YOU_WORKER_SESSION_ID=visible-worker", "YOU_WORK_ID=visible-work",
+	}}
+	before := request.Clone()
+	diagnostics := normalizeDiagnostics(providers.ExecuteDiagnostics{
+		Metadata: map[string]string{"safe": "planted-worker-token visible-worker visible-work visible-other-value"},
+	}, request)
+	if diagnostics.Metadata["safe"] != "<redacted> visible-worker visible-work visible-other-value" {
+		t.Fatal("classification lost privacy or nonsecret neighboring facts")
+	}
+	if !reflect.DeepEqual(request, before) {
+		t.Fatal("classification mutated the execution environment")
+	}
+}

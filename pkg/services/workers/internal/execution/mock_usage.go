@@ -29,6 +29,7 @@ type mockWorkerUsageObservationPayload struct {
 func PublishMockWorkerUsage(
 	ctx context.Context,
 	correlation workers.ExecutionCorrelation,
+	provider string,
 	usage *workers.MockWorkerUsageConfig,
 ) {
 	if usage == nil {
@@ -51,19 +52,24 @@ func PublishMockWorkerUsage(
 	if err != nil {
 		return
 	}
+	attemptID := strings.TrimSpace(correlation.AttemptID)
+	if attemptID == "" {
+		// Legacy direct executions use their dispatch as the physical attempt.
+		attemptID = strings.TrimSpace(correlation.DispatchID)
+	}
+	provider = strings.TrimSpace(provider)
 	publish(workers.ProgressFragment{
 		Correlation: correlation,
 		DispatchID:  correlation.DispatchID,
 		Kind:        workers.ProgressFragmentKind,
 		Type:        "usage.updated",
 		Payload:     string(encoded),
-		Provider:    strings.TrimSpace(usage.Provider),
-		Metadata:    map[string]string{"model": strings.TrimSpace(usage.Model)},
+		Provider:    provider,
 		CanonicalDraft: workers.Draft{
 			Kind: workers.KindUsage, Phase: workers.PhaseUpdated,
-			DispatchID: correlation.DispatchID, Payload: encoded,
+			DispatchID: attemptID, Payload: encoded,
 			Provenance: workers.Provenance{
-				Provider: strings.TrimSpace(usage.Provider), NativeEventType: "usage.updated",
+				Provider: provider, NativeEventType: "usage.updated",
 				Delivery: workers.DeliverySynthesized, Representation: workers.RepresentationSnapshot,
 				Fidelity: workers.FidelityNormalized,
 			},

@@ -74,10 +74,13 @@ type RunIntent struct {
 }
 
 type MCPIntent struct {
-	ProjectRoot string
-	ServerURL   string
-	Stdin       io.Reader
-	Stdout      io.Writer
+	// Execution-only credentials stay outside serialized lifecycle data.
+	WorkerSessionID    string `json:"-"`
+	WorkerSessionToken string `json:"-"`
+	ProjectRoot        string
+	ServerURL          string
+	Stdin              io.Reader
+	Stdout             io.Writer
 }
 
 // RunSelection executes one invocation-local CLI run choice with the typed

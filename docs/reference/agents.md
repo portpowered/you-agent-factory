@@ -124,6 +124,12 @@ to refresh one batch without creating duplicate batches. Change `requestId` or c
 Before `you submit` or `you submit batch`, confirm a factory service is listening. A local
 `factory.json` on disk does not mean a runtime is accepting work.
 
+Worker executions receive `YOU_SERVER` when their host exposes the Worker
+Session API. CLI commands use this address when `--server` is absent. An
+explicit `--server` takes precedence; an absent or empty `YOU_SERVER` uses
+`http://localhost:7437`. Use `--remote` to select remote execution placement.
+`YOU_SERVER` does not set a local listener address; use `--listen` for that.
+
 1. **`you session list`** (primary) — calls `GET /factory-sessions` on the running host
    (default `http://localhost:7437`). Empty table means no open sessions; connection refused
    means start a listening service with `you server --listen <host:port>` or a

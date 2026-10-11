@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 )
+
+func (*lifecycleControlFactory) PrepareInvocation(_ context.Context, request work.SubmitRequest, _ *workersessions.CallerIdentity) (work.SubmitRequest, func() error, error) {
+	return request, nil, nil
+}
 
 type lifecycleControlFactory struct {
 	*executeObserverFactory

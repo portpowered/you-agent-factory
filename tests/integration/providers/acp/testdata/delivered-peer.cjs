@@ -44,6 +44,16 @@ const finish = () => {
 };
 input.on("line", (line) => {
   const request = JSON.parse(line);
+  if (mode === "permission" && request.id === "permission-request") {
+    const option = request.result?.outcome?.optionId;
+    fs.writeFileSync(attempts, option || "missing");
+    const update = JSON.stringify({jsonrpc: "2.0", method: "session/update", params: {
+      sessionId: "eof-fixture-session", update: {sessionUpdate: "agent_message_chunk",
+        content: {type: "text", text: "permission witness complete"}}
+    }}) + "\n";
+    flushAndExit(update + result(promptID, {stopReason: "end_turn"}));
+    return;
+  }
   if (request.method === "initialize") {
     if (earlyFailure) {
       flushAndExit(JSON.stringify({jsonrpc: "2.0", id: request.id, error: {code: -32602, message: "fixture initialize refused"}}) + "\n");
@@ -56,8 +66,19 @@ input.on("line", (line) => {
     if (mode === "initialize-version") flushAndExit(reply);
     else process.stdout.write(reply);
   } else if (request.method === "session/new") {
-    process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "fixture", options: [{ value: "fixture", name: "Fixture" }] }] }));
+    process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "fixture", options: [{ value: "fixture", name: "Fixture" }, { value: "test-model", name: "Test model" }] }] }));
+  } else if (request.method === "session/set_config_option" && mode === "permission") {
+    if (request.params.value !== "test-model") throw new Error("wrong configured model");
+    process.stdout.write(result(request.id, {configOptions: []}));
   } else if (request.method === "session/prompt") {
+    if (mode === "permission") {
+      promptID = request.id;
+      process.stdout.write(JSON.stringify({jsonrpc: "2.0", id: "permission-request", method: "session/request_permission", params: {
+        sessionId: "eof-fixture-session", toolCall: {toolCallId: "permission-tool-call"},
+        options: [{optionId: "allow-once", name: "Allow once", kind: "allow_once"}, {optionId: "reject-once", name: "Reject", kind: "reject_once"}]
+      }}) + "\n");
+      return;
+    }
     if (mode === "controlled") {
       promptID = request.id;
       const [host, port] = attempts.split(":");

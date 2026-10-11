@@ -50,7 +50,13 @@ func (s *Service) Execute(
 	}
 	if !request.Target.Environment.SkipProcessInheritance &&
 		len(request.Target.Environment.ProcessEnvironment) == 0 {
-		request.Target.Environment.ProcessEnvironment = os.Environ()
+		request.Target.Environment.ProcessEnvironment = inheritedExecutionEnvironment(os.Environ())
+	}
+	if len(request.Target.Environment.SupervisedEnvironment) > 0 {
+		request.Target.Environment.ProcessEnvironment = append(
+			inheritedExecutionEnvironment(request.Target.Environment.ProcessEnvironment),
+			request.Target.Environment.SupervisedEnvironment...,
+		)
 	}
 	correlation := request.Correlation
 	if request.Target.Noop {
@@ -297,7 +303,7 @@ func publishMockWorkerUsage(
 	request workers.ExecuteRequest,
 	usage *workers.MockWorkerUsageConfig,
 ) {
-	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, usage)
+	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, providerTargetIdentity(&request), usage)
 }
 
 // executeProviderWithRetry preserves the provider-attempt policy at the
