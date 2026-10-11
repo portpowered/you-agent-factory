@@ -2,11 +2,13 @@ package admission
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	agentmessages "github.com/portpowered/infinite-you/pkg/services/agent_messages"
 	"github.com/portpowered/infinite-you/pkg/services/agent_messages/internal/store"
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
 
@@ -35,6 +37,12 @@ type Ledger interface {
 	Commit(store.Transaction) error
 }
 
+// EventAppender publishes already committed, privacy-normalized observations.
+// It owns no durable state or admission authority.
+type EventAppender interface {
+	Append(context.Context, events.AppendRequest) (events.AppendResult, error)
+}
+
 // Engine serializes admission across policy, request aliases, limits and the
 // durable transaction. It retains no credentials. Wire supplies one instance
 // per writable profile and injects controlled effects at these exact ports.
@@ -48,10 +56,12 @@ type Engine struct {
 	now       func() time.Time
 	newID     func() string
 	cursorKey []byte
+	events    EventAppender
+	logger    *slog.Logger
 }
 
-func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte) *Engine {
-	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID, cursorKey: append([]byte(nil), cursorKey...)}
+func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger *slog.Logger) *Engine {
+	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID, cursorKey: append([]byte(nil), cursorKey...), events: stream, logger: logger}
 }
 
 func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, caller *workersessions.CallerIdentity, factory string) (agentmessages.Message, error) {
@@ -140,7 +150,7 @@ func (e *Engine) commit(ctx context.Context, caller *workersessions.CallerIdenti
 	if err := e.authority.Revalidate(ctx, caller); err != nil {
 		return err
 	}
-	return e.ledger.Commit(t)
+	return e.persist(ctx, t)
 }
 
 // admissionExpiry folds maintenance into the admitted write. Denials and failed

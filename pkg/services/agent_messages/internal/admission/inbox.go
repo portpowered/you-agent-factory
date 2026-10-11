@@ -59,7 +59,7 @@ func (e *Engine) readEntry(ctx context.Context, caller *workersessions.CallerIde
 	if err := e.readAuthority(ctx, caller); err != nil {
 		return agentmessages.Message{}, err
 	}
-	if err := e.ledger.Commit(t); err != nil {
+	if err := e.persist(ctx, t); err != nil {
 		return agentmessages.Message{}, err
 	}
 	return entry.Message, nil

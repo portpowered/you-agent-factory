@@ -3,8 +3,15 @@ package agentmessages
 import (
 	"context"
 
+	"github.com/portpowered/infinite-you/pkg/services/events"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+// ObservationTopic is the process-local Agent Message stream. It is independent
+// of canonical Factory Events; read authorization remains Messaging's policy.
+const ObservationTopic events.Topic = "agent-messages/events"
+
+const ObservationSchema events.SchemaID = "agent-message-observation/v1"
 
 // Service is the sole peer boundary for durable Agent Message operations.
 // Caller credentials are execution-only and are validated on every operation.

@@ -182,5 +182,5 @@ func (e *Engine) updatePage(ctx context.Context, r agentmessages.ListRequest, id
 	}
 	t := store.Transaction{Version: store.Version, RecordID: e.newID(), Sequence: sequence + 1,
 		Kind: store.InboxUpdated, CommittedAt: now, Messages: changes, Requests: []store.Request{}}
-	return e.ledger.Commit(t)
+	return e.persist(ctx, t)
 }
