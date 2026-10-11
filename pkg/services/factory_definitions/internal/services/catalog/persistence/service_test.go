@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -102,7 +103,9 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 		nil,
 		platformfilesystem.Local{},
 		persistenceTestNamedPaths.RequireDefinitionDir,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 	)
 	if err != nil {
 		t.Fatalf("construct persistence: %v", err)
@@ -186,7 +189,9 @@ func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.
 		nil,
 		platformfilesystem.Local{},
 		persistenceTestNamedPaths.RequireDefinitionDir,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 	)
 	if err != nil {
 		t.Fatalf("construct persistence: %v", err)
@@ -265,7 +270,9 @@ func TestReplaceFactoryLayout_ValidationFailureLeavesCommittedFactoryUnchanged(t
 		nil,
 		platformfilesystem.Local{},
 		persistenceTestNamedPaths.RequireDefinitionDir,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 	)
 	if err != nil {
 		t.Fatalf("construct persistence: %v", err)

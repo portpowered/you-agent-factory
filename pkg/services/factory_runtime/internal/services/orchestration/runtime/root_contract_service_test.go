@@ -366,7 +366,6 @@ func TestFactoryImpl_RuntimeConfigurationAccessorsRemainSafe(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	impl.SetProgressPublisher(nil)
 	impl.SetMockWorkersConfig(&workers.MockWorkersConfig{})
-	impl.SetPromptSourceReader(nil)
 	if impl.WorkflowContext() != nil {
 		t.Fatalf("WorkflowContext() = %#v, want nil for the default test runtime", impl.WorkflowContext())
 	}

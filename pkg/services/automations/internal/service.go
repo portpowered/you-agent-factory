@@ -62,9 +62,6 @@ func New(logger *zap.Logger, clock Clock, lifecycle sourcelifecycle.SourceLifecy
 // Root returns the inert published Automation operations backed by the same
 // reconciliation owner used for runtime scheduler supervision.
 func (s *Service) Root() automations.Root {
-	if s == nil || s.reconciler == nil {
-		return automations.Root{}
-	}
 	return automations.Root{Operations: s, Lifecycle: s, Runtime: s}
 }
 
@@ -114,7 +111,7 @@ func (s *Service) GetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	if s != nil && s.scriptPollers != nil && scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
+	if scriptpollers.IsScriptPollerInstanceID(request.InstanceID) {
 		if result, handled, err := s.getCursorFromActiveRuntime(ctx, request); handled {
 			return result, err
 		}

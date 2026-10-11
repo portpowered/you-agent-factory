@@ -84,11 +84,8 @@ func NewBundle(
 	}
 }
 
-// RuntimeLogger returns the bundle logger or a nop logger when unset.
+// RuntimeLogger returns the selected runtime-scoped logger.
 func (r *Bundle) RuntimeLogger() *zap.Logger {
-	if r == nil || r.Logger == nil {
-		return zap.NewNop()
-	}
 	return r.Logger
 }
 

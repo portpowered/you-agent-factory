@@ -53,3 +53,7 @@ func (stubActivationGateway) SwapPersistedNamedFactoryRuntime(context.Context, s
 func StubActivationGateway() factoryroot.DefinitionActivationGateway {
 	return stubActivationGateway{}
 }
+
+func (stubActivationGateway) WithSessionSourcesStopped(_ context.Context, _ string, fn func() error) error {
+	return fn()
+}

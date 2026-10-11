@@ -110,6 +110,44 @@ func TestShutdownTerminalCauseOrdering(t *testing.T) {
 	}
 }
 
+func TestTerminationJoinsDispatchProducerBeforeStoppingAttempts(t *testing.T) {
+	t.Parallel()
+	runtime, err := newTestFactory(withNet(buildSimpleNet()), withServiceMode(), withLogger(logging.NoopLogger{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := runtime.(*factoryImpl)
+	engineDone := make(chan struct{})
+	controlCtx, cancelControl := context.WithCancel(t.Context())
+	defer cancelControl()
+	f.state = interfaces.FactoryStateRunning
+	f.engineRunDone = engineDone
+	// A canceled control cannot wait for the still active tick. It must leave
+	// cleanup to Run, rather than close the tick's publication target early.
+	f.runCancel = cancelControl
+	closed := 0
+	f.cfg.workerAttempts = shutdownAttemptCloser{close: func(context.Context, string) error {
+		closed++
+		select {
+		case <-engineDone:
+		default:
+			t.Error("attempt cleanup overtook the dispatch producer")
+		}
+		return nil
+	}}
+	result, err := f.ControlTerminate(controlCtx, factory.TerminateRequest{Reason: "selected stop"})
+	if result.Outcome != factory.ControlOutcomeAccepted || !errors.Is(err, context.Canceled) || closed != 0 {
+		t.Fatalf("interrupted termination = %#v, %v; scoped closes=%d", result, err, closed)
+	}
+	close(engineDone)
+	if err := f.stopDispatchRuntime(t.Context(), dispatchplanning.RuntimeStopReasonTerminated); err != nil {
+		t.Fatalf("joined cleanup = %v", err)
+	}
+	if closed != 1 {
+		t.Fatalf("joined scoped closes = %d, want 1", closed)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this subscription contract test keeps replay ordering and live-stream assertions together at the runtime seam.
 func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *testing.T) {
 	live := make(chan interfaces.FactoryEvent, 1)

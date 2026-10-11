@@ -10,19 +10,18 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -1018,9 +1017,19 @@ func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 	var identities atomic.Int64
 	newID := func() string { return fmt.Sprintf("opening-%d", identities.Add(1)) }
 	dispatchOpening := &observedOutboxOpening{OutboxOpening: dispatchplanningwire.NewOpening()}
+	source := "initial authored prompt"
+	reader := interfaces.FileReader(func(path string) ([]byte, error) {
+		if path != "selected-worker.md" {
+			return nil, fmt.Errorf("unexpected prompt path %q", path)
+		}
+		return []byte(source), nil
+	})
+	renderer := runtimePromptRendererFunc(func(prompt string, _ []workerexecution.Token, _ *workerexecution.Context) (string, error) {
+		return "selected:" + prompt, nil
+	})
 	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
 		return interfaces.WorkPropagationModeOutputAsPayload
-	}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open, scheduler.NewEnablementEvaluator())
+	}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchOpening.Open, scheduler.NewEnablementEvaluator(), reader, renderer, nil, testPrepareSchedules)
 	selectOpening := func(cfg *testFactoryConfig) { cfg.engineOpening = opening }
 	if _, err := newTestFactory(selectOpening); err == nil {
 		t.Fatal("opening without a net succeeded")
@@ -1040,6 +1049,26 @@ func TestEngineOpeningReusesPolicyWithoutSharingRuntimeState(t *testing.T) {
 		return engine
 	}
 	first, peer := open(base), open(base.Add(time.Hour))
+	lookup := runtimePromptSourceLookupFixture{RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{}, worker: interfaces.PromptSource{Path: "selected-worker.md"}}
+	for _, instance := range []factoryhost.Engine{first, peer} {
+		instance.(*factoryImpl).cfg.runtimeConfig = lookup
+	}
+	assertPrompt := func(instance factoryhost.Engine, want string) {
+		t.Helper()
+		cfg := instance.(*factoryImpl).cfg
+		body, found := runtimePromptSourceContent(cfg, "worker", true, true)
+		if !found {
+			t.Fatal("selected reader did not resolve authored prompt")
+		}
+		rendered, err := cfg.promptRenderer.RenderPrompt(body, nil, nil)
+		if err != nil || rendered != "selected:"+want {
+			t.Fatalf("prompt = %q, error = %v", rendered, err)
+		}
+	}
+	assertPrompt(first, source)
+	source = "reloaded authored prompt"
+	assertPrompt(first, source)
+	assertPrompt(peer, source)
 	if dispatchOpening.calls != 2 {
 		t.Fatalf("selected outbox openings = %d, want one per admitted runtime", dispatchOpening.calls)
 	}

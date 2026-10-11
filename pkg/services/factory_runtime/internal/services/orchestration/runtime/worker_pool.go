@@ -649,6 +649,7 @@ func (f *factoryImpl) ControlTerminate(ctx context.Context, req factory.Terminat
 	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
 		f.state = interfaces.FactoryStateCompleted
 		cancel := f.runCancel
+		engineRunDone := f.engineRunDone
 		f.mu.Unlock()
 		f.recordStateChange(state, interfaces.FactoryStateCompleted, req.Reason)
 		// The control has committed before child coordination starts. Canceling
@@ -661,6 +662,16 @@ func (f *factoryImpl) ControlTerminate(ctx context.Context, req factory.Terminat
 		workerSessionControl := f.controlAssociatedWorkerSessions(
 			ctx, req.TurnID, req.ControlID, action, factory.ControlOutcomeAccepted,
 		)
+		// Cancellation stops the next tick, but an already running tick may
+		// still be publishing its reserved dispatch. Join that producer before
+		// sealing the outbox; Run's cleanup waits behind this control lock.
+		if engineRunDone != nil {
+			select {
+			case <-engineRunDone:
+			case <-ctx.Done():
+				return factory.TerminateResult{Outcome: factory.ControlOutcomeAccepted, WorkerSessionControl: workerSessionControl}, ctx.Err()
+			}
+		}
 		stopErr := f.stopDispatchRuntimeLocked(ctx, dispatchplanning.RuntimeStopReasonTerminated)
 		f.logRuntimeLifecycleControl(string(action), state, interfaces.FactoryStateCompleted, "ACCEPTED")
 		if cancel == nil {

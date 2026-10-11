@@ -22,4 +22,5 @@ type Engine interface {
 	GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
 	WaitToComplete() <-chan struct{}
 	Run(context.Context) error
+	RecoverInvocationSchedules(context.Context) error
 }

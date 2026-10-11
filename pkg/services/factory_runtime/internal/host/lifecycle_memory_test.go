@@ -335,3 +335,5 @@ var _ factoryruntime.RuntimeMetricsSink = (*lateMetricEmissionSink)(nil)
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
+
+func (*runtimeMetricsTestEngine) RecoverInvocationSchedules(context.Context) error { return nil }

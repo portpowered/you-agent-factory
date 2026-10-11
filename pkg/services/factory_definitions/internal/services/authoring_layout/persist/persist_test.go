@@ -132,7 +132,7 @@ func (f *failingPersistenceFilesystem) Rename(from, to string) error {
 
 type failedDirectoryCommit struct{ failure error }
 
-func (f failedDirectoryCommit) Commit(string, string, string) (string, error) {
+func (f failedDirectoryCommit) Commit(string, string, string, ...string) (string, error) {
 	return "", f.failure
 }
 

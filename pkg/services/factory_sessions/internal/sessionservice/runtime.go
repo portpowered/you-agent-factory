@@ -53,19 +53,21 @@ func (a *Assembly) scopedPreseedRuntimeInputs(fs *SessionRuntime, ctx context.Co
 // Definition compatibility edges. Reusable operations and collaborators stay
 // on its fixed owner; this handle holds only selected facts and acquired state.
 type SessionRuntime struct {
-	runtimeID        string
-	generationID     string
-	owner            *Assembly
-	releaseMu        sync.Mutex
-	releaseDone      bool
-	runtimeMu        sync.RWMutex
-	runtimeState     runtimebinding.State
-	openingSession   *livesession.LiveSession
-	runtimeBuild     runtimeports.RuntimeReplacementBuilder
-	modelsScope      models.RuntimeScopeRef
-	runtimeLifecycle runtimeports.RuntimeLifecycle
-	runtimeSidecars  RuntimeSidecars
-	factoryRootDir   string
+	// layoutReplacement is scoped transaction state protected by the activation lock.
+	layoutReplacement bool
+	runtimeID         string
+	generationID      string
+	owner             *Assembly
+	releaseMu         sync.Mutex
+	releaseDone       bool
+	runtimeMu         sync.RWMutex
+	runtimeState      runtimebinding.State
+	openingSession    *livesession.LiveSession
+	runtimeBuild      runtimeports.RuntimeReplacementBuilder
+	modelsScope       models.RuntimeScopeRef
+	runtimeLifecycle  runtimeports.RuntimeLifecycle
+	runtimeSidecars   RuntimeSidecars
+	factoryRootDir    string
 	// startupBundle holds the built default runtime before Run registers ~default.
 	startupSessionID string
 	dir              string

@@ -289,6 +289,7 @@ func (s *service) ReplaceFactoryLayout(
 		parentDir,
 		targetDir,
 		stagingDir,
+		".infinite-you",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("commit factory %q: %w", segment, err)

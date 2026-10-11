@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
@@ -82,7 +83,9 @@ func testComposition() factorydefinitiontestcomposition.Composition {
 			SafePromptPath:    authoredmapping.SafePromptFilePath,
 		},
 		fileSystem,
-		directoryreplace.Local{},
+		directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+			return os.CopyFS(destination, os.DirFS(source))
+		}),
 		factorydefinitiontestcomposition.Effects{
 			Loading:             fileSystem,
 			AuthoredReader:      fileSystem,

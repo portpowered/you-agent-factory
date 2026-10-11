@@ -346,3 +346,5 @@ func TestWaitForStartObservesReadinessWithoutSecondHandle(t *testing.T) {
 		t.Fatalf("Stop() error = %v", err)
 	}
 }
+
+func (*executeObserverFactory) RecoverInvocationSchedules(context.Context) error { return nil }

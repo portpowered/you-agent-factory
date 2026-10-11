@@ -617,3 +617,5 @@ func TestRuntimeRecordingCancellationPreservesCompletedCleanup(t *testing.T) {
 		t.Fatalf("cleanup = %v, want completed cleanup retaining storage failure without cancellation", err)
 	}
 }
+
+func (*lifecycleObserverFactory) RecoverInvocationSchedules(context.Context) error { return nil }

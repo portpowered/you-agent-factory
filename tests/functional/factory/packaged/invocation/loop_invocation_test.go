@@ -90,7 +90,8 @@ func testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T, fixture
 }
 
 func testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t *testing.T, fixture *loopSharedFixture) {
-	scenario := fixture.newScenario(t, support.NewRecordingCommandRunner("unused"))
+	runner := newBlockingLoopRunner()
+	scenario := fixture.newScenario(t, runner)
 	scenario.open(t)
 
 	status := postLoopInvocation(t, scenario, map[string]any{"request": "check", "every": "tomorrow"}, nil)
@@ -101,6 +102,49 @@ func testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t *testing.T, fix
 	case record := <-fixture.submissions:
 		t.Fatalf("invalid duration admitted Work = %#v", record)
 	default:
+	}
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(fixture.baseURL, scenario.sessionID, "/work"))
+	if len(listed.Results) != 0 || runner.calls() != 0 {
+		t.Fatalf("invalid interval left Work or executed a provider: work=%#v calls=%d", listed.Results, runner.calls())
+	}
+	// Correct the input in the same live Session. Hold the provider so the
+	// first scheduled Work and its controller identity can be observed before
+	// completion; validation must not poison the next schedule admission.
+	start := fixture.clock.Now()
+	observer := newLoopPhaseObserver(t)
+	submission := invokeLoopUntilFirstScheduledWork(t, scenario, map[string]any{
+		"request": "check", "every": "1m", "triggerAtStart": "true",
+	}, observer)
+	assertLoopSubmission(t, submission, "init", "SCHEDULED", "1", start, start)
+	observer.waitForSignal("corrected interval provider start", runner.started,
+		func() string { return fmt.Sprintf("provider_calls=%d", runner.calls()) })
+	if runner.calls() != 1 {
+		t.Fatalf("corrected interval provider calls = %d, want 1", runner.calls())
+	}
+	runner.Release()
+	waitForLoopDispatchCompletion(observer, scenario)
+	assertLoopRetryHistory(t, scenario, submission.Request.WorkID)
+}
+
+func assertLoopRetryHistory(t *testing.T, scenario *loopScenario, scheduledWorkID string) {
+	t.Helper()
+	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 || dispatches[0].Response == nil {
+		t.Fatalf("corrected interval dispatches = %#v, want one completed dispatch", dispatches)
+	}
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchRequest || event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			if event.Context.SessionId == nil || *event.Context.SessionId != scenario.sessionID {
+				t.Fatalf("corrected interval event crossed Sessions: %#v", event.Context)
+			}
+		}
+	}
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(scenario.fixture.baseURL, scenario.sessionID, "/work"))
+	if !support.HasWorkAtCustomerState(listed, scheduledWorkID, "scheduled-execution:complete") {
+		t.Fatalf("corrected interval has no completed scheduled Work %q: %#v", scheduledWorkID, listed)
 	}
 }
 

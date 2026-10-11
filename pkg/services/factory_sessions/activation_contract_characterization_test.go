@@ -116,3 +116,7 @@ func TestDefinitionActivationRootContract_SerializesLockAndIdleOutcomes(t *testi
 		t.Fatalf("RequireIdleRuntimeForSession() error = %v, want idle acceptance", err)
 	}
 }
+
+func (*peerDefinitionActivationFake) WithSessionSourcesStopped(_ context.Context, _ string, fn func() error) error {
+	return fn()
+}

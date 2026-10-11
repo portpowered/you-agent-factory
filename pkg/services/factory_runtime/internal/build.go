@@ -42,6 +42,7 @@ type inputFileSystem interface {
 // engineOpening opens scoped state using the already selected runtime behavior.
 type engineOpening interface {
 	Open(
+		ctx context.Context,
 		net *state.Net,
 		runtimeScheduler scheduler.Scheduler,
 		statelessService workers.Service,
@@ -416,6 +417,7 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 		effectiveSubmissionRecorder = f.submissionRecorder
 	}
 	activeFactory, err := f.engineOpening.Open(
+		ctx,
 		net,
 		runtimeScheduler,
 		workerService,
@@ -451,11 +453,6 @@ func (f *RuntimeFactory) assembleRuntimeBundle(
 		SetMockWorkersConfig(*workers.MockWorkersConfig)
 	}); ok {
 		configurable.SetMockWorkersConfig(mockWorkersConfig)
-	}
-	if configurable, ok := activeFactory.(interface {
-		SetPromptSourceReader(func(string) ([]byte, error))
-	}); ok && f.inputFiles != nil {
-		configurable.SetPromptSourceReader(f.inputFiles.ReadFile)
 	}
 	// Filesystem effects may finish after admission was canceled. Keep the
 	// unpublished engine inside this opening owner so unwind releases only its

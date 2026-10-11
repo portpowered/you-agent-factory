@@ -202,7 +202,9 @@ func provideFactoryDefinitionDirectoryReplacementStore(
 	if edges.FactoryDefinitionDirectoryReplacementStore != nil {
 		return edges.FactoryDefinitionDirectoryReplacementStore
 	}
-	return directoryreplace.NewLocal(runtime.GOOS)
+	return directoryreplace.NewLocal(runtime.GOOS, os.Stat, os.MkdirAll, func(source, destination string) error {
+		return os.CopyFS(destination, os.DirFS(source))
+	})
 }
 
 func provideFactoryDefinitionNamedPathFileSystem(
