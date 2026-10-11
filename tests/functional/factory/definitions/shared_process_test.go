@@ -94,12 +94,21 @@ func sharedDefinitionsProcessForTest(t testing.TB) support.ApplicationProcess {
 
 func startSharedDefinitionsProcess() (*sharedDefinitionsProcessFixture, error) {
 	providerEdge := support.NewRecordingCommandRunner("unexpected provider invocation in static definition group")
+	files := &fixedRolesDefinitionFiles{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: providerEdge,
+		ProviderCommandRunner:                     providerEdge,
+		FactoryDefinitionPersistenceFileSystem:    files,
+		FactoryDefinitionLoadingFileSystem:        files,
+		FactoryDefinitionAuthoredReaderFileSystem: files,
+		FactoryDefinitionAuthoredWriterFileSystem: files,
 	})
 	if err != nil {
 		return nil, err
 	}
+	if providerEdge.CallCount() != 0 {
+		return nil, fmt.Errorf("Definitions construction executed the provider command edge")
+	}
+	files.activated.Store(true)
 	return &sharedDefinitionsProcessFixture{
 		process:      process,
 		providerEdge: providerEdge,
@@ -293,4 +302,15 @@ func sharedDefinitionsAssertFactoryList(
 	if !foundCurrent {
 		t.Fatalf("factory list missing current Factory %q: %#v", wantCurrent, entries)
 	}
+}
+
+// This fault belongs to an invocation's isolated root, so parallel peers retain
+// ordinary local persistence and construction remains observable as inert.
+type fixedRolesDefinitionFiles struct{ saveDeniedDefinitionFiles }
+
+func (files *fixedRolesDefinitionFiles) WriteFile(path string, payload []byte, mode os.FileMode) error {
+	if strings.Contains(path, "fixed-role-install-denied") {
+		return os.ErrPermission
+	}
+	return files.saveDeniedDefinitionFiles.WriteFile(path, payload, mode)
 }

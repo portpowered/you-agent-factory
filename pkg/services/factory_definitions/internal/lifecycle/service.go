@@ -29,10 +29,8 @@ const (
 )
 
 // Service owns current and named factory definition reads, persistence, and
-// activation policy. UnimplementedService keeps the CTR-DEF root slice methods
-// assignable until nested IMP-DEF collaborators are wired.
+// activation policy. Completed owners are captured at construction.
 type Service struct {
-	nonCatalogDefaults
 	catalog.Service
 	validationService      validationservice.Service
 	authoringLayoutService authoringlayout.Service
@@ -50,25 +48,6 @@ type Service struct {
 // Canonical loading remains private to the compilation owner's validation consumers.
 type CompilationOperations interface {
 	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
-}
-
-type nonCatalogDefaults interface {
-	ListEffectiveFactories(context.Context, factoryroot.ListEffectiveFactoriesRequest) (factoryroot.ListEffectiveFactoriesResult, error)
-	PrepareFactoryLayout(context.Context, factoryroot.PrepareFactoryLayoutRequest) (factoryroot.PrepareFactoryLayoutResult, error)
-	FlattenFactoryLayout(context.Context, factoryroot.FlattenFactoryLayoutRequest) (factoryroot.FlattenFactoryLayoutResult, error)
-	ExpandFactoryLayout(context.Context, factoryroot.ExpandFactoryLayoutRequest) (factoryroot.ExpandFactoryLayoutResult, error)
-	CreateNamedFactory(context.Context, factoryroot.CreateNamedFactoryRequest) (factoryroot.CreateNamedFactoryResult, error)
-	ReplaceNamedFactory(context.Context, factoryroot.ReplaceNamedFactoryRequest) (factoryroot.ReplaceNamedFactoryResult, error)
-	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
-	ValidateStructuralFactoryDefinition(context.Context, factoryroot.ValidateStructuralFactoryDefinitionRequest) (factoryroot.ValidateStructuralFactoryDefinitionResult, error)
-	ValidateEffectiveFactoryDefinition(context.Context, factoryroot.ValidateEffectiveFactoryDefinitionRequest) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error)
-	CaptureFactorySnapshot(context.Context, factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error)
-	PrepareFactorySnapshotImport(context.Context, factoryroot.PrepareFactorySnapshotImportRequest) (factoryroot.PrepareFactorySnapshotImportResult, error)
-	MaterializeFactorySnapshot(context.Context, factoryroot.MaterializeFactorySnapshotRequest) (factoryroot.MaterializeFactorySnapshotResult, error)
-	ListBuiltInPackagedFactories(context.Context, factoryroot.ListBuiltInPackagedFactoriesRequest) (factoryroot.ListBuiltInPackagedFactoriesResult, error)
-	ResolveBuiltInPackagedFactory(context.Context, factoryroot.ResolveBuiltInPackagedFactoryRequest) (factoryroot.ResolveBuiltInPackagedFactoryResult, error)
-	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
-	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
 
 // ListEffectiveFactories delegates catalog reads to the fixed construction collaborator.
@@ -106,7 +85,6 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	snapshotsPortability snapshotsportability.Service,
 ) *Service {
 	return &Service{
-		nonCatalogDefaults:     factoryroot.UnimplementedService{},
 		Service:                catalogService,
 		validationService:      validationService,
 		authoringLayoutService: authoringLayoutService,
@@ -125,9 +103,6 @@ func (s *Service) CompileEffectiveFactorySource(
 	ctx context.Context,
 	request factoryroot.CompileEffectiveFactorySourceRequest,
 ) (factoryroot.CompileEffectiveFactorySourceResult, error) {
-	if s == nil || s.compilationService == nil {
-		return factoryroot.UnimplementedService{}.CompileEffectiveFactorySource(ctx, request)
-	}
 	return s.compilationService.CompileEffectiveFactorySource(ctx, request)
 }
 
@@ -135,9 +110,6 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	ctx context.Context,
 	request factoryroot.ValidateStructuralFactoryDefinitionRequest,
 ) (factoryroot.ValidateStructuralFactoryDefinitionResult, error) {
-	if s == nil || s.validationService == nil {
-		return factoryroot.UnimplementedService{}.ValidateStructuralFactoryDefinition(ctx, request)
-	}
 	return s.validationService.ValidateStructuralFactoryDefinition(ctx, request)
 }
 
@@ -145,9 +117,6 @@ func (s *Service) ValidateEffectiveFactoryDefinition(
 	ctx context.Context,
 	request factoryroot.ValidateEffectiveFactoryDefinitionRequest,
 ) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error) {
-	if s == nil || s.validationService == nil {
-		return factoryroot.UnimplementedService{}.ValidateEffectiveFactoryDefinition(ctx, request)
-	}
 	return s.validationService.ValidateEffectiveFactoryDefinition(ctx, request)
 }
 
@@ -155,9 +124,6 @@ func (s *Service) PrepareFactoryLayout(
 	ctx context.Context,
 	request factoryroot.PrepareFactoryLayoutRequest,
 ) (factoryroot.PrepareFactoryLayoutResult, error) {
-	if s == nil || s.authoringLayoutService == nil {
-		return factoryroot.UnimplementedService{}.PrepareFactoryLayout(ctx, request)
-	}
 	return s.authoringLayoutService.PrepareFactoryLayout(ctx, request)
 }
 
@@ -165,9 +131,6 @@ func (s *Service) FlattenFactoryLayout(
 	ctx context.Context,
 	request factoryroot.FlattenFactoryLayoutRequest,
 ) (factoryroot.FlattenFactoryLayoutResult, error) {
-	if s == nil || s.authoringLayoutService == nil {
-		return factoryroot.UnimplementedService{}.FlattenFactoryLayout(ctx, request)
-	}
 	return s.authoringLayoutService.FlattenFactoryLayout(ctx, request)
 }
 
@@ -175,9 +138,6 @@ func (s *Service) ExpandFactoryLayout(
 	ctx context.Context,
 	request factoryroot.ExpandFactoryLayoutRequest,
 ) (factoryroot.ExpandFactoryLayoutResult, error) {
-	if s == nil || s.authoringLayoutService == nil {
-		return factoryroot.UnimplementedService{}.ExpandFactoryLayout(ctx, request)
-	}
 	return s.authoringLayoutService.ExpandFactoryLayout(ctx, request)
 }
 
@@ -185,9 +145,6 @@ func (s *Service) CreateNamedFactory(
 	ctx context.Context,
 	request factoryroot.CreateNamedFactoryRequest,
 ) (factoryroot.CreateNamedFactoryResult, error) {
-	if s == nil || s.authoringLayoutService == nil {
-		return factoryroot.UnimplementedService{}.CreateNamedFactory(ctx, request)
-	}
 	return s.authoringLayoutService.CreateNamedFactory(ctx, request)
 }
 
@@ -195,9 +152,6 @@ func (s *Service) ReplaceNamedFactory(
 	ctx context.Context,
 	request factoryroot.ReplaceNamedFactoryRequest,
 ) (factoryroot.ReplaceNamedFactoryResult, error) {
-	if s == nil || s.authoringLayoutService == nil {
-		return factoryroot.UnimplementedService{}.ReplaceNamedFactory(ctx, request)
-	}
 	return s.authoringLayoutService.ReplaceNamedFactory(ctx, request)
 }
 
@@ -205,9 +159,6 @@ func (s *Service) ListBuiltInPackagedFactories(
 	ctx context.Context,
 	request factoryroot.ListBuiltInPackagedFactoriesRequest,
 ) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
-	if s == nil || s.distributionService == nil {
-		return factoryroot.UnimplementedService{}.ListBuiltInPackagedFactories(ctx, request)
-	}
 	return s.distributionService.ListBuiltInPackagedFactories(ctx, request)
 }
 
@@ -215,9 +166,6 @@ func (s *Service) ResolveBuiltInPackagedFactory(
 	ctx context.Context,
 	request factoryroot.ResolveBuiltInPackagedFactoryRequest,
 ) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
-	if s == nil || s.distributionService == nil {
-		return factoryroot.UnimplementedService{}.ResolveBuiltInPackagedFactory(ctx, request)
-	}
 	return s.distributionService.ResolveBuiltInPackagedFactory(ctx, request)
 }
 
@@ -225,9 +173,6 @@ func (s *Service) InstallPackagedFactory(
 	ctx context.Context,
 	request factoryroot.InstallPackagedFactoryRequest,
 ) (factoryroot.InstallPackagedFactoryResult, error) {
-	if s == nil || s.distributionService == nil {
-		return factoryroot.UnimplementedService{}.InstallPackagedFactory(ctx, request)
-	}
 	return s.distributionService.InstallPackagedFactory(ctx, request)
 }
 
@@ -235,9 +180,6 @@ func (s *Service) CreateFactoryScaffold(
 	ctx context.Context,
 	request factoryroot.CreateFactoryScaffoldRequest,
 ) (factoryroot.CreateFactoryScaffoldResult, error) {
-	if s == nil || s.distributionService == nil {
-		return factoryroot.UnimplementedService{}.CreateFactoryScaffold(ctx, request)
-	}
 	return s.distributionService.CreateFactoryScaffold(ctx, request)
 }
 

@@ -80,7 +80,7 @@ func TestInjectedDelegationPreservesResultsRequestsAndErrorIdentity(t *testing.T
 		name string
 		err  error
 	}{
-		{"success", nil}, {"failure", errors.New("selected owner failed")}, {"cancellation", context.Canceled},
+		{"success", nil}, {"failure", errors.New("selected owner failed")}, {"cancellation", context.Canceled}, {"deadline", context.DeadlineExceeded},
 	} {
 		t.Run(failure.name, func(t *testing.T) {
 			t.Parallel()
