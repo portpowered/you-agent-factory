@@ -110,6 +110,21 @@ func (handle *hostedHandleFake) RunDoneCh() <-chan struct{} { return handle.done
 
 type lifecycleFake struct{}
 
+type replacementSidecars struct {
+	stopped factory.RuntimeRun
+	started factory.RuntimeRun
+}
+
+func (*replacementSidecars) Preseed(context.Context, factory.RuntimeRecord) error { return nil }
+func (s *replacementSidecars) Stop(run factory.RuntimeRun)                        { s.stopped = run }
+func (s *replacementSidecars) Start(_ context.Context, run factory.RuntimeRun) error {
+	if s.stopped == nil {
+		return errors.New("replacement source started before previous source joined")
+	}
+	s.started = run
+	return nil
+}
+
 type canceledReadinessLifecycle struct{ lifecycleFake }
 
 type startupReadinessLifecycle struct {
@@ -554,6 +569,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	var retiredSessionID string
 	var retiredRecord factory.RuntimeRecord
 	var retiredAfterStop bool
+	sidecars := &replacementSidecars{}
 
 	updated, err := runtimebinding.Replace(
 		context.Background(),
@@ -561,9 +577,10 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		&runtimeState,
 		original,
 		replacement,
-		false,
+		true,
+		true,
 		lifecycleFake{},
-		nil,
+		sidecars,
 		func(handle factory.RuntimeRun) error {
 			stopped = handle
 			return nil
@@ -588,6 +605,9 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		t.Fatal("runtime retirement callback ran before the previous runtime stopped")
 	}
 	newHandle := runtimebinding.HandleFromSession(updated)
+	if sidecars.stopped != oldHandle || sidecars.started != newHandle {
+		t.Fatal("replacement sources did not join prior scope and start selected generation")
+	}
 	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
 	assertActiveReplacement(t, &runtimeState, updated, newHandle)
 	bound := runtimebinding.SessionStateFrom(updated)
@@ -606,6 +626,39 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 
 	newHandle.CancelRun()
 	<-newHandle.RunDoneCh()
+}
+
+func TestReplaceReadinessFailureRestoresSelectedSourcesAndPreservesPeer(t *testing.T) {
+	t.Parallel()
+	sessions := newRuntimeBindingState()
+	prior := newHostedHandleFake(&hostedInstanceFake{})
+	peer := newHostedHandleFake(&hostedInstanceFake{})
+	defer prior.CancelRun()
+	defer peer.CancelRun()
+	runtimebinding.Register(sessions, runtimebinding.Registration{SessionID: "selected", Handle: prior})
+	runtimebinding.Register(sessions, runtimebinding.Registration{SessionID: "peer", Handle: peer})
+	original, originalPeer := sessions.Resolve("selected"), sessions.Resolve("peer")
+	var active runtimebinding.State
+	active.SetActive(t.Context(), original.ID, prior)
+	cause := errors.New("selected replacement readiness failed")
+	var candidate factory.RuntimeRun
+	lifecycle := startupReadinessLifecycle{readiness: func(_ context.Context, run factory.RuntimeRun) error {
+		candidate = run
+		return cause
+	}}
+	sidecars := &replacementSidecars{}
+	_, err := runtimebinding.Replace(t.Context(), sessions, &active, original, &hostedInstanceFake{},
+		true, true, lifecycle, sidecars, lifecycle.Stop, nil, nil)
+	if !errors.Is(err, cause) || candidate == nil || !candidate.Completed() {
+		t.Fatalf("failed candidate cleanup/cause: run=%v error=%v", candidate, err)
+	}
+	if sessions.Resolve("selected") != original || sessions.Resolve("peer") != originalPeer ||
+		prior.Completed() || peer.Completed() || active.Active().Handle != prior {
+		t.Fatal("failed replacement changed selected or peer generation")
+	}
+	if sidecars.stopped != prior || sidecars.started != prior {
+		t.Fatal("failed replacement did not restore sources on retained generation")
+	}
 }
 
 func assertReplacementSession(

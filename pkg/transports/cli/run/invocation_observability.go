@@ -533,6 +533,8 @@ func openRemoteFactoryEventStreamResponse(
 		message := fmt.Sprintf("remote Factory Event stream failed at %s (%d)", safeRemoteEndpoint(endpointURL), response.HTTP.StatusCode)
 		if apiError, ok := clihttp.DecodeAPIError(response.HTTP); ok {
 			message = fmt.Sprintf("remote Factory Event stream failed at %s (%d): %s", safeRemoteEndpoint(endpointURL), response.HTTP.StatusCode, apiError.Message)
+			cause := &remoteInvocationEventTransportError{status: response.HTTP.StatusCode, message: message}
+			return nil, clihttp.NewAPIErrorFromResponse(response.HTTP, apiError, message, cause)
 		}
 		return nil, &remoteInvocationEventTransportError{status: response.HTTP.StatusCode, message: message}
 	}

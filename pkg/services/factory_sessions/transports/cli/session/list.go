@@ -185,11 +185,7 @@ func fetchLiveSessions(cfg ListConfig, scope fse.SessionListScope) ([]fse.LiveSe
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf(
-				"list factory sessions failed (%d): %s",
-				resp.StatusCode,
-				errResp.Message,
-			)
+			return nil, factoryapi.ListFactorySessionsResponse{}, clihttp.NewAPIErrorFromResponse(resp, errResp, fmt.Sprintf("list factory sessions failed (%d): %s", resp.StatusCode, errResp.Message), nil)
 		}
 		return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("list factory sessions failed (%d)", resp.StatusCode)
 	}

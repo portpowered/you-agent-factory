@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -371,4 +372,18 @@ func currentFactoryServer(t *testing.T, current factoryapi.Factory) *httptest.Se
 func serverBase(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
 	return strings.TrimSuffix(srv.URL, "/")
+}
+
+func TestCurrentFactoryStatusErrorsPreserveTupleAndCause(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"code":"NOT_FOUND","family":"NOT_FOUND","message":"synthetic missing factory","details":"server hint"}`)
+	err := renderQueryCurrentError(queryCurrentError(http.StatusNotFound, body))
+	var typed *clihttp.APIError
+	if !errors.As(err, &typed) || !errors.Is(err, ErrCurrentFactoryNotFound) || typed.Response.Details != "server hint" || typed.Response.Message != "synthetic missing factory" {
+		t.Fatalf("query error = %#v", err)
+	}
+	err = replaceCurrentHTTPError("replace current factory", http.StatusConflict, []byte(`{"code":"CONFLICT","family":"CONFLICT","message":"synthetic conflict"}`))
+	if !errors.As(err, &typed) || typed.Response.Code != "CONFLICT" || typed.Response.Family != "CONFLICT" {
+		t.Fatalf("replace error = %#v", err)
+	}
 }

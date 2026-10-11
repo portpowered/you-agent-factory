@@ -407,9 +407,6 @@ func (executor *workstationRequestExecutor) requestConfig(values WorkstationRequ
 func (executor *workstationRequestExecutor) resolveExecutionRequest(values WorkstationRequestValues,
 	request workers.WorkstationExecutionRequest,
 ) (workers.ExecuteRequest, error) {
-	if executor == nil || executor.service == nil {
-		return workers.ExecuteRequest{}, workers.ErrExecuteUnavailable
-	}
 	request = normalizeWorkstationRequest(values, request)
 	return executeRequestFromWorkstationRequest(executor.requestConfig(values), workers.WorkstationDispatchRequest{
 		WorkstationName: firstRuntimeValue(request.Dispatch.WorkstationName, request.WorkstationType), Execution: request})
@@ -698,9 +695,6 @@ func (executor *workstationRequestExecutor) execute(
 	values WorkstationRequestValues,
 	request workers.WorkstationExecutionRequest,
 ) (workers.WorkResult, error) {
-	if executor == nil || executor.service == nil {
-		return workers.WorkResult{}, workers.ErrExecuteUnavailable
-	}
 	request = normalizeWorkstationRequest(values, request)
 	executeRequest, err := executor.resolveExecutionRequest(values, request)
 	if err != nil {

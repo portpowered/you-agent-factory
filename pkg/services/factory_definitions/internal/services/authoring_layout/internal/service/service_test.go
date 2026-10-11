@@ -43,7 +43,7 @@ func (s stubPersistenceFileSystem) MkdirAll(string, fs.FileMode) error {
 
 type stubDirectoryReplacementStore struct{}
 
-func (stubDirectoryReplacementStore) Commit(string, string, string) (string, error) {
+func (stubDirectoryReplacementStore) Commit(string, string, string, ...string) (string, error) {
 	return "", nil
 }
 func (stubDirectoryReplacementStore) Restore(string, string) {}
@@ -225,7 +225,7 @@ func (m *memoryLayoutEffects) Stat(path string) (fs.FileInfo, error) {
 	return nil, fs.ErrNotExist
 }
 func (*memoryLayoutEffects) MkdirAll(string, fs.FileMode) error { return nil }
-func (m *memoryLayoutEffects) Commit(root, target, stage string) (string, error) {
+func (m *memoryLayoutEffects) Commit(root, target, stage string, _ ...string) (string, error) {
 	if m.commitErr != nil {
 		return "", m.commitErr
 	}

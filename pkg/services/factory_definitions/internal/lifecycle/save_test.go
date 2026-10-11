@@ -230,11 +230,14 @@ func TestReplaceCurrentSaveSequencesSelectedLayoutAndRollback(t *testing.T) {
 				// Replace-current uses the selected current name, not the submitted name.
 				request.Snapshot, _ = request.Snapshot.WithName("submitted")
 				got, err := service.SaveReplaceCurrentSnapshotForSession(h.ctx, h.session.ID, request)
-				want := []string{"session", "current", "validate", "idle", "version", "prepare", "replace", "activate", "discard", "readback"}
+				want := []string{"session", "current", "validate", "idle", "version", "prepare", "stop-sources", "replace", "activate", "discard", "readback"}
 				if failure != "" {
 					want = effectsThroughFailure(want, failure)
 					if failure == "activate" {
 						want = append(want, "restore")
+					}
+					if failure == "replace" || failure == "activate" {
+						want = append(want, "resume-sources")
 					}
 					if !errors.Is(err, h.cause) || got != nil {
 						t.Fatalf("failure = %v, %v", got, err)
@@ -333,4 +336,16 @@ func assertNamedUpsertReadback(t *testing.T, h *saveHost, got definitions.Editab
 	if err := got.Snapshot.Decode(&decoded); err != nil || !reflect.DeepEqual(decoded, map[string]any{"name": h.name, "body": "replacement"}) {
 		t.Fatalf("upsert payload = %#v, %v", decoded, err)
 	}
+}
+
+func (g saveGateway) WithSessionSourcesStopped(ctx context.Context, id string, fn func() error) error {
+	if ctx != g.host.ctx || id != g.host.session.ID || !g.host.locked {
+		g.host.t.Fatal("source transaction lost scoped authority")
+	}
+	_ = g.host.event("stop-sources")
+	err := fn()
+	if err != nil {
+		_ = g.host.event("resume-sources")
+	}
+	return err
 }

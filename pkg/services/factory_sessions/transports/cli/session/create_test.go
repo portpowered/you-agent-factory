@@ -3,12 +3,14 @@ package session
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -469,4 +471,14 @@ func TestCreate_RejectsMissingDir(t *testing.T) {
 
 func errorsIsTargetSelection(err error) bool {
 	return err != nil && strings.Contains(err.Error(), ErrFactorySessionTargetsRequireSelection.Error())
+}
+
+func TestCreateStatusErrorPreservesServerResponse(t *testing.T) {
+	t.Parallel()
+	response := &http.Response{StatusCode: http.StatusBadRequest, Body: io.NopCloser(strings.NewReader(`{"code":"BAD_REQUEST","family":"BAD_REQUEST","message":"synthetic create rejection","details":"server hint"}`))}
+	err := createStatusError(response)
+	var typed *clihttp.APIError
+	if !errors.As(err, &typed) || typed.Response.Code != "BAD_REQUEST" || typed.Response.Family != "BAD_REQUEST" || typed.Response.Message != "synthetic create rejection" || typed.Response.Details != "server hint" {
+		t.Fatalf("error = %#v", err)
+	}
 }

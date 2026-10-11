@@ -115,27 +115,33 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 			return err
 		}
 
-		replaceResult, err := s.host.ReplaceFactoryLayoutAtDir(targetDir, prepared)
-		if err != nil {
-			return err
-		}
-
-		if err := s.activationGateway.ActivateSessionEditableFactory(
-			ctx,
-			session,
-			sessionID,
-			sessionRootDir,
-			activateFactoryDir,
-			currentName,
-			currentName,
-		); err != nil {
-			if replaceResult != nil && replaceResult.Restore != nil {
-				replaceResult.Restore()
+		if err := s.activationGateway.WithSessionSourcesStopped(ctx, sessionID, func() error {
+			replaceResult, err := s.host.ReplaceFactoryLayoutAtDir(targetDir, prepared)
+			if err != nil {
+				return err
 			}
+
+			if err := s.activationGateway.ActivateSessionEditableFactory(
+				ctx,
+				session,
+				sessionID,
+				sessionRootDir,
+				activateFactoryDir,
+				currentName,
+				currentName,
+			); err != nil {
+				if replaceResult != nil && replaceResult.Restore != nil {
+					replaceResult.Restore()
+				}
+				return err
+			}
+			if replaceResult != nil && replaceResult.DiscardBackup != nil {
+				replaceResult.DiscardBackup()
+			}
+
+			return nil
+		}); err != nil {
 			return err
-		}
-		if replaceResult != nil && replaceResult.DiscardBackup != nil {
-			replaceResult.DiscardBackup()
 		}
 
 		var readbackErr error

@@ -442,6 +442,7 @@ type controlledEngineCall struct {
 type controlledEngineOpening struct{ calls []controlledEngineCall }
 
 func (opening *controlledEngineOpening) Open(
+	_ context.Context,
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	statelessService workers.Service,

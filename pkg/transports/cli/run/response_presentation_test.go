@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -778,4 +779,25 @@ func (o *fakePresentationOutput) Dropped() int {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.dropped
+}
+
+func TestWriteInvocationErrorPreservesTypedHTTPResponseOverInvocationCause(t *testing.T) {
+	t.Parallel()
+	response := factoryapi.ErrorResponse{Code: "BAD_REQUEST", Family: "BAD_REQUEST", Message: "  synthetic server rejection\n", Details: "server guidance"}
+	cause := &InvocationError{Code: RemoteDurableStartCode, Message: "contextual invocation failure"}
+	err := clihttp.NewAPIError(400, response, cause.Error(), cause)
+	var stderr bytes.Buffer
+	if !WriteInvocationError(&stderr, err, false) {
+		t.Fatal("typed failure not rendered")
+	}
+	var got factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &got); decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	if got != response {
+		t.Fatalf("response = %#v, want %#v", got, response)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("invocation cause lost")
+	}
 }

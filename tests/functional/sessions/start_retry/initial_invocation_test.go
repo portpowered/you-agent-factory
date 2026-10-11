@@ -1,98 +1,30 @@
 package start_retry_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap/zaptest/observer"
 )
 
-func newInitialOpeningChildScenario(t *testing.T) initialOpeningScenario {
-	t.Helper()
-	config := map[string]any{"name": "initial-opening-child"}
-	// Only this explicitly opened Factory has this resource. Looking up the
-	// process's default runtime or the active peer cannot admit this child.
-	config["resources"] = []map[string]any{{"id": "opening-child-slot", "name": "child-slot", "capacity": 1}}
-	config["invocationSignature"] = map[string]any{
-		"parameters": []any{map[string]any{"name": "prompt", "required": false,
-			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}}}},
-	}
-	config["orchestrator"] = map[string]any{
-		"kind": "JAVASCRIPT",
-		"javascript": map[string]any{
-			"argsSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string"}}, "additionalProperties": false},
-			"inlineSource": map[string]any{
-				"encoding": "utf-8",
-				"inline": `return (async function () {
-  return await agent.run({prompt: "prove opened session child", label: "opening-child",
-    modelProvider: "codex", model: "gpt-5-codex", resourceId: "opening-child-slot"});
-})();`,
-			},
-		},
-	}
-	// The peer remains a Petri Factory so its existing public Work/history
-	// observers distinguish the candidate's child execution from peer Work.
-	scenario := newInitialOpeningScenario(t)
-	scenario.candidateDir = support.ScaffoldFactory(t, config)
-	return scenario
-}
-
-func newOpeningPolicyScenario(t *testing.T) initialOpeningScenario {
-	t.Helper()
-	scenario := newInitialOpeningProviderScenario(t)
-	path := filepath.Join(scenario.candidateDir, "factory.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var config map[string]any
-	if err := json.Unmarshal(data, &config); err != nil {
-		t.Fatal(err)
-	}
-	config["invocationSignature"] = map[string]any{"parameters": []any{
-		map[string]any{"name": "prompt", "required": true,
-			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}}},
-		map[string]any{"name": "secret", "required": true, "sensitive": true,
-			"bindings": []any{map[string]any{"kind": "NAMED"}}},
-	}}
-	support.WriteWorkstationConfig(t, scenario.candidateDir, "process", "---\ntype: MODEL_WORKSTATION\n---\nselected-control-"+scenario.candidateID+" secret=${secret} {{ (index .Inputs 0).Payload }}\n")
-	data, err = json.Marshal(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(scenario.candidateDir, factorydefinitions.InputsDir), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return scenario
-}
-
-func openingPolicySecret(scenario initialOpeningScenario) string {
-	return "private-policy-" + scenario.candidateID
-}
-
-// Both command invocations reach their selected provider before current
+// All four command invocations reach their selected provider before current
 // selection moves. Captured streams are read only after their command joins.
 func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions factorysessions.Service, scenarios []initialOpeningScenario, gate *selectedProviderGate, serverURL string, logs *observer.ObservedLogs) {
 	t.Helper()
@@ -105,15 +37,7 @@ func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions fa
 		request := scenario.request()
 		request.RuntimeSelection.Verbose = i == 1
 		startInitialOpeningSession(t, sessions, request)
-		mode := "--quiet"
-		if i == 1 {
-			mode = "--verbose"
-		}
-		args := []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
-			"run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--no-record", mode, "--secret", openingPolicySecret(scenario), "selected policy Work"}
-		if i == 1 {
-			args = append(args, "--json", "--output", "primary")
-		}
+		args := openingPolicyArgs(scenario, serverURL, i)
 		inputs[i] = support.FakeInputs(ctx, args)
 		inputs[i].Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
 		inputs[i].Input.WorkingDirectory = scenario.candidateDir
@@ -147,7 +71,7 @@ func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions fa
 		case <-ctx.Done():
 			t.Fatal("policy command did not complete")
 		}
-		assertOpeningPolicyOutput(t, sessions, scenario, inputs[i], logs, i == 0)
+		assertOpeningPolicyOutput(t, sessions, scenario, inputs[i], logs, i)
 	}
 	assertInitialOpeningHistoryPreserved(t, sessions, scenarios[0].peerID, peerHistory)
 	assertInitialOpeningInvocation(t, sessions, scenarios[0].peerID)
@@ -173,32 +97,29 @@ func awaitOpeningPolicyProviders(t *testing.T, ctx context.Context, gate *select
 				default:
 				}
 			}
-			t.Fatal("quiet and verbose providers did not overlap")
+			t.Fatal("quiet, normal, verbose and NDJSON providers did not overlap")
 		}
 	}
 }
 
-func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, inputs *support.CapturedInputs, logs *observer.ObservedLogs, quiet bool) {
+func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, inputs *support.CapturedInputs, logs *observer.ObservedLogs, mode int) {
 	t.Helper()
-	if quiet {
+	switch mode {
+	case 0:
 		if inputs.Stdout() != scenario.candidateID+" COMPLETE" || inputs.Stderr() != "" {
 			t.Fatalf("quiet result framing: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
 		}
-	} else {
-		var response factoryapi.InvocationResponse
-		if err := json.Unmarshal([]byte(inputs.Stdout()), &response); err != nil {
-			t.Fatalf("single JSON framing: %v stdout=%q", err, inputs.Stdout())
+	case 1:
+		assertOpeningPolicySingleJSON(t, scenario.candidateID, inputs.Stdout())
+	case 2:
+		if !strings.HasSuffix(strings.TrimSpace(inputs.Stdout()), scenario.candidateID+" COMPLETE") || !strings.Contains(inputs.Stdout(), "Work") {
+			t.Fatalf("human stream lost lifecycle or final result: %q", inputs.Stdout())
 		}
-		if response.Status != factoryapi.InvocationTerminalStatusCompleted || response.SessionId == nil || response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
-			t.Fatalf("selected policy result = %+v", response)
+		if strings.Contains(inputs.Stdout(), "\"recordType\"") || strings.Contains(inputs.Stdout()+inputs.Stderr(), "\x1b[") {
+			t.Fatalf("human stream contains structured records or interactive controls: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
 		}
-		content, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
-		if err != nil || content.Text != scenario.candidateID+" COMPLETE" {
-			t.Fatalf("selected policy content = %+v, %v", content, err)
-		}
-		if *response.SessionId != scenario.candidateID {
-			t.Fatalf("policy result session = %s, want %s", *response.SessionId, scenario.candidateID)
-		}
+	case 3:
+		assertOpeningPolicyNDJSON(t, sessions, scenario, inputs.Stdout())
 	}
 	secret := openingPolicySecret(scenario)
 	if strings.Contains(inputs.Stdout()+inputs.Stderr(), secret) {
@@ -211,6 +132,142 @@ func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, s
 	}
 	initialOpeningHistory(t, sessions, scenario.candidateID)
 	assertOpeningPolicyResponseCorrelation(t, sessions, scenario.candidateID, logs)
+}
+
+func assertOpeningPolicySingleJSON(t *testing.T, sessionID, output string) {
+	t.Helper()
+	var response factoryapi.InvocationResponse
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("single JSON framing: %v stdout=%q", err, output)
+	}
+	assertOpeningPolicyTerminal(t, sessionID, response)
+}
+
+func assertOpeningPolicyTerminal(t *testing.T, sessionID string, response factoryapi.InvocationResponse) {
+	t.Helper()
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted || response.SessionId == nil || *response.SessionId != sessionID || response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("selected policy result = %+v", response)
+	}
+	content, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil || content.Text != sessionID+" COMPLETE" {
+		t.Fatalf("selected policy content = %+v, %v", content, err)
+	}
+}
+
+func assertOpeningPolicyNDJSON(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, output string) {
+	t.Helper()
+	sessionID := scenario.candidateID
+	history := initialOpeningHistory(t, sessions, sessionID).History
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	events, terminal, startup := 0, 0, 0
+	lastSequence := -1
+	for i, line := range lines {
+		var record struct {
+			RecordType string                        `json:"recordType"`
+			Event      factoryapi.FactoryEvent       `json:"event"`
+			Response   factoryapi.InvocationResponse `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("NDJSON line %d: %v: %q", i, err, line)
+		}
+		switch record.RecordType {
+		case "factory_event":
+			assertOpeningPolicyRecordedEvent(t, history, record.Event)
+			if i < 2 {
+				assertOpeningPolicyStartup(t, scenario, record.Event, i)
+				startup++
+			}
+			events++
+			if (record.Event.Context.SessionId != nil && *record.Event.Context.SessionId != sessionID) || record.Event.Context.Sequence <= lastSequence {
+				t.Fatalf("NDJSON event crossed Session or order: %#v", record.Event)
+			}
+			lastSequence = record.Event.Context.Sequence
+		case "invocation_result":
+			terminal++
+			if i != len(lines)-1 {
+				t.Fatalf("NDJSON terminal is not the final line: %d", i)
+			}
+			assertOpeningPolicyTerminal(t, sessionID, record.Response)
+		default:
+			t.Fatalf("unexpected NDJSON record: %s", line)
+		}
+	}
+	if events == 0 || terminal != 1 || startup != 2 {
+		t.Fatalf("NDJSON events=%d terminals=%d startup=%d, want lifecycle, two startup frames and one terminal", events, terminal, startup)
+	}
+}
+
+// Lifecycle frames can omit Session identity. Their selected public history,
+// including the complete payload, is the attribution boundary for those frames.
+func assertOpeningPolicyRecordedEvent(t *testing.T, history []factorydefinitions.FactoryEvent, event factoryapi.FactoryEvent) {
+	t.Helper()
+	for _, recorded := range history {
+		if recorded.Context.Sequence != event.Context.Sequence {
+			continue
+		}
+		// The public projection deliberately omits private execution facts,
+		// such as the association event's model and reasoning effort.
+		public, err := apisurface.FactoryEventToAPI(recorded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Union payloads retain JSON bytes; object-key order is not framing.
+		var got, want any
+		for _, value := range []struct {
+			event factoryapi.FactoryEvent
+			into  *any
+		}{{event, &got}, {public, &want}} {
+			encoded, err := json.Marshal(value.event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(encoded, value.into); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// CLI presentation hides provider diagnostics and identity even when
+		// the recording/API retains them. This fixture has no nested private
+		// observations; the selected result and all remaining fields must match.
+		if event.Type == factoryapi.FactoryEventTypeModelResponse || event.Type == factoryapi.FactoryEventTypeInferenceResponse || event.Type == factoryapi.FactoryEventTypeAgentRunResponse {
+			gotPayload := got.(map[string]any)["payload"].(map[string]any)
+			wantPayload := want.(map[string]any)["payload"].(map[string]any)
+			for _, key := range []string{"diagnostics", "providerSession"} {
+				if _, exposed := gotPayload[key]; exposed {
+					t.Fatalf("NDJSON exposed private %s", key)
+				}
+				delete(wantPayload, key)
+			}
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("NDJSON event differs from selected public history: got=%+v want=%+v", event, recorded)
+		}
+		return
+	}
+	t.Fatalf("NDJSON event is absent from selected public history: %+v", event)
+}
+
+func assertOpeningPolicyStartup(t *testing.T, scenario initialOpeningScenario, event factoryapi.FactoryEvent, index int) {
+	t.Helper()
+	var source factoryapi.Factory
+	switch {
+	case index == 0 && event.Type == factoryapi.FactoryEventTypeRunRequest:
+		payload, err := event.Payload.AsRunRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		source = payload.Factory
+	case index == 1 && event.Type == factoryapi.FactoryEventTypeInitialStructureRequest:
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		source = payload.Factory
+	default:
+		t.Fatalf("unexpected unattributed NDJSON event at %d: %s", index, event.Type)
+	}
+	if event.Context.Sequence != index || source.FactoryDirectory == nil || filepath.Clean(*source.FactoryDirectory) != scenario.candidateDir {
+		t.Fatalf("NDJSON startup lost selected source or order: context=%#v source=%#v", event.Context, source)
+	}
 }
 
 func assertOpeningPolicyResponseCorrelation(t *testing.T, sessions factorysessions.Service, id string, logs *observer.ObservedLogs) {
@@ -515,395 +572,6 @@ func assertInitialOpeningWorkProjection(t *testing.T, process support.Process, s
 	}
 }
 
-func testInitialOpeningBoardRecovery(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario, effects *initialOpeningEffects, logs *observer.ObservedLogs, serverURL, recovery string) {
-	t.Helper()
-	peer := scenario.startPeer(t, sessions)
-	request := scenario.request()
-	request.Persistence = factorysessions.PersistencePolicyEnabled
-	recordPath := filepath.Join(t.TempDir(), "board.jsonl")
-	request.RuntimeSelection.Recording.RecordPath = recordPath
-	startInitialOpeningSession(t, sessions, request)
-	requestID := "completed-" + scenario.candidateID
-	stream := initialOpeningHistory(t, sessions, scenario.candidateID)
-	submitInitialRecoveryWork(t, process, scenario, serverURL, requestID, "completed", true)
-	assertInitialOpeningAttributedEvents(t, t.Context(), stream, scenario.candidateID, requestID)
-	// A nonterminal waiting state has no workstation input until explicitly
-	// moved to init, so it can be persisted without opening a dispatch.
-	submitInitialRecoveryWork(t, process, scenario, serverURL, "pending-"+scenario.candidateID, "pending", false)
-	waitInitialRecoveryAdmission(t, stream, "pending-"+scenario.candidateID)
-	before := initialOpeningHistory(t, sessions, scenario.candidateID)
-	closeInitialOpeningSession(t, sessions, scenario.candidateID)
-	// A successful close finalizes that runtime generation. Recovery reopens
-	// the same logical session with a fresh runtime generation.
-	request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
-	prepareInitialRecoveryArtifact(t, sessions, &request, scenario, recordPath, recovery)
-	startInitialOpeningSession(t, sessions, request)
-	if recovery == "missing" {
-		entries := logs.FilterField(zap.String("session_id", scenario.candidateID)).FilterField(zap.String("recovery", "missing_board_recording_after_durable_state")).All()
-		if len(entries) != 1 {
-			t.Fatalf("missing-board warnings=%d, want one preserved-durable-state warning", len(entries))
-		}
-	} else {
-		after := initialOpeningHistory(t, sessions, scenario.candidateID)
-		for index, event := range before.History {
-			if index >= len(after.History) || after.History[index].Id != event.Id {
-				t.Fatalf("reopening lost selected prefix at %d", index)
-			}
-		}
-		assertInitialRecoveryWorkStates(t, process, scenario, serverURL)
-		move := support.FakeInputs(t.Context(), []string{"you", "--server", serverURL, "--session", scenario.candidateID,
-			"work", "move", "pending-" + scenario.candidateID, "init"})
-		move.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
-		move.Input.WorkingDirectory = scenario.candidateDir
-		if err := process.Execute(move.Input); err != nil {
-			t.Fatalf("release recovered pending Work: %v %s", err, move.Stderr())
-		}
-
-	}
-	// Running the successor must leave the completed Work terminal. Count the
-	// exact owned external executions: one before close, pending only if its
-	// board survived, and one new invocation after reopen.
-	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
-	want := 3
-	if recovery == "missing" {
-		want = 2
-	}
-	calls := effects.forScenario(scenario)
-	if calls[filepath.Clean(scenario.candidateDir)+"|worker.run"] != want {
-		t.Fatalf("recovery ran completed Work again or lost pending Work: %v want=%d", calls, want)
-	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
-	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
-}
-
-func submitInitialRecoveryWork(t *testing.T, process support.Process, scenario initialOpeningScenario, serverURL, requestID, label string, running bool) {
-	t.Helper()
-	state := "init"
-	if !running {
-		state = "waiting"
-	}
-	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", serverURL, "--session", scenario.candidateID, "submit", "batch",
-		fmt.Sprintf(`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"workId":%q,"name":%q,"state":%q,"workTypeName":"task","payload":{"title":"recover"}}]}`, requestID, label+"-"+scenario.candidateID, label, state)})
-	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
-	inputs.Input.WorkingDirectory = scenario.candidateDir
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("submit recovery Work (running=%v): %v %s", running, err, inputs.Stderr())
-	}
-}
-
-func assertInitialRecoveryWorkStates(t *testing.T, process support.Process, scenario initialOpeningScenario, serverURL string) {
-	t.Helper()
-	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", serverURL, "--session", scenario.candidateID, "work", "list"})
-	inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
-	inputs.Input.WorkingDirectory = scenario.candidateDir
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatal(err)
-	}
-	var listed factoryapi.ListWorkResponse
-	if err := json.Unmarshal([]byte(inputs.Stdout()), &listed); err != nil {
-		t.Fatal(err)
-	}
-	if !support.HasWorkAtCustomerState(listed, "completed-"+scenario.candidateID, "task:complete") || !support.HasWorkAtCustomerState(listed, "pending-"+scenario.candidateID, "task:waiting") {
-		t.Fatalf("recovered Work state: %s", inputs.Stdout())
-	}
-}
-
-func prepareInitialRecoveryArtifact(t *testing.T, sessions factorysessions.Service, request *factorysessions.SessionStartRequest, scenario initialOpeningScenario, recordPath, recovery string) {
-	t.Helper()
-	selectedPath := filepath.Join(filepath.Dir(recordPath), "board."+scenario.candidateID+".jsonl")
-	original, err := os.ReadFile(recordPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Initial compatibility recordings use the selected filename; explicit
-	// current-board reads use the session-suffixed filename. Seed the selected
-	// recovery destination from finalized public history, as when restoring a
-	// trusted backup. This proves recovery of selected facts, not path naming.
-	if err := os.WriteFile(selectedPath, original, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if recovery == "corrupt" {
-		corrupt := []byte("{invalid board")
-		if err := os.WriteFile(selectedPath, corrupt, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		_, err := sessions.Start(t.Context(), *request)
-		if err == nil || !strings.Contains(err.Error(), "CORRUPT_HISTORY") {
-			t.Fatalf("corrupt board error: %v", err)
-		}
-		assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
-		after, err := os.ReadFile(selectedPath)
-		if err != nil || !bytes.Equal(after, corrupt) {
-			t.Fatalf("failed opening changed corrupt source: %v", err)
-		}
-		if err := os.WriteFile(selectedPath, original, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	} else if recovery == "missing" {
-		if err := os.Remove(selectedPath); err != nil {
-			t.Fatal(err)
-		}
-		// Select a fresh missing-board destination for this successor. The
-		// reusable Recordings process retains the old finalized writer cursor;
-		// reusing that physical writer tests a separate recording lifecycle.
-		request.RuntimeSelection.Recording.RecordPath = filepath.Join(t.TempDir(), "missing-board.jsonl")
-	}
-}
-
-func waitInitialRecoveryAdmission(t *testing.T, stream *factorydefinitions.FactoryEventStream, requestID string) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
-	defer cancel()
-	for {
-		select {
-		case event, ok := <-stream.Events:
-			if !ok {
-				t.Fatal("pending Work stream closed")
-			}
-			if event.Type == factorydefinitions.FactoryEventTypeWorkRequest && event.Context.RequestID != nil && *event.Context.RequestID == requestID {
-				return
-			}
-		case <-ctx.Done():
-			t.Fatalf("pending Work admission: %v", ctx.Err())
-		}
-	}
-}
-
-func testSelectedReplayFailureRetry(t *testing.T, sessions factorysessions.Service, process support.Process, scenario initialOpeningScenario) {
-	t.Helper()
-	peerHistory := scenario.startPeer(t, sessions)
-	request := scenario.request()
-	recordPath := filepath.Join(t.TempDir(), "selected.jsonl")
-	request.RuntimeSelection.Recording.RecordPath = recordPath
-	startInitialOpeningSession(t, sessions, request)
-	assertInitialOpeningInvocation(t, sessions, scenario.candidateID)
-	history := initialOpeningHistory(t, sessions, scenario.candidateID)
-	closeInitialOpeningSession(t, sessions, scenario.candidateID)
-	valid, err := os.ReadFile(recordPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	selectedPath := filepath.Join(t.TempDir(), "retry.jsonl")
-	inputs := selectedReplayRetryInputs(t, scenario, selectedPath)
-	err = process.Execute(inputs.Input)
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("missing selected replay lost its cause: %v", err)
-	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	// Recognizable portable input with an unsupported field must preserve the
-	// typed diagnostic and redact its payload before returning to the customer.
-	private := "selected-private-replay-payload"
-	invalid := fmt.Sprintf(`{"recordingKind":%q,"unknown":%q}`, recordings.KindJavaScriptFactorySession, private)
-	if err := os.WriteFile(selectedPath, []byte(invalid), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	inputs = selectedReplayRetryInputs(t, scenario, selectedPath)
-	err = process.Execute(inputs.Input)
-	var inputErr *recordings.ReplayInputError
-	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticMalformed {
-		t.Fatalf("invalid selected replay lost typed classification: %v", err)
-	}
-	if strings.Contains(inputs.Stdout()+inputs.Stderr(), private) || strings.Contains(fmt.Sprint(inputErr.Diagnostic), private) {
-		t.Fatal("replay diagnostic exposed private payload")
-	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	if err := os.WriteFile(selectedPath, selectedForeignReplay(t, valid), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	err = process.Execute(selectedReplayRetryInputs(t, scenario, selectedPath).Input)
-	if !errors.As(err, &inputErr) || inputErr.Diagnostic.Code != recordings.ReplayArtifactDiagnosticForeignReference {
-		t.Fatalf("foreign selected replay lost typed classification: %v", err)
-	}
-	assertInitialOpeningNotPublished(t, sessions, scenario.candidateID)
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerHistory)
-	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
-	peerAfterFailure := initialOpeningHistory(t, sessions, scenario.peerID)
-	if err := os.WriteFile(selectedPath, valid, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	assertInitialOpeningReplay(t, process, selectedPath, scenario.candidateID, history)
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerAfterFailure)
-	assertSelectedHostedLegacyReplay(t, sessions, scenario, selectedPath, history)
-	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
-}
-
-func selectedForeignReplay(t *testing.T, valid []byte) []byte {
-	t.Helper()
-	lines := strings.Split(strings.TrimSpace(string(valid)), "\n")
-	for i, line := range lines {
-		var row map[string]json.RawMessage
-		if err := json.Unmarshal([]byte(line), &row); err != nil {
-			t.Fatal(err)
-		}
-		var event factorydefinitions.FactoryEvent
-		if json.Unmarshal(row["event"], &event) != nil || string(event.Type) != "DISPATCH_REQUEST" {
-			continue
-		}
-		var payload factorydefinitions.DispatchRequestEventPayload
-		if err := event.DecodePayload(&payload); err != nil {
-			t.Fatal(err)
-		}
-		payload.Inputs = []factorydefinitions.DispatchConsumedWorkRef{{WorkID: "foreign-work"}}
-		event.Payload, _ = json.Marshal(payload)
-		row["event"], _ = json.Marshal(event)
-		encoded, err := json.Marshal(row)
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines[i] = string(encoded)
-		return []byte(strings.Join(lines, "\n") + "\n")
-	}
-	t.Fatal("selected recording has no dispatch to corrupt")
-	return nil
-}
-
-func assertSelectedHostedLegacyReplay(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, path string, history *factorydefinitions.FactoryEventStream) {
-	t.Helper()
-	peerBefore := initialOpeningHistory(t, sessions, scenario.peerID)
-	request := scenario.request()
-	request.SessionID = uuid.NewString()
-	request.RuntimeSelection.RuntimeInstanceID = uuid.NewString()
-	request.RuntimeSelection.Recording.ReplayPath = path
-	request.RuntimeSelection.Host = factorysessions.RuntimeHostRequest{Host: "127.0.0.1", Port: 24117}
-	// The selected legacy config must load even when the current authored
-	// definition is no longer valid. A hosted replay retains its runtime mode.
-	if err := os.WriteFile(request.RuntimeSelection.DefinitionSourcePath, []byte(`{"name":`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	startInitialOpeningSession(t, sessions, request)
-	replayed := initialOpeningHistory(t, sessions, request.SessionID)
-	// Host readiness precedes replay completion. In particular the dispatch
-	// result wakes observers before its following canonical relocation. Join
-	// that retained/live cut rather than asserting a readiness-time count.
-	ctx, cancel := context.WithTimeout(t.Context(), initialOpeningReadCeiling)
-	defer cancel()
-	for len(replayed.History) < len(history.History) {
-		select {
-		case event, ok := <-replayed.Events:
-			if !ok {
-				t.Fatal("hosted replay closed before restoring selected history")
-			}
-			replayed.History = append(replayed.History, event)
-		case <-ctx.Done():
-			t.Fatalf("hosted replay lost selected history: got=%d want>=%d: %v", len(replayed.History), len(history.History), ctx.Err())
-		}
-	}
-	for i, event := range history.History {
-		if replayed.History[i].Id != event.Id || replayed.History[i].Type != event.Type {
-			t.Fatalf("hosted replay changed selected event %d: %#v", i, replayed.History[i])
-		}
-	}
-	assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peerBefore)
-}
-
-// K-F3 holds two live provider commands while the ordinary CLI inspects a
-// recording on that same process. Recorded time must remain distinct from the
-// selected 2041 process timestamp; closing inspection must preserve live Work.
-func assertPreparationReplayBesideLiveWork(t *testing.T, process support.Process, sessions factorysessions.Service, scenario initialOpeningScenario) {
-	t.Helper()
-	id := uuid.NewString()
-	recordedAt := time.Date(2026, 7, 12, 12, 0, 2, 0, time.UTC)
-	path, payload := writePreparationRecording(t, id, recordedAt)
-	writer := &preparationInspectionWriter{entered: make(chan struct{}), release: make(chan struct{})}
-	unblock := func() { writer.once.Do(func() { close(writer.release) }) }
-	t.Cleanup(unblock)
-	inputs := selectedReplayRetryInputs(t, scenario, path)
-	inputs.Input.Args = []string{"you", "run", "--dir", scenario.candidateDir, "--session", uuid.NewString(), "--replay", path, "--no-record"}
-	inputs.Input.Stdout = writer
-	done := make(chan error, 1)
-	go func() { done <- process.Execute(inputs.Input); close(done) }()
-	t.Cleanup(func() {
-		unblock()
-		if err := <-done; err != nil {
-			t.Errorf("historical CLI inspection: %v", err)
-		}
-	})
-	select {
-	case <-writer.entered:
-	case err := <-done:
-		t.Fatalf("inspection ended before readiness: %v; %s", err, inputs.Stderr())
-	case <-t.Context().Done():
-		t.Fatal("inspection never reached CLI output")
-	}
-	assertPreparationHistoricalFacts(t, sessions, scenario, id, recordedAt, path, payload)
-	unblock()
-}
-
-func writePreparationRecording(t *testing.T, id string, recordedAt time.Time) (string, []byte) {
-	t.Helper()
-	recording, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
-		SessionID: id, Status: "SUCCEEDED", OrchestratorKind: "JAVASCRIPT", SourceRef: "workflow/selected.js",
-		SourceHash: "sha256:" + strings.Repeat("1", 64), PolicyHash: "sha256:" + strings.Repeat("3", 64),
-		Artifacts:  []recordings.PortableRecordingCanonicalArtifact{{ID: "checkpoint-artifact", Kind: "CHECKPOINT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("4", 64), SizeBytes: 42, CreatedAt: recordedAt, SecretsRedacted: 2}},
-		Checkpoint: &recordings.PortableRecordingCanonicalCheckpoint{ID: "selected-checkpoint", ArtifactID: "checkpoint-artifact", Timestamp: recordedAt},
-		Events: []json.RawMessage{
-			json.RawMessage(`{"id":"recorded-start","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T12:00:00Z"},"payload":{}}`),
-			json.RawMessage(`{"id":"recorded-checkpoint","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"eventTime":"2026-07-12T12:00:01Z","checkpointId":"selected-checkpoint"},"payload":{"artifactIds":["checkpoint-artifact"]}}`),
-			json.RawMessage(`{"id":"recorded-done","type":"SESSION_COMPLETED","context":{"sequence":2,"eventTime":"2026-07-12T12:00:02Z"},"payload":{}}`),
-		},
-		Result: &recordings.PortableRecordingCanonicalResult{Status: "FINAL", Mode: "final", PrimaryResult: json.RawMessage(`{"answer":"recorded"}`)},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	payload, err := json.Marshal(recording)
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(t.TempDir(), "selected.json")
-	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path, payload
-}
-
-func assertPreparationHistoricalFacts(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, id string, recordedAt time.Time, path string, payload []byte) {
-	t.Helper()
-	read, err := sessions.GetSession(t.Context(), id)
-	if err != nil || read.ResolvedSource.SourceRef != "workflow/selected.js" || read.Status != factorysessions.LifecycleStatusSucceeded {
-		t.Fatalf("selected historical facts = %#v, %v", read, err)
-	}
-	after := 1
-	events, err := sessions.ReadEvents(t.Context(), id, factorysessions.EventReconnectRequest{AfterSequence: &after})
-	if err != nil || len(events.Events) != 1 {
-		t.Fatalf("selected recorded events = %#v, %v", events, err)
-	}
-	var event struct {
-		ID      string `json:"id"`
-		Context struct {
-			EventTime time.Time `json:"eventTime"`
-		} `json:"context"`
-	}
-	if err := json.Unmarshal(events.Events[0], &event); err != nil || event.ID != "recorded-done" || !event.Context.EventTime.Equal(recordedAt) {
-		t.Fatalf("replay time leaked process clock: %s, %v", events.Events[0], err)
-	}
-	for _, liveID := range []string{scenario.candidateID, scenario.peerID} {
-		initialOpeningHistory(t, sessions, liveID)
-	}
-	result, err := sessions.GetResult(t.Context(), id, factorysessions.ResultRequest{Mode: factorysessions.ResultModeFinal})
-	if err != nil || string(result.PrimaryResult) != `{"answer":"recorded"}` {
-		t.Fatalf("historical result = %#v, %v", result, err)
-	}
-	afterPayload, err := os.ReadFile(path)
-	if err != nil || string(afterPayload) != string(payload) {
-		t.Fatalf("inspection modified recording: %v", err)
-	}
-}
-
-type preparationInspectionWriter struct {
-	entered, release chan struct{}
-	once             sync.Once
-	ready            sync.Once
-}
-
-func (writer *preparationInspectionWriter) Write(p []byte) (int, error) {
-	if strings.Contains(string(p), "Replayed Factory Session:") {
-		writer.ready.Do(func() { close(writer.entered) })
-		<-writer.release
-	}
-	return len(p), nil
-}
-
 func newBindingChildScenario(t *testing.T) initialOpeningScenario {
 	t.Helper()
 	scenario := newInitialOpeningChildScenario(t)
@@ -1132,4 +800,18 @@ func (gate *bindingChildGate) run(ctx context.Context, request platformprocess.C
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
+}
+
+func openingPolicyArgs(scenario initialOpeningScenario, serverURL string, i int) []string {
+	args := []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
+		"run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--no-record", "--secret", openingPolicySecret(scenario), "selected policy Work"}
+	switch i {
+	case 0:
+		args = append(args, "--quiet")
+	case 1:
+		args = append(args, "--verbose", "--json", "--output", "primary")
+	case 3:
+		args = append(args, "--json")
+	}
+	return args
 }

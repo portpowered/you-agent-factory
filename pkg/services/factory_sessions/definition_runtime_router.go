@@ -369,3 +369,11 @@ func (g definitionActivationGatewayRouter) SwapPersistedNamedFactoryRuntime(
 
 var _ DefinitionHost = definitionHostRouter{}
 var _ DefinitionActivationGateway = definitionActivationGatewayRouter{}
+
+func (g definitionActivationGatewayRouter) WithSessionSourcesStopped(ctx context.Context, id string, fn func() error) error {
+	target, err := g.target(id)
+	if err != nil {
+		return err
+	}
+	return target.WithSessionSourcesStopped(ctx, id, fn)
+}

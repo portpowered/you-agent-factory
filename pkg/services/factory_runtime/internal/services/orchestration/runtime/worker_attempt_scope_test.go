@@ -3,17 +3,21 @@ package runtime
 import (
 	"context"
 	"errors"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
+	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -465,5 +469,293 @@ func TestRequesterParentSnapshotProducerAndRefusals(t *testing.T) {
 	origin.ParentSnapshotIDs = append(origin.ParentSnapshotIDs, "other")
 	if got, err := requesterFromWorkOrigin("lane", "project", facts); err == nil || got != nil {
 		t.Fatal("ambiguous parents acquired requester")
+	}
+}
+
+// runtimeWorkerSessionsService is a small service-root test double. It keeps
+// identity reservation and cancellation observable while delegating execution
+// to the already injected Workers root, so Runtime tests do not construct peer
+// services through their private wire packages.
+type runtimeWorkerSessionsService struct {
+	factory.WorkerAttemptOpener
+	*fakeWorkerSessionsService
+
+	mu       sync.Mutex
+	sessions map[string]workersessions.Session
+}
+
+func newRuntimeWorkerSessionsService(execution workers.Service) *runtimeWorkerSessionsService {
+	return &runtimeWorkerSessionsService{
+		fakeWorkerSessionsService: &fakeWorkerSessionsService{execution: execution},
+		sessions:                  make(map[string]workersessions.Session),
+	}
+}
+
+func (service *runtimeWorkerSessionsService) Reserve(
+	ctx context.Context,
+	request workersessions.ReserveRequest,
+) (workersessions.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return workersessions.Session{}, err
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if _, exists := service.sessions[request.ID]; exists {
+		return workersessions.Session{}, workersessions.ErrSessionAlreadyExists
+	}
+	session := workersessions.Session{ID: request.ID, State: workersessions.StateReserved}
+	service.sessions[request.ID] = session
+	return session.Clone(), nil
+}
+
+func (service *runtimeWorkerSessionsService) Get(
+	ctx context.Context,
+	request workersessions.GetRequest,
+) (workersessions.Session, error) {
+	if err := ctx.Err(); err != nil {
+		return workersessions.Session{}, err
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	session, ok := service.sessions[request.ID]
+	if !ok {
+		return workersessions.Session{}, workersessions.ErrSessionNotFound
+	}
+	return session.Clone(), nil
+}
+
+func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
+	ctx context.Context,
+	request workersessions.RuntimeAttemptRequest,
+	execution workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+) (workersessions.RuntimeAttempt, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	service.sessions[request.ID] = workersessions.Session{ID: request.ID, State: workersessions.StateRunning}
+	service.mu.Unlock()
+	return workersessions.RuntimeAttempt(func(
+		_ context.Context,
+		result workers.WorkstationDispatchResult,
+		_ error,
+	) (workers.WorkstationDispatchResult, bool, error) {
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		session := service.sessions[request.ID]
+		switch result.TerminalOutcome {
+		case workers.WorkstationDispatchTerminalOutcomeCompleted:
+			session.State = workersessions.StateCompleted
+			session.Result = &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+		case workers.WorkstationDispatchTerminalOutcomeCanceled:
+			session.State = workersessions.StateCanceled
+			session.Result = nil
+		default:
+			session.State = workersessions.StateFailed
+			session.Result = &workersessions.TerminalResult{
+				Outcome: workersessions.TerminalOutcomeFailed,
+				Cause: &workersessions.FailureCause{
+					Kind:   workersessions.FailureCauseWorkersExecutionFailure,
+					Detail: "runtime Worker Sessions test execution failed",
+				},
+			}
+		}
+		service.sessions[request.ID] = session
+		return result, false, nil
+	}), nil
+}
+
+func (service *runtimeWorkerSessionsService) Cancel(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	if err := ctx.Err(); err != nil {
+		return workersessions.ControlResult{}, err
+	}
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	session, ok := service.sessions[request.ID]
+	if !ok {
+		return workersessions.ControlResult{}, workersessions.ErrSessionNotFound
+	}
+	session.State = workersessions.StateCanceled
+	service.sessions[request.ID] = session
+	return workersessions.ControlResult{
+		Session: session.Clone(), Action: workersessions.ControlActionCancel,
+		Outcome: workersessions.ControlOutcomeApplied, DispatchID: request.ID,
+	}, nil
+}
+
+func (service *runtimeWorkerSessionsService) InvokeSession(
+	ctx context.Context,
+	request workersessions.InvokeSessionRequest,
+) (workersessions.InvokeSessionResult, error) {
+	service.mu.Lock()
+	session, ok := service.sessions[request.ID]
+	service.mu.Unlock()
+	if !ok {
+		return workersessions.InvokeSessionResult{}, workersessions.ErrSessionNotFound
+	}
+	if session.State == workersessions.StateCanceled {
+		return workersessions.InvokeSessionResult{
+			Session:     session.Clone(),
+			Dispatch:    canceledRuntimeDispatch(request.Execution),
+			DispatchErr: workers.ErrWorkstationDispatchCanceled,
+		}, nil
+	}
+
+	maxAttempts := request.Retry.Attempts()
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		execution := workers.CloneWorkstationExecutionRequest(request.Execution.Execution)
+		if attempt > 1 {
+			execution.Dispatch.DispatchID = fmt.Sprintf("%s/attempt/%d", request.ID, attempt)
+		}
+		dispatchRequest := workers.WorkstationDispatchRequest{
+			WorkstationName: request.Execution.WorkstationName,
+			Execution:       execution,
+		}
+		executeResult, executeErr := service.execution.Execute(ctx, testExecuteRequestFromDispatch(dispatchRequest))
+		dispatchResult := testDispatchResultFromExecute(dispatchRequest, executeResult, executeErr)
+		if dispatchResult.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed &&
+			dispatchResult.Result.FailureMetadata != nil &&
+			dispatchResult.Result.FailureMetadata.Family == workers.WorkFailureFamilyRetryable &&
+			attempt < maxAttempts {
+			continue
+		}
+		service.mu.Lock()
+		switch dispatchResult.TerminalOutcome {
+		case workers.WorkstationDispatchTerminalOutcomeCompleted:
+			session.State = workersessions.StateCompleted
+		case workers.WorkstationDispatchTerminalOutcomeCanceled:
+			session.State = workersessions.StateCanceled
+		default:
+			session.State = workersessions.StateFailed
+		}
+		service.sessions[request.ID] = session
+		service.mu.Unlock()
+		return workersessions.InvokeSessionResult{
+			Session: session.Clone(), Dispatch: dispatchResult, DispatchErr: executeErr,
+		}, nil
+	}
+	return workersessions.InvokeSessionResult{}, errors.New("runtime Worker Sessions test service exhausted retry attempts")
+}
+
+func canceledRuntimeDispatch(request workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult {
+	return workers.WorkstationDispatchResult{
+		DispatchID:      request.Execution.Dispatch.DispatchID,
+		WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
+		Result: workers.WorkResult{
+			DispatchID:   request.Execution.Dispatch.DispatchID,
+			TransitionID: request.Execution.Dispatch.TransitionID,
+			Outcome:      workers.OutcomeFailed,
+			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
+		},
+	}
+}
+
+func directInputPromptRuntimeFixture(
+	t *testing.T,
+) (*runtimeConfig, workers.WorkstationDispatchRequest, modelinference.RuntimeScopeRef) {
+	t.Helper()
+	const (
+		workstationName = "execute-tts"
+		workerName      = "tts-executor"
+		promptTemplate  = "For Work {{ (index .Inputs 0).WorkID }}, read the complete bound text input."
+		workID          = "work-tts-1"
+		boundText       = "The release is ready."
+	)
+	modelScope, err := (modelinference.RuntimeScopeRef{}).Parse("factory-session:models")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	cfg := &runtimeConfig{
+		modelRuntimeScope: modelScope,
+		newID:             func() string { return "attempt-1" },
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			tokens []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			if prompt != promptTemplate {
+				t.Fatalf("prompt template = %q, want authored template", prompt)
+			}
+			if len(tokens) != 1 || tokens[0].Color.WorkID != workID ||
+				len(tokens[0].Color.Content) != 1 || tokens[0].Color.Content[0].Text != boundText {
+				t.Fatalf("prompt tokens = %#v, want WorkID %q with complete bound text", tokens, workID)
+			}
+			return "For Work " + tokens[0].Color.WorkID + ", read: " + tokens[0].Color.Content[0].Text, nil
+		}),
+		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				workstationName: {
+					Name: workstationName, Type: interfaces.WorkstationTypeInference,
+					WorkerTypeName: workerName, PromptTemplate: promptTemplate,
+					Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "ready"}},
+				},
+			},
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				workerName: {
+					Name: workerName, Type: interfaces.WorkerTypeInference,
+					Model: "OMNIVOICE_Q4_K_M", ModelProvider: "CODEX",
+					ModelLocality: modelinference.RuntimeModelLocalityLocal,
+					Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
+				},
+			},
+			Factory: &interfaces.FactoryConfig{Resources: []interfaces.ResourceConfig{{
+				Name: "omnivoice-cache", Type: interfaces.ResourceTypeModel, Capacity: 1,
+				Model: "OMNIVOICE_Q4_K_M", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND",
+			}}},
+		},
+	}
+	return cfg, directInputPromptRequest(workstationName, workerName, workID, boundText), modelScope
+}
+
+func directInputPromptRequest(
+	workstationName, workerName, workID, boundText string,
+) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: workstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			WorkerName: workerName, WorkerType: interfaces.WorkerTypeInference,
+			RunnerID: workers.RunnerIDCodex, FactorySessionID: "session-1",
+			RuntimeID: "runtime-1", GenerationID: "generation-1",
+			InputTokens: workers.InputTokens(workers.Token{ID: "token-1", State: "ready", Color: workers.Color{
+				WorkID: workID, WorkTypeID: "task", RequestID: "request-1", DataType: workers.DataTypeWork,
+				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: boundText, Slot: "text"}},
+			}}),
+			Dispatch: work.WorkDispatch{
+				DispatchID: "dispatch-1", WorkstationName: workstationName, WorkerType: workerName,
+				Execution: work.ExecutionMetadata{RequestID: "request-1", WorkIDs: []string{workID}},
+			},
+		},
+	}
+}
+
+func assertDirectInputPromptExecuteRequest(
+	t *testing.T,
+	request workers.ExecuteRequest,
+	modelScope modelinference.RuntimeScopeRef,
+) {
+	t.Helper()
+	if got := request.Target.Prompt.UserMessage; got != "For Work work-tts-1, read: The release is ready." {
+		t.Fatalf("rendered user message = %q, want WorkID and complete bound text", got)
+	}
+	if len(request.Input.Work) != 1 || request.Input.Work[0].WorkID != "work-tts-1" ||
+		len(request.Input.Work[0].Content) != 1 || request.Input.Work[0].Content[0].Text != "The release is ready." {
+		t.Fatalf("detached Work inputs = %#v, want canonical per-input Work", request.Input.Work)
+	}
+	if len(workers.WorkDispatchInputTokens(request.Input.Dispatch)) != 1 {
+		t.Fatalf("detached dispatch inputs = %#v, want direct input token bridged into dispatch", request.Input.Dispatch.InputTokens)
+	}
+	modelRuntime := request.Input.ModelRuntime
+	if modelRuntime == nil || modelRuntime.Scope != modelScope ||
+		modelRuntime.Worker.Name != "tts-executor" || modelRuntime.Worker.Model != "OMNIVOICE_Q4_K_M" ||
+		len(modelRuntime.Worker.Resources) != 1 || modelRuntime.Worker.Resources[0].Name != "omnivoice-cache" ||
+		len(modelRuntime.Resources) != 1 || modelRuntime.Resources[0].Backend != "LLAMACPP" {
+		t.Fatalf("managed Models projection = %#v, want opened scope and authored worker", modelRuntime)
 	}
 }

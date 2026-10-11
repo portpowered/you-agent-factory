@@ -11,8 +11,14 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // TestBlockedDispatchConcurrentBatchIngressRegression_ServiceModeWorkerPool is the
@@ -281,5 +287,218 @@ func workInputsFromDispatchFixture() work.WorkDispatch {
 				History: workers.History{TotalVisits: map[string]int{"transition-inputs": 4}},
 			},
 		),
+	}
+}
+
+func buildSimpleNet() *state.Net {
+	wt := &state.WorkType{
+		ID:   "task",
+		Name: "Task",
+		States: []state.StateDefinition{
+			{Value: "init", Category: state.StateCategoryInitial},
+			{Value: "done", Category: state.StateCategoryTerminal},
+			{Value: "failed", Category: state.StateCategoryFailed},
+		},
+	}
+
+	places := make(map[string]*petri.Place)
+	for _, p := range wt.GeneratePlaces() {
+		places[p.ID] = p
+	}
+
+	transition := &petri.Transition{
+		ID:         "t-process",
+		Name:       "Process",
+		Type:       petri.TransitionNormal,
+		WorkerType: "mock",
+		InputArcs: []petri.Arc{{
+			ID:          "a-in",
+			Name:        "input",
+			PlaceID:     "task:init",
+			Direction:   petri.ArcInput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{
+			ID:          "a-out",
+			Name:        "output",
+			PlaceID:     "task:done",
+			Direction:   petri.ArcOutput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+	}
+
+	return &state.Net{
+		ID:          "test-net",
+		Places:      places,
+		Transitions: map[string]*petri.Transition{"t-process": transition},
+		WorkTypes:   map[string]*state.WorkType{"task": wt},
+		Resources:   make(map[string]*state.ResourceDef),
+	}
+}
+
+func buildSimpleNetWithFailureArc() *state.Net {
+	n := buildSimpleNet()
+	n.Transitions["t-process"].FailureArcs = []petri.Arc{{
+		ID:        "a-failed",
+		Name:      "failed",
+		PlaceID:   "task:failed",
+		Direction: petri.ArcOutput,
+	}}
+	return n
+}
+
+func newPassingInlineRuntime(t *testing.T) factoryhost.Engine {
+	t.Helper()
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withInlineDispatch(),
+		withWorkerExecutor("mock", &passExecutor{}),
+		withLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return f
+}
+
+func newPassingInlineRuntimeWithLedger(
+	t *testing.T,
+) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger) {
+	t.Helper()
+	f, ledger, err := newTestFactoryWithScriptedLedger(
+		withNet(buildSimpleNet()),
+		withInlineDispatch(),
+		withWorkerExecutor("mock", &passExecutor{}),
+		withLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return f, ledger
+}
+
+func tickableFactory(t *testing.T, f factoryhost.Engine) TickableFactory {
+	t.Helper()
+	tickable, ok := f.(TickableFactory)
+	if !ok {
+		t.Fatal("factory is not tickable")
+	}
+	return tickable
+}
+
+func runtimeGeneratedEvents(t *testing.T, f factoryhost.Engine) []factoryapi.FactoryEvent {
+	t.Helper()
+	events, err := f.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	mapped := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		mapped[index] = runtimeGeneratedFactoryEvent(t, event)
+	}
+	return mapped
+}
+
+func runtimeGeneratedFactoryEvent(t testing.TB, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	var mapped factoryapi.FactoryEvent
+	if err := event.Decode(&mapped); err != nil {
+		t.Fatalf("map Factory event %q: %v", event.Id, err)
+	}
+	return mapped
+}
+
+func markingContainsWorkAtPlace(marking *petri.MarkingSnapshot, workID string, placeID string) bool {
+	if marking == nil {
+		return false
+	}
+	for _, tokenID := range marking.PlaceTokens[placeID] {
+		token := marking.Tokens[tokenID]
+		if token != nil && token.Color.WorkID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func safeBoundaryWorkID(dispatch work.WorkDispatch) string {
+	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
+		if token.Color.DataType == factorytoken.DataTypeResource {
+			continue
+		}
+		if token.Color.WorkID != "" {
+			return token.Color.WorkID
+		}
+		if token.ID != "" {
+			return token.ID
+		}
+	}
+	for _, workID := range dispatch.Execution.WorkIDs {
+		if workID != "" {
+			return workID
+		}
+	}
+	return ""
+}
+
+func safeBoundaryResult(
+	dispatch work.WorkDispatch,
+	workID string,
+	outcome workers.WorkOutcome,
+	errText string,
+	providerFailure *workers.WorkFailureMetadata,
+	providerSession *providers.SessionMetadata,
+	retryCount string,
+) workers.WorkResult {
+	return workers.WorkResult{
+		DispatchID:      dispatch.DispatchID,
+		TransitionID:    dispatch.TransitionID,
+		Outcome:         outcome,
+		Output:          "safe boundary output for " + workID,
+		Error:           errText,
+		FailureMetadata: providerFailure,
+		Continuation:    (providerSession).ContinuationRef(),
+		Diagnostics: &workers.WorkDiagnostics{
+			RenderedPrompt: &workers.RenderedPromptDiagnostic{
+				SystemPromptHash: "system-hash-" + workID,
+				UserMessageHash:  "user-hash-" + workID,
+				Variables: map[string]string{
+					"prompt_source":  "factory-renderer",
+					"work_type_name": "task",
+					"system_prompt":  "raw rendered system prompt must stay private",
+					"user_message":   "raw rendered user message must stay private",
+					"stdin":          "raw rendered stdin must stay private",
+					"env":            "raw rendered environment must stay private",
+				},
+			},
+			Provider: &workers.ProviderDiagnostic{
+				Provider: "codex",
+				Model:    "gpt-5.4",
+				RequestMetadata: map[string]string{
+					"prompt_source":      "provider-renderer",
+					"worker_type":        "mock",
+					"working_directory":  "/workspace/" + workID,
+					"worktree":           "/workspace/" + workID + "/.worktree",
+					"system_prompt_body": "raw prompt body must stay private",
+					"stdin_payload":      "raw stdin payload must stay private",
+					"env_secret":         "raw env secret must stay private",
+				},
+				ResponseMetadata: map[string]string{
+					"provider_session_id": providerSession.ID,
+					"retry_count":         retryCount,
+					"system_prompt_body":  "raw response prompt body must stay private",
+					"stdin_payload":       "raw response stdin payload must stay private",
+					"env_secret":          "raw response env secret must stay private",
+				},
+			},
+			Command: &workers.CommandDiagnostic{
+				Command: "echo",
+				Stdin:   "raw command stdin must stay private",
+				Env: map[string]string{
+					"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private",
+				},
+			},
+			Panic: &workers.PanicDiagnostic{Stack: "panic stack should not be stored"},
+		},
 	}
 }

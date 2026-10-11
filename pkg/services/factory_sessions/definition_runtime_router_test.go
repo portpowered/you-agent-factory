@@ -379,3 +379,7 @@ func (s definitionRouterGatewayStub) RequireSession(string) (*factorydefinitions
 
 var _ DefinitionHost = definitionRouterHostStub{}
 var _ DefinitionActivationGateway = definitionRouterGatewayStub{}
+
+func (forwardingDefinitionGatewayStub) WithSessionSourcesStopped(_ context.Context, _ string, fn func() error) error {
+	return fn()
+}

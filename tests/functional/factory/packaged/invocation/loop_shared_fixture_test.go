@@ -1,6 +1,7 @@
 package invocation_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +13,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -355,7 +360,21 @@ func newLoopSharedFixtureWithExpected(t *testing.T, expectedSessions int) *loopS
 	clock := newLoopSchedulerClockAt(time.Date(2026, time.July, 29, 20, 0, 0, 0, time.UTC))
 	submissions := make(chan work.FactorySubmissionRecord, 16)
 	lifecycle := newLoopLifecycleLedger(expectedSessions)
+	logCore, logs := observer.New(zap.InfoLevel)
+	var rejectedWrites bytes.Buffer
+	t.Cleanup(func() {
+		// Process cleanup has joined all writers before this observation.
+		if rejectedWrites.Len() != 0 {
+			t.Errorf("loop cleanup wrote through a closed runtime sink: %s", rejectedWrites.String())
+		}
+		if t.Failed() {
+			for _, entry := range logs.FilterLevelExact(zap.ErrorLevel).All() {
+				t.Logf("loop backend error: %s %v", entry.Message, entry.ContextMap())
+			}
+		}
+	})
 	builtProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProcessLogger: zap.New(logCore, zap.ErrorOutput(zapcore.Lock(zapcore.AddSync(&rejectedWrites)))),
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			lifecycle.recordProcessStart()
 			err := api.Start(ctx, request)

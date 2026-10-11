@@ -1,10 +1,15 @@
 package customer_journeys_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
+	"net/http"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -35,7 +40,9 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	peerDir, peer := newScriptCycleFactory(t)
 	failureDir, failure := newScriptCycleFactory(t)
 	failurePeerDir, failurePeer := newScriptCycleFactory(t)
-	files := &scriptReplacementFailure{directory: failureDir}
+	runtimeDir, runtimeSource := newScriptCycleFactory(t)
+	runtimePeerDir, runtimePeer := newScriptCycleFactory(t)
+	files := &scriptReplacementFailure{directory: failureDir, runtimeDirectory: runtimeDir}
 	watcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	executionWatcherDir := newWatcherIngressFactory(t, "owned-exec-preseed")
 	duplicateWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
@@ -50,6 +57,8 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		filepath.Clean(peerDir):        peer,
 		filepath.Clean(failureDir):     failure,
 		filepath.Clean(failurePeerDir): failurePeer,
+		filepath.Clean(runtimeDir):     runtimeSource,
+		filepath.Clean(runtimePeerDir): runtimePeer,
 	}}
 	server := startScriptCycleHost(t, router, hosted.router, files, hosted.checkpoints, func(record work.FactorySubmissionRecord) {
 		if record.Request.RequestID == "watcher-stopped-only" {
@@ -60,6 +69,10 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		}
 	})
 	hosted.run(t, server.URL())
+	t.Run("runtime_replacement_preserves_committed_cursor_and_failed_candidate_keeps_sources", func(t *testing.T) {
+		t.Parallel()
+		assertScriptRuntimeReplacement(t, server.URL(), runtimeDir, runtimePeerDir, runtimeSource, runtimePeer, files)
+	})
 	t.Run("watcher_stop_joins_while_peer_progresses_and_restart_admits_eligible_input", func(t *testing.T) {
 		t.Parallel()
 		assertWatcherIndependentStop(t, server.URL(), stoppedWatcherDir, watcherPeerDir, &stoppedWatcherAdmissions)
@@ -160,7 +173,8 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedC
 		FactoryDir: hostDir,
 		Edges: serviceedges.Edges{
 			ScriptCommandRunner: router, AutomationsCursorFileSystem: files,
-			HostedHTTPClient: hosted, HostedLinearEndpoint: "https://owned-hosted.invalid/graphql",
+			FactoryRuntimeDirectories: files,
+			HostedHTTPClient:          hosted, HostedLinearEndpoint: "https://owned-hosted.invalid/graphql",
 			HostedLinearCheckpointStore: checkpoints,
 			SubmissionRecorder:          observeSubmission,
 		},
@@ -214,8 +228,132 @@ const scriptReplacementFailureDetail = "owned-script-cursor-replacement-unavaila
 
 type scriptReplacementFailure struct {
 	platformfilesystem.Local
-	directory    string
-	replacements atomic.Int32
+	directory        string
+	replacements     atomic.Int32
+	runtimeDirectory string
+	failRuntime      atomic.Bool
+}
+
+const scriptRuntimeOpeningFailureDetail = "owned-runtime-replacement-opening-unavailable"
+
+func (f *scriptReplacementFailure) Stat(path string) (fs.FileInfo, error) {
+	if f.failRuntime.Load() && filepath.Clean(path) == filepath.Join(f.runtimeDirectory, interfaces.InputsDir) {
+		return nil, fs.ErrNotExist
+	}
+	return f.Local.Stat(path)
+}
+
+func (f *scriptReplacementFailure) MkdirAll(path string, mode fs.FileMode) error {
+	if filepath.Clean(path) == filepath.Join(f.runtimeDirectory, interfaces.InputsDir) && f.failRuntime.Swap(false) {
+		return fmt.Errorf("%s", scriptRuntimeOpeningFailureDetail)
+	}
+	return f.Local.MkdirAll(path, mode)
+}
+
+// M10 enters the API-owned current Factory replacement boundary. Source-cycle
+// commands expose the persisted cursor; selected Work and peer history expose
+// usable runtime state. Only this customer's dependent replacements serialize.
+func assertScriptRuntimeReplacement(t *testing.T, baseURL, directory, peerDirectory string,
+	source, peer *scriptCycleRoute, files *scriptReplacementFailure,
+) {
+	t.Helper()
+	id := support.OpenFactorySessionAt(t, baseURL, directory).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, id) })
+	peerID := support.OpenFactorySessionAt(t, baseURL, peerDirectory).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, peerID) })
+	first, peerFirst := awaitScriptCycleCommand(t, source), awaitScriptCycleCommand(t, peer)
+	first.output <- scriptCycleOutput(t, "runtime-cursor", "runtime-checkpoint")
+	pending := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, pending.request, "runtime-cursor", "runtime-checkpoint")
+	readScriptQueuedWork(t, baseURL, id, scriptPollerExternalWorkID)
+	endpoint := baseURL + "/factory-sessions/" + id + "/factory"
+	current := support.GetJSON[factoryapi.Factory](t, endpoint)
+	replaceScriptRuntime(t, endpoint, current, "replacement-committed", http.StatusOK)
+	select {
+	case <-pending.canceled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("successful replacement did not join the prior source")
+	}
+	resumed := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, resumed.request, "runtime-cursor", "runtime-checkpoint")
+	resumed.output <- scriptRuntimeReplacementWorkRequestJSON(t, "after-runtime-replacement")
+	active := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, active.request, "runtime-cursor", "runtime-checkpoint")
+	readScriptQueuedWork(t, baseURL, id, "after-runtime-replacement")
+	committed := support.GetJSON[factoryapi.Factory](t, endpoint)
+	files.failRuntime.Store(true)
+	replaceScriptRuntime(t, endpoint, committed, "replacement-uncommitted", http.StatusBadRequest)
+	if files.failRuntime.Load() {
+		t.Fatal("failed candidate did not reach the selected runtime opening edge")
+	}
+	retained := support.GetJSON[factoryapi.Factory](t, endpoint)
+	if !reflect.DeepEqual(retained, committed) {
+		t.Fatal("failed candidate changed the committed current Factory")
+	}
+	select {
+	case <-active.canceled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("layout transaction did not join the prior source before rollback")
+	}
+	restored := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, restored.request, "runtime-cursor", "runtime-checkpoint")
+	restored.output <- scriptRuntimeReplacementWorkRequestJSON(t, "after-failed-runtime-replacement")
+	next := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, next.request, "runtime-cursor", "runtime-checkpoint")
+	readScriptQueuedWork(t, baseURL, id, "after-runtime-replacement", "after-failed-runtime-replacement")
+	peerFirst.output <- scriptCycleOutput(t, "peer-cursor", "peer-checkpoint")
+	peerNext := awaitScriptCycleCommand(t, peer)
+	assertScriptResumeEnvironment(t, peerNext.request, "peer-cursor", "peer-checkpoint")
+	assertScriptIngressWork(t, readScriptQueuedWork(t, baseURL, peerID, scriptPollerExternalWorkID))
+}
+
+// Distinct admissions need distinct request identities within the same Session.
+func scriptRuntimeReplacementWorkRequestJSON(t *testing.T, workID string) []byte {
+	t.Helper()
+	return []byte(strings.ReplaceAll(string(scriptPollerNamedWorkRequestJSON(t, workID)), scriptPollerExternalRequestID, workID+"-request"))
+}
+
+func replaceScriptRuntime(t *testing.T, endpoint string, current factoryapi.Factory, marker string, status int) {
+	t.Helper()
+	metadata := factoryapi.StringMap{"runtime-replacement": marker}
+	current.Metadata = &metadata
+	if current.Version == nil {
+		t.Fatal("current Factory lacks version metadata")
+	}
+	version := *current.Version
+	version.Logical++
+	version.Physical = version.Physical.Add(time.Nanosecond)
+	current.Version = &version
+	body, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: current})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, endpoint, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	payload, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != status {
+		t.Fatalf("runtime replacement status=%d, want %d; body=%s", response.StatusCode, status, payload)
+	}
+	if status == http.StatusBadRequest {
+		var rejected factoryapi.ErrorResponse
+		if err := json.Unmarshal(payload, &rejected); err != nil {
+			t.Fatal(err)
+		}
+		if rejected.Code != "INVALID_FACTORY" {
+			t.Fatalf("candidate opening failure code=%q, want INVALID_FACTORY", rejected.Code)
+		}
+	}
 }
 
 func (f *scriptReplacementFailure) Rename(from, to string) error {

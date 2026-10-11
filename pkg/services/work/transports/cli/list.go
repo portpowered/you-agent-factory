@@ -267,9 +267,12 @@ func listPageStatusError(
 	logListPageFailure(cfg, endpoint, options, pageNumber, response, resp.StatusCode, "status")
 	if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 		if pageNumber == 1 {
-			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
+			if strings.TrimSpace(cfg.SessionID) != "" && resp.StatusCode == http.StatusNotFound && errResp.Code == "NOT_FOUND" && errResp.Family == "NOT_FOUND" && errResp.Message == "factory session not found" && errResp.Details == nil {
+				errResp.Details = map[string]string{"hint": "This Factory Session is not live on the selected server. Use `you session list` to select a live session."}
+			}
+			return clihttp.NewAPIErrorFromResponse(resp, errResp, fmt.Sprintf("list work failed (%d): %s", resp.StatusCode, errResp.Message), nil)
 		}
-		return fmt.Errorf("work list page %d failed (%d): %s", pageNumber, resp.StatusCode, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(resp, errResp, fmt.Sprintf("work list page %d failed (%d): %s", pageNumber, resp.StatusCode, errResp.Message), nil)
 	}
 	if pageNumber == 1 {
 		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
