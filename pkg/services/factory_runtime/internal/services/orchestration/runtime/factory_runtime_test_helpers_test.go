@@ -146,6 +146,7 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 type testFactoryOption func(*testFactoryConfig)
 
 type testFactoryConfig struct {
+	progressPublisher         workers.ProgressPublisher
 	engineOpening             *EngineOpening
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
@@ -195,7 +196,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	}
 	runtime, err := opening.Open(
 		context.Background(),
-		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.runtimeConfig, nil,
+		cfg.net, cfg.scheduler, workerService, workerSessionsService, workerAttempts, cfg.progressPublisher, cfg.runtimeConfig, nil,
 		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock, platformclock.Real{},
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
 		cfg.restoredWorldState, false,

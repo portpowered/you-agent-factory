@@ -67,6 +67,7 @@ func TestBundleOpeningKeepsMutationAndProgressObserversWithTheirOpening(t *testi
 		if !errors.Is(err, cell.mutationErr) {
 			t.Fatalf("%s mutation callback error = %v, want %v", cell.identity, err, cell.mutationErr)
 		}
+		observer.progress(workers.ProgressFragment{Payload: "direct-" + cell.identity, Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-" + cell.identity}})
 		if _, err := observer.worker.Execute(t.Context(), workers.ExecuteRequest{
 			Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-" + cell.identity},
 		}); err != nil {
@@ -76,16 +77,17 @@ func TestBundleOpeningKeepsMutationAndProgressObserversWithTheirOpening(t *testi
 	if want := []string{"first:first:token-first", "second:second:token-second", "retry:first:token-retry"}; !reflect.DeepEqual(mutations, want) {
 		t.Fatalf("mutation observations = %v, want %v", mutations, want)
 	}
-	if want := []string{"first:dispatch-first", "second:dispatch-second", "retry:dispatch-retry"}; !reflect.DeepEqual(progress, want) {
+	if want := []string{"first:direct-first", "first:dispatch-first", "second:direct-second", "second:dispatch-second", "retry:direct-retry", "retry:dispatch-retry"}; !reflect.DeepEqual(progress, want) {
 		t.Fatalf("progress observations = %v, want %v", progress, want)
 	}
-	if want := []string{"runtime-first:dispatch-first", "runtime-second:dispatch-second", "runtime-first:dispatch-retry"}; !reflect.DeepEqual(sessions.progressScopes, want) {
+	if want := []string{"runtime-first:dispatch-first", "runtime-first:dispatch-first", "runtime-second:dispatch-second", "runtime-second:dispatch-second", "runtime-first:dispatch-retry", "runtime-first:dispatch-retry"}; !reflect.DeepEqual(sessions.progressScopes, want) {
 		t.Fatalf("supervised progress scopes = %v, want %v", sessions.progressScopes, want)
 	}
 }
 
 type observationOpeningCall struct {
 	mutation factory.PetriMutationRecorder
+	progress workers.ProgressPublisher
 	worker   workers.Service
 }
 
@@ -104,9 +106,9 @@ func (effect *observationOpeningEffect) Open(
 	_ []factory.SubmissionHook, _ factory.CompletionDeliveryPlanner,
 	mutation factory.PetriMutationRecorder,
 	_ time.Duration, _ []definitions.FactoryEvent, worker workers.Service, _ workersessions.Service,
-	_ factory.WorkerAttemptOpener, _ func(string), _ ...*workers.MockWorkersConfig,
+	_ factory.WorkerAttemptOpener, progress workers.ProgressPublisher, _ func(string), _ ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
-	effect.calls = append(effect.calls, observationOpeningCall{mutation: mutation, worker: worker})
+	effect.calls = append(effect.calls, observationOpeningCall{mutation: mutation, progress: progress, worker: worker})
 	if effect.failure == nil {
 		effect.failure = errors.New("controlled resource opening failure")
 	}

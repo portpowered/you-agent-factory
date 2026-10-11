@@ -1,5 +1,5 @@
-// Package agy owns the parent-private Agy execution adapter. PTY transport is
-// part of this canonical Agy identity; no separate provider identity exists.
+// Package agy owns the parent-private Agy execution adapter. Native command
+// execution uses the canonical Antigravity provider identity.
 package agy
 
 import (
@@ -13,7 +13,7 @@ import (
 )
 
 // Effect is the invocation-scoped native Agy boundary. Implementations drive
-// PTY-backed execution, emit final stdout through observe, and return only
+// native execution, emit final stdout through observe, and return only
 // allowlisted execution facts.
 type Effect interface {
 	Execute(context.Context, execution.ContinuationRequest, func([]byte) error) (EffectResult, error)
@@ -41,7 +41,7 @@ type EffectResult struct {
 	DurationMillis int64
 	Metadata       map[string]string
 	SessionRef     *providers.SessionRef
-	// CapturedStdout retains cleaned PTY stdout for timeout partial publication.
+	// CapturedStdout retains native stdout for timeout partial publication.
 	CapturedStdout []byte
 }
 
@@ -85,8 +85,8 @@ func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
 		}
 		expectedSchema := request.OutputSchema
 		if _, nativePrintOutput := effectResult.Metadata["output_format"]; !nativePrintOutput {
-			// The legacy PTY compatibility effect returns final text rather than
-			// AGY's print-mode response envelope. Structured contracts are
+			// Supplied effects may return final text rather than AGY's
+			// print-mode response envelope. Structured contracts are
 			// enforced by the command-runner path that advertises its format.
 			expectedSchema = ""
 		}

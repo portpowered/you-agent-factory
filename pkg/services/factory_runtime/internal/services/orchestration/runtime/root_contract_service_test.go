@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -17,6 +18,8 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	runtimehttp "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation"
@@ -364,7 +367,6 @@ func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *
 
 func TestFactoryImpl_RuntimeConfigurationAccessorsRemainSafe(t *testing.T) {
 	impl := newRootContractTestFactory(t)
-	impl.SetProgressPublisher(nil)
 	impl.SetMockWorkersConfig(&workers.MockWorkersConfig{})
 	if impl.WorkflowContext() != nil {
 		t.Fatalf("WorkflowContext() = %#v, want nil for the default test runtime", impl.WorkflowContext())
@@ -994,4 +996,58 @@ func (*controlledWorkstationBoundary) ValidateExecution(_ context.Context, reque
 
 func (*testWorkstationBoundary) ValidateExecution(_ context.Context, request workers.ExecuteRequest) error {
 	return request.Validate()
+}
+
+// Retained child-execution handles must keep the publisher selected before engine
+// allocation, including after a peer opens or an earlier admission fails.
+func TestEngineOpeningInitialProgressKeepsAttributionAcrossOpenings(t *testing.T) {
+	t.Parallel()
+	var identities atomic.Int64
+	newID := func() string { return fmt.Sprintf("progress-opening-%d", identities.Add(1)) }
+	opening := NewEngineOpening(nil, unavailableProviderSessions{}, nil, nil, interfaces.WorkPropagationPolicyFunc(func(*interfaces.FactoryWorkstationConfig) interfaces.WorkPropagationMode {
+		return interfaces.WorkPropagationModeOutputAsPayload
+	}), testRuntimeWorkService{}, newID, newID, nil, nil, dispatchplanning.OutboxOpening(func(dispatchplanning.WorkersPublisher, dispatchplanning.WorkersCanceler) dispatchplanning.Service {
+		return struct{ dispatchplanning.Service }{}
+	}), scheduler.NewEnablementEvaluator(), nil, nil, nil, testPrepareSchedules)
+	type observed struct {
+		owner    string
+		fragment workers.ProgressFragment
+	}
+	var observations []observed
+	var publishers []workers.ProgressPublisher
+	for _, owner := range []string{"first", "peer", "retry"} {
+		selectOpening := func(cfg *testFactoryConfig) {
+			cfg.engineOpening = opening
+			cfg.progressPublisher = func(fragment workers.ProgressFragment) {
+				observations = append(observations, observed{owner: owner, fragment: fragment})
+			}
+		}
+		if owner == "first" {
+			if _, err := newTestFactory(selectOpening); err == nil {
+				t.Fatal("invalid engine admission succeeded")
+			}
+		}
+		engine, err := newTestFactory(selectOpening, withNet(buildSimpleNet()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		publishers = append(publishers, engine.(*factoryImpl).RuntimeProgressPublisher())
+	}
+	for index, publisher := range publishers {
+		if publisher == nil {
+			t.Fatal("initial publisher unavailable")
+		}
+		fragment := workers.ProgressFragment{Payload: fmt.Sprintf("fragment-%d", index), Correlation: workers.ExecutionCorrelation{FactorySessionID: fmt.Sprintf("session-%d", index), RuntimeID: fmt.Sprintf("runtime-%d", index), DispatchID: fmt.Sprintf("dispatch-%d", index), RequestID: fmt.Sprintf("request-%d", index), TraceID: fmt.Sprintf("trace-%d", index), AttemptID: fmt.Sprintf("attempt-%d", index), GenerationID: fmt.Sprintf("generation-%d", index)}}
+		publisher(fragment)
+		if got := observations[index]; got.owner != []string{"first", "peer", "retry"}[index] || !reflect.DeepEqual(got.fragment, fragment) {
+			t.Fatalf("retained progress = %#v; fragment = %#v", got, fragment)
+		}
+	}
+	engine, err := newTestFactory(func(cfg *testFactoryConfig) { cfg.engineOpening = opening }, withNet(buildSimpleNet()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if engine.(*factoryImpl).RuntimeProgressPublisher() != nil {
+		t.Fatal("disabled publisher became enabled")
+	}
 }

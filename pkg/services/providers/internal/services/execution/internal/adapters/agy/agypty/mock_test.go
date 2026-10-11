@@ -17,7 +17,7 @@ func TestMockAllocatorRecordsLaunchAndCapture(t *testing.T) {
 		WorkDir:    "/factory/workspaces/a",
 		Env:        []string{"GIT_TERMINAL_PROMPT=0"},
 	}
-	cfg := agypty.DefaultSessionConfig()
+	cfg := agypty.SessionConfig{MaxCaptureBytes: agypty.DefaultMaxCaptureBytes, IdleTimeout: agypty.DefaultIdleTimeout, HardTimeout: agypty.DefaultHardTimeout}
 
 	session, err := allocator.Allocate(context.Background(), launch, cfg)
 	if err != nil {

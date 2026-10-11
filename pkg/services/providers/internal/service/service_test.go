@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -731,7 +731,7 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 func TestRootSelectsAntigravityThroughAuthoritativeCatalogIdentity(t *testing.T) {
 	t.Parallel()
 
-	service := newAgyProvidersServiceWithPTY(t, &mockPTYAllocator{})
+	service := newAgyProvidersServiceWithCommand(t, &mockAgyCommandRunner{})
 	resolved, err := service.ResolveIdentity(
 		context.Background(),
 		providers.ResolveIdentityRequest{Identity: " ANTIGRAVITY "},
@@ -765,14 +765,14 @@ func TestRootSelectsAntigravityThroughAuthoritativeCatalogIdentity(t *testing.T)
 func TestRootExecutesAntigravityThroughCanonicalProvider(t *testing.T) {
 	t.Parallel()
 
-	mock := &mockPTYAllocator{
-		Result: providerswire.PTYSessionResult{ExitCode: 0, CleanedText: "agy provider answer"},
+	mock := &mockAgyCommandRunner{
+		Result: providerswire.CommandResult{ExitCode: 0, Stdout: []byte("agy provider answer")},
 	}
-	service := newAgyProvidersServiceWithPTY(t, mock)
+	service := newAgyProvidersServiceWithCommand(t, mock)
 	result, err := service.Execute(context.Background(), providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-agy-root",
-		Model:            "agy-default",
+		Model:            "gemini-3.6-flash-high",
 		UserMessage:      "say hello",
 		WorkingDirectory: t.TempDir(),
 	})
@@ -785,18 +785,18 @@ func TestRootExecutesAntigravityThroughCanonicalProvider(t *testing.T) {
 	if result.Diagnostics == nil {
 		t.Fatal("Execute(antigravity) diagnostics = nil, want canonical execution facts")
 	}
-	if len(mock.Sessions) != 1 {
-		t.Fatalf("pty sessions = %d, want 1", len(mock.Sessions))
+	if len(mock.Requests) != 1 {
+		t.Fatalf("command requests = %d, want 1", len(mock.Requests))
 	}
 }
 
 func TestRootContinuesAntigravityThroughCanonicalProvider(t *testing.T) {
 	t.Parallel()
 
-	mock := &mockPTYAllocator{
-		Result: providerswire.PTYSessionResult{ExitCode: 0, CleanedText: "continued Agy response"},
+	mock := &mockAgyCommandRunner{
+		Result: providerswire.CommandResult{ExitCode: 0, Stdout: []byte("continued Agy response")},
 	}
-	service := newAgyProvidersServiceWithPTY(t, mock)
+	service := newAgyProvidersServiceWithCommand(t, mock)
 	continued, err := service.Continue(context.Background(), providers.ContinueRequest{
 		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
@@ -822,21 +822,21 @@ func TestRootContinuesAntigravityThroughCanonicalProvider(t *testing.T) {
 	if continued.Result.SessionRef == nil || continued.Result.SessionRef.ID != "prior-session" {
 		t.Fatalf("Continue(antigravity) session = %#v, want prior-session", continued.Result.SessionRef)
 	}
-	if len(mock.Sessions) != 1 {
-		t.Fatalf("pty sessions = %d, want 1", len(mock.Sessions))
+	if len(mock.Requests) != 1 {
+		t.Fatalf("command requests = %d, want 1", len(mock.Requests))
 	}
 }
 
 func TestRootSanitizesAntigravityFailureDetails(t *testing.T) {
 	t.Parallel()
 
-	mock := &mockPTYAllocator{
-		Result: providerswire.PTYSessionResult{
+	mock := &mockAgyCommandRunner{
+		Result: providerswire.CommandResult{
 			ExitCode: 1,
-			RawBytes: []byte("failed reading /tmp/secret-key and private prompt"),
+			Stderr:   []byte("failed reading /tmp/secret-key and private prompt"),
 		},
 	}
-	service := newAgyProvidersServiceWithPTY(t, mock)
+	service := newAgyProvidersServiceWithCommand(t, mock)
 	_, err := service.Execute(context.Background(), providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-agy-failure",
@@ -857,39 +857,34 @@ func TestRootSanitizesAntigravityFailureDetails(t *testing.T) {
 	}
 }
 
-type mockPTYAllocator struct {
-	Sessions []providerswire.PTYSession
-	Result   providerswire.PTYSessionResult
+type mockAgyCommandRunner struct {
+	Requests []providerswire.CommandRequest
+	Result   providerswire.CommandResult
 }
 
-func (allocator *mockPTYAllocator) Allocate(
-	_ context.Context,
-	launch providerswire.PTYProcessLaunch,
-	config providerswire.PTYSessionConfig,
-) (providerswire.PTYSession, error) {
-	session := &mockPTYSession{Launch: launch, Config: config, Result: allocator.Result}
-	allocator.Sessions = append(allocator.Sessions, session)
-	return session, nil
+func (runner *mockAgyCommandRunner) Run(_ context.Context, request providerswire.CommandRequest) (providerswire.CommandResult, error) {
+	runner.Requests = append(runner.Requests, request)
+	result := runner.Result
+	if result.ExitCode == 0 && len(result.Stdout) > 0 {
+		result.Stdout, _ = json.Marshal(map[string]any{"event": "result", "result": map[string]any{"conversation_id": "", "status": "SUCCESS", "response": string(result.Stdout), "duration_seconds": 0, "num_turns": 1, "usage": map[string]int{"input_tokens": 0, "output_tokens": 0, "thinking_tokens": 0, "cache_read_tokens": 0, "total_tokens": 0}}})
+	}
+	return result, nil
 }
 
-type mockPTYSession struct {
-	Launch providerswire.PTYProcessLaunch
-	Config providerswire.PTYSessionConfig
-	Result providerswire.PTYSessionResult
+func (runner *mockAgyCommandRunner) RunStreaming(ctx context.Context, request providerswire.CommandRequest, observe providerswire.OutputChunkObserver) (providerswire.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if observe != nil && len(result.Stdout) > 0 {
+		err = observe(providerswire.OutputStreamStdout, result.Stdout)
+	}
+	return result, err
 }
 
-func (session *mockPTYSession) Run(context.Context) (providerswire.PTYSessionResult, error) {
-	return session.Result, nil
-}
-
-func (session *mockPTYSession) Close() error { return nil }
-
-func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
+func newAgyProvidersServiceWithCommand(t *testing.T, command *mockAgyCommandRunner) providers.Service {
 	t.Helper()
 	runner := fixtureCommandRunner(testutil.NewProviderCommandRunner())
 	service, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
-		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
+		providerswire.NewAgyCommandEffect(providerswire.CommandRunner{Run: command.Run, RunStreaming: command.RunStreaming}, platformclock.Real{}, platformclock.Real{}),
 		providerswire.NewCodexEffect(runner, platformclock.Real{}, nil, nil),
 		providerswire.NewClaudeEffect(runner, platformclock.Real{}),
 		providerswire.Configuration{})

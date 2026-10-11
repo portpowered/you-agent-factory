@@ -133,7 +133,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		loaded, "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {
@@ -208,7 +208,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		loaded, "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil,
 		0, nil,
 		testRuntimeWorkers{},
-		sessions, sessions,
+		sessions, sessions, nil,
 		nil,
 	)
 	if err != nil {

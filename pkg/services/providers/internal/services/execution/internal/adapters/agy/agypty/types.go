@@ -44,11 +44,6 @@ var ErrNonzeroExit = providerservice.ErrPTYNonzeroExit
 // SessionConfig carries bounded capture and timeout policy for one PTY session.
 type SessionConfig = providerservice.PTYSessionConfig
 
-// DefaultSessionConfig returns the documented default session limits.
-func DefaultSessionConfig() SessionConfig {
-	return providerservice.DefaultPTYSessionConfig()
-}
-
 // ProcessLaunch is the typed subprocess description for one Agy headless run.
 // Argv is passed directly to exec.Command without shell indirection.
 type ProcessLaunch = providerservice.PTYProcessLaunch

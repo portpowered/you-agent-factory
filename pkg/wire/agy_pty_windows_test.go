@@ -15,7 +15,7 @@ import (
 )
 
 func TestConPTYSessionRun_CompletesChildProcess(t *testing.T) {
-	result, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "agy-pty"}, providerswire.DefaultPTYSessionConfig())
+	result, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "agy-pty"}, testDefaultPTYSessionConfig())
 	defer session.Close()
 	if !strings.Contains(result.CleanedText, "agy-pty") {
 		t.Fatalf("CleanedText = %q", result.CleanedText)
@@ -23,7 +23,7 @@ func TestConPTYSessionRun_CompletesChildProcess(t *testing.T) {
 }
 
 func TestConPTYSessionRun_HardTimeoutTerminatesProcess(t *testing.T) {
-	cfg := providerswire.DefaultPTYSessionConfig()
+	cfg := testDefaultPTYSessionConfig()
 	cfg.HardTimeout, cfg.IdleTimeout = 100*time.Millisecond, time.Hour
 	result, session := runWiredConPTY(t, []string{`C:\Windows\System32\ping.exe`, "-n", "120", "127.0.0.1"}, cfg)
 	defer session.Close()
@@ -33,7 +33,7 @@ func TestConPTYSessionRun_HardTimeoutTerminatesProcess(t *testing.T) {
 }
 
 func TestConPTYSessionRun_ClosesPTYAfterRun(t *testing.T) {
-	_, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "close"}, providerswire.DefaultPTYSessionConfig())
+	_, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "close"}, testDefaultPTYSessionConfig())
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}

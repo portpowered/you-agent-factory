@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -465,9 +464,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	probeCalls := 0
 	workersRunner := &inertWorkersCommandRunner{}
-	agyAllocator := &inertPTYAllocator{}
-	agyLocator := &inertExecutableLocator{}
-	agyInspector := &inertPathInspector{}
 
 	runtime.GC()
 	time.Sleep(20 * time.Millisecond)
@@ -481,7 +477,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		return descriptor, nil
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
-		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{}),
+		NewAgyCommandEffect(workersRunner.commandEffect(), platformclock.Real{}, platformclock.Real{}),
 		NewCodexEffect((workersRunner).commandEffect(), platformclock.Real{}, nil, nil),
 		NewClaudeEffect((workersRunner).commandEffect(), platformclock.Real{}),
 		Configuration{})
@@ -501,14 +497,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 	if workersRunner.calls != 0 {
 		t.Fatalf("workers command runner calls = %d, want inert construction", workersRunner.calls)
-	}
-	if agyAllocator.calls != 0 || agyLocator.calls != 0 || agyInspector.calls != 0 {
-		t.Fatalf(
-			"construction invoked Agy PTY platform effects (allocate=%d lookpath=%d stat=%d), want inert construction",
-			agyAllocator.calls,
-			agyLocator.calls,
-			agyInspector.calls,
-		)
 	}
 
 	runtime.GC()
@@ -567,30 +555,22 @@ func TestNewServiceUsesCompletedNativeEffects(t *testing.T) {
 
 	workersRunner := &recordingWorkersCommandRunner{}
 	clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
-	policy := DefaultPTYSessionConfig()
-	policy.HardTimeout = 17 * time.Minute
-	agyAllocator := &recordingPTYAllocator{
-		result:     PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
-		onAllocate: func() { clock.SetTick(37) },
-	}
-	agyPath := filepath.Join(t.TempDir(), "agy")
-	agyLocator := fakeExecutableLocator{"agy": agyPath}
-	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
+	agyRunner := &clockCommandRunner{clock: clock}
 
 	root, err := newTestProvidersService(IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
-		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy}),
+		NewAgyCommandEffect(agyRunner.commandEffect(), clock, platformclock.Real{}),
 		NewCodexEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second), nil, nil),
 		NewClaudeEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
 		Configuration{})
 	if err != nil {
 		t.Fatalf("newTestProvidersService() error = %v", err)
 	}
-	if workersRunner.calls != 0 || agyAllocator.calls != 0 {
+	if workersRunner.calls != 0 || agyRunner.calls != 0 {
 		t.Fatalf(
-			"construction invoked platform effects (runner=%d agy allocate=%d), want inert construction",
+			"construction invoked platform effects (runner=%d agy command=%d), want inert construction",
 			workersRunner.calls,
-			agyAllocator.calls,
+			agyRunner.calls,
 		)
 	}
 
@@ -601,22 +581,16 @@ func TestNewServiceUsesCompletedNativeEffects(t *testing.T) {
 		UserMessage:      "hello through wire",
 	})
 	if agyErr != nil {
-		t.Fatalf("Execute(agy) error = %v, want success with injected PTY platform", agyErr)
+		t.Fatalf("Execute(agy) error = %v, want success with injected command runner", agyErr)
 	}
-	if agyAllocator.calls != 1 {
-		t.Fatalf("agy allocator calls = %d, want injected Agy PTY platform used on execute", agyAllocator.calls)
+	if agyRunner.calls != 1 {
+		t.Fatalf("agy command calls = %d, want injected Agy command runner used on execute", agyRunner.calls)
 	}
-	if agyResult.Content != "agy via wire" {
-		t.Fatalf("Execute(agy) content = %q, want injected allocator output", agyResult.Content)
+	if agyResult.Content != "selected clock result" {
+		t.Fatalf("Execute(agy) content = %q, want injected command output", agyResult.Content)
 	}
 	if agyResult.Diagnostics == nil || agyResult.Diagnostics.DurationMillis != 37 {
-		t.Fatalf("PTY duration = %#v, want the supplied effect's 37ms clock", agyResult.Diagnostics)
-	}
-	if agyAllocator.config != policy {
-		t.Fatalf("PTY config = %#v, want detached policy %#v", agyAllocator.config, policy)
-	}
-	if agyAllocator.launch.Executable != agyPath || agyAllocator.closes != 1 {
-		t.Fatalf("PTY launch/close = %#v/%d, want selected executable and joined resource", agyAllocator.launch, agyAllocator.closes)
+		t.Fatalf("AGY duration = %#v, want the supplied effect's 37ms clock", agyResult.Diagnostics)
 	}
 }
 
