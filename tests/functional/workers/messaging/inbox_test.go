@@ -106,7 +106,23 @@ func assertPullAndReply(t *testing.T, f *fixture, message api.AgentMessage, lead
 	if reply.To.WorkerSessionId != "lane" || reply.ThreadId != message.ThreadId || reply.InReplyTo == nil || *reply.InReplyTo != message.MessageId {
 		t.Fatalf("reply relationship: %+v", reply)
 	}
+	assertReplyReplayAndConflict(t, f, message.MessageId, reply, lead)
 	return assertRepliedParent(t, f, message.MessageId, reply.MessageId)
+}
+
+func assertReplyReplayAndConflict(t *testing.T, f *fixture, parentID string, reply api.AgentMessage, lead map[string]string) {
+	t.Helper()
+	request := map[string]any{"requestId": "lead-reply", "inReplyTo": parentID, "body": "acknowledged"}
+	if replay := f.send(t, request, lead); !reflect.DeepEqual(replay, reply) {
+		t.Fatal("reply retry changed the committed message")
+	}
+	request["body"] = "changed acknowledgement"
+	assertError(t, f, http.MethodPost, "/messages", request, lead, http.StatusConflict, "MESSAGE_REQUEST_CONFLICT")
+	status, body := f.request(t, http.MethodGet, "/messages?threadId="+reply.ThreadId, nil, nil)
+	var page api.AgentMessageListResponse
+	if status != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Messages) != 2 {
+		t.Fatal("reply retry or conflict created an additional thread message")
+	}
 }
 
 func assertRepliedParent(t *testing.T, f *fixture, id, replyID string) string {
