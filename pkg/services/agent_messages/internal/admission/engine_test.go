@@ -364,3 +364,124 @@ func TestEngineDeniedAndUnknownTargetsNeverCommit(t *testing.T) {
 		})
 	}
 }
+
+func TestEngineAdmissionExpiresDueMessagesAtomically(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	first, err := f.engine.Send(context.Background(), engineRequest("first", "question"), f.caller, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now = first.ExpiresAt
+	next, err := f.engine.Send(context.Background(), engineRequest("next", "new question"), f.caller, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := f.ledger.transactions[1]
+	if len(tx.Messages) != 2 || tx.Messages[0].Message.MessageID != next.MessageID || tx.Messages[1].Message.Status != agentmessages.Expired {
+		t.Fatalf("admission did not include durable expiry: %+v", tx)
+	}
+	if f.ledger.entries[0].Message.Status != agentmessages.Expired || f.quota.calls != 2 {
+		t.Fatal("expiry publication or successful-send accounting changed")
+	}
+}
+
+func TestEngineDueRetryAndAliasReturnExpiredWithoutAnotherSend(t *testing.T) {
+	t.Parallel()
+	for _, alias := range []bool{false, true} {
+		t.Run(fmt.Sprint(alias), func(t *testing.T) {
+			t.Parallel()
+			f := newEngineFixture()
+			request := engineRequest("first", "question")
+			seconds := 60
+			request.ExpiresInSeconds = &seconds
+			first, err := f.engine.Send(context.Background(), request, f.caller, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.now = first.ExpiresAt
+			if alias {
+				request.RequestID = "alias"
+			}
+			got, err := f.engine.Send(context.Background(), request, f.caller, "")
+			if err != nil || got.MessageID != first.MessageID || got.Status != agentmessages.Expired {
+				t.Fatalf("due retry = %+v, %v", got, err)
+			}
+			if len(f.ledger.entries) != 1 || len(f.ledger.transactions) != 2 || f.quota.calls != 1 || f.ledger.entries[0].Message.Status != agentmessages.Expired {
+				t.Fatal("due retry created a send or omitted durable expiry")
+			}
+			got, err = f.engine.Send(context.Background(), request, f.caller, "")
+			if err != nil || got.Status != agentmessages.Expired || len(f.ledger.transactions) != 2 {
+				t.Fatal("expired retry was not idempotent", err)
+			}
+		})
+	}
+}
+
+func TestEngineFailedAdmissionDoesNotPublishExpiry(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []string{"denial", "final-authority", "store", "conflict"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			f := newEngineFixture()
+			first, err := f.engine.Send(context.Background(), engineRequest("first", "question"), f.caller, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.now = first.ExpiresAt
+			request := engineRequest("next", "new question")
+			switch failure {
+			case "denial":
+				f.authority.denied = true
+			case "final-authority":
+				f.authority.finalError = agentmessages.ErrNotPermitted
+			case "store":
+				f.ledger.commitError = store.ErrUnavailable
+			case "conflict":
+				request.RequestID = "first"
+			}
+			if _, err := f.engine.Send(context.Background(), request, f.caller, ""); err == nil {
+				t.Fatal("failed admission succeeded")
+			}
+			if len(f.ledger.transactions) != 1 || len(f.ledger.entries) != 1 || f.ledger.entries[0].Message.Status != agentmessages.Queued {
+				t.Fatal("failed admission changed existing message expiry")
+			}
+		})
+	}
+}
+
+func TestEngineReplyExpiryLeavesConversationTerminalStatesIntact(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	short := engineRequest("short", "short-lived question")
+	seconds := 60
+	short.ExpiresInSeconds = &seconds
+	due, err := f.engine.Send(context.Background(), short, f.caller, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := f.engine.Send(context.Background(), engineRequest("parent", "long-lived question"), f.caller, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now = due.ExpiresAt
+	f.authority.sender = engineIdentity("lead")
+	f.caller.WorkerSessionID = "lead"
+	reply, err := f.engine.Send(context.Background(), agentmessages.SendRequest{RequestID: "reply", Body: "answer", InReplyTo: parent.MessageID}, f.caller, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := f.ledger.transactions[2]
+	if tx.Kind != store.Replied || len(tx.Messages) != 3 || f.ledger.entries[0].Message.Status != agentmessages.Expired || f.ledger.entries[1].Message.Status != agentmessages.Replied {
+		t.Fatalf("reply/expiry transaction = %+v", tx)
+	}
+	f.now = reply.ExpiresAt
+	f.authority.sender = engineIdentity("worker")
+	f.caller.WorkerSessionID = "worker"
+	if _, err := f.engine.Send(context.Background(), engineRequest("after", "later question"), f.caller, ""); err != nil {
+		t.Fatal(err)
+	}
+	if f.ledger.entries[0].Message.Status != agentmessages.Expired || f.ledger.entries[1].Message.Status != agentmessages.Replied || f.ledger.entries[1].Message.RepliedByMessageID != reply.MessageID || f.ledger.entries[2].Message.Status != agentmessages.Expired {
+		t.Fatal("later admission regressed terminal conversation state")
+	}
+}

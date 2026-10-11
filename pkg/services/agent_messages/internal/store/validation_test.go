@@ -153,3 +153,71 @@ func TestJournalSnapshotRetainsConversationAndAliases(t *testing.T) {
 		t.Fatal("snapshot replaced live index", err)
 	}
 }
+
+func TestJournalAdmissionExpirySurvivesReconstruction(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{Sent, RequestAlias} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			original := sentTransaction("msg-root", 1)
+			mustCommit(t, j, original)
+			expired := original.Messages[0]
+			expired.Message.Status = agentmessages.Expired
+			tx := sentTransaction("msg-next", 2)
+			if kind == RequestAlias {
+				tx.Kind = RequestAlias
+				tx.Messages = []Entry{}
+				tx.Requests[0].MessageID = "msg-root"
+			}
+			tx.CommittedAt = expired.Message.ExpiresAt
+			tx.Messages = append(tx.Messages, expired)
+			mustCommit(t, j, tx)
+			reconstructed := newTestJournal(t, testFiles{}, path)
+			entries, seq, err := reconstructed.Entries()
+			if err != nil || seq != 2 || entries[0].Message.Status != agentmessages.Expired {
+				t.Fatal("admission expiry lost on restart", err)
+			}
+			assertRequestRecovered(t, reconstructed, tx.Requests[0])
+		})
+	}
+}
+
+func TestJournalAdmissionRefusesInvalidExpiryWithoutChangingBytes(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []string{"early", "immutable", "unknown", "alias-read"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			original := sentTransaction("msg-root", 1)
+			mustCommit(t, j, original)
+			before := readBytes(t, path)
+			expired := original.Messages[0]
+			expired.Message.Status = agentmessages.Expired
+			tx := sentTransaction("msg-next", 2)
+			tx.CommittedAt = expired.Message.ExpiresAt
+			switch fault {
+			case "early":
+				tx.CommittedAt = tx.CommittedAt.Add(-time.Nanosecond)
+			case "immutable":
+				expired.RecipientChainIdentity = "foreign"
+			case "unknown":
+				expired.Message.MessageID = "missing"
+			case "alias-read":
+				tx.Kind = RequestAlias
+				tx.Messages = []Entry{}
+				tx.Requests[0].MessageID = "msg-root"
+				expired.Message.Status = agentmessages.Read
+			}
+			tx.Messages = append(tx.Messages, expired)
+			if err := j.Commit(tx); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("invalid admission expiry accepted", err)
+			}
+			if string(readBytes(t, path)) != string(before) {
+				t.Fatal("invalid expiry changed bytes")
+			}
+		})
+	}
+}

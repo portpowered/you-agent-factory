@@ -49,10 +49,10 @@ func (j *Journal) validateChanges(t Transaction, changed map[string]Entry) error
 	case Snapshot:
 		return j.validateSnapshot(t, changed)
 	case RequestAlias:
-		if len(changed) != 0 || len(t.Requests) == 0 {
+		if len(t.Requests) == 0 {
 			return ErrInvalidTransaction
 		}
-		return nil
+		return j.validateAdmissionExpiry(t, changed)
 	case Sent, Replied:
 		return j.validateAdmission(t, changed)
 	default:
@@ -77,6 +77,19 @@ func (j *Journal) validateSnapshot(t Transaction, changed map[string]Entry) erro
 }
 
 func (j *Journal) validateAdmission(t Transaction, changed map[string]Entry) error {
+	admitted := make(map[string]Entry, len(changed))
+	expired := make(map[string]Entry)
+	for id, entry := range changed {
+		if entry.Message.Status == agentmessages.Expired {
+			expired[id] = entry
+		} else {
+			admitted[id] = entry
+		}
+	}
+	if err := j.validateAdmissionExpiry(t, expired); err != nil {
+		return err
+	}
+	changed = admitted
 	wantCount := 1
 	if t.Kind == Replied {
 		wantCount = 2
@@ -103,6 +116,16 @@ func (j *Journal) validateAdmission(t Transaction, changed map[string]Entry) err
 		return ErrInvalidTransaction
 	}
 	return j.validateLinks(changed)
+}
+
+func (j *Journal) validateAdmissionExpiry(t Transaction, changed map[string]Entry) error {
+	for id, entry := range changed {
+		old, exists := j.entries[id]
+		if !exists || entry.Message.ExpiresAt.After(t.CommittedAt) || !validTransition(old, entry, Expired) {
+			return ErrInvalidTransaction
+		}
+	}
+	return nil
 }
 
 func (j *Journal) validateUpdates(t Transaction, changed map[string]Entry) error {

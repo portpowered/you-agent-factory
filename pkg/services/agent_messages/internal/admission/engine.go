@@ -99,7 +99,7 @@ func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, ca
 		return agentmessages.Message{}, err
 	}
 	if exists {
-		return e.retry(ctx, caller, prior, fingerprint, entries)
+		return e.retry(ctx, caller, prior, fingerprint, entries, sequence)
 	}
 	if duplicate, found := identicalMessage(now, prepared, sender, recipient, entries); found {
 		alias.MessageID = duplicate.MessageID
@@ -107,22 +107,32 @@ func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, ca
 		if err := e.commit(ctx, caller, t); err != nil {
 			return agentmessages.Message{}, err
 		}
+		if readTransition(now, false, duplicate) == store.Expired {
+			duplicate.Status = agentmessages.Expired
+		}
 		return duplicate, nil
 	}
 	return e.admit(ctx, caller, prepared, sender, recipient, parent, entries, sequence, now, alias)
 }
 
-func (e *Engine) retry(ctx context.Context, caller *workersessions.CallerIdentity, prior store.Request, fingerprint string, entries []store.Entry) (agentmessages.Message, error) {
+func (e *Engine) retry(ctx context.Context, caller *workersessions.CallerIdentity, prior store.Request, fingerprint string, entries []store.Entry, sequence uint64) (agentmessages.Message, error) {
 	if prior.RequestSHA256 != fingerprint {
 		return agentmessages.Message{}, agentmessages.ErrRequestConflict
 	}
-	if err := e.authority.Revalidate(ctx, caller); err != nil {
-		return agentmessages.Message{}, err
+	for _, entry := range entries {
+		if entry.Message.MessageID == prior.MessageID {
+			return e.readEntry(ctx, caller, false, entry, sequence)
+		}
 	}
-	return priorMessage(prior.MessageID, entries)
+	return agentmessages.Message{}, store.ErrCorrupt
 }
 
 func (e *Engine) commit(ctx context.Context, caller *workersessions.CallerIdentity, t store.Transaction) error {
+	entries, _, err := e.ledger.Entries()
+	if err != nil {
+		return err
+	}
+	t.Messages = admissionExpiry(t, entries)
 	// This is the authorization linearization point. A previously observed
 	// terminal/owner-lost caller cannot reach persistence or spend quota.
 	if err := e.authority.Revalidate(ctx, caller); err != nil {
@@ -131,19 +141,26 @@ func (e *Engine) commit(ctx context.Context, caller *workersessions.CallerIdenti
 	return e.ledger.Commit(t)
 }
 
+// admissionExpiry folds maintenance into the admitted write. Denials and failed
+// transactions cannot publish expiry independently of the successful send.
+func admissionExpiry(t store.Transaction, entries []store.Entry) []store.Entry {
+	changed := make(map[string]bool, len(t.Messages))
+	for _, entry := range t.Messages {
+		changed[entry.Message.MessageID] = true
+	}
+	for _, entry := range entries {
+		if !changed[entry.Message.MessageID] && readTransition(t.CommittedAt, false, entry.Message) == store.Expired {
+			entry.Message.Status = agentmessages.Expired
+			t.Messages = append(t.Messages, entry)
+		}
+	}
+	return t.Messages
+}
+
 func (e *Engine) transaction(sequence uint64, now time.Time, kind string, entries []store.Entry, alias store.Request) store.Transaction {
 	if entries == nil {
 		entries = []store.Entry{}
 	}
 	return store.Transaction{Version: store.Version, RecordID: e.newID(), Sequence: sequence + 1,
 		Kind: kind, CommittedAt: now, Messages: entries, Requests: []store.Request{alias}}
-}
-
-func priorMessage(id string, entries []store.Entry) (agentmessages.Message, error) {
-	for _, entry := range entries {
-		if entry.Message.MessageID == id {
-			return entry.Message, nil
-		}
-	}
-	return agentmessages.Message{}, store.ErrCorrupt
 }
