@@ -1070,6 +1070,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_observer_test.go::TestSubagentDirectStart",
           "boundary": "cli"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
+          "boundary": "cli"
         }
       ]
     },
@@ -1669,6 +1673,10 @@
         {
           "test": "tests/functional/workers/invoke_continue/invoke_preflight_test.go::TestT7InvokeOverridesReachProviderCommandAndCapturedSession",
           "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
+          "boundary": "rest"
         }
       ]
     },
@@ -2264,6 +2272,10 @@
         },
         {
           "test": "tests/functional/workers/invoke_continue/requester_mcp_test.go::TestRequesterPreparationOwnerLoss",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/invoke_continue/subagent_deadline_test.go::TestSubagentExecutionDeadlines",
           "boundary": "rest"
         }
       ]
