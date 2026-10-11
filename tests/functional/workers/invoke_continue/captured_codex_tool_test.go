@@ -108,25 +108,30 @@ func assertCapturedCodexToolReads(t *testing.T, ctx context.Context, fixture *in
 			}
 		}
 		if view == "logs" {
-			var logs api.WorkerSessionLogPage
-			if json.Unmarshal([]byte(body), &logs) != nil {
-				t.Fatal("invalid captured logs")
-			}
-			count := 0
-			for _, record := range logs.Events {
-				if record.Event.Payload["kind"] == "TOOL" {
-					count++
-				}
-			}
-			if count != 7 {
-				t.Fatalf("emitted tool lifecycle count = %d, want 7", count)
-			}
-			assertCapturedCodexToolLogs(t, logs)
+			assertCapturedCodexToolLogBody(t, body)
 		} else {
 			assertCapturedCodexToolTranscript(t, body)
 		}
 	}
 	assertCapturedCodexToolPages(t, ctx, fixture, scenario, id)
+}
+
+func assertCapturedCodexToolLogBody(t *testing.T, body string) {
+	t.Helper()
+	var logs api.WorkerSessionLogPage
+	if json.Unmarshal([]byte(body), &logs) != nil {
+		t.Fatal("invalid captured logs")
+	}
+	count := 0
+	for _, record := range logs.Events {
+		if record.Event.Payload["kind"] == "TOOL" {
+			count++
+		}
+	}
+	if count != 7 {
+		t.Fatalf("emitted tool lifecycle count = %d, want 7", count)
+	}
+	assertCapturedCodexToolLogs(t, logs)
 }
 
 func assertCapturedCodexToolPages(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string) {
@@ -508,30 +513,43 @@ func assertCapturedCodexToolTranscript(t *testing.T, body string) {
 		if entry.Order != index+1 || entry.Timestamp == nil || (index < len(wantCalls) && (entry.CallId == nil || *entry.CallId != wantCalls[index])) {
 			t.Fatal("transcript changed first-observed tool order")
 		}
-		if entry.Type == "tool_call" {
-			if entry.CallId == nil || entry.Name == nil || *entry.Name != names[*entry.CallId] {
-				if entry.CallId == nil || entry.Name == nil {
-					t.Fatal("native tool identity/name unavailable")
-				}
-				t.Fatalf("native tool identity/name lost: id=%q name=%q", *entry.CallId, *entry.Name)
-			}
-			if (*entry.CallId == "mcp" || *entry.CallId == "collab") && (entry.Arguments == nil || !strings.Contains(*entry.Arguments, "visible")) {
-				t.Fatal("opening arguments lost on completion")
-			}
+		switch entry.Type {
+		case "tool_call":
+			assertCapturedCodexTranscriptCall(t, entry, names)
+		case "tool_output":
+			assertCapturedCodexTranscriptOutput(t, entry)
 		}
-		if entry.Type == "tool_output" && entry.CallId != nil && (*entry.CallId == "success" || *entry.CallId == "failure") {
-			var result map[string]any
-			if entry.Output == nil || json.Unmarshal([]byte(*entry.Output), &result) != nil {
-				t.Fatal("tool result is not valid JSON")
-			}
-			code, status := float64(0), "completed"
-			if *entry.CallId == "failure" {
-				code, status = 1, "failed"
-			}
-			if result["exit_code"] != code || result["status"] != status || entry.Status == nil || *entry.Status != status {
-				t.Fatal("tool outcome lost or misreported")
-			}
-		}
+	}
+}
+
+func assertCapturedCodexTranscriptCall(t *testing.T, entry api.ProviderSessionTranscriptEntry, names map[string]string) {
+	t.Helper()
+	if entry.CallId == nil || entry.Name == nil {
+		t.Fatal("native tool identity/name unavailable")
+	}
+	if *entry.Name != names[*entry.CallId] {
+		t.Fatalf("native tool identity/name lost: id=%q name=%q", *entry.CallId, *entry.Name)
+	}
+	if (*entry.CallId == "mcp" || *entry.CallId == "collab") && (entry.Arguments == nil || !strings.Contains(*entry.Arguments, "visible")) {
+		t.Fatal("opening arguments lost on completion")
+	}
+}
+
+func assertCapturedCodexTranscriptOutput(t *testing.T, entry api.ProviderSessionTranscriptEntry) {
+	t.Helper()
+	if entry.CallId == nil || (*entry.CallId != "success" && *entry.CallId != "failure") {
+		return
+	}
+	var result map[string]any
+	if entry.Output == nil || json.Unmarshal([]byte(*entry.Output), &result) != nil {
+		t.Fatal("tool result is not valid JSON")
+	}
+	code, status := float64(0), "completed"
+	if *entry.CallId == "failure" {
+		code, status = 1, "failed"
+	}
+	if result["exit_code"] != code || result["status"] != status || entry.Status == nil || *entry.Status != status {
+		t.Fatal("tool outcome lost or misreported")
 	}
 }
 
@@ -556,19 +574,24 @@ func assertCapturedCodexToolLogs(t *testing.T, logs api.WorkerSessionLogPage) {
 		if json.Unmarshal(draft.Payload, &payload) != nil || index >= len(wantIDs) || payload.ToolCallID != wantIDs[index] || payload.Status != wantStatus[index] {
 			t.Fatalf("tool lifecycle order/facts differ at %d", index)
 		}
-		if index == 1 || index == 2 {
-			var result map[string]any
-			if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != wantStatus[index] {
-				t.Fatal("command result lost explicit zero or failure")
-			}
-		}
-		if index >= 3 && strings.Contains(string(payload.ResultSummary), "exit_code") {
-			t.Fatal("non-command tool acquired an invented exit code")
-		}
+		assertCapturedCodexToolLogResult(t, payload, index, wantStatus[index])
 		index++
 	}
 	if index != len(wantIDs) || logs.CommittedPosition != int64(len(logs.Events)) {
 		t.Fatal("capture lost or duplicated acknowledged native facts")
+	}
+}
+
+func assertCapturedCodexToolLogResult(t *testing.T, payload workers.ToolPayload, index int, status string) {
+	t.Helper()
+	if index == 1 || index == 2 {
+		var result map[string]any
+		if json.Unmarshal(payload.ResultSummary, &result) != nil || result["exit_code"] != float64(index-1) || result["status"] != status {
+			t.Fatal("command result lost explicit zero or failure")
+		}
+	}
+	if index >= 3 && strings.Contains(string(payload.ResultSummary), "exit_code") {
+		t.Fatal("non-command tool acquired an invented exit code")
 	}
 }
 
