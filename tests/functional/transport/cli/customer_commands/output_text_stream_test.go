@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -109,7 +111,7 @@ func testOutputCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuie
 
 	dir := support.ScaffoldFactory(t, textStreamPromptRunFactoryConfig())
 	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
-	configuredURL := reserveTextStreamLoopbackURL(t)
+	listener, configuredURL := reserveTextStreamLoopbackListener(t)
 	wantDashboardURL := configuredURL + "/dashboard/ui"
 	wantInitiated := "Factory initiated: " + dir
 
@@ -132,9 +134,17 @@ func testOutputCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuie
 	// and continuous cancellation/join lifecycle must not be shared.
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: textStreamAcceptedProviderRunner(),
+		APIServerStarter:      platformhttpserver.StarterWithListener(listener, nil, nil),
 	})
 	support.CleanupProcess(t, process)
-	t.Cleanup(cancel)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-stdout.done:
+		case <-time.After(humanTextStreamScenarioTimeout):
+			t.Errorf("timed out joining continuous invocation during cleanup")
+		}
+	})
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)
@@ -142,7 +152,7 @@ func testOutputCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuie
 	}()
 
 	waitForTextStreamStartup(t, stdout)
-	if err := waitForTextStreamServerReady(ctx, configuredURL); err != nil {
+	if err := waitForTextStreamServerReady(ctx, configuredURL, stdout); err != nil {
 		t.Fatalf(
 			"text-stream loopback readiness request failed after startup output: %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -636,18 +646,18 @@ func textStreamPromptRunFactoryConfig() map[string]any {
 	}
 }
 
-func reserveTextStreamLoopbackURL(t *testing.T) string {
+func reserveTextStreamLoopbackListener(t *testing.T) (net.Listener, string) {
 	t.Helper()
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve loopback port: %v", err)
 	}
+	// Retain ownership from reservation through serving. Releasing the port
+	// lets unrelated parallel hosts claim the selected customer endpoint.
+	t.Cleanup(func() { _ = listener.Close() })
 	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("release loopback port: %v", err)
-	}
-	return "http://127.0.0.1:" + strconv.Itoa(port)
+	return listener, "http://127.0.0.1:" + strconv.Itoa(port)
 }
 
 func assertTextStreamListenerRebinds(t *testing.T, baseURL string) {
@@ -666,21 +676,45 @@ func assertTextStreamListenerRebinds(t *testing.T, baseURL string) {
 	}
 }
 
-func waitForTextStreamServerReady(ctx context.Context, baseURL string) error {
-	client := &http.Client{Timeout: 2 * time.Second}
+func waitForTextStreamServerReady(ctx context.Context, baseURL string, capture *interruptibleStdoutCapture) error {
+	// Use a scenario-owned connection pool: ephemeral endpoints can be reused
+	// by other hosts in the functional monolith. Startup text reports binding,
+	// so only a complete public Work response establishes HTTP readiness.
+	transport := &http.Transport{Proxy: nil}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
+	select {
+	case <-capture.done:
+		return fmt.Errorf("continuous process exited before public Work read: %v", capture.err)
+	default:
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
 	if err != nil {
 		return err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		select {
+		case <-capture.done:
+			return fmt.Errorf("public Work read failed: %w; continuous process exited: %v", err, capture.err)
+		default:
+			return fmt.Errorf("public Work read failed while continuous process remained active: %w", err)
+		}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errors.New("server not ready")
+		return fmt.Errorf("public Work read returned HTTP %d", resp.StatusCode)
 	}
-	return nil
+	var result factoryapi.ListWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode public Work response: %w", err)
+	}
+	select {
+	case <-capture.done:
+		return fmt.Errorf("continuous process exited before cancellation: %v", capture.err)
+	default:
+		return nil
+	}
 }
 
 func assertInterruptedHumanCLIOutput(t *testing.T, output string) {
