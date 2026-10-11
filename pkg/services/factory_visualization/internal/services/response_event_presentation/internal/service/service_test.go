@@ -466,61 +466,71 @@ func TestResponsePresentationSelectedDrainTimer(t *testing.T) {
 	t.Parallel()
 	for _, timeout := range []bool{false, true} {
 		t.Run(fmt.Sprint(timeout), func(t *testing.T) {
-			scheduler := &selectedDrainScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedDrainTimer, 2)}
-			writer := newGatedPresentationWriter()
-			output := presentationservice.New(scheduler).OpenBestEffortOutput(writer)
-			if err := output.Enqueue([]byte("first")); err != nil {
-				t.Fatal(err)
-			}
-			done := make(chan error, 1)
-			go func() { done <- output.CloseAndDrain() }()
-			var timer *selectedDrainTimer
-			select {
-			case timer = <-scheduler.created:
-			case <-time.After(10 * time.Second):
-				t.Fatal("drain timer missing")
-			}
-			if timer.duration != 250*time.Millisecond {
-				t.Fatal(timer.duration)
-			}
-			scheduler.SetTick(249)
-			select {
-			case <-done:
-				t.Fatal("early drain")
-			default:
-			}
-			if timeout {
-				scheduler.SetTick(250)
-			} else {
-				writer.release()
-			}
-			select {
-			case err := <-done:
-				if err != nil {
-					t.Fatal(err)
-				}
-			case <-time.After(10 * time.Second):
-				t.Fatal("drain not joined")
-			}
-			if !timer.stopped {
-				t.Fatal("drain timer not stopped")
-			}
-			if timeout {
-				writer.release()
-			}
-			if err := output.CloseAndDrain(); err != nil {
-				t.Fatal(err)
-			}
-			if repeated := <-scheduler.created; !repeated.stopped {
-				t.Fatal("repeated drain timer remained active")
-			}
-			// Exclusive terminal writes preserve serialized writer access.
-			if err := output.WithWriterExclusive(func(io.Writer) error { return nil }); err != nil {
-				t.Fatal(err)
-			}
-			if !timeout && writer.String() != "first\n" {
-				t.Fatalf("ordered output %q", writer.String())
-			}
+			assertSelectedDrain(t, timeout)
 		})
+	}
+}
+
+func assertSelectedDrain(t *testing.T, timeout bool) {
+	t.Helper()
+	scheduler := &selectedDrainScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedDrainTimer, 2)}
+	writer := newGatedPresentationWriter()
+	output := presentationservice.New(scheduler).OpenBestEffortOutput(writer)
+	if err := output.Enqueue([]byte("first")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- output.CloseAndDrain() }()
+	var timer *selectedDrainTimer
+	select {
+	case timer = <-scheduler.created:
+	case <-time.After(10 * time.Second):
+		t.Fatal("drain timer missing")
+	}
+	if timer.duration != 250*time.Millisecond {
+		t.Fatal(timer.duration)
+	}
+	scheduler.SetTick(249)
+	select {
+	case <-done:
+		t.Fatal("early drain")
+	default:
+	}
+	if timeout {
+		scheduler.SetTick(250)
+	} else {
+		writer.release()
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("drain not joined")
+	}
+	if !timer.stopped {
+		t.Fatal("drain timer not stopped")
+	}
+	if timeout {
+		writer.release()
+	}
+	assertRepeatedSelectedDrain(t, output, scheduler, writer, timeout)
+}
+
+func assertRepeatedSelectedDrain(t *testing.T, output contracts.Output, scheduler *selectedDrainScheduler, writer *gatedPresentationWriter, timeout bool) {
+	t.Helper()
+	if err := output.CloseAndDrain(); err != nil {
+		t.Fatal(err)
+	}
+	if repeated := <-scheduler.created; !repeated.stopped {
+		t.Fatal("repeated drain timer remained active")
+	}
+	// Exclusive terminal writes preserve serialized writer access.
+	if err := output.WithWriterExclusive(func(io.Writer) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !timeout && writer.String() != "first\n" {
+		t.Fatalf("ordered output %q", writer.String())
 	}
 }

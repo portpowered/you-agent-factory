@@ -381,7 +381,7 @@ func newLoopSharedFixtureWithExpected(t *testing.T, expectedSessions int) *loopS
 			lifecycle.recordProcessStop()
 			return err
 		},
-		Clock:                 clock,
+		Clock:                 support.ActivationClock{Clock: clock},
 		ProviderCommandRunner: provider,
 		SubmissionRecorder:    func(record work.FactorySubmissionRecord) { submissions <- record },
 	})

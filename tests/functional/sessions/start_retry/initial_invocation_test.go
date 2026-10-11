@@ -905,22 +905,7 @@ func assertSelectedStartupSequence(t *testing.T, process support.Process, sessio
 	port := 7439 + index%3
 	inputs := makeInputs(dir, "--work", workPath, "--continuously", "--with-server", "--listen", "localhost:"+fmt.Sprint(port), "--no-record")
 	command := support.StartProcessCommand(t, process, inputs.Input)
-	var timer *selectedSchedulingTimer
-	for timer == nil {
-		select {
-		case candidate := <-scheduler.created:
-			if candidate.duration == 10*time.Millisecond {
-				scheduler.acknowledge(candidate)
-			}
-			if candidate.duration == 250*time.Millisecond && !candidate.stopped.Load() {
-				timer = candidate
-			}
-		case <-command.Done():
-			t.Fatalf("startup ended before timer: %v stdout=%s stderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
-		case <-time.After(30 * time.Second):
-			t.Fatal("startup readability timer missing")
-		}
-	}
+	timer := waitSelectedStartupTimer(t, scheduler, command, inputs)
 	facts.Advance(time.Hour)
 	if err := selectedSchedulingActivate(t, scheduler, func() error { assertInitialOpeningInvocation(t, sessions, livePeer.peerID); return nil }); err != nil {
 		t.Fatal(err)
@@ -958,4 +943,25 @@ func assertSelectedStartupSequence(t *testing.T, process support.Process, sessio
 	if stopped := selectedSchedulingReceive(t, joined); stopped != port {
 		t.Fatalf("joined port %d want %d", stopped, port)
 	}
+}
+
+func waitSelectedStartupTimer(t *testing.T, scheduler *selectedSchedulingClock, command *support.ProcessCommand, inputs *support.CapturedInputs) *selectedSchedulingTimer {
+	t.Helper()
+	var timer *selectedSchedulingTimer
+	for timer == nil {
+		select {
+		case candidate := <-scheduler.created:
+			if candidate.duration == 10*time.Millisecond {
+				scheduler.acknowledge(candidate)
+			}
+			if candidate.duration == 250*time.Millisecond && !candidate.stopped.Load() {
+				timer = candidate
+			}
+		case <-command.Done():
+			t.Fatalf("startup ended before timer: %v stdout=%s stderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
+		case <-time.After(30 * time.Second):
+			t.Fatal("startup readability timer missing")
+		}
+	}
+	return timer
 }

@@ -33,7 +33,7 @@ func TestInvocationScheduleRecordingRecoveryContinuesSequence(t *testing.T) {
 	clock := &invocationRecoveryClock{FakeClock: clockwork.NewFakeClockAt(time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC)), armed: make(chan struct{}, 8)}
 	var calls atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
-		Clock:               clock,
+		Clock:               support.ActivationClock{Clock: clock},
 		ScriptCommandRunner: invocationRecoveryRunner{calls: &calls},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			return ctx.Value(restartProbeServerKey{}).(*support.ProcessAPIServer).Start(ctx, request)
@@ -194,9 +194,10 @@ type invocationRecoveryClock struct {
 	armed chan struct{}
 }
 
-func (clock *invocationRecoveryClock) AfterFunc(duration time.Duration, callback func()) clockwork.Timer {
-	timer := clock.FakeClock.AfterFunc(duration, callback)
-	// The only hour-long callback in this fixture is the selected duration job.
+func (clock *invocationRecoveryClock) NewTimer(duration time.Duration) clockwork.Timer {
+	timer := clock.FakeClock.NewTimer(duration)
+	// The only hour-long timer in this fixture is the selected duration job.
+	// The process clock projection schedules callbacks through NewTimer.
 	if duration == time.Hour {
 		clock.armed <- struct{}{}
 	}

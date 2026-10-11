@@ -109,7 +109,7 @@ func TestPollerRecoverableFailureRetriesWithoutDuplicates(t *testing.T) {
 		FactoryDir: dir,
 		Edges: serviceedges.Edges{
 			ScriptCommandRunner: runner,
-			Clock:               fakeClock,
+			Clock:               support.ActivationClock{Clock: fakeClock},
 		},
 	})
 	defer server.Stop(t)

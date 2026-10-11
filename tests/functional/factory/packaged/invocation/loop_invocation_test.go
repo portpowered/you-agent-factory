@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -231,9 +229,11 @@ func newLoopSchedulerClockAt(start time.Time) *loopSchedulerClock {
 	}
 }
 
-func (clock *loopSchedulerClock) AfterFunc(duration time.Duration, callback func()) clockwork.Timer {
-	timer := clock.FakeClock.AfterFunc(duration, callback)
-	if loopSchedulerTimerCaller() {
+func (clock *loopSchedulerClock) NewTimer(duration time.Duration) clockwork.Timer {
+	timer := clock.FakeClock.NewTimer(duration)
+	// The primary scenario is the only active one-minute schedule during its
+	// observation window. Watch its selected timer edge, not unrelated host waits.
+	if duration == time.Minute {
 		clock.schedulerTimerCount.Add(1)
 		select {
 		case clock.schedulerTimers <- struct{}{}:
@@ -245,22 +245,6 @@ func (clock *loopSchedulerClock) AfterFunc(duration time.Duration, callback func
 
 func (clock *loopSchedulerClock) schedulerTimerRegistrations() uint64 {
 	return clock.schedulerTimerCount.Load()
-}
-
-func loopSchedulerTimerCaller() bool {
-	pcs := make([]uintptr, 8)
-	n := runtime.Callers(2, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-	for {
-		frame, more := frames.Next()
-		if strings.Contains(frame.Function, "gocron/v2.(*scheduler).selectStart") ||
-			strings.Contains(frame.Function, "gocron/v2.(*scheduler).selectExecJobsOutForRescheduling") {
-			return true
-		}
-		if !more {
-			return false
-		}
-	}
 }
 
 func newBlockingLoopRunner() *blockingLoopRunner {

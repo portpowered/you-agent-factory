@@ -66,7 +66,7 @@ func TestAPIResponseEventStreamClosesAtDocumentedBoundary(t *testing.T) {
 			CompletedRetentionWindow: functionalResponseEventCompletedRetentionWindow,
 		},
 		Edges: serviceedges.Edges{
-			Clock:                 fakeClock,
+			Clock:                 support.ActivationClock{Clock: fakeClock},
 			ProviderCommandRunner: runner,
 		},
 	})
@@ -149,7 +149,7 @@ func TestAPIResponseEventSessionExpiryReturnsTypedGone(t *testing.T) {
 			CompletedRetentionWindow: functionalResponseEventCompletedRetentionWindow,
 		},
 		Edges: serviceedges.Edges{
-			Clock:                 fakeClock,
+			Clock:                 support.ActivationClock{Clock: fakeClock},
 			ProviderCommandRunner: runner,
 		},
 	})

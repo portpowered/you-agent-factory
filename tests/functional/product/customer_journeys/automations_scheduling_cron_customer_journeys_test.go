@@ -95,7 +95,7 @@ func startCronSessionHost(t *testing.T, clock *clockwork.FakeClock) (*support.Fu
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: hostDir,
 		Edges: serviceedges.Edges{
-			Clock: clock, ScriptCommandRunner: scriptCycleRouter{},
+			Clock: support.ActivationClock{Clock: clock}, ScriptCommandRunner: scriptCycleRouter{},
 			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
 				route := routes[record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation]]
 				if route == nil {

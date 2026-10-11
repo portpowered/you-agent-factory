@@ -669,59 +669,69 @@ func TestServiceRunSelectedReadabilityTimer(t *testing.T) {
 	t.Parallel()
 	for _, action := range []string{"complete", "cancel", "api failure"} {
 		t.Run(action, func(t *testing.T) {
-			scheduler := &selectedStartupScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedStartupTimer, 1)}
-			service := New(func(context.Context, platformhttpserver.StartRequest) error { return nil }, scheduler)
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			bound := make(chan platformhttpserver.Binding, 1)
-			bound <- platformhttpserver.Binding{Port: 7438}
-			api := make(chan error, 1)
-			cause := errors.New("selected API failure")
-			done := make(chan error, 1)
-			go func() {
-				_, err := service.waitForStartupReadability(ctx, true, "work.json", api, 7438, bound, nil, nil)
-				done <- err
-			}()
-			var timer *selectedStartupTimer
-			select {
-			case timer = <-scheduler.created:
-			case <-time.After(10 * time.Second):
-				t.Fatal("timer not created")
-			}
-			if timer.duration != 250*time.Millisecond {
-				t.Fatalf("duration %v", timer.duration)
-			}
-			scheduler.SetTick(249)
-			select {
-			case err := <-done:
-				t.Fatalf("early completion %v", err)
-			default:
-			}
-			switch action {
-			case "complete":
-				scheduler.SetTick(250)
-			case "cancel":
-				cancel()
-			case "api failure":
-				api <- cause
-			}
-			select {
-			case err := <-done:
-				if action == "complete" && err != nil {
-					t.Fatal(err)
-				}
-				if action == "cancel" && !errors.Is(err, context.Canceled) {
-					t.Fatal(err)
-				}
-				if action == "api failure" && !errors.Is(err, cause) {
-					t.Fatal(err)
-				}
-			case <-time.After(10 * time.Second):
-				t.Fatal("startup not joined")
-			}
-			if !timer.stopped {
-				t.Fatal("startup timer not stopped")
-			}
+			assertSelectedReadability(t, action)
 		})
+	}
+}
+
+func assertSelectedReadability(t *testing.T, action string) {
+	t.Helper()
+	scheduler := &selectedStartupScheduler{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond), created: make(chan *selectedStartupTimer, 1)}
+	service := New(func(context.Context, platformhttpserver.StartRequest) error { return nil }, scheduler)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	bound := make(chan platformhttpserver.Binding, 1)
+	bound <- platformhttpserver.Binding{Port: 7438}
+	api := make(chan error, 1)
+	cause := errors.New("selected API failure")
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.waitForStartupReadability(ctx, true, "work.json", api, 7438, bound, nil, nil)
+		done <- err
+	}()
+	var timer *selectedStartupTimer
+	select {
+	case timer = <-scheduler.created:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timer not created")
+	}
+	if timer.duration != 250*time.Millisecond {
+		t.Fatalf("duration %v", timer.duration)
+	}
+	scheduler.SetTick(249)
+	select {
+	case err := <-done:
+		t.Fatalf("early completion %v", err)
+	default:
+	}
+	switch action {
+	case "complete":
+		scheduler.SetTick(250)
+	case "cancel":
+		cancel()
+	case "api failure":
+		api <- cause
+	}
+	select {
+	case err := <-done:
+		assertSelectedReadabilityResult(t, action, err, cause)
+	case <-time.After(10 * time.Second):
+		t.Fatal("startup not joined")
+	}
+	if !timer.stopped {
+		t.Fatal("startup timer not stopped")
+	}
+}
+
+func assertSelectedReadabilityResult(t *testing.T, action string, err, cause error) {
+	t.Helper()
+	if action == "complete" && err != nil {
+		t.Fatal(err)
+	}
+	if action == "cancel" && !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if action == "api failure" && !errors.Is(err, cause) {
+		t.Fatal(err)
 	}
 }
