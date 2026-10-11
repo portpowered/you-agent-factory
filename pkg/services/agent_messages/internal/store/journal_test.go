@@ -99,6 +99,87 @@ func assertRequestRecovered(t *testing.T, journal *Journal, request Request) {
 	}
 }
 
+func pendingDelivery(entries ...Entry) DeliveryIntent {
+	ids, bodies := []string{}, []string{}
+	for _, entry := range entries {
+		ids = append(ids, entry.Message.MessageID)
+		bodies = append(bodies, entry.Message.Body)
+	}
+	input := strings.Join(bodies, "\n\n")
+	hash := sha256.Sum256([]byte(input))
+	return DeliveryIntent{RequestID: ids[0], RecipientChainIdentity: entries[0].RecipientChainIdentity,
+		FactorySessionID: entries[0].Message.To.FactorySessionID, SourceWorkerSessionID: "recipient", SuccessorWorkerSessionID: "successor",
+		MessageIDs: ids, FollowUpInput: input, InputSHA256: hex.EncodeToString(hash[:]), ResolveHead: true, State: IntentPending}
+}
+
+func intentTransaction(sequence uint64, intent DeliveryIntent) Transaction {
+	tx := transaction(sequence, ReviveIntent)
+	tx.Messages = []Entry{}
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	return tx
+}
+
+func acceptedTransaction(sequence uint64, intent DeliveryIntent, entries ...Entry) Transaction {
+	tx := transaction(sequence, ReviveOutcome, append([]Entry{}, entries...)...)
+	intent.State, intent.AcceptedAt = IntentAccepted, tx.CommittedAt
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	for i := range tx.Messages {
+		m := &tx.Messages[i].Message
+		m.Status, m.RevivedWorkerSessionID, m.To.DeliveredWorkerSessionID = agentmessages.DeliveredRevive, intent.SuccessorWorkerSessionID, intent.SuccessorWorkerSessionID
+	}
+	return tx
+}
+
+func TestJournalReviveIntentAndAtomicOutcomeSurviveReopen(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []string{"none", "short", "sync"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			files := &testFiles{}
+			j := newTestJournal(t, files, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(3, intent))
+			got, _ := j.DeliveryIntents()
+			got[0].MessageIDs[0] = "mutation"
+			got, _ = j.DeliveryIntents()
+			if !reflect.DeepEqual(got, []DeliveryIntent{intent}) {
+				t.Fatal("intent read shared mutable input")
+			}
+			if fault != "none" {
+				files.open = func(path string, flags int, mode fs.FileMode) (io.WriteCloser, error) {
+					file, err := os.OpenFile(path, flags, mode)
+					if err != nil {
+						return nil, err
+					}
+					return &faultFile{File: file, fault: fault}, nil
+				}
+			}
+			outcome := acceptedTransaction(4, intent, entries...)
+			err := j.Commit(outcome)
+			want, wantEntries := []DeliveryIntent{intent}, entries
+			if fault == "none" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				want, wantEntries = outcome.DeliveryIntents, outcome.Messages
+			} else if !errors.Is(err, ErrUnavailable) {
+				t.Fatal("outcome fault not reported", err)
+			}
+			for _, journal := range []*Journal{j, newTestJournal(t, testFiles{}, path)} {
+				got, err := journal.DeliveryIntents()
+				gotEntries, _, readErr := journal.Entries()
+				if err != nil || readErr != nil || !reflect.DeepEqual(got, want) || !reflect.DeepEqual(gotEntries, wantEntries) {
+					t.Fatal("partial delivery outcome escaped", err, readErr)
+				}
+			}
+		})
+	}
+}
+
 func TestJournalInboxUpdatesAreAtomicAndReconstructed(t *testing.T) {
 	t.Parallel()
 	for _, fault := range []string{"none", "short", "sync"} {

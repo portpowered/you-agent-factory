@@ -58,7 +58,7 @@ func listRequest(query url.Values) (agentmessages.ListRequest, bool, error) {
 	}
 	for _, status := range query["status"] {
 		switch agentmessages.Status(status) {
-		case agentmessages.Queued, agentmessages.Read, agentmessages.Replied, agentmessages.Expired:
+		case agentmessages.Queued, agentmessages.Read, agentmessages.Replied, agentmessages.Expired, agentmessages.DeliveredRevive:
 			request.Statuses = append(request.Statuses, agentmessages.Status(status))
 		default:
 			return request, false, agentmessages.ErrBadRequest

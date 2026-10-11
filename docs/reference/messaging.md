@@ -26,7 +26,7 @@ From an authorized running worker, send a message to its permitted recipient:
 you message recipient-worker-session-id "Please review the result" --request-id review-one --output json
 ```
 
-The response contains a stable `messageId` and `QUEUED` status.
+The response contains a stable `messageId` and its durable delivery status.
 The server persists the message before returning HTTP `202`.
 Specify `--server http://127.0.0.1:7437` to select a host explicitly.
 Otherwise, the CLI uses `YOU_SERVER` when available.
@@ -190,18 +190,26 @@ Unavailable storage returns `MESSAGE_STORE_UNAVAILABLE`.
 Repair the underlying storage before reconstructing the process.
 Do not include message bodies or execution credentials in diagnostic reports.
 
-## QUEUE milestone
+## Delivery to ended recipients
 
-This increment delivers durable QUEUE messaging and recipient pull.
 Running recipients receive queued inbox records without execution changes.
-Ended recipients also retain queued messages.
-The default `ifEnded` remains `REVIVE`, preserving the later delivery contract.
-In this milestone, ended `REVIVE` requests return `QUEUED` with `REVIVE_UNSUPPORTED`.
+The default `ifEnded` is `REVIVE`.
+An ended eligible recipient resumes its recorded Provider Session in one direct successor, using the normalized message body.
+Messaging does not create Work or acquire a Factory execution slot.
+Confirmed admission and durable delivery produce `DELIVERED_REVIVE` with `revivedWorkerSessionId` and `to.deliveredWorkerSessionId`.
+Concurrent sends never branch the recipient chain.
+Messages sent while its newest successor is running remain queued.
+
+Missing continuation capability leaves `QUEUED` with `REVIVE_UNSUPPORTED`.
+Rejected or uncertain admission leaves `QUEUED` with `REVIVE_FAILED`.
+The rolling limit permits six accepted revivals per recipient chain per hour; further messages remain queued with `REVIVE_LIMIT`.
+Retries preserve the original message and never spend another revival.
 Use `--if-ended hold` to request queued retention explicitly.
 Use `--reply-hold` to make a future reply inherit `HOLD`.
 
 `--interrupt` returns `MESSAGE_INTERRUPT_UNSUPPORTED` before any effect.
-Revival, scheduled expiry, interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
+Automatic delivery on end, restart reconciliation, and scheduled expiry are pending the remaining T6 work.
+Interruption, MCP messaging, dashboard messaging, and prompt adoption belong to later increments.
 No Factory route, guard, or workstation waits on an Agent Message.
 
 For Worker Session discovery and execution identity, run `you docs operations`.

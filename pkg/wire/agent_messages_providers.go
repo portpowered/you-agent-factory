@@ -36,7 +36,7 @@ func provideMessageQuota() (agentmessageswire.Quota, error) {
 	return agentmessageswire.NewQuota(10, 8, 3)
 }
 
-func provideMessageEngine(authority agentmessageswire.Authority, validator agentmessageswire.InputValidator, quota agentmessageswire.Quota, journal *agentmessageswire.Journal, clock platformclock.Source, stream events.Service, logger logging.Logger) (*agentmessageswire.Engine, error) {
+func provideMessageEngine(authority agentmessageswire.Authority, validator agentmessageswire.InputValidator, quota agentmessageswire.Quota, journal *agentmessageswire.Journal, clock platformclock.Source, stream events.Service, logger logging.Logger, sessions workersessions.Service) (*agentmessageswire.Engine, error) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func provideMessageEngine(authority agentmessageswire.Authority, validator agent
 			millis >>= 8
 		}
 		return "msg-" + messageIDText(id[:])
-	}, key, stream, logger)
+	}, key, stream, logger, sessions.Continue)
 }
 
 func messageIDText(bytes []byte) string {

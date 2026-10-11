@@ -25,7 +25,7 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 	publication := context.WithoutCancel(ctx)
 	for _, entry := range t.Messages {
 		observation := agentmessages.Observation{RecordID: t.RecordID, Sequence: t.Sequence,
-			Kind: observationKind(entry), Message: entry.Message}
+			Kind: observationKind(t.Kind, entry), Message: entry.Message}
 		payload, err := json.Marshal(observation)
 		if err == nil {
 			topic := entry.Message.To.ObservationTopic()
@@ -53,7 +53,10 @@ func (e *Engine) persist(ctx context.Context, t store.Transaction) error {
 	return nil
 }
 
-func observationKind(entry store.Entry) string {
+func observationKind(kind string, entry store.Entry) string {
+	if (kind == store.DeliveryUpdated || kind == store.ReviveOutcome) && entry.Message.Status == agentmessages.Queued {
+		return store.DeliveryUpdated
+	}
 	if entry.Message.Status == agentmessages.Queued {
 		return store.Sent
 	}

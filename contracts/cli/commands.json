@@ -55,7 +55,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Queue a durable message to your evidenced requester or lead. Use reply to answer a message and list to pull an authorized inbox. Messaging never dispatches, revives or interrupts a Worker Session in this milestone.",
+            "canonicalEnglish": "Send a durable message to your evidenced requester or lead. REVIVE continues an ended eligible recipient; HOLD retains it for authorized pull. Use reply to answer and list to pull your inbox.",
             "id": "you.message.description"
           },
           "title": {
@@ -280,7 +280,7 @@
           "scope": "local",
           "sensitivity": "public",
           "shorthand": "",
-          "usage": "Ended recipient policy: revive or hold; revival remains queued in this milestone.",
+          "usage": "Ended recipient policy: revive the recorded session or hold for authorized pull.",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -315,7 +315,7 @@
           "scope": "local",
           "sensitivity": "public",
           "shorthand": "",
-          "usage": "Request interruption; this milestone returns MESSAGE_INTERRUPT_UNSUPPORTED.",
+          "usage": "Request interruption; returns MESSAGE_INTERRUPT_UNSUPPORTED.",
           "valueType": "bool",
           "visibility": "visible"
         },
@@ -1467,7 +1467,7 @@
           "scope": "local",
           "sensitivity": "public",
           "shorthand": "",
-          "usage": "Ended recipient policy: revive or hold; revival remains queued in this milestone.",
+          "usage": "Ended recipient policy: revive the recorded session or hold for authorized pull.",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -1502,7 +1502,7 @@
           "scope": "local",
           "sensitivity": "public",
           "shorthand": "",
-          "usage": "Request interruption; this milestone returns MESSAGE_INTERRUPT_UNSUPPORTED.",
+          "usage": "Request interruption; returns MESSAGE_INTERRUPT_UNSUPPORTED.",
           "valueType": "bool",
           "visibility": "visible"
         },

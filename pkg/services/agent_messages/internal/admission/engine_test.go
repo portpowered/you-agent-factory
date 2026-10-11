@@ -74,7 +74,16 @@ type engineLedger struct {
 	sequence     uint64
 	transactions []store.Transaction
 	commitError  error
+	intents      map[string]store.DeliveryIntent
 	beforeCommit func(store.Transaction)
+}
+
+func (l *engineLedger) DeliveryIntents() ([]store.DeliveryIntent, error) {
+	result := []store.DeliveryIntent{}
+	for _, intent := range l.intents {
+		result = append(result, intent)
+	}
+	return result, nil
 }
 
 func (l *engineLedger) Entries() ([]store.Entry, uint64, error) {
@@ -145,6 +154,12 @@ func (l *engineLedger) Commit(transaction store.Transaction) error {
 	for _, request := range transaction.Requests {
 		l.requests[request.SenderIdentity+":"+request.RequestID] = request
 	}
+	if l.intents == nil {
+		l.intents = map[string]store.DeliveryIntent{}
+	}
+	for _, intent := range transaction.DeliveryIntents {
+		l.intents[intent.RequestID] = intent
+	}
 	l.sequence = transaction.Sequence
 	l.transactions = append(l.transactions, transaction)
 	return nil
@@ -166,7 +181,10 @@ func newEngineFixture() *engineFixture {
 	f.quota = &engineQuota{limit: 100}
 	f.caller = &workersessions.CallerIdentity{WorkerSessionID: "worker", Token: "caller-secret"}
 	id := 0
-	f.engine = NewEngine(true, f.authority, engineValidator{}, f.quota, f.ledger, func() time.Time { return f.now }, func() string { id++; return fmt.Sprintf("id-%d", id) }, []byte("controlled-cursor-signing-key-32bytes"), nil, nil)
+	f.engine = NewEngine(true, f.authority, engineValidator{}, f.quota, f.ledger, func() time.Time { return f.now }, func() string { id++; return fmt.Sprintf("id-%d", id) }, []byte("controlled-cursor-signing-key-32bytes"), nil, nil,
+		func(context.Context, workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+			return workersessions.ContinueResult{}, workersessions.ErrContinuationExecutionUnavailable
+		})
 	return f
 }
 
@@ -176,6 +194,136 @@ func engineIdentity(id string) Identity {
 
 func engineRequest(id, body string) agentmessages.SendRequest {
 	return agentmessages.SendRequest{RequestID: id, To: &agentmessages.Address{WorkerSessionID: "lead"}, Body: body}
+}
+
+func TestSendRevivePublishesOnlyDurableAdmission(t *testing.T) {
+	t.Parallel()
+	for _, cell := range []struct {
+		name, state, reason string
+		fault               error
+		malformed           bool
+	}{
+		{"accepted", store.IntentAccepted, "", nil, false},
+		{"unsupported", store.IntentFailed, "REVIVE_UNSUPPORTED", workersessions.ErrContinuationProviderSessionMissing, false},
+		{"rejected", store.IntentFailed, "REVIVE_FAILED", workersessions.ErrContinuationNotAccepted, false},
+		{"canceled wait", store.IntentUncertain, "REVIVE_FAILED", context.Canceled, false},
+		{"unknown outcome", store.IntentUncertain, "REVIVE_FAILED", errors.New("private diagnostic"), false},
+		{"foreign result", store.IntentUncertain, "REVIVE_FAILED", nil, true},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			f := newEngineFixture()
+			recipient := f.authority.recipients["lead"]
+			recipient.Observation.State, recipient.Observation.Revivable = workersessions.StateCompleted, true
+			f.authority.recipients["lead"] = recipient
+			calls := 0
+			f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+				calls++
+				assertPendingIntent(t, f, req)
+				result := workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+					SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}
+				if cell.malformed {
+					result.Session.ID = "foreign"
+				}
+				return result, cell.fault
+			}
+			request := engineRequest("ask", "safe input")
+			got, err := f.engine.Send(t.Context(), request, f.caller, "")
+			if err != nil || got.Reason != cell.reason {
+				t.Fatalf("send: %+v %v", got, err)
+			}
+			intents, _ := f.ledger.DeliveryIntents()
+			if len(intents) != 1 || intents[0].State != cell.state {
+				t.Fatalf("outcome: %+v", intents)
+			}
+			assertReviveMessage(t, got, intents[0])
+			if retry, err := f.engine.Send(t.Context(), request, f.caller, ""); err != nil || retry != got || calls != 1 {
+				t.Fatalf("retry repeated delivery: %+v %v %d", retry, err, calls)
+			}
+		})
+	}
+}
+
+func assertPendingIntent(t *testing.T, f *engineFixture, req workersessions.ContinueRequest) {
+	t.Helper()
+	intents, _ := f.ledger.DeliveryIntents()
+	if len(intents) != 1 || intents[0].State != store.IntentPending || req.RequestID != intents[0].RequestID ||
+		req.SuccessorWorkerSessionID != intents[0].SuccessorWorkerSessionID || req.FollowUpInput != "safe input" || !req.ResolveHead {
+		t.Fatal("effect preceded durable immutable intent")
+	}
+	if f.ledger.entries[0].Message.Status != agentmessages.Queued {
+		t.Fatal("delivery published before admission")
+	}
+}
+
+func assertReviveMessage(t *testing.T, got agentmessages.Message, intent store.DeliveryIntent) {
+	t.Helper()
+	if intent.State == store.IntentAccepted {
+		if got.Status != agentmessages.DeliveredRevive || got.RevivedWorkerSessionID != intent.SuccessorWorkerSessionID ||
+			got.To.DeliveredWorkerSessionID != got.RevivedWorkerSessionID {
+			t.Fatal("missing admitted successor facts")
+		}
+	} else if got.Status != agentmessages.Queued || got.RevivedWorkerSessionID != "" {
+		t.Fatal("failure claimed delivery")
+	}
+}
+
+func TestConcurrentSendsQueueAgainstAdmittedHead(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	recipient := f.authority.recipients["lead"]
+	recipient.Observation.State, recipient.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = recipient
+	calls := 0
+	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		calls++
+		head := recipient
+		head.Observation.WorkerSessionID, head.Observation.State = req.SuccessorWorkerSessionID, workersessions.StateRunning
+		f.authority.recipients[req.SuccessorWorkerSessionID] = head
+		recipient.Observation.ContinuationHeadWorkerSessionID = req.SuccessorWorkerSessionID
+		f.authority.recipients["lead"] = recipient
+		return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+	}
+	results := make(chan agentmessages.Message, 2)
+	errCh := make(chan error, 2)
+	for _, body := range []string{"first", "second"} {
+		go func() {
+			m, err := f.engine.Send(t.Context(), engineRequest(body, body), f.caller, "")
+			results <- m
+			errCh <- err
+		}()
+	}
+	statuses := map[agentmessages.Status]int{}
+	for range 2 {
+		statuses[(<-results).Status]++
+		if err := <-errCh; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 1 || statuses[agentmessages.DeliveredRevive] != 1 || statuses[agentmessages.Queued] != 1 {
+		t.Fatal("concurrent sends branched", calls, statuses)
+	}
+}
+
+func TestReviveOutcomeFaultKeepsPendingIntent(t *testing.T) {
+	t.Parallel()
+	f := newEngineFixture()
+	recipient := f.authority.recipients["lead"]
+	recipient.Observation.State, recipient.Observation.Revivable = workersessions.StateCompleted, true
+	f.authority.recipients["lead"] = recipient
+	f.engine.continueSession = func(_ context.Context, req workersessions.ContinueRequest) (workersessions.ContinueResult, error) {
+		f.ledger.commitError = store.ErrUnavailable
+		return workersessions.ContinueResult{RequestID: req.RequestID, SourceWorkerSessionID: req.SourceWorkerSessionID,
+			SuccessorWorkerSessionID: req.SuccessorWorkerSessionID, Session: workersessions.Session{ID: req.SuccessorWorkerSessionID}}, nil
+	}
+	if _, err := f.engine.Send(t.Context(), engineRequest("ask", "safe input"), f.caller, ""); !errors.Is(err, store.ErrUnavailable) {
+		t.Fatal(err)
+	}
+	intents, _ := f.ledger.DeliveryIntents()
+	if intents[0].State != store.IntentPending || f.ledger.entries[0].Message.Status != agentmessages.Queued {
+		t.Fatal("failed flush published delivery")
+	}
 }
 
 func TestEngineSendFlushRetryAndAlias(t *testing.T) {

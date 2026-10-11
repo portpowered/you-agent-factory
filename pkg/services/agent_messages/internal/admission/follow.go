@@ -130,13 +130,20 @@ func (e *Engine) followRecord(ctx context.Context, request agentmessages.ListReq
 		return nil
 	}
 	if observation.Sequence < entry.Sequence || observation.Sequence > sequence || !sameAdmittedContent(observation.Message, entry.Message) ||
-		observation.Kind != observationKind(store.Entry{Message: observation.Message}) {
+		!validObservationKind(observation) {
 		return agentmessages.ErrStreamUnavailable
 	}
 	if err := e.readAuthority(ctx, request.Caller); err != nil {
 		return err
 	}
 	return observe(observation)
+}
+
+func validObservationKind(observation agentmessages.Observation) bool {
+	if observation.Kind == store.DeliveryUpdated {
+		return observation.Message.Status == agentmessages.Queued && observation.Message.Reason != ""
+	}
+	return observation.Kind == observationKind("", store.Entry{Message: observation.Message})
 }
 
 func decodeObservation(record events.Record) (agentmessages.Observation, error) {

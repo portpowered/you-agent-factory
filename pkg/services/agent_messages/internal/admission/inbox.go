@@ -82,7 +82,7 @@ func readTransition(now time.Time, recipient bool, m agentmessages.Message) stri
 	if !m.ExpiresAt.After(now) {
 		return store.Expired
 	}
-	if recipient && m.Status == agentmessages.Queued {
+	if recipient && (m.Status == agentmessages.Queued || m.Status == agentmessages.DeliveredRevive) {
 		return store.Read
 	}
 	return ""

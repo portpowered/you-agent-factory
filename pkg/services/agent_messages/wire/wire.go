@@ -30,6 +30,7 @@ type (
 	EventAppender     = admission.EventAppender
 	ObservationReader = admission.ObservationReader
 	Engine            = admission.Engine
+	ContinueOperation = admission.ContinueOperation
 	ConfiguredService = admission.Configured
 )
 
@@ -64,12 +65,12 @@ func NewQuota(sendsPerHour, threadMessages, maxHop int) (Quota, error) {
 	return admission.Limits{SendsPerHour: sendsPerHour, ThreadMessages: threadMessages, HopLimit: &maxHop}, nil
 }
 
-func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger) (*Engine, error) {
+func NewService(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte, stream EventAppender, logger logging.Logger, continueSession ContinueOperation) (*Engine, error) {
 	if authority == nil || validator == nil || quota == nil || ledger == nil || now == nil ||
-		newID == nil || len(cursorKey) < sha256.Size || stream == nil || logger == nil {
+		newID == nil || len(cursorKey) < sha256.Size || stream == nil || logger == nil || continueSession == nil {
 		return nil, agentmessages.ErrBadRequest
 	}
-	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, newID, cursorKey, stream, logger), nil
+	return admission.NewEngine(enabled, authority, validator, quota, ledger, now, newID, cursorKey, stream, logger, continueSession), nil
 }
 
 // NewConfiguredService supplies selected-profile lifecycle over the same Engine

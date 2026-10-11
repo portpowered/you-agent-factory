@@ -63,6 +63,74 @@ func TestJournalRejectsInvalidContentBeforeOpeningWriter(t *testing.T) {
 	}
 }
 
+func TestJournalRejectsChangedReviveIntentBeforeEffect(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*DeliveryIntent){
+		"input": func(i *DeliveryIntent) { i.FollowUpInput += " changed" },
+		"hash":  func(i *DeliveryIntent) { i.InputSHA256 = strings.Repeat("a", 64) },
+		"reverse order": func(i *DeliveryIntent) {
+			i.MessageIDs[0], i.MessageIDs[1] = i.MessageIDs[1], i.MessageIDs[0]
+			i.RequestID = i.MessageIDs[0]
+		},
+		"duplicate":            func(i *DeliveryIntent) { i.MessageIDs[1] = i.MessageIDs[0] },
+		"foreign chain":        func(i *DeliveryIntent) { i.RecipientChainIdentity = "foreign" },
+		"foreign scope":        func(i *DeliveryIntent) { i.FactorySessionID = "foreign" },
+		"self successor":       func(i *DeliveryIntent) { i.SuccessorWorkerSessionID = i.SourceWorkerSessionID },
+		"no resolve head":      func(i *DeliveryIntent) { i.ResolveHead = false },
+		"premature acceptance": func(i *DeliveryIntent) { i.State = IntentAccepted; i.AcceptedAt = time.Now() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mutate(&intent)
+			before := readBytes(t, path)
+			if err := j.Commit(intentTransaction(3, intent)); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("invalid intent committed", err)
+			}
+			if string(readBytes(t, path)) != string(before) {
+				t.Fatal("invalid intent changed durable bytes")
+			}
+		})
+	}
+}
+
+func TestJournalReviveOutcomeCannotChangeTupleOrGuessSuccess(t *testing.T) {
+	t.Parallel()
+	for name, mutate := range map[string]func(*Transaction){
+		"missing intent":         func(tx *Transaction) { tx.DeliveryIntents = nil },
+		"different successor":    func(tx *Transaction) { tx.DeliveryIntents[0].SuccessorWorkerSessionID = "other" },
+		"different source":       func(tx *Transaction) { tx.DeliveryIntents[0].SourceWorkerSessionID = "other" },
+		"missing message":        func(tx *Transaction) { tx.Messages = tx.Messages[:1] },
+		"foreign delivered fact": func(tx *Transaction) { tx.Messages[0].Message.RevivedWorkerSessionID = "other" },
+		"future acceptance":      func(tx *Transaction) { tx.DeliveryIntents[0].AcceptedAt = tx.CommittedAt.Add(time.Second) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(3, intent))
+			tx := acceptedTransaction(4, intent, entries...)
+			mutate(&tx)
+			if err := j.Commit(tx); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("malformed outcome accepted", err)
+			}
+			got, _ := j.DeliveryIntents()
+			if got[0].State != IntentPending {
+				t.Fatal("invalid outcome changed recovery state")
+			}
+		})
+	}
+}
+
 func TestJournalRollbackUncertaintyStopsFurtherWrites(t *testing.T) {
 	t.Parallel()
 	for _, fault := range []string{"rollback-sync", "rollback-truncate"} {

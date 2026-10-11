@@ -24,11 +24,16 @@ import (
 )
 
 type workerGate struct {
-	started chan map[string]string
-	release chan struct{}
+	started  chan map[string]string
+	release  chan struct{}
+	requests chan platformprocess.CommandRequest
 }
 
-type commandRunner struct{ workers map[string]*workerGate }
+type commandRunner struct {
+	workers map[string]*workerGate
+	revival *workerGate
+	factory *workerGate
+}
 
 func (r *commandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	env := make(map[string]string)
@@ -38,15 +43,27 @@ func (r *commandRunner) Run(ctx context.Context, request platformprocess.Command
 		}
 	}
 	gate := r.workers[env["YOU_WORKER_SESSION_ID"]]
+	if gate == nil && strings.Contains(string(request.Stdin), "Factory-origin lead") {
+		gate = r.factory
+	}
+	if gate == nil {
+		gate = r.revival
+	}
 	if gate == nil {
 		return platformprocess.CommandResult{}, context.Canceled
 	}
-	gate.started <- env
+	select {
+	case gate.started <- env:
+	default:
+	}
+	if gate.requests != nil {
+		gate.requests <- request
+	}
 	select {
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-gate.release:
-		return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n{\"type\":\"turn.completed\"}\n")}, nil
+		return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"controlled-answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")}, nil
 	}
 }
 
@@ -70,6 +87,14 @@ func startHostEffects(t *testing.T, home, dir, settings string, effects servicee
 }
 
 func startHostTransport(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, workers ...string) *fixture {
+	return startHostRunner(t, home, dir, settings, effects, wrap, nil, workers...)
+}
+
+func startHostRunner(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, revival *workerGate, workers ...string) *fixture {
+	return startHostDelivery(t, home, dir, settings, effects, wrap, revival, nil, workers...)
+}
+
+func startHostDelivery(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, revival, factory *workerGate, workers ...string) *fixture {
 	t.Helper()
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
@@ -96,6 +121,8 @@ func startHostTransport(t *testing.T, home, dir, settings string, effects servic
 	support.WriteAgentConfig(t, dir, "worker", "---\ntype: MODEL_WORKER\nmodel: functional-model\nmodelProvider: CODEX\nstopToken: COMPLETE\n---\nProcess the input task.\n")
 	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nControlled Factory input: {{ (index .Inputs 0).Payload }}\n")
 	f := &fixture{home: home, dir: dir, env: builtcliacceptance.ProcessEnvForIsolatedHome(home), runner: &commandRunner{workers: make(map[string]*workerGate)}}
+	f.runner.revival = revival
+	f.runner.factory = factory
 	for _, id := range workers {
 		f.runner.workers[id] = &workerGate{started: make(chan map[string]string, 1), release: make(chan struct{})}
 	}
