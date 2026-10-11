@@ -45,8 +45,9 @@ func appendRequesterMCPScenarios(rootDir string, setup *invokeContinueScenarioSe
 			return err
 		}
 		result := platformprocess.CommandResult{Stdout: directCodexSessionOutput("factory-caller-child-thread", "Factory caller output COMPLETE")}
-		child := newInvokeContinueResettableProviderCommandRunner(result)
-		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-factory-child-"+mode, child, child, nil, nil, nil, child.Reset); err != nil {
+		child := &requesterFactoryGatedRunner{result: result}
+		child.reset()
+		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "requester-factory-child-"+mode, child, child, nil, nil, nil, child.reset); err != nil {
 			return err
 		}
 		if mode == "async" || mode == "sync" {
@@ -292,6 +293,31 @@ func (route requesterDurableCommandRoute) Run(ctx context.Context, request platf
 	return platformprocess.CommandResult{}, errors.New("unrecognized requester durable command")
 }
 
+// Hold the command result until public observations have been checked while
+// the Factory owner is still live, without changing invocation completion.
+type requesterFactoryGatedRunner struct {
+	*invokeContinueResettableProviderCommandRunner
+	result  platformprocess.CommandResult
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *requesterFactoryGatedRunner) reset() {
+	r.invokeContinueResettableProviderCommandRunner = newInvokeContinueResettableProviderCommandRunner(r.result)
+	r.started, r.release = make(chan struct{}), make(chan struct{})
+}
+
+func (r *requesterFactoryGatedRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	result, err := r.invokeContinueResettableProviderCommandRunner.Run(ctx, request)
+	close(r.started)
+	select {
+	case <-r.release:
+		return result, err
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
 // CLI live/local invocation and HTTP durable starts have different owners.
 // Each cell observes its own native command and public Worker Session metadata.
 func TestRequesterFactoryCallerVariants(t *testing.T) {
@@ -316,8 +342,23 @@ func TestRequesterFactoryCallerVariants(t *testing.T) {
 			}
 			t19AwaitSignal(t, ctx, runner.started, "Factory caller running")
 			token := requesterSourceToken(t, runner, parentID)
-			invokeRequesterFactory(t, fixture, child, ctx, mode, parentID, token)
+			childRunner := child.providerRunner.(*requesterFactoryGatedRunner)
+			finished := make(chan struct{})
+			var release sync.Once
+			defer func() {
+				release.Do(func() { close(childRunner.release) })
+				t19AwaitSignal(t, ctx, finished, "Factory caller result and cleanup")
+			}()
+			go func() {
+				defer close(finished)
+				invokeRequesterFactory(t, fixture, child, ctx, mode, parentID, token)
+			}()
+			t19AwaitSignal(t, ctx, childRunner.started, "Factory child admitted execution")
+			// The default fleet selects live Factory owners. Observe show/list
+			// before the invocation helper closes or terminates this scope.
 			assertRequesterFactoryInvocationChild(t, fixture, child, ctx, parentID, token)
+			release.Do(func() { close(childRunner.release) })
+			t19AwaitSignal(t, ctx, finished, "Factory caller completed result")
 			assertRequesterMCPParentActive(t, fixture, parent, ctx, parentID)
 		})
 	}
