@@ -22,7 +22,7 @@ type replayCaptureReader struct {
 
 func TestReplayObservationSubscriptionCloseCancelsBlockedPage(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second) //nolint:testsleep // Failure ceiling for a stuck replay read; entered and done channels synchronize Close.
 	defer cancel()
 	topic := workersessions.Topic("worker")
 	entered := make(chan struct{})

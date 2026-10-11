@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -186,46 +187,44 @@ func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 
 func assertWorkerEventsIdleFactoryFollow(t *testing.T) {
 	t.Helper()
-	release := make(chan struct{})
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	runner := &factoryFollowCommandRunner{ready: make(chan struct{}), release: make(chan struct{}), joined: make(chan struct{})}
+	defer runner.releaseProgress()
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-012-worker-id-follow")
-	sessionID := uuid.NewString()
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
+	sessionID, home := uuid.NewString(), t.TempDir()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--session", sessionID},
-		ProviderOverride:          support.BlockingInferenceProvider(release),
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Args:  []string{"--session", sessionID},
+		Env:   append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
 	})
 	workID := submitWSRFT011Work(t, server.URL(), sessionID, "live-follow")
-	workerID := waitForWSRFT012WorkerID(t, server.URL(), sessionID, workID)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	started := make(chan error, 1)
-	streamDone := make(chan wsrft012StreamResult, 1)
-	go func() {
-		events, err := readWSRFT012LiveStream(ctx, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, nil), started)
-		streamDone <- wsrft012StreamResult{events: events, err: err}
-	}()
-	if err := <-started; err != nil {
-		t.Fatalf("start live Worker-ID follow: %v", err)
+	select {
+	case <-runner.ready:
+	case <-ctx.Done():
+		t.Fatal("provider command did not acknowledge its running gate")
 	}
+	workerID := waitForWSRFT012WorkerID(t, server.URL(), sessionID, workID)
+	streamDone := startWorkerEventsFollower(t, ctx, workerEventsWSRFT011URL(server.URL(), sessionID, workerID, nil))
 	topLevel := fmt.Sprintf("%s/worker-sessions/%s/events", server.URL(), url.PathEscape(workerID))
 	otherObserver := startWorkerEventsFollower(t, ctx, topLevel)
 	assertWorkerEventsIdleReplay(t, topLevel, workerID)
-	// Disconnect a third observer while both surviving readers and the Worker
-	// still await the same gated provider output.
-	detachedContext, detach := context.WithCancel(ctx)
-	detached := startWorkerEventsFollower(t, detachedContext, topLevel)
-	detach()
-	if result := <-detached; result.err == nil {
-		t.Fatal("disconnected observer unexpectedly completed before provider release")
-	}
-	close(release)
+	// Each follower has consumed the Factory MODEL_REQUEST from the running
+	// command, rather than just headers.
+	// Detach only the third reader while the execution and both peers stay live.
+	assertFactoryFollowObserverDetach(t, ctx, topLevel, runner, streamDone, otherObserver)
+	runner.releaseProgress()
 	stream := <-streamDone
 	if stream.err != nil {
 		t.Fatalf("read live Worker-ID follow: %v", stream.err)
 	}
 	liveRecords := assertWSRFT012Live(t, stream.events, workerID)
+	payload, err := json.Marshal(stream.events)
+	if err != nil || !strings.Contains(string(payload), "factory-follow-later") {
+		t.Fatalf("Factory follower lost gated later output: %s (%v)", payload, err)
+	}
 	other := <-otherObserver
 	if other.err != nil {
 		t.Fatalf("surviving top-level observer: %v", other.err)
@@ -236,6 +235,85 @@ func assertWorkerEventsIdleFactoryFollow(t *testing.T) {
 	})), workerID)
 	assertWSRFT011SameRecords(t, liveRecords, replayedRecords)
 	server.Stop(t)
+}
+
+// The command edge publishes a prefix synchronously and waits for a test-owned
+// release before publishing later output. No inference-service substitute is used.
+type factoryFollowCommandRunner struct {
+	ready, release, joined chan struct{}
+}
+
+func (r *factoryFollowCommandRunner) releaseProgress() {
+	select {
+	case <-r.release:
+	default:
+		close(r.release)
+	}
+}
+
+func (r *factoryFollowCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return r.RunStreaming(ctx, request, nil)
+}
+
+func (r *factoryFollowCommandRunner) RunStreaming(ctx context.Context, _ platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	defer close(r.joined)
+	if observe != nil {
+		observe(platformprocess.OutputStreamStdout, []byte("{\"type\":\"thread.started\",\"thread_id\":\"factory-follow-thread\"}\n"))
+		observe(platformprocess.OutputStreamStdout, []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"prefix\",\"type\":\"agent_message\",\"text\":\"factory-follow-prefix\"}}\n"))
+	}
+	close(r.ready)
+	select {
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	case <-r.release:
+		if observe != nil {
+			observe(platformprocess.OutputStreamStdout, []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"later\",\"type\":\"agent_message\",\"text\":\"factory-follow-later\"}}\n"))
+			observe(platformprocess.OutputStreamStdout, []byte("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}\n"))
+		}
+		return platformprocess.CommandResult{}, nil
+	}
+}
+
+func assertFactoryFollowObserverDetach(t *testing.T, ctx context.Context, endpoint string, runner *factoryFollowCommandRunner, peers ...<-chan wsrft012StreamResult) {
+	t.Helper()
+	detachedContext, detach := context.WithCancel(ctx)
+	defer detach()
+	detached := startWorkerEventsFollower(t, detachedContext, endpoint)
+	for _, follower := range append(peers, detached) {
+		select {
+		case result := <-follower:
+			t.Fatalf("follower ended before observer cancellation/provider release: %+v", result)
+		default:
+		}
+	}
+	detach()
+	select {
+	case result := <-detached:
+		// The server may close cleanly once the request is canceled, before the
+		// client's body reader surfaces context.Canceled. Both mean detachment.
+		if detachedContext.Err() != context.Canceled || (result.err != nil && !errors.Is(result.err, context.Canceled)) {
+			t.Fatalf("detached observer outcome: %v (context %v)", result.err, detachedContext.Err())
+		}
+		for _, event := range result.events {
+			if event.Delivery != factoryapi.WorkerSessionEventDeliveryRecord || event.ReplaySummary != nil {
+				t.Fatalf("idle observer received premature terminal/failure: %+v", event)
+			}
+		}
+	case <-ctx.Done():
+		t.Fatal("observer did not detach while provider was gated")
+	}
+	select {
+	case <-runner.joined:
+		t.Fatal("observer detachment ended the gated provider command")
+	default:
+	}
+	for _, peer := range peers {
+		select {
+		case result := <-peer:
+			t.Fatalf("observer detachment ended a surviving follower: %+v", result)
+		default:
+		}
+	}
 }
 
 type wsrft012StreamResult struct {
@@ -346,7 +424,7 @@ func readWSRFT011Events(t *testing.T, endpoint string) []factoryapi.WorkerSessio
 	return events
 }
 
-func readWSRFT012LiveStream(ctx context.Context, endpoint string, started chan<- error) ([]factoryapi.WorkerSessionEvent, error) {
+func readWSRFT012LiveStream(ctx context.Context, endpoint string, started chan<- error, observed func(factoryapi.WorkerSessionEvent)) ([]factoryapi.WorkerSessionEvent, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		started <- fmt.Errorf("build request: %w", err)
@@ -365,10 +443,14 @@ func readWSRFT012LiveStream(ctx context.Context, endpoint string, started chan<-
 		return nil, err
 	}
 	started <- nil
-	return decodeWSRFT011Events(response.Body)
+	return decodeWSRFT011ObservedEvents(response.Body, observed)
 }
 
 func decodeWSRFT011Events(reader io.Reader) ([]factoryapi.WorkerSessionEvent, error) {
+	return decodeWSRFT011ObservedEvents(reader, nil)
+}
+
+func decodeWSRFT011ObservedEvents(reader io.Reader, observed func(factoryapi.WorkerSessionEvent)) ([]factoryapi.WorkerSessionEvent, error) {
 	var events []factoryapi.WorkerSessionEvent
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
@@ -381,6 +463,9 @@ func decodeWSRFT011Events(reader io.Reader) ([]factoryapi.WorkerSessionEvent, er
 			return nil, err
 		}
 		events = append(events, event)
+		if observed != nil {
+			observed(event)
+		}
 	}
 	return events, scanner.Err()
 }
@@ -389,12 +474,31 @@ func startWorkerEventsFollower(t *testing.T, ctx context.Context, endpoint strin
 	t.Helper()
 	started := make(chan error, 1)
 	done := make(chan wsrft012StreamResult, 1)
+	prefix := make(chan struct{})
 	go func() {
-		events, err := readWSRFT012LiveStream(ctx, endpoint, started)
+		events, err := readWSRFT012LiveStream(ctx, endpoint, started, func(event factoryapi.WorkerSessionEvent) {
+			// Factory streams carry canonical Factory events. MODEL_REQUEST is
+			// their active-attempt acknowledgment; native output is captured in
+			// the later MODEL_RESULT, not emitted as direct Worker frames.
+			if event.Event.SchemaId == "MODEL_REQUEST" {
+				select {
+				case <-prefix:
+				default:
+					close(prefix)
+				}
+			}
+		})
 		done <- wsrft012StreamResult{events: events, err: err}
 	}()
 	if err := <-started; err != nil {
 		t.Fatalf("establish idle event stream: %v", err)
+	}
+	select {
+	case <-prefix:
+	case result := <-done:
+		t.Fatalf("follower ended before Factory model-request acknowledgment: %+v", result)
+	case <-ctx.Done():
+		t.Fatal("follower did not acknowledge the active Factory model request")
 	}
 	return done
 }

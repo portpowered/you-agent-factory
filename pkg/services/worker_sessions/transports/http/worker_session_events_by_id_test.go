@@ -82,7 +82,7 @@ func (s gatedStreamWork) ListWork(ctx context.Context, _ string, _ work.ListOpti
 
 func TestWorkerEventsSetupDoesNotWaitForWorkNameEnrichment(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second) //nolint:testsleep // Failure ceiling for blocked enrichment; entered and done channels observe stream setup.
 	defer cancel()
 	workReader := gatedStreamWork{entered: make(chan struct{}), release: make(chan struct{})}
 	defer close(workReader.release)
