@@ -17,14 +17,16 @@ import (
 
 func (f *factoryImpl) submitInvocationWorkRequest(
 	ctx context.Context,
+	scheduleCtx context.Context,
 	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
-	prepared, err := f.cfg.prepareSchedules(f.scheduleContext(), automations.InvocationScheduleRequest{
+	// Admission uses the command context; committed schedules use the runtime
+	// context so they outlive the command and stop with the selected runtime.
+	prepared, err := f.cfg.prepareSchedules(scheduleCtx, automations.InvocationScheduleRequest{
 		RuntimeID:  f.cfg.runtimeID,
 		FactoryDir: f.cfg.requestFactoryDirectory, FactoryConfig: factoryConfigFromFactoryConfig(f.cfg),
 		RuntimeConfig: f.scheduleRuntimeConfig(), WorkRequest: request,
-		Submitter:      f.submitScheduledWork,
-		Observe:        f.observeInvocationSchedule,
+		Submitter: f.submitScheduledWork, Observe: f.observeInvocationSchedule,
 		FailController: f.failInvocationScheduleController,
 	})
 	if err != nil {
@@ -87,19 +89,7 @@ func (f *factoryImpl) recoverInvocationScheduleSnapshot(ctx context.Context, sna
 	}
 
 	stateTypes := configuredPlaceStateTypes(factoryConfigFromFactoryConfig(f.cfg))
-	maxSequences := make(map[string]int64)
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil {
-			continue
-		}
-		traceID := token.Color.CurrentChainingTraceID
-		if traceID == "" {
-			traceID = token.Color.TraceID
-		}
-		if sequence, ok := scheduleSequence(token.Color.Tags); ok && sequence > maxSequences[traceID] {
-			maxSequences[traceID] = sequence
-		}
-	}
+	maxSequences := maximumScheduleSequences(snapshot.Marking.Tokens)
 
 	recoveredControllers := make(map[string]struct{})
 	for _, token := range snapshot.Marking.Tokens {
@@ -124,6 +114,24 @@ func (f *factoryImpl) recoverInvocationScheduleSnapshot(ctx context.Context, sna
 	}
 	f.recovered = true
 	return nil
+}
+
+func maximumScheduleSequences(tokens map[string]*factorytoken.Token) map[string]int64 {
+	maxSequences := make(map[string]int64)
+	for _, token := range tokens {
+		if token == nil {
+			continue
+		}
+		traceID := token.Color.CurrentChainingTraceID
+		if traceID == "" {
+			traceID = token.Color.TraceID
+		}
+		if sequence, ok := scheduleSequence(token.Color.Tags); ok && sequence > maxSequences[traceID] {
+			maxSequences[traceID] = sequence
+		}
+	}
+
+	return maxSequences
 }
 
 func firstNonEmptyScheduleTag(value, fallback string) string {
@@ -244,22 +252,7 @@ func (f *factoryImpl) observeInvocationSchedule(
 			failuresBySequence[sequence] = stateType
 		}
 	}
-	for _, dispatch := range snapshot.Dispatches {
-		if dispatch == nil {
-			continue
-		}
-		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.CurrentChainingTraceID != request.ControllerTraceID {
-				continue
-			}
-			if token.Color.WorkID == request.ControllerWorkID {
-				observation.ControllerActive = true
-			}
-			if token.Color.WorkTypeID == request.ExecutionWorkType {
-				observation.ExecutionActive = true
-			}
-		}
-	}
+	observeScheduledDispatches(snapshot.Dispatches, request, &observation)
 	observation.ConsecutiveFailures = consecutiveScheduleFailures(failuresBySequence)
 	return observation, nil
 }
@@ -358,4 +351,23 @@ func (f *factoryImpl) recoverInvocationScheduleController(ctx context.Context, t
 		TraceID: traceID, Name: token.Color.Name, WorkTypeName: token.Color.WorkTypeID,
 	})
 	return nil
+}
+
+func observeScheduledDispatches(dispatches map[string]*interfaces.DispatchEntry, request automations.InvocationScheduleObservationRequest, observation *automations.InvocationScheduleObservation) {
+	for _, dispatch := range dispatches {
+		if dispatch == nil {
+			continue
+		}
+		for _, token := range dispatch.ConsumedTokens {
+			if token.Color.CurrentChainingTraceID != request.ControllerTraceID {
+				continue
+			}
+			if token.Color.WorkID == request.ControllerWorkID {
+				observation.ControllerActive = true
+			}
+			if token.Color.WorkTypeID == request.ExecutionWorkType {
+				observation.ExecutionActive = true
+			}
+		}
+	}
 }

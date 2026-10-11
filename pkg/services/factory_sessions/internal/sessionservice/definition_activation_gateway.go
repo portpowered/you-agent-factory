@@ -211,11 +211,7 @@ func (fs *SessionRuntime) withSessionSourcesStopped(ctx context.Context, id stri
 	if err == nil {
 		return nil
 	}
-	serviceCtx := ctx
-	if active := fs.runtimeState.Active(); active != nil && active.Context != nil {
-		serviceCtx = active.Context
-	}
-	return errors.Join(err, fs.runtimeSidecars.Start(serviceCtx, current))
+	return errors.Join(err, fs.runtimeSidecars.Start(fs.replacementSourceContext(ctx), current))
 }
 
 func (g definitionActivationGateway) WithSessionSourcesStopped(ctx context.Context, id string, fn func() error) error {
@@ -227,4 +223,13 @@ func (g keyedDefinitionActivationGateway) WithSessionSourcesStopped(ctx context.
 		return err
 	}
 	return owner.withSessionSourcesStopped(ctx, id, fn)
+}
+
+// Rollback restarts sources on the active runtime lifetime, retaining the
+// command context only when no active runtime context was acquired.
+func (fs *SessionRuntime) replacementSourceContext(ctx context.Context) context.Context {
+	if active := fs.runtimeState.Active(); active != nil && active.Context != nil {
+		return active.Context
+	}
+	return ctx
 }

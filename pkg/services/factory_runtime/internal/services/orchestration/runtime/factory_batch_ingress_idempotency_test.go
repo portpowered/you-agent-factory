@@ -341,7 +341,6 @@ func snapshotObservesWork(snap *interfaces.EngineStateSnapshot[petri.MarkingSnap
 	return false
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigger(t *testing.T) {
 	t.Parallel()
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -389,27 +388,7 @@ func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigg
 	if len(schedules.requests) != 1 || len(schedules.commits) != 1 {
 		t.Fatalf("recovery prepares/commits = %d/%d, want 1/1", len(schedules.requests), len(schedules.commits))
 	}
-	request := schedules.requests[0]
-	if request.ResumeSequence != 7 || !request.SuppressTriggerAtStart {
-		t.Fatalf("recovery controls = sequence %d suppress-start %v, want 7/true", request.ResumeSequence, request.SuppressTriggerAtStart)
-	}
-	if len(request.WorkRequest.Works) != 1 {
-		t.Fatalf("recovered works = %d, want 1", len(request.WorkRequest.Works))
-	}
-	controller := request.WorkRequest.Works[0]
-	if controller.WorkID != "controller-1" || controller.CurrentChainingTraceID != "trace-loop" {
-		t.Fatalf("recovered controller identity = %#v", controller)
-	}
-	if got := controller.InvocationArguments.Arguments["every"].Values; len(got) != 1 || got[0] != "1h0m0s" {
-		t.Fatalf("recovered duration = %#v, want 1h0m0s", got)
-	}
-	if got := controller.InvocationArguments.Arguments["triggerAtStart"].Values; len(got) != 1 || got[0] != "true" {
-		t.Fatalf("recovered trigger-at-start = %#v, want retained true metadata", got)
-	}
-	commit := schedules.commits[0]
-	if !commit.Accepted || commit.WorkID != "controller-1" || commit.TraceID != "trace-loop" {
-		t.Fatalf("recovery commit = %#v", commit)
-	}
+	assertRecoveredInvocationSchedule(t, schedules)
 
 	if err := wrapped.recoverInvocationScheduleSnapshot(context.Background(), snapshot); err != nil {
 		t.Fatalf("second recovery: %v", err)
@@ -456,4 +435,30 @@ type invocationScheduleRecoveryLookup struct{ interfaces.RuntimeConfigLookup }
 
 func (invocationScheduleRecoveryLookup) FactoryConfig() *interfaces.FactoryConfig {
 	return invocationScheduleRecoveryConfig()
+}
+
+func assertRecoveredInvocationSchedule(t *testing.T, schedules *recordingInvocationSchedules) {
+	t.Helper()
+	request := schedules.requests[0]
+	if request.ResumeSequence != 7 || !request.SuppressTriggerAtStart {
+		t.Fatalf("recovery controls = sequence %d suppress-start %v, want 7/true", request.ResumeSequence, request.SuppressTriggerAtStart)
+	}
+	if len(request.WorkRequest.Works) != 1 {
+		t.Fatalf("recovered works = %d, want 1", len(request.WorkRequest.Works))
+	}
+	controller := request.WorkRequest.Works[0]
+	if controller.WorkID != "controller-1" || controller.CurrentChainingTraceID != "trace-loop" {
+		t.Fatalf("recovered controller identity = %#v", controller)
+	}
+	if got := controller.InvocationArguments.Arguments["every"].Values; len(got) != 1 || got[0] != "1h0m0s" {
+		t.Fatalf("recovered duration = %#v, want 1h0m0s", got)
+	}
+	if got := controller.InvocationArguments.Arguments["triggerAtStart"].Values; len(got) != 1 || got[0] != "true" {
+		t.Fatalf("recovered trigger-at-start = %#v, want retained true metadata", got)
+	}
+	commit := schedules.commits[0]
+	if !commit.Accepted || commit.WorkID != "controller-1" || commit.TraceID != "trace-loop" {
+		t.Fatalf("recovery commit = %#v", commit)
+	}
+
 }

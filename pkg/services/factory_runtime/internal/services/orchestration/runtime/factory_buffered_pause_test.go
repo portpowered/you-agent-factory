@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -327,4 +328,215 @@ func countFactoryStateEventsTo(t *testing.T, events []factoryapi.FactoryEvent, w
 		}
 	}
 	return count
+}
+
+type serviceModeRunHarness struct {
+	t       *testing.T
+	Factory factoryhost.Engine
+	cancel  context.CancelFunc
+	errCh   chan error
+}
+
+func startServiceModeRunHarness(t *testing.T, opts ...testFactoryOption) *serviceModeRunHarness {
+	t.Helper()
+
+	f, err := newTestFactory(opts...)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- f.Run(ctx)
+	}()
+
+	waitForFactoryState(t, f, interfaces.FactoryStateRunning, time.Second)
+	return &serviceModeRunHarness{t: t, Factory: f, cancel: cancel, errCh: errCh}
+}
+
+func (h *serviceModeRunHarness) pauseAndWait() {
+	h.t.Helper()
+	if err := h.Factory.Pause(context.Background()); err != nil {
+		h.t.Fatalf("Pause: %v", err)
+	}
+	waitForFactoryState(h.t, h.Factory, interfaces.FactoryStatePaused, time.Second)
+}
+
+func (h *serviceModeRunHarness) resumeAndWait() {
+	h.t.Helper()
+	if err := h.Factory.Resume(context.Background()); err != nil {
+		h.t.Fatalf("Resume: %v", err)
+	}
+	waitForFactoryState(h.t, h.Factory, interfaces.FactoryStateRunning, time.Second)
+}
+
+func submitPausedBufferTask(t *testing.T, f factoryhost.Engine, requestID, traceID string) {
+	t.Helper()
+	result, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
+		RequestID:  requestID,
+		WorkTypeID: "task",
+		TraceID:    traceID,
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest while paused: %v", err)
+	}
+	if !result.Accepted {
+		t.Fatalf("submit accepted = false, want true")
+	}
+}
+
+func assertPausedSubmissionNotApplied(t *testing.T, f factoryhost.Engine) {
+	t.Helper()
+	pollPausedSnapshot(t, f, 300*time.Millisecond, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+		if snap.FactoryState != string(interfaces.FactoryStatePaused) {
+			t.Fatalf("factory state = %q, want PAUSED", snap.FactoryState)
+		}
+		if hasWorkAtPlace(snap, "task:init") || hasWorkAtPlace(snap, "task:done") {
+			t.Fatalf("paused submission applied to marking = %#v", snap.Marking.Tokens)
+		}
+		if snap.InFlightCount > 0 || len(snap.Dispatches) > 0 {
+			t.Fatalf("running dispatches while paused inFlight=%d dispatches=%d", snap.InFlightCount, len(snap.Dispatches))
+		}
+	})
+}
+
+func observeNextBufferedResult(t *testing.T, f factoryhost.Engine) <-chan struct{} {
+	t.Helper()
+	impl, ok := f.(*factoryImpl)
+	if !ok || impl.dispatchFlow == nil {
+		t.Fatal("test factory does not expose a canonical dispatch result hook")
+	}
+	written := make(chan struct{})
+	var once sync.Once
+	notify := func() { once.Do(func() { close(written) }) }
+	impl.dispatchFlow.SetOnBufferedResult(notify)
+	return written
+}
+
+func assertPausedWorkerResultApplied(t *testing.T, f factoryhost.Engine) {
+	t.Helper()
+	waitForWorkAtPlace(t, f, "task:done", time.Minute)
+	snap, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot while paused: %v", err)
+	}
+	if snap.FactoryState != string(interfaces.FactoryStatePaused) {
+		t.Fatalf("factory state = %q, want PAUSED", snap.FactoryState)
+	}
+	if countTokensAtPlace(snap, "task:done") != 1 || snap.InFlightCount != 0 || len(snap.DispatchHistory) != 1 {
+		t.Fatalf("paused result was not applied exactly once: %#v", snap)
+	}
+}
+
+func assertPausedSubmissionNotDone(t *testing.T, f factoryhost.Engine) {
+	t.Helper()
+	snap, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot while paused: %v", err)
+	}
+	if hasWorkAtPlace(snap, "task:done") {
+		t.Fatal("buffered submission applied while paused")
+	}
+}
+
+func assertTaskDoneOnce(t *testing.T, f factoryhost.Engine) {
+	t.Helper()
+	snap, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot after resume: %v", err)
+	}
+	if count := countTokensAtPlace(snap, "task:done"); count != 1 {
+		t.Fatalf("task:done token count = %d, want 1", count)
+	}
+}
+
+func assertNoInFlightDispatches(t *testing.T, f factoryhost.Engine) {
+	t.Helper()
+	snap, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot after resume: %v", err)
+	}
+	if snap.InFlightCount != 0 {
+		t.Fatalf("inFlightCount = %d, want 0 after resume", snap.InFlightCount)
+	}
+}
+
+func hasWorkAtPlace(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], placeID string) bool {
+	for _, token := range snap.Marking.Tokens {
+		if token.PlaceID == placeID {
+			return true
+		}
+	}
+	return false
+}
+
+func countTokensAtPlace(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], placeID string) int {
+	count := 0
+	for _, token := range snap.Marking.Tokens {
+		if token.PlaceID == placeID {
+			count++
+		}
+	}
+	return count
+}
+
+func submitTaskWithWorkID(t *testing.T, f factoryhost.Engine, workID, traceID string) {
+	t.Helper()
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
+		WorkID:     workID,
+		WorkTypeID: "task",
+		TraceID:    traceID,
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest for %q: %v", workID, err)
+	}
+}
+
+func assertWorkNotAtDonePlace(t *testing.T, f factoryhost.Engine, workID string) {
+	t.Helper()
+	snap, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if markingContainsWorkAtPlace(&snap.Marking, workID, "task:done") {
+		t.Fatalf("marking = %#v, want work %q to remain unprocessed before resume", snap.Marking.Tokens, workID)
+	}
+}
+
+func assertWorksNotAtDonePlace(t *testing.T, f factoryhost.Engine, workIDs []string) {
+	t.Helper()
+	for _, workID := range workIDs {
+		assertWorkNotAtDonePlace(t, f, workID)
+	}
+}
+
+func waitForWorkDoneAfterResume(t *testing.T, f factoryhost.Engine, workID string) {
+	t.Helper()
+	waitForAggregateSnapshotWithTimeout(t, f, 2*time.Second, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return markingContainsWorkAtPlace(&snap.Marking, workID, "task:done")
+	})
+}
+
+func waitForQuiescentWorksAtDone(t *testing.T, f factoryhost.Engine, workIDs []string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+	return waitForAggregateSnapshotWithTimeout(t, f, 5*time.Second, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return allWorksAtDonePlace(&snap.Marking, workIDs) && snap.InFlightCount == 0
+	})
+}
+
+func assertDispatchOrder(t *testing.T, history []interfaces.CompletedDispatch, wantWorkIDs []string) {
+	t.Helper()
+	gotOrder := workIDsFromDispatchHistory(history)
+	for i, wantWorkID := range wantWorkIDs {
+		if gotOrder[i] != wantWorkID {
+			t.Fatalf("dispatch history order = %v, want %v", gotOrder, wantWorkIDs)
+		}
+	}
+}
+
+func resumeFactory(t *testing.T, f factoryhost.Engine) {
+	t.Helper()
+	if err := f.Resume(context.Background()); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
 }

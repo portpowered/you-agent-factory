@@ -707,7 +707,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 
 // SubmitWorkRequest injects a canonical work request batch idempotently.
 func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	return f.submitInvocationWorkRequest(ctx, request)
+	return f.submitInvocationWorkRequest(ctx, f.scheduleContext(), request)
 }
 
 // PrepareInvocation keeps caller authority beside execution, never inside

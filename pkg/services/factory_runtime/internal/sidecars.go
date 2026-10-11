@@ -8,7 +8,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -179,7 +179,7 @@ func validStatesForBundle(bundle *factoryhost.Bundle) map[string]map[string]bool
 func (s *RuntimeSidecars) failStart(ctx context.Context, handle *factoryhost.Handle, cancel context.CancelFunc, err error) error {
 	cancel()
 	handle.Sidecars.Wait()
-	if handle != nil && handle.Bundle != nil {
+	if handle.Bundle != nil {
 		_, _ = s.automation.DeactivateRuntime(context.WithoutCancel(ctx), automations.RuntimeDeactivationRequest{
 			RuntimeID: handle.Bundle.RuntimeInstanceID,
 		})
