@@ -2,24 +2,439 @@ package messaging
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+// Gate the selected profile's actual outcome flush, leaving journal policy and
+// provider admission in production. No service or journal internals are replaced.
+type messageOutcomeFileSystem struct {
+	platformfilesystem.Local
+	entered, release chan struct{}
+	unblock          sync.Once
+	reject           bool
+	state            string
+	kind             string
+}
+
+type messageOutcomeFile struct {
+	*os.File
+	gate    *messageOutcomeFileSystem
+	outcome bool
+}
+
+func (g *messageOutcomeFileSystem) OpenFile(path string, flags int, mode fs.FileMode) (io.WriteCloser, error) {
+	file, err := os.OpenFile(path, flags, mode)
+	if err != nil {
+		return nil, err
+	}
+	return &messageOutcomeFile{File: file, gate: g}, nil
+}
+
+func (f *messageOutcomeFile) Write(data []byte) (int, error) {
+	var record struct {
+		Kind            string `json:"kind"`
+		DeliveryIntents []struct {
+			State string `json:"state"`
+		} `json:"deliveryIntents"`
+	}
+	if json.Unmarshal(data, &record) == nil {
+		kind := f.gate.kind
+		if kind == "" {
+			kind = "REVIVE_OUTCOME"
+		}
+		f.outcome = record.Kind == kind
+		if f.gate.state != "" {
+			f.outcome = f.outcome && len(record.DeliveryIntents) == 1 && record.DeliveryIntents[0].State == f.gate.state
+		}
+	}
+	return f.File.Write(data)
+}
+
+func (f *messageOutcomeFile) Sync() error {
+	if f.outcome {
+		f.outcome = false // Rollback's Sync must flush without entering again.
+		f.gate.unblockEnter()
+		<-f.gate.release
+		if f.gate.reject {
+			return errors.New("controlled-private-outcome-flush-failure")
+		}
+	}
+	return f.File.Sync()
+}
+
+func (g *messageOutcomeFileSystem) unblockEnter() {
+	select {
+	case <-g.entered:
+	default:
+		close(g.entered)
+	}
+}
+
+type outcomeSendResponse struct {
+	status int
+	body   []byte
+}
+
+// The diagnostic sink acknowledges completion of the controlled failure.
+// Durable facts and public streams remain the behavioral assertions.
+type outcomeFailureSignal struct {
+	zapcore.Core
+	failed chan struct{}
+	once   *sync.Once
+}
+
+func (c *outcomeFailureSignal) With(fields []zapcore.Field) zapcore.Core {
+	return &outcomeFailureSignal{Core: c.Core.With(fields), failed: c.failed, once: c.once}
+}
+
+func (c *outcomeFailureSignal) Check(entry zapcore.Entry, checked *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if c.Enabled(entry.Level) {
+		return checked.AddCore(entry, c)
+	}
+	return checked
+}
+
+func (c *outcomeFailureSignal) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	if entry.Message == "Agent Message revival outcome unavailable" || entry.Message == "Agent Message recovery unavailable" {
+		c.once.Do(func() { close(c.failed) })
+	}
+	return c.Core.Write(entry, fields)
+}
+
+func TestReviveDeliveryWaitsForOutcomeFlush(t *testing.T) {
+	t.Parallel()
+	for _, reject := range []bool{false, true} {
+		t.Run(map[bool]string{false: "committed", true: "refused"}[reject], func(t *testing.T) {
+			t.Parallel()
+			exerciseOutcomeFlush(t, reject)
+		})
+	}
+}
+
+// The provider can confirm progress after send has returned. Its final
+// observation still waits for the selected profile's durable outcome flush.
+func TestProviderConfirmedDeliveryWaitsForOutcomeFlush(t *testing.T) {
+	t.Parallel()
+	for _, reject := range []bool{false, true} {
+		t.Run(map[bool]string{false: "committed", true: "refused"}[reject], func(t *testing.T) {
+			t.Parallel()
+			exerciseProviderOutcomeFlush(t, reject)
+		})
+	}
+}
+
+func exerciseProviderOutcomeFlush(t *testing.T, reject bool) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: reject, state: "ACCEPTED"}
+	defer gate.unblock.Do(func() { close(gate.release) })
+	progress := make(chan struct{})
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	core, _ := observer.New(zap.InfoLevel)
+	failure := &outcomeFailureSignal{Core: core, failed: make(chan struct{}), once: &sync.Once{}}
+	signal := &subscriptionSignal{Core: failure, ready: make(chan struct{}), once: &sync.Once{}}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(signal)}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 8), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("provider flush follow did not register")
+	}
+	request := map[string]any{"requestId": "provider-flush", "to": map[string]string{"workerSessionId": "lead"}, "body": "durable provider confirmation"}
+	pending := f.sendRaw(t, request, lane)
+	assertPendingProviderResponse(t, pending)
+	assertPendingProviderFrames(t, ctx, pending, frames, finished)
+	successor := <-revival.started
+	<-revival.requests
+	close(progress)
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("provider confirmation did not reach outcome flush")
+	}
+	select {
+	case <-frames:
+		t.Fatal("provider delivery published before durable flush")
+	default:
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	final := pending
+	if reject {
+		select {
+		case <-failure.failed:
+		case <-ctx.Done():
+			t.Fatal("provider outcome failure did not complete")
+		}
+		assertProviderRetry(t, f, request, lane, pending)
+		select {
+		case <-frames:
+			t.Fatal("refused provider flush published delivery")
+		default:
+		}
+	} else {
+		final = f.awaitDeliveryOutcome(t, lane, pending)
+		assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, "")
+		assertProviderRetry(t, f, request, lane, final)
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("provider flush changed Factory Events")
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("provider flush follow did not join")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	assertRestartedDelivery(t, f, revival, pending, final, successor["YOU_WORKER_SESSION_ID"], reject)
+
+}
+
+func exerciseOutcomeFlush(t *testing.T, reject bool) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: reject}
+	defer gate.unblock.Do(func() { close(gate.release) })
+	input := &reviveInputGate{entered: make(chan struct{}), release: make(chan struct{})}
+	defer input.unblock.Do(func() { close(input.release) })
+	core, _ := observer.New(zap.InfoLevel)
+	signal := &subscriptionSignal{Core: core, ready: make(chan struct{}), once: &sync.Once{}}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	dir := t.TempDir()
+	f := startHostRunner(t, t.TempDir(), dir, "", serviceedges.Edges{
+		AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(signal),
+		FactorySessionsWorkingDirectory: reviveRecordingDirectory(dir), WorkerRecordingWriter: input,
+		WorkerRecordingStoreObserver: func(store recordings.WorkerRecordingStore) { input.WorkerRecordingStore = store },
+	}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 4), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("follow did not register")
+	}
+	request := map[string]any{"requestId": "flush", "to": map[string]string{"workerSessionId": "lead"}, "body": "flush before delivery facts"}
+	result := make(chan outcomeSendResponse, 1)
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+		result <- outcomeSendResponse{status, body}
+	}()
+	select {
+	case <-input.entered:
+	case <-ctx.Done():
+		t.Fatal("delivery did not reach admission input")
+	}
+	var sent api.AgentMessageObservation
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &sent) != nil || sent.Kind != "SENT" || sent.Message.Status != "QUEUED" || sent.Message.RevivedWorkerSessionId != nil {
+		t.Fatal("initial follow did not preserve queued admission")
+	}
+	input.unblock.Do(func() { close(input.release) })
+	assertFlushPublicationBlocked(t, ctx, gate, result, frames)
+	successor := assertOutcomeFlushResult(t, ctx, f, lane, lead, revival, sent.Message, result, frames, finished, reject)
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("outcome flush changed Factory Events")
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("outcome follow did not join")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	if reject {
+		assertRestartedDelivery(t, f, revival, sent.Message, sent.Message, successor, true)
+	}
+
+}
+
+func assertRestartedDelivery(t *testing.T, first *fixture, revival *workerGate, pending, expected api.AgentMessage, successor string, recoverOutcome bool) {
+	t.Helper()
+	second := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival)
+	if recoverOutcome {
+		reason := "REVIVE_PENDING"
+		pending.Reason = &reason
+		expected = second.awaitDeliveryOutcome(t, nil, pending)
+		if expected.Status != "DELIVERED_REVIVE" || expected.RevivedWorkerSessionId == nil || *expected.RevivedWorkerSessionId != successor {
+			t.Fatal("startup did not recover the original confirmed successor")
+		}
+	}
+	page := readPage(t, second, "/messages?threadId="+pending.ThreadId, nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], expected) {
+		t.Fatal("reconstruction changed the durable provider outcome")
+	}
+	second.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("outcome recovery started another provider attempt")
+	default:
+	}
+}
+
+func TestInterruptedAdmissionWithoutProviderProofStaysQueuedAfterRestart(t *testing.T) {
+	t.Parallel()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, state: "ADMITTED"}
+	progress := make(chan struct{})
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{AgentMessageStoreFileSystem: gate}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	request := map[string]any{"requestId": "interrupted", "to": map[string]string{"workerSessionId": "lead"}, "body": "requires authoritative resumed progress"}
+	response := make(chan outcomeSendResponse, 1)
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+		response <- outcomeSendResponse{status, body}
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("admission did not reach the controlled flush")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	result := <-response
+	var failure api.ErrorResponse
+	if result.status != http.StatusServiceUnavailable || json.Unmarshal(result.body, &failure) != nil || failure.Code != "MESSAGE_STORE_UNAVAILABLE" {
+		t.Fatal("refused admission flush did not return its typed fault")
+	}
+	<-revival.started
+	<-revival.requests
+	page := readPage(t, f, "/messages?toWorkerSessionId=lead", lane)
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("interrupted admission guessed provider delivery")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t) // cancels and joins the admitted, unconfirmed successor
+	second := startHostRunner(t, f.home, f.dir, "", serviceedges.Edges{}, nil, revival)
+	pending := "REVIVE_PENDING"
+	page.Messages[0].Reason = &pending
+	recovered := second.awaitDeliveryOutcome(t, nil, page.Messages[0])
+	if recovered.Status != "QUEUED" || recovered.Reason == nil || *recovered.Reason != "REVIVE_FAILED" || recovered.RevivedWorkerSessionId != nil || recovered.Body != page.Messages[0].Body {
+		t.Fatal("restart guessed success without provider progress")
+	}
+	assertError(t, second, http.MethodPost, "/messages", request, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	second.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("unconfirmed restart branched another provider attempt")
+	default:
+	}
+}
+
+func assertFlushPublicationBlocked(t *testing.T, ctx context.Context, gate *messageOutcomeFileSystem, result <-chan outcomeSendResponse, frames <-chan []byte) {
+	t.Helper()
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("delivery did not reach outcome flush")
+	}
+	select {
+	case <-result:
+		t.Fatal("send completed before outcome flush")
+	default:
+	}
+	select {
+	case <-frames:
+		t.Fatal("delivery published before outcome flush")
+	default:
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+}
+
+func assertOutcomeFlushResult(t *testing.T, ctx context.Context, f *fixture, lane, lead map[string]string, revival *workerGate, queued api.AgentMessage, result <-chan outcomeSendResponse, frames <-chan []byte, finished <-chan error, reject bool) string {
+	t.Helper()
+	var response outcomeSendResponse
+	select {
+	case response = <-result:
+	case <-ctx.Done():
+		t.Fatal("send did not finish after outcome flush")
+	}
+	if reject {
+		return assertRefusedOutcomeFlush(t, f, lane, revival, queued, response, frames)
+	}
+	var responseBody api.AgentMessageSendResponse
+	if response.status != http.StatusAccepted || json.Unmarshal(response.body, &responseBody) != nil {
+		t.Fatal("committed flush lost send outcome")
+	}
+	var outcome api.AgentMessageObservation
+	assertPendingOutcomeFrame(t, ctx, frames, finished)
+	message := f.awaitDeliveryOutcome(t, lane, responseBody.Message)
+	if json.Unmarshal(nextFrame(t, ctx, frames, finished), &outcome) != nil || outcome.Kind != "DELIVERED_REVIVE" || !reflect.DeepEqual(outcome.Message, message) {
+		t.Fatal("committed delivery differs from follow")
+	}
+	got := readPage(t, f, "/messages?threadId="+queued.ThreadId, lane)
+	if len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], message) {
+		t.Fatal("committed delivery differs from read")
+	}
+	successor := assertReviveAdmission(t, f, revival, message, lead)
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	return successor["YOU_WORKER_SESSION_ID"]
+}
+
+func assertRefusedOutcomeFlush(t *testing.T, f *fixture, lane map[string]string, revival *workerGate, queued api.AgentMessage, response outcomeSendResponse, frames <-chan []byte) string {
+	t.Helper()
+	var failure api.ErrorResponse
+	if response.status != http.StatusServiceUnavailable || json.Unmarshal(response.body, &failure) != nil || string(failure.Code) != "MESSAGE_STORE_UNAVAILABLE" {
+		t.Fatalf("flush failure: %d %s", response.status, response.body)
+	}
+	got := readPage(t, f, "/messages?threadId="+queued.ThreadId, lane)
+	if len(got.Messages) != 1 || !reflect.DeepEqual(got.Messages[0], queued) {
+		t.Fatal("failed flush changed queued record")
+	}
+	select {
+	case <-frames:
+		t.Fatal("failed flush published delivery")
+	default:
+	}
+	// The admitted worker is real even when its message outcome cannot flush.
+	successor := <-revival.started
+	<-revival.requests
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	return successor["YOU_WORKER_SESSION_ID"]
+}
 
 func TestMessagingFaultsLeaveFactoryWorkHealthy(t *testing.T) {
 	t.Parallel()
@@ -117,12 +532,15 @@ func TestMessagingSettingsPreserveCanonicalFactoryOutcome(t *testing.T) {
 		if cell.journal != "" {
 			writeJournal(t, filepath.Join(home, ".you-agent-factory", "messages", "messages.jsonl"), cell.journal)
 		}
-		f := startHostEffects(t, home, dir, cell.settings, serviceedges.Merge(healthyProviderEffects(), effects))
+		revival := &workerGate{started: make(chan map[string]string, 2), requests: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+		close(revival.release)
+		f := startHostRunner(t, home, dir, cell.settings, effects, nil, revival, cell.name+"-lead", cell.name+"-lane")
 		if cell.code != "" {
 			assertError(t, f, http.MethodGet, "/messages", nil, nil, http.StatusServiceUnavailable, cell.code)
 		} else if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
 			t.Fatal("isolated inbox is not empty")
 		}
+		assertMessagingSideChannelBeforeFactoryWork(t, f, revival, cell.name, cell.code)
 		assertHealthyWork(t, f)
 		events := comparableFactoryEvents(t, f.server.GetFactoryEvents(t))
 		f.server.Close(t)
@@ -131,6 +549,33 @@ func TestMessagingSettingsPreserveCanonicalFactoryOutcome(t *testing.T) {
 		} else if !reflect.DeepEqual(baseline, events) {
 			t.Fatalf("messaging %s changed canonical Factory events:\ndisabled: %s\nactual: %s", cell.name, baseline, events)
 		}
+	}
+}
+
+// Every immutable profile runs the same real Worker and Factory behavior.
+// Only the enabled profile admits the side-channel ask; its direct continuation
+// must not change the later canonical Factory sequence or Work outcome.
+func assertMessagingSideChannelBeforeFactoryWork(t *testing.T, f *fixture, revival *workerGate, prefix, code string) {
+	t.Helper()
+	lead := f.invoke(t, prefix+"-lead", nil)
+	lane := f.invoke(t, prefix+"-lane", lead)
+	f.endWorker(t, prefix+"-lead")
+	if code != "" {
+		assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "isolated-ask", "to": map[string]string{"workerSessionId": prefix + "-lead"}, "body": "private side-channel ask"}, lane, http.StatusServiceUnavailable, code)
+	} else {
+		before := messageFactoryStreams(t, f, prefix+"-lead", prefix+"-lane")
+		message := f.cliSend(t, lane, prefix+"-lead", "--request-id", "isolated-ask", "--body", "private side-channel ask")
+		head := assertReviveAdmission(t, f, revival, message, lead)
+		f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+		if after := messageFactoryStreams(t, f, prefix+"-lead", prefix+"-lane"); !reflect.DeepEqual(before, after) {
+			t.Fatal("side-channel continuation changed canonical Factory history")
+		}
+	}
+	f.endWorker(t, prefix+"-lane")
+	select {
+	case <-revival.requests:
+		t.Fatal("inactive Messaging or settled ask started another continuation")
+	default:
 	}
 }
 
@@ -268,4 +713,285 @@ func TestReadOnlyRetentionStorePreservesInboxAndFactoryWork(t *testing.T) {
 	if page := readPage(t, third, "/messages", nil); len(page.Messages) != 1 || page.Messages[0].MessageId != recent.MessageId || page.Messages[0].BodySha256 != recent.BodySha256 || page.Messages[0].Status != "EXPIRED" {
 		t.Fatal("retention retry lost the surviving committed message")
 	}
+}
+
+func TestRecipientEndDuringSendFlushDeliversOnce(t *testing.T) {
+	t.Parallel()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), kind: "SENT"}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{AgentMessageStoreFileSystem: gate}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	result := make(chan outcomeSendResponse, 1)
+	request := map[string]any{"requestId": "end-during-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "input committed after recipient end"}
+	go func() {
+		status, body := f.request(t, http.MethodPost, "/messages", request, lane)
+		result <- outcomeSendResponse{status: status, body: body}
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("send did not reach its durable flush")
+	}
+	// The recipient ends before SENT commits or an end observer can register.
+	// Worker completion is independent of the blocked Messaging journal.
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	select {
+	case <-revival.requests:
+		t.Fatal("uncommitted send reached the provider")
+	case <-result:
+		t.Fatal("send returned before its durable flush")
+	default:
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	var response outcomeSendResponse
+	select {
+	case response = <-result:
+	case <-time.After(15 * time.Second):
+		t.Fatal("committed send did not finish")
+	}
+	var sent api.AgentMessageSendResponse
+	if response.status != http.StatusAccepted || json.Unmarshal(response.body, &sent) != nil {
+		t.Fatalf("send after recipient end: %d %s", response.status, response.body)
+	}
+	final := f.awaitDeliveryOutcome(t, lane, sent.Message)
+	head := assertReviveAdmission(t, f, revival, final, lead)
+	if replay := f.cliSend(t, lane, "lead", "--request-id", "end-during-send", "--body", request["body"].(string)); !reflect.DeepEqual(replay, final) {
+		t.Fatal("CLI retry changed the HTTP delivery or started a second send")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	assertContinuationLinks(t, f, "lead", head["YOU_WORKER_SESSION_ID"])
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("send/end overlap changed canonical Factory Events")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("send/end overlap or retry branched the continuation")
+	default:
+	}
+}
+
+func TestStartupDeliversUnreadMessagesWithoutAnotherSend(t *testing.T) {
+	t.Parallel()
+	home, dir := t.TempDir(), t.TempDir()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, kind: "REVIVE_INTENT"}
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	f := startHostRunner(t, home, dir, "", serviceedges.Edges{AgentMessageStoreFileSystem: gate}, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	first := f.cliSend(t, lane, "lead", "--request-id", "first", "--body", "first retained input")
+	held := f.cliSend(t, lane, "lead", "--request-id", "held", "--body", "held retained input", "--if-ended", "hold")
+	second := f.cliSend(t, lane, "lead", "--request-id", "second", "--body", "second retained input")
+	f.endWorker(t, "lead")
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("recipient end did not attempt durable delivery")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	// An unavailable intent flush has no continuation effect. Startup must
+	// recover these unread messages without the former process's Events or
+	// credentials, and without a new send to wake delivery.
+	if page := readPage(t, f, "/messages?toWorkerSessionId=lead", nil); len(page.Messages) != 3 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RevivedWorkerSessionId != nil {
+		t.Fatal("refused intent flush claimed delivery or lost the inbox")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("refused intent flush reached the provider")
+	default:
+	}
+	assertInactiveStartupPreservesUnread(t, f, revival, first.MessageId)
+	next := startHostRunner(t, home, dir, `{"messaging":{"enabled":true}}`, serviceedges.Edges{}, nil, revival)
+	pending := "REVIVE_PENDING"
+	first.Reason = &pending
+	final := next.awaitDeliveryOutcome(t, nil, first)
+	batch := final
+	batch.Body = first.Body + "\n\n" + second.Body
+	head := assertReviveAdmission(t, next, revival, batch, lead)
+	page := readPage(t, next, "/messages?toWorkerSessionId=lead", nil)
+	assertStartupDeliverySelection(t, page, head["YOU_WORKER_SESSION_ID"], first, held, second)
+	assertError(t, next, http.MethodGet, "/messages/"+first.MessageId, nil, lane, http.StatusForbidden, "MESSAGE_NOT_PERMITTED")
+	before := next.server.GetFactoryEvents(t)
+	close(revival.release)
+	next.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	if after := next.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+		t.Fatal("direct recovered successor changed canonical Factory Events")
+	}
+	next.server.Close(t)
+	third := startHostRunner(t, home, dir, "", serviceedges.Edges{}, nil, revival)
+	if reopened := readPage(t, third, "/messages?toWorkerSessionId=lead", nil); !reflect.DeepEqual(page, reopened) {
+		t.Fatal("second startup changed delivered or held messages")
+	}
+	third.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("restart or held input duplicated the continuation")
+	default:
+	}
+}
+
+// Replacing the graph is necessary to select a different immutable profile
+// policy. Inactive hosts retain the exact inbox; later re-enabling must
+// deliver the existing REVIVE messages without a new send.
+func assertInactiveStartupPreservesUnread(t *testing.T, first *fixture, revival *workerGate, messageID string) {
+	t.Helper()
+	path := filepath.Join(first.home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cell := range []struct{ name, settings, code, tail string }{
+		{"disabled", `{"messaging":{"enabled":false}}`, "MESSAGING_DISABLED", ""},
+		{"quarantined", `{"messaging":{"limits":{"defaultExpirySeconds":59}}}`, "MESSAGE_STORE_UNAVAILABLE", ""},
+		{"corrupt", `{"messaging":{"enabled":true}}`, "MESSAGE_STORE_CORRUPT", "invalid retained tail\n"},
+	} {
+		expected := append(bytes.Clone(before), cell.tail...)
+		if err := os.WriteFile(path, expected, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		f := startHostRunner(t, first.home, first.dir, cell.settings, serviceedges.Edges{}, nil, revival, cell.name)
+		caller := f.invoke(t, cell.name, nil)
+		for _, route := range []string{"/messages", "/messages/" + messageID, "/messages?follow=true"} {
+			assertError(t, f, http.MethodGet, route, nil, nil, http.StatusServiceUnavailable, cell.code)
+		}
+		assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "inactive-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "inactive send"}, caller, http.StatusServiceUnavailable, cell.code)
+		// Worker execution and owned shutdown still function while Messaging
+		// cannot activate delivery; join the host before inspecting effects.
+		f.endWorker(t, cell.name)
+		f.server.Close(t)
+		select {
+		case <-revival.requests:
+			t.Fatalf("%s startup revived the retained recipient", cell.name)
+		default:
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(expected, after) {
+			t.Fatalf("%s startup changed or erased the retained inbox", cell.name)
+		}
+	}
+	// The fixture removes only its injected corruption after the owning host
+	// joins. Product activation must never repair the customer's journal.
+	if err := os.WriteFile(path, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertStartupDeliverySelection(t *testing.T, page api.AgentMessageListResponse, head string, messages ...api.AgentMessage) {
+	t.Helper()
+	if len(page.Messages) != len(messages) {
+		t.Fatal("startup invented or lost an original message")
+	}
+	for i, message := range page.Messages {
+		if message.MessageId != messages[i].MessageId || message.Body != messages[i].Body {
+			t.Fatal("startup changed durable send order or input")
+		}
+		if i == 1 {
+			if message.Status != "QUEUED" || message.RevivedWorkerSessionId != nil {
+				t.Fatal("startup revived a held message")
+			}
+		} else if message.Status != "DELIVERED_REVIVE" || message.RevivedWorkerSessionId == nil || *message.RevivedWorkerSessionId != head {
+			t.Fatal("startup did not share exactly one confirmed successor")
+		}
+	}
+}
+
+// The policy-free filesystem edge refuses the retention replacement before
+// publication. This controlled refusal runs on Windows as well as Linux; the
+// read-only directory journey above separately owns real Linux permissions.
+type refusedRetentionFileSystem struct {
+	platformfilesystem.Local
+}
+
+func (refusedRetentionFileSystem) ReplaceDurable(string, []byte) error {
+	return fs.ErrPermission
+}
+
+func TestUnwritableStartupRetainsUnreadRevivalUntilRecovery(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+	settings := `{"messaging":{"enabled":true,"retentionDays":1}}`
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	first, lead, expired, unread := prepareRetentionRevival(t, settings, clock, effects, revival)
+	path := filepath.Join(first.home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.SetTick(25 * 60 * 60)
+	refused := serviceedges.Merge(effects, serviceedges.Edges{AgentMessageStoreFileSystem: refusedRetentionFileSystem{}})
+	second := startHostRunner(t, first.home, first.dir, settings, refused, nil, revival, "healthy")
+	caller := second.invoke(t, "healthy", nil)
+	for _, route := range []string{"/messages", "/messages/" + unread.MessageId, "/messages?follow=true"} {
+		assertError(t, second, http.MethodGet, route, nil, nil, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	}
+	assertError(t, second, http.MethodPost, "/messages", map[string]any{"requestId": "refused-send", "to": map[string]string{"workerSessionId": "lead"}, "body": "refused startup send"}, caller, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	second.endWorker(t, "healthy")
+	second.server.Close(t)
+	if after, err := os.ReadFile(path); err != nil || !bytes.Equal(before, after) {
+		t.Fatal("unwritable activation changed the committed inbox")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("quarantined startup continued the unread recipient")
+	default:
+	}
+	third := startHostRunner(t, first.home, first.dir, settings, effects, nil, revival)
+	pending := "REVIVE_PENDING"
+	unread.Reason = &pending
+	final := third.awaitDeliveryOutcome(t, nil, unread)
+	head := assertReviveAdmission(t, third, revival, final, lead)
+	assertError(t, third, http.MethodGet, "/messages/"+expired.MessageId, nil, nil, http.StatusNotFound, "MESSAGE_NOT_FOUND")
+	page := readPage(t, third, "/messages?toWorkerSessionId=lead", nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], final) {
+		t.Fatal("recovered retention lost or changed the unread message")
+	}
+	beforeEvents := third.server.GetFactoryEvents(t)
+	close(revival.release)
+	third.waitEndedWorker(t, head["YOU_WORKER_SESSION_ID"])
+	if after := third.server.GetFactoryEvents(t); !reflect.DeepEqual(beforeEvents, after) {
+		t.Fatal("recovered direct delivery changed canonical Factory Events")
+	}
+	third.server.Close(t)
+	select {
+	case <-revival.requests:
+		t.Fatal("retention recovery duplicated continuation")
+	default:
+	}
+}
+
+func prepareRetentionRevival(t *testing.T, settings string, clock *platformclock.Deterministic, effects serviceedges.Edges, revival *workerGate) (*fixture, map[string]string, api.AgentMessage, api.AgentMessage) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: true, kind: "REVIVE_INTENT"}
+	effects = serviceedges.Merge(effects, serviceedges.Edges{AgentMessageStoreFileSystem: gate})
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), settings, effects, nil, revival, "lead", "lane")
+	t.Cleanup(func() { gate.unblock.Do(func() { close(gate.release) }) })
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	expired := f.cliSend(t, lane, "lead", "--request-id", "old", "--body", "expired before retention", "--expires", "1m")
+	clock.SetTick(60)
+	if page := readPage(t, f, "/messages?threadId="+expired.ThreadId, lane); len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("old message did not durably expire")
+	}
+	clock.SetTick(23 * 60 * 60)
+	unread := f.cliSend(t, lane, "lead", "--request-id", "unread", "--body", "survives unwritable retention")
+	f.endWorker(t, "lead")
+	select {
+	case <-gate.entered:
+	case <-time.After(15 * time.Second):
+		t.Fatal("recipient end did not reach the intent flush")
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	if page := readPage(t, f, "/messages?threadId="+unread.ThreadId, nil); len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("failed intent did not preserve unread input")
+	}
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	return f, lead, expired, unread
 }

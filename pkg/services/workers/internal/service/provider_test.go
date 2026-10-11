@@ -69,6 +69,27 @@ func TestAuthorizeProviderTargetValidatesProviderRequests(t *testing.T) {
 	})
 }
 
+func TestAuthorizeProviderTargetPreservesMissingExecutablePrerequisite(t *testing.T) {
+	t.Parallel()
+	failure := providers.ExecuteFailure{
+		Kind: providers.ExecuteFailureKindDependency, Message: "ACP executable prerequisite is unavailable",
+		Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{"work-failure-type": "missing_executable"}},
+	}
+	prerequisite := errors.Join(providers.ErrProviderUnavailable, failure)
+	owner := &Service{providers: &providerAuthorizationFake{
+		resolveResult: providers.ResolveIdentityResult{ID: "custom"}, validateErr: prerequisite,
+	}}
+	request := agentProviderRequestWithAlias("custom")
+	err := owner.authorizeProviderTarget(t.Context(), &request, runners.AgentIdentity)
+	var providerErr *workers.ProviderError
+	if !errors.As(err, &providerErr) || providerErr.Type != workers.WorkFailureTypeMissingExecutable || providerErr.Message != failure.Message {
+		t.Fatalf("prerequisite failure = %v, want safe missing-executable failure", err)
+	}
+	if !errors.Is(err, providers.ErrProviderUnavailable) || !errors.Is(err, providers.ErrExecuteFailed) {
+		t.Fatalf("prerequisite failure lost admission/execution sentinels: %v", err)
+	}
+}
+
 func TestAuthorizeProviderTargetDetachesProviderSelection(t *testing.T) {
 	t.Parallel()
 

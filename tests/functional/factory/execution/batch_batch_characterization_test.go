@@ -1,21 +1,111 @@
 package execution_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestFiniteBatchCanceledResult(t *testing.T) {
+	host := newFactorySessionHost(t)
+	// /shutdown owns this host globally, so observe it only after every
+	// parallel explicit-session scenario has joined and released its peer.
+	t.Cleanup(func() {
+		postFiniteBatchControl(t, host.server.URL()+"/shutdown", http.StatusAccepted)
+		selectedAwait(t, host.server.Done())
+		host.server.Stop(t) // Asserts the ordinary serving invocation succeeded.
+	})
+	for _, mode := range []string{"human", "json", "global-json", "context", "completed-and-held", "failed-and-held"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			exerciseFiniteBatchCancellation(t, host, mode)
+		})
+	}
+}
+
+func cancelFiniteBatchSession(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	postFiniteBatchControl(t, baseURL+"/factory-sessions/"+sessionID+"/cancel", http.StatusOK)
+}
+
+func postFiniteBatchControl(t *testing.T, endpoint string, wantStatus int) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != wantStatus {
+		t.Fatalf("control status = %d, want %d", response.StatusCode, wantStatus)
+	}
+}
+
+func assertFiniteBatchReplay(t *testing.T, host *factorySessionHost, dir, recordPath string, env []string) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--replay", recordPath, "--session", uuid.NewString(), "--no-record"})
+	inputs.Input.Env = env
+	inputs.Input.WorkingDirectory = dir
+	if err := host.server.Execute(t, inputs.Input); err != nil {
+		t.Fatalf("replay canceled batch: %v (type=%T); cause=%#v; stdout=%s stderr=%s", err, err, errors.Unwrap(err), inputs.Stdout(), inputs.Stderr())
+	}
+	if !strings.Contains(inputs.Stdout(), `Work: id="btrc-batch-child" type="task" state="init"`) || !strings.Contains(inputs.Stdout(), "DISPATCH_RESPONSE") {
+		t.Fatalf("replay lost unfinished Work/canonical dispatch: %s", inputs.Stdout())
+	}
+}
+
+func holdFiniteBatchPeer(t *testing.T, host *factorySessionHost) func() {
+	t.Helper()
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
+	runner := &selectedCommandRunner{calls: make(chan selectedCommandCall)}
+	baseURL, sessionID := host.Open(t, dir, runner)
+	support.SubmitSessionWorkAt(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{WorkTypeName: "task", Payload: "peer customer value"})
+	call := selectedAwait(t, runner.calls)
+	return func() {
+		// A selected batch has joined before this read/release. The serving
+		// peer must still retain its own Work and independently complete it.
+		items := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+sessionID+"/work")
+		if len(items.Results) == 0 {
+			t.Fatal("peer Work disappeared during selected cancellation")
+		}
+		select {
+		case err := <-call.canceled:
+			t.Fatalf("peer canceled with selected batch: %v", err)
+		default:
+		}
+		result, err := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("peer COMPLETE")}).Run(t.Context(), call.request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		call.reply <- result
+		support.WaitForSessionTerminalStatus(t, baseURL, sessionID, 30*time.Second)
+	}
+}
 
 const (
 	btrcBatchRequestID   = "btrc-batch-request"
@@ -563,4 +653,158 @@ func btrcStringSliceValue(value *[]string) []string {
 		return nil
 	}
 	return *value
+}
+
+func assertFiniteBatchCanceledResult(t *testing.T, mode string, err error, stdout, stderr string) {
+	t.Helper()
+	if mode == "context" {
+		assertFiniteBatchInterrupted(t, err, stderr)
+		return
+	}
+	var failure *runcli.InvocationError
+	if !errors.As(err, &failure) || failure.Code != "RUN_BATCH_FAILED" {
+		t.Fatalf("batch result = %v; stdout=%s stderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(stdout, "success") || strings.Contains(err.Error(), "session not found") {
+		t.Fatalf("untruthful result: %v / %s", err, stdout)
+	}
+	if !strings.Contains(err.Error(), "batch-child") || !strings.Contains(err.Error(), "unfinished") {
+		t.Fatalf("missing unfinished attribution: %v", err)
+	}
+	if mode == "completed-and-held" && strings.Contains(err.Error(), "batch-parent") {
+		t.Fatalf("completed member reported as failed: %v", err)
+	}
+	if mode == "failed-and-held" && !strings.Contains(err.Error(), "batch-parent") {
+		t.Fatalf("failed member lost: %v", err)
+	}
+	if mode == "json" || mode == "global-json" {
+		assertFiniteBatchCanceledJSON(t, stdout)
+	}
+}
+
+func assertFiniteBatchInterrupted(t *testing.T, err error, stderr string) {
+	t.Helper()
+	if !errors.Is(err, context.Canceled) || !strings.Contains(stderr, "batch interrupted") || strings.Contains(stderr, "CURRENT_FACTORY_INVALID") {
+		t.Fatalf("interrupted batch = %v / %s", err, stderr)
+	}
+}
+
+func assertFiniteBatchCanceledJSON(t *testing.T, stdout string) {
+	t.Helper()
+	var report struct {
+		Status   string
+		Failures []struct {
+			WorkID    string
+			WorkState string
+			Reason    string
+		}
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("JSON result: %v / %s", err, stdout)
+	}
+	if report.Status != "FAILED" || len(report.Failures) != 2 {
+		t.Fatalf("report = %#v", report)
+	}
+}
+
+// finiteBatchStartup observes the public CLI readiness line, which follows
+// startup completion and recording publication. A command can start earlier.
+type finiteBatchStartup struct {
+	io.Writer
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (output *finiteBatchStartup) Write(data []byte) (int, error) {
+	n, err := output.Writer.Write(data)
+	if err == nil && strings.Contains(string(data[:n]), "Factory initiated:") {
+		output.once.Do(func() { close(output.ready) })
+	}
+	return n, err
+}
+
+func exerciseFiniteBatchCancellation(t *testing.T, host *factorySessionHost, mode string) {
+	t.Helper()
+	var finishPeer func()
+	if mode == "human" {
+		finishPeer = holdFiniteBatchPeer(t, host)
+	}
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "resource_contention"))
+	runner := &selectedCommandRunner{calls: make(chan selectedCommandCall)}
+	host.commands.mu.Lock()
+	host.commands.routes[dir] = runner
+	host.commands.mu.Unlock()
+	t.Cleanup(func() { host.commands.mu.Lock(); delete(host.commands.routes, dir); host.commands.mu.Unlock() })
+	batch, err := json.Marshal(btrcBatchRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	batchPath := filepath.Join(t.TempDir(), "batch.json")
+	if err := os.WriteFile(batchPath, batch, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sessionID := uuid.NewString()
+	recordPath := filepath.Join(t.TempDir(), "batch.replay.jsonl")
+	args := []string{"you", "run", "--dir", dir, "--session", sessionID, "--work", batchPath, "--record", recordPath}
+	if mode == "json" {
+		args = append(args, "--json")
+	}
+	if mode == "global-json" {
+		args = append([]string{"you", "--json"}, args[1:]...)
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	startup := &finiteBatchStartup{Writer: inputs.Input.Stdout, ready: make(chan struct{})}
+	if mode == "context" {
+		inputs.Input.Stdout = startup
+	}
+	home := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = dir
+	ctx, cancel := context.WithCancel(inputs.Input.Context)
+	defer cancel()
+	inputs.Input.Context = ctx
+	done := make(chan error, 1)
+	joined := make(chan struct{})
+	t.Cleanup(func() { cancel(); selectedAwait(t, joined) })
+	go func() { done <- host.server.Execute(t, inputs.Input); close(joined) }()
+	var call selectedCommandCall
+	select {
+	case call = <-runner.calls:
+	case err := <-done:
+		t.Fatalf("batch exited before readiness: %v / %s / %s", err, inputs.Stdout(), inputs.Stderr())
+	case <-t.Context().Done():
+		t.Fatal("test ended before readiness")
+	}
+	if mode == "completed-and-held" || mode == "failed-and-held" {
+		releaseFiniteBatchMember(t, call, mode)
+		call = selectedAwait(t, runner.calls)
+	}
+	if mode == "context" {
+		// Worker readiness alone does not establish a started CLI invocation.
+		// Cancel only after public startup completion while the worker is held.
+		selectedAwait(t, startup.ready)
+		cancel()
+	} else {
+		cancelFiniteBatchSession(t, host.server.URL(), sessionID)
+	}
+	selectedAwait(t, call.canceled)
+	err = selectedAwait(t, done)
+	assertFiniteBatchCanceledResult(t, mode, err, inputs.Stdout(), inputs.Stderr())
+	assertFiniteBatchReplay(t, host, dir, recordPath, inputs.Input.Env)
+	if finishPeer != nil {
+		finishPeer()
+	}
+}
+
+func releaseFiniteBatchMember(t *testing.T, call selectedCommandCall, mode string) {
+	t.Helper()
+	result := platformprocess.CommandResult{Stdout: []byte("processed. COMPLETE")}
+	if mode == "failed-and-held" {
+		result = platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 400 Bad Request: invalid request")}
+	}
+	shaped, err := support.NewShapedProviderCommandRunner(result).Run(t.Context(), call.request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call.reply <- shaped
 }

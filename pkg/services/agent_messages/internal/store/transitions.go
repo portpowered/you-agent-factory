@@ -25,6 +25,9 @@ func (j *Journal) validate(t Transaction) error {
 	if err := j.validateChanges(t, changed); err != nil {
 		return err
 	}
+	if err := j.validateIntents(t, changed); err != nil {
+		return err
+	}
 	seen := make(map[requestKey]bool, len(t.Requests))
 	for _, request := range t.Requests {
 		key := requestKey{request.SenderIdentity, request.RequestID}
@@ -45,6 +48,8 @@ func (j *Journal) validate(t Transaction) error {
 
 func (j *Journal) validateChanges(t Transaction, changed map[string]Entry) error {
 	switch t.Kind {
+	case ReviveIntent, ReviveOutcome:
+		return nil // Intent validation owns the exact atomic message changes.
 	case Snapshot:
 		return j.validateSnapshot(t, changed)
 	case RequestAlias:
@@ -102,7 +107,7 @@ func (j *Journal) validateAdmission(t Transaction, changed map[string]Entry) err
 		if !exists {
 			newCount++
 			if entry.Message.Status != agentmessages.Queued ||
-				entry.Sequence != t.Sequence || entry.Message.RepliedByMessageID != "" {
+				entry.Sequence != t.Sequence || entry.Message.RepliedByMessageID != "" || entry.Message.RevivedWorkerSessionID != "" {
 				return ErrInvalidTransaction
 			}
 			continue
@@ -155,7 +160,7 @@ func validTransition(old, next Entry, kind string) bool {
 	expected := old
 	switch kind {
 	case Read:
-		if old.Message.Status != agentmessages.Queued {
+		if old.Message.Status != agentmessages.Queued && old.Message.Status != agentmessages.DeliveredRevive {
 			return false
 		}
 		expected.Message.Status = agentmessages.Read
@@ -167,6 +172,11 @@ func validTransition(old, next Entry, kind string) bool {
 		}
 	case Expired:
 		expected.Message.Status = agentmessages.Expired
+	case DeliveryUpdated:
+		if old.Message.Status != agentmessages.Queued || next.Message.Status != agentmessages.Queued || next.Message.Reason == "" {
+			return false
+		}
+		expected.Message.Reason = next.Message.Reason
 	default:
 		return false
 	}

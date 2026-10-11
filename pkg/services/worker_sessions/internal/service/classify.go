@@ -735,11 +735,20 @@ func causeKindString(cause *workersessions.FailureCause) string {
 // W3 terminal record. Failure fields are additive and carry only the already
 // normalized Worker Sessions classification.
 type terminalSessionPayload struct {
-	Continuation         *workers.SessionContinuation `json:"continuation,omitempty"`
-	Status               string                       `json:"status,omitempty"`
-	FailureCause         string                       `json:"failureCause,omitempty"`
-	FailureDetail        string                       `json:"failureDetail,omitempty"`
-	AgentRunFailureClass string                       `json:"agentRunFailureClass,omitempty"`
+	Continuation                    *workers.SessionContinuation      `json:"continuation,omitempty"`
+	Status                          string                            `json:"status,omitempty"`
+	FailureCause                    string                            `json:"failureCause,omitempty"`
+	FailureDetail                   string                            `json:"failureDetail,omitempty"`
+	AgentRunFailureClass            string                            `json:"agentRunFailureClass,omitempty"`
+	ProviderFailureKind             providers.ExecuteFailureKind      `json:"providerFailureKind,omitempty"`
+	ProviderContinuationFailureKind providers.ContinuationFailureKind `json:"providerContinuationFailureKind,omitempty"`
+	ProviderContinuationOutcome     providers.ContinuationOutcome     `json:"providerContinuationOutcome,omitempty"`
+}
+
+func (p terminalSessionPayload) failure() *workersessions.FailureCause {
+	return &workersessions.FailureCause{Kind: workersessions.FailureCauseKind(p.FailureCause), Detail: p.FailureDetail,
+		AgentRunFailureClass: p.AgentRunFailureClass, ProviderFailureKind: p.ProviderFailureKind,
+		ProviderContinuationFailureKind: p.ProviderContinuationFailureKind, ProviderContinuationOutcome: p.ProviderContinuationOutcome}
 }
 
 // terminalPhase is the pure mapping from a committed Worker Session State to
@@ -777,6 +786,9 @@ func terminalDraft(state workersessions.State, result workersessions.TerminalRes
 		payload.FailureCause = string(cause.Kind)
 		payload.FailureDetail = cause.Detail
 		payload.AgentRunFailureClass = cause.AgentRunFailureClass
+		payload.ProviderFailureKind = cause.ProviderFailureKind
+		payload.ProviderContinuationFailureKind = cause.ProviderContinuationFailureKind
+		payload.ProviderContinuationOutcome = cause.ProviderContinuationOutcome
 	}
 	payloadJSON, _ := json.Marshal(payload)
 	return workers.Draft{

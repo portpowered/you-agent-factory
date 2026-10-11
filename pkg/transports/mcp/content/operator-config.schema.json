@@ -423,6 +423,12 @@
               "minimum": 1,
               "default": 10
             },
+            "revivesPerChainPerHour": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 6,
+              "description": "Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit."
+            },
             "messagesPerThread": {
               "type": "integer",
               "minimum": 1,

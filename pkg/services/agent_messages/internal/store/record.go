@@ -15,15 +15,18 @@ import (
 )
 
 const (
-	Version      = 1
-	Sent         = "SENT"
-	Read         = "READ"
-	Replied      = "REPLIED"
-	Expired      = "EXPIRED"
-	InboxUpdated = "INBOX_UPDATED"
-	RequestAlias = "REQUEST_ALIAS"
-	Snapshot     = "SNAPSHOT"
-	maxBodyBytes = 8192
+	Version         = 1
+	Sent            = "SENT"
+	Read            = "READ"
+	Replied         = "REPLIED"
+	Expired         = "EXPIRED"
+	InboxUpdated    = "INBOX_UPDATED"
+	RequestAlias    = "REQUEST_ALIAS"
+	Snapshot        = "SNAPSHOT"
+	ReviveIntent    = "REVIVE_INTENT"
+	ReviveOutcome   = "REVIVE_OUTCOME"
+	DeliveryUpdated = "DELIVERY_UPDATED"
+	maxBodyBytes    = 8192
 )
 
 var (
@@ -55,13 +58,14 @@ type Request struct {
 // Transaction is the v1 serializer contract. Reply admission changes its
 // parent and child together; an alias record changes no message state.
 type Transaction struct {
-	Version     int       `json:"version"`
-	RecordID    string    `json:"recordId"`
-	Sequence    uint64    `json:"sequence"`
-	Kind        string    `json:"kind"`
-	CommittedAt time.Time `json:"committedAt"`
-	Messages    []Entry   `json:"messages"`
-	Requests    []Request `json:"requests"`
+	Version         int              `json:"version"`
+	RecordID        string           `json:"recordId"`
+	Sequence        uint64           `json:"sequence"`
+	Kind            string           `json:"kind"`
+	CommittedAt     time.Time        `json:"committedAt"`
+	Messages        []Entry          `json:"messages"`
+	Requests        []Request        `json:"requests"`
+	DeliveryIntents []DeliveryIntent `json:"deliveryIntents,omitempty"`
 }
 
 func (t Transaction) validate() error {
@@ -70,7 +74,7 @@ func (t Transaction) validate() error {
 		return ErrInvalidTransaction
 	}
 	switch t.Kind {
-	case Sent, Read, Replied, Expired, InboxUpdated, RequestAlias, Snapshot:
+	case Sent, Read, Replied, Expired, InboxUpdated, RequestAlias, Snapshot, ReviveIntent, ReviveOutcome, DeliveryUpdated:
 	default:
 		return ErrInvalidTransaction
 	}
@@ -114,19 +118,28 @@ func validAddress(m agentmessages.Message) bool {
 
 func validDelivery(m agentmessages.Message) bool {
 	if m.Delivery != "QUEUE" || !endedPolicy(m.IfEnded) || !endedPolicy(m.ReplyIfEnded) ||
-		m.Hop < 0 || m.Hop > 3 || m.SentAt.IsZero() || m.RevivedWorkerSessionID != "" {
+		m.Hop < 0 || m.Hop > 3 || m.SentAt.IsZero() {
 		return false
 	}
 	expiry := m.ExpiresAt.Sub(m.SentAt)
 	if expiry < time.Minute || expiry > 7*24*time.Hour {
 		return false
 	}
-	if m.Reason != "" && m.Reason != "REVIVE_UNSUPPORTED" {
+	if !validReason(m.Reason) {
+		return false
+	}
+	if (m.RevivedWorkerSessionID == "") != (m.To.DeliveredWorkerSessionID == "") ||
+		m.RevivedWorkerSessionID != m.To.DeliveredWorkerSessionID {
+		return false
+	}
+	if m.RevivedWorkerSessionID != "" && (m.IfEnded != "REVIVE" || m.Reason != "" || m.Status == agentmessages.Queued) {
 		return false
 	}
 	switch m.Status {
 	case agentmessages.Queued, agentmessages.Read, agentmessages.Replied, agentmessages.Expired:
 		return true
+	case agentmessages.DeliveredRevive:
+		return m.RevivedWorkerSessionID != ""
 	default:
 		return false
 	}

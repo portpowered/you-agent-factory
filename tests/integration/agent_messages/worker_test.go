@@ -131,6 +131,8 @@ const providerChild = `const fs = require('fs');
 const path = require('path');
 if (!process.argv.slice(2).includes('exec')) { console.log('codex controlled 1.0'); process.exit(0); }
 process.stdin.resume();
+let input = '';
+process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
  const id = process.env.YOU_WORKER_SESSION_ID;
  const target = path.join(process.env.AM_T5_CREDENTIAL_ROOT, id+'-credentials.json');
@@ -140,10 +142,15 @@ process.stdin.on('end', () => {
  const args = process.argv.slice(2);
  const resume = args.indexOf('resume');
  const thread = resume >= 0 ? args[resume+1] : 'controlled-'+id;
+ fs.writeFileSync(path.join(process.env.AM_T5_CREDENTIAL_ROOT,id+'-input.json'), JSON.stringify({args,input}));
  console.log(JSON.stringify({type:'thread.started',thread_id:thread}));
+ let progressed = false;
  const parent = process.ppid;
  const lifetime = setTimeout(() => process.exit(1), 80000);
  const interval = setInterval(() => {
+  if (!progressed && fs.existsSync(path.join(process.env.AM_T5_CREDENTIAL_ROOT,id+'-progress'))) {
+   console.log(JSON.stringify({type:'turn.started'})); progressed = true;
+  }
   if (fs.existsSync(path.join(process.env.AM_T5_CREDENTIAL_ROOT,id+'-release'))) {
    console.log(JSON.stringify({type:'item.completed',item:{id:'final',type:'agent_message',text:'controlled worker complete'}}));
    console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));

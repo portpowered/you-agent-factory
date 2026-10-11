@@ -141,6 +141,55 @@ start. Omission applies no execution deadline. It does not specify a completion
 wait for the MCP call.
 
 Explicit `action: "RUN"` returns `worker_session.run_removed` before execution.
+
+### Watch several direct sessions
+
+Start several sessions on the same host and keep each returned
+`workerSessionId`. For example, submit these two calls to `you.subagent`:
+
+```json
+{"action":"START","prompt":"Review the tests"}
+{"action":"START","prompt":"Review the documentation"}
+```
+
+Use the returned IDs with one terminal watcher:
+
+```sh
+you --server http://localhost:8080 worker-sessions follow --terminal direct-a direct-b
+```
+
+Each session produces one flushed physical line when it reaches a terminal state,
+in completion order. Already-terminal sessions are included. Duplicate IDs
+produce one observation and one line.
+
+```text
+workerSessionId="direct-b" state=COMPLETED result="Documentation review complete"
+workerSessionId="direct-a" state=FAILED result="Published failure detail"
+```
+
+The state comes from the session lifecycle record: `COMPLETED`, `FAILED`,
+`CANCELED`, or `TERMINATED`. Successful results use only the latest completed,
+nonpartial assistant text, bounded to 240 characters plus an ellipsis.
+Failure and control results use published details. If no result text or detail
+is available, the result contains the state. Embedded newlines are escaped;
+prompts, reasoning, tools, and raw transcripts are excluded. Add global
+`--json` for flushed NDJSON with
+the string fields `workerSessionId`, `state`, and `result`.
+
+The watcher consumes retained and live notifications without polling. It exits
+0 after every distinct selected ID reaches terminal, including failed attempts.
+An empty ID list, blank ID, unknown ID, unavailable host or stream, observation
+gap, premature stream closure, or output failure exits 1 with a typed stderr
+diagnostic. Observation errors name the failed ID and selected host; any genuine
+terminal lines already emitted remain valid. It never selects another host or
+treats stream closure as success. Connection and stream-header establishment
+are bounded to 15 seconds; an open observer has no lifetime deadline.
+
+Press Ctrl+C to detach the watcher (exit 130). This closes only its own
+observers and leaves the attempts running. Run the same watcher again to
+reattach. To stop an attempt, use the separate Worker Session control command
+or the MCP CONTROL action.
+
 Use START, then READ the admitted identity. Unknown actions and invalid inputs
 return nonretryable `worker_session.invalid_request`. Other failures retain the
 Worker Session typed error envelope.

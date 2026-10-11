@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -97,6 +98,222 @@ func assertRequestRecovered(t *testing.T, journal *Journal, request Request) {
 	if err != nil || !exists || got != request {
 		t.Fatalf("request alias was not recovered: %v", err)
 	}
+}
+
+func pendingDelivery(entries ...Entry) DeliveryIntent {
+	ids, bodies := []string{}, []string{}
+	for _, entry := range entries {
+		ids = append(ids, entry.Message.MessageID)
+		bodies = append(bodies, entry.Message.Body)
+	}
+	input := strings.Join(bodies, "\n\n")
+	hash := sha256.Sum256([]byte(input))
+	return DeliveryIntent{RequestID: ids[0], RecipientChainIdentity: entries[0].RecipientChainIdentity,
+		FactorySessionID: entries[0].Message.To.FactorySessionID, SourceWorkerSessionID: "recipient", SuccessorWorkerSessionID: "successor",
+		MessageIDs: ids, FollowUpInput: input, InputSHA256: hex.EncodeToString(hash[:]), ResolveHead: true, State: IntentPending}
+}
+
+func intentTransaction(sequence uint64, intent DeliveryIntent) Transaction {
+	tx := transaction(sequence, ReviveIntent)
+	tx.Messages = []Entry{}
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	return tx
+}
+
+func acceptedTransaction(sequence uint64, intent DeliveryIntent, entries ...Entry) Transaction {
+	tx := transaction(sequence, ReviveOutcome, append([]Entry{}, entries...)...)
+	intent.State, intent.AcceptedAt = IntentAccepted, tx.CommittedAt
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	for i := range tx.Messages {
+		m := &tx.Messages[i].Message
+		m.Status, m.RevivedWorkerSessionID, m.To.DeliveredWorkerSessionID = agentmessages.DeliveredRevive, intent.SuccessorWorkerSessionID, intent.SuccessorWorkerSessionID
+	}
+	return tx
+}
+
+func admittedTransaction(sequence uint64, intent DeliveryIntent, entries ...Entry) Transaction {
+	tx := transaction(sequence, ReviveOutcome, append([]Entry{}, entries...)...)
+	intent.State, intent.AcceptedAt, intent.Reason = IntentAdmitted, tx.CommittedAt, "REVIVE_PENDING"
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	for i := range tx.Messages {
+		tx.Messages[i].Message.Reason = intent.Reason
+	}
+	return tx
+}
+
+func TestJournalAdmittedReviveAwaitsProviderOutcomeAcrossReopen(t *testing.T) {
+	t.Parallel()
+	for _, confirmed := range []bool{true, false} {
+		t.Run(fmt.Sprint(confirmed), func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := newTestJournal(t, testFiles{}, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(3, intent))
+			admitted := admittedTransaction(4, intent, entries...)
+			mustCommit(t, j, admitted)
+			j = newTestJournal(t, testFiles{}, path)
+			assertDeliverySnapshot(t, j, admitted)
+			intent = admitted.DeliveryIntents[0]
+			mustCommit(t, j, sentTransaction("third", 5))
+			if err := j.Commit(intentTransaction(6, pendingDelivery(message("third", 5)))); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("unconfirmed admitted chain allowed a second effect", err)
+			}
+			outcome := providerOutcomeTransaction(6, intent, confirmed, admitted.Messages...)
+			mustCommit(t, j, outcome)
+			assertDeliverySnapshot(t, newTestJournal(t, testFiles{}, path), outcome)
+			if err := j.Commit(providerOutcomeTransaction(7, intent, !confirmed, outcome.Messages...)); !errors.Is(err, ErrInvalidTransaction) {
+				t.Fatal("settled provider outcome was changed", err)
+			}
+		})
+	}
+}
+
+func providerOutcomeTransaction(sequence uint64, intent DeliveryIntent, confirmed bool, entries ...Entry) Transaction {
+	tx := transaction(sequence, ReviveOutcome, append([]Entry{}, entries...)...)
+	intent.State, intent.Reason = IntentAccepted, ""
+	if !confirmed {
+		intent.State, intent.Reason, intent.AcceptedAt = IntentFailed, "REVIVE_UNSUPPORTED", time.Time{}
+	}
+	tx.DeliveryIntents = []DeliveryIntent{intent}
+	for i := range tx.Messages {
+		m := &tx.Messages[i].Message
+		m.Reason = intent.Reason
+		if confirmed {
+			if m.Status == agentmessages.Queued {
+				m.Status = agentmessages.DeliveredRevive
+			}
+			m.RevivedWorkerSessionID, m.To.DeliveredWorkerSessionID = intent.SuccessorWorkerSessionID, intent.SuccessorWorkerSessionID
+		}
+	}
+	return tx
+}
+
+func assertDeliverySnapshot(t *testing.T, j *Journal, tx Transaction) {
+	t.Helper()
+	intents, err := j.DeliveryIntents()
+	if err != nil || !reflect.DeepEqual(intents, tx.DeliveryIntents) {
+		t.Fatal("delivery milestone was not durable", err)
+	}
+	for _, want := range tx.Messages {
+		got, found, _, err := j.LookupMessage(want.Message.MessageID)
+		if err != nil || !found || got != want {
+			t.Fatal("message published a different delivery milestone", err)
+		}
+	}
+}
+
+func TestJournalReviveIntentAndAtomicOutcomeSurviveReopen(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []string{"none", "short", "sync"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			files := &testFiles{}
+			j := newTestJournal(t, files, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			entries, _, _ := j.Entries()
+			intent := pendingDelivery(entries...)
+			mustCommit(t, j, intentTransaction(3, intent))
+			got, _ := j.DeliveryIntents()
+			got[0].MessageIDs[0] = "mutation"
+			got, _ = j.DeliveryIntents()
+			if !reflect.DeepEqual(got, []DeliveryIntent{intent}) {
+				t.Fatal("intent read shared mutable input")
+			}
+			if fault != "none" {
+				files.open = func(path string, flags int, mode fs.FileMode) (io.WriteCloser, error) {
+					file, err := os.OpenFile(path, flags, mode)
+					if err != nil {
+						return nil, err
+					}
+					return &faultFile{File: file, fault: fault}, nil
+				}
+			}
+			outcome := acceptedTransaction(4, intent, entries...)
+			err := j.Commit(outcome)
+			want, wantEntries := []DeliveryIntent{intent}, entries
+			if fault == "none" {
+				if err != nil {
+					t.Fatal(err)
+				}
+				want, wantEntries = outcome.DeliveryIntents, outcome.Messages
+			} else if !errors.Is(err, ErrUnavailable) {
+				t.Fatal("outcome fault not reported", err)
+			}
+			for _, journal := range []*Journal{j, newTestJournal(t, testFiles{}, path)} {
+				got, err := journal.DeliveryIntents()
+				gotEntries, _, readErr := journal.Entries()
+				if err != nil || readErr != nil || !reflect.DeepEqual(got, want) || !reflect.DeepEqual(gotEntries, wantEntries) {
+					t.Fatal("partial delivery outcome escaped", err, readErr)
+				}
+			}
+		})
+	}
+}
+
+func TestJournalReviveOutcomePreservesConcurrentInboxState(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{Read, Replied, Expired} {
+		for _, accepted := range []bool{true, false} {
+			t.Run(kind+fmt.Sprint(accepted), func(t *testing.T) {
+				t.Parallel()
+				path := filepath.Join(t.TempDir(), "messages.jsonl")
+				j := newTestJournal(t, testFiles{}, path)
+				mustCommit(t, j, sentTransaction("first", 1))
+				entries, _, _ := j.Entries()
+				intent := pendingDelivery(entries...)
+				mustCommit(t, j, intentTransaction(2, intent))
+				updated := entries[0]
+				updated.Message.Status = agentmessages.Status(kind)
+				change := transaction(3, kind, updated)
+				if kind == Replied {
+					change = concurrentReply(updated)
+					updated = change.Messages[0]
+				}
+				mustCommit(t, j, change)
+				outcome := acceptedTransaction(4, intent, updated)
+				outcome.Messages[0].Message.Status = updated.Message.Status
+				if !accepted {
+					outcome.Messages = []Entry{updated}
+					outcome.Messages[0].Message.Reason = "REVIVE_FAILED"
+					outcome.DeliveryIntents[0] = intent
+					outcome.DeliveryIntents[0].State, outcome.DeliveryIntents[0].Reason = IntentFailed, "REVIVE_FAILED"
+				}
+				regression := outcome
+				regression.Messages = append([]Entry{}, outcome.Messages...)
+				regression.Messages[0].Message.Status = agentmessages.Queued
+				if accepted {
+					regression.Messages[0].Message.Status = agentmessages.DeliveredRevive
+				}
+				if err := j.Commit(regression); !errors.Is(err, ErrInvalidTransaction) {
+					t.Fatal("outcome regressed concurrent inbox state", err)
+				}
+				mustCommit(t, j, outcome)
+				for _, journal := range []*Journal{j, newTestJournal(t, testFiles{}, path)} {
+					got, found, _, err := journal.LookupMessage("first")
+					if err != nil || !found || got != outcome.Messages[0] {
+						t.Fatal("outcome lost durable concurrent inbox state", err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func concurrentReply(parent Entry) Transaction {
+	parent.Message.RepliedByMessageID = "reply"
+	child := message("reply", 3)
+	child.Message.ThreadID, child.Message.InReplyTo = parent.Message.ThreadID, parent.Message.MessageID
+	child.Message.From.WorkerSessionID, child.Message.To.WorkerSessionID = parent.Message.To.WorkerSessionID, parent.Message.From.WorkerSessionID
+	child.SenderChainIdentity, child.RecipientChainIdentity = parent.RecipientChainIdentity, parent.SenderChainIdentity
+	change := transaction(3, Replied, parent, child)
+	change.Requests = []Request{{SenderIdentity: child.SenderChainIdentity, RequestID: "reply", RequestSHA256: strings.Repeat("b", 64), MessageID: "reply"}}
+	return change
 }
 
 func TestJournalInboxUpdatesAreAtomicAndReconstructed(t *testing.T) {

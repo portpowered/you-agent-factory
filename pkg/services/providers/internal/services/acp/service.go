@@ -15,6 +15,9 @@ type Service interface {
 	Configure(context.Context, []providers.ACPIntegration) error
 	Integrations() []providers.ACPIntegration
 	Resolve(providers.ID) (providers.ID, bool)
+	// ValidatePrerequisites checks the current configured executable without
+	// registering an attempt or starting an ACP conversation.
+	ValidatePrerequisites(context.Context, providers.ID) error
 	Execute(context.Context, providers.ID, providers.ExecuteRequest) (providers.ExecuteResult, error)
 
 	// NegotiatedCapabilities returns the exact AgentCapabilities id's daemon

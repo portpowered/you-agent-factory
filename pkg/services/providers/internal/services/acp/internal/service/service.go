@@ -886,6 +886,41 @@ func (a *attempt) promptWithWindow(
 	return response, err
 }
 
+// ValidatePrerequisites observes a snapshot of the immutable parsed command.
+// Configuration locks are released before lookup; a concurrent replacement
+// cannot redirect this check to another route. Launch still rechecks availability.
+func (service *Service) ValidatePrerequisites(ctx context.Context, id providers.ID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target, _, ok := service.resolveProvider(id)
+	if !ok || service.locator == nil {
+		return providers.ErrProviderUnavailable
+	}
+	_, lookupErr := service.resolveLaunchName(target)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if lookupErr != nil {
+		// Locator errors and configured command text are private. The public
+		// admission mapper supplies the existing actionable guidance. Retain
+		// only the safe failure classification for execution preflight callers.
+		failure := providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "ACP executable prerequisite is unavailable",
+		}
+		var lookupFailure providers.ExecuteFailure
+		if errors.As(lookupErr, &lookupFailure) && lookupFailure.Diagnostics != nil &&
+			lookupFailure.Diagnostics.Metadata["work-failure-type"] == "missing_executable" {
+			failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+				"work-failure-type": "missing_executable",
+			}}
+		}
+		return fmt.Errorf("%w: %w", providers.ErrProviderUnavailable, failure)
+	}
+	return nil
+}
+
 func (service *Service) resolveLaunchName(target *provider) (string, error) {
 	name := target.command.Name
 	if target.id == providers.ID("pi") && name == "you" && slices.Equal(target.command.Args, []string{"pi-acp"}) {

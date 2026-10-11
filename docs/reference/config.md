@@ -56,9 +56,10 @@ model. Both fields require non-empty strings. Optional `reasoningEffort` accepts
 
 This record is independent of `workerModelProvider` and `workerModel`.
 `you init` preserves it when updating generic worker defaults.
-The settings tool `you.operator_settings.set_subagent_defaults` updates only
-this dedicated record. A new record requires both provider and model; partial
-updates preserve omitted fields in an existing record.
+Edit `defaults.subagent` in the selected host's configuration file, or update
+the same record through the existing settings document API. A new record
+requires both provider and model. Preserve the other settings when saving
+the document.
 
 The same document can set the rolling-file policy for runtime logs and metrics:
 

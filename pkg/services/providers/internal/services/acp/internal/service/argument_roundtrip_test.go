@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,122 @@ import (
 )
 
 const argumentRoundTripHelperEnvironment = "YOU_TEST_ACP_ARGUMENT_ROUNDTRIP_HELPER"
+
+type prerequisiteLocator struct {
+	lookup  func(string) (string, error)
+	current string
+}
+
+func (locator prerequisiteLocator) LookPath(name string) (string, error) { return locator.lookup(name) }
+func (locator prerequisiteLocator) CurrentExecutable() (string, error)   { return locator.current, nil }
+
+func TestACPPrerequisiteLookupIsFreshAndDoesNotLaunch(t *testing.T) {
+	t.Parallel()
+	for _, executable := range []string{"missing-agent", filepath.Join(t.TempDir(), "private path", "agent")} {
+		t.Run(filepath.Base(executable), func(t *testing.T) {
+			t.Parallel()
+			available, calls := false, 0
+			owner := &Service{locator: prerequisiteLocator{lookup: func(name string) (string, error) {
+				calls++
+				if name != executable {
+					t.Fatalf("lookup = %q, want parsed executable", name)
+				}
+				if !available {
+					return "", errors.New("private locator credential and path")
+				}
+				return name, nil
+			}}, newCommand: func(string, ...string) *exec.Cmd { t.Fatal("preflight created command"); return nil },
+				stdioPipes: func() (platformprocess.StdioChannel, error) { t.Fatal("preflight opened stdio"); return nil, nil }}
+			integration := providers.ACPIntegration{Name: "custom", Aliases: []string{"selected-alias"}, Transport: "stdio", Command: `"` + executable + `" acp --private-argument`}
+			if err := owner.Configure(t.Context(), []providers.ACPIntegration{integration}); err != nil {
+				t.Fatal(err)
+			}
+			for _, present := range []bool{false, true, false} {
+				available = present
+				err := owner.ValidatePrerequisites(t.Context(), "selected-alias")
+				var want error
+				if !present {
+					want = providers.ErrProviderUnavailable
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("present=%v: %v", present, err)
+				}
+				if !present {
+					assertSafeMissingExecutablePrerequisite(t, err, executable)
+				}
+			}
+			if calls != 3 {
+				t.Fatalf("lookups = %d, want fresh lookup per check", calls)
+			}
+			// The same launch authority still checks after a successful admission.
+			target, _, _ := owner.resolveProvider("custom")
+			if _, err := owner.resolveLaunchName(target); err == nil {
+				t.Fatal("launch did not recheck removed executable")
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if err := owner.ValidatePrerequisites(ctx, "custom"); !errors.Is(err, context.Canceled) || calls != 4 {
+				t.Fatal("canceled check performed lookup")
+			}
+		})
+	}
+}
+
+func assertSafeMissingExecutablePrerequisite(t *testing.T, err error, executable string) {
+	t.Helper()
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency ||
+		failure.Diagnostics == nil || failure.Diagnostics.Metadata["work-failure-type"] != "missing_executable" {
+		t.Fatalf("missing executable lost typed classification: %v", err)
+	}
+	if strings.Contains(err.Error(), executable) || strings.Contains(err.Error(), "private") {
+		t.Fatal("private lookup error escaped")
+	}
+}
+
+func TestACPPrerequisitePiBridgeAndCancellation(t *testing.T) {
+	t.Parallel()
+	owner := &Service{locator: prerequisiteLocator{current: filepath.Join(t.TempDir(), "you.exe"), lookup: func(string) (string, error) { t.Fatal("Pi bridge used PATH"); return "", nil }}}
+	if err := owner.Configure(t.Context(), []providers.ACPIntegration{{Name: "pi", Transport: "stdio", Command: "you pi-acp"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.ValidatePrerequisites(t.Context(), "pi"); err != nil {
+		t.Fatal(err)
+	}
+	owner.locator = prerequisiteLocator{current: "relative-you"}
+	if err := owner.ValidatePrerequisites(t.Context(), "pi"); !errors.Is(err, providers.ErrProviderUnavailable) {
+		t.Fatalf("relative bridge: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	owner.locator = prerequisiteLocator{lookup: func(string) (string, error) { cancel(); return "agent", nil }}
+	if err := owner.Configure(t.Context(), []providers.ACPIntegration{{Name: "custom", Transport: "stdio", Command: "agent acp"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.ValidatePrerequisites(ctx, "custom"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation during lookup: %v", err)
+	}
+}
+
+func TestACPPrerequisiteSnapshotDoesNotHoldConfigurationLock(t *testing.T) {
+	t.Parallel()
+	entered, release := make(chan string, 1), make(chan struct{})
+	owner := &Service{locator: prerequisiteLocator{lookup: func(name string) (string, error) { entered <- name; <-release; return name, nil }}}
+	if err := owner.Configure(t.Context(), []providers.ACPIntegration{{Name: "custom", Transport: "stdio", Command: "original acp"}}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- owner.ValidatePrerequisites(t.Context(), "custom") }()
+	if name := <-entered; name != "original" {
+		t.Fatalf("selected executable = %q", name)
+	}
+	if err := owner.Configure(t.Context(), []providers.ACPIntegration{{Name: "custom", Transport: "stdio", Command: "replacement acp"}}); err != nil {
+		t.Error(err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
 
 // A prior attempt's advertised load support cannot authorize this attempt's
 // protocol traffic. An unavailable connection proves refusal precedes any RPC.

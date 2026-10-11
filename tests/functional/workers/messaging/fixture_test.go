@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,16 +22,34 @@ import (
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type workerGate struct {
-	started chan map[string]string
-	release chan struct{}
+	started            chan map[string]string
+	release            chan struct{}
+	requests           chan platformprocess.CommandRequest
+	result             *platformprocess.CommandResult
+	progress           <-chan struct{}
+	startupDiagnostics []byte
 }
 
-type commandRunner struct{ workers map[string]*workerGate }
+type commandRunner struct {
+	workers map[string]*workerGate
+	revival *workerGate
+	factory *workerGate
+}
 
 func (r *commandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return r.run(ctx, request, nil)
+}
+
+func (r *commandRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	return r.run(ctx, request, observe)
+}
+
+func (r *commandRunner) run(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
 	env := make(map[string]string)
 	for _, item := range request.Env {
 		if key, value, ok := strings.Cut(item, "="); ok {
@@ -38,23 +57,89 @@ func (r *commandRunner) Run(ctx context.Context, request platformprocess.Command
 		}
 	}
 	gate := r.workers[env["YOU_WORKER_SESSION_ID"]]
+	if gate == nil && strings.Contains(string(request.Stdin), "Factory-origin lead") {
+		gate = r.factory
+	}
+	if gate == nil {
+		gate = r.revival
+	}
 	if gate == nil {
 		return platformprocess.CommandResult{}, context.Canceled
 	}
-	gate.started <- env
+	select {
+	case gate.started <- env:
+	default:
+	}
+	if gate.requests != nil {
+		gate.requests <- request
+	}
+	if err := gate.observeStart(ctx, observe); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
 	select {
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
 	case <-gate.release:
-		return platformprocess.CommandResult{Stdout: []byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n{\"type\":\"turn.completed\"}\n")}, nil
+		return gate.completedOutput(observe), nil
 	}
+}
+
+func (gate *workerGate) observeStart(ctx context.Context, observe platformprocess.OutputChunkObserver) error {
+	if observe != nil && gate.result == nil {
+		if gate.progress != nil {
+			select {
+			case <-gate.progress:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		observe(platformprocess.OutputStreamStdout, []byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n{\"type\":\"turn.started\"}\n"))
+		if len(gate.startupDiagnostics) != 0 {
+			for _, line := range bytes.SplitAfter(gate.startupDiagnostics, []byte("\n")) {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if len(line) != 0 {
+					observe(platformprocess.OutputStreamStderr, line)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (gate *workerGate) completedOutput(observe platformprocess.OutputChunkObserver) platformprocess.CommandResult {
+
+	if gate.result != nil {
+		if observe != nil {
+			observe(platformprocess.OutputStreamStdout, gate.result.Stdout)
+			observe(platformprocess.OutputStreamStderr, gate.result.Stderr)
+		}
+		return *gate.result
+	}
+	output := []byte("{\"type\":\"item.completed\",\"item\":{\"id\":\"controlled-answer\",\"type\":\"agent_message\",\"text\":\"COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
+	if observe != nil {
+		observe(platformprocess.OutputStreamStdout, output)
+	} else {
+		output = append([]byte("{\"type\":\"thread.started\",\"thread_id\":\"controlled-thread\"}\n"), output...)
+	}
+	return platformprocess.CommandResult{Stdout: output}
 }
 
 type fixture struct {
 	server    *support.FunctionalAPIServer
+	endpoint  string
 	home, dir string
 	env       []string
 	runner    *commandRunner
+	outcomes  *deliveryOutcomeSignal
+}
+
+func (f *fixture) baseURL() string {
+	if f.endpoint != "" {
+		return f.endpoint
+	}
+	return f.server.URL()
 }
 
 // One immutable profile requires one graph; leaves share its host and own
@@ -70,6 +155,14 @@ func startHostEffects(t *testing.T, home, dir, settings string, effects servicee
 }
 
 func startHostTransport(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, workers ...string) *fixture {
+	return startHostRunner(t, home, dir, settings, effects, wrap, nil, workers...)
+}
+
+func startHostRunner(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, revival *workerGate, workers ...string) *fixture {
+	return startHostDelivery(t, home, dir, settings, effects, wrap, revival, nil, workers...)
+}
+
+func startHostDelivery(t *testing.T, home, dir, settings string, effects serviceedges.Edges, wrap func(platformhttpserver.Starter) platformhttpserver.Starter, revival, factory *workerGate, workers ...string) *fixture {
 	t.Helper()
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		t.Fatal(err)
@@ -96,6 +189,14 @@ func startHostTransport(t *testing.T, home, dir, settings string, effects servic
 	support.WriteAgentConfig(t, dir, "worker", "---\ntype: MODEL_WORKER\nmodel: functional-model\nmodelProvider: CODEX\nstopToken: COMPLETE\n---\nProcess the input task.\n")
 	support.WriteWorkstationConfig(t, dir, "process", "---\ntype: MODEL_WORKSTATION\n---\nControlled Factory input: {{ (index .Inputs 0).Payload }}\n")
 	f := &fixture{home: home, dir: dir, env: builtcliacceptance.ProcessEnvForIsolatedHome(home), runner: &commandRunner{workers: make(map[string]*workerGate)}}
+	f.runner.revival = revival
+	f.runner.factory = factory
+	f.outcomes = &deliveryOutcomeSignal{Core: zapcore.NewNopCore(), done: map[string]chan struct{}{}}
+	core := zapcore.Core(f.outcomes)
+	if effects.ProcessLogger != nil {
+		core = zapcore.NewTee(effects.ProcessLogger.Core(), core)
+	}
+	effects.ProcessLogger = zap.New(core)
 	for _, id := range workers {
 		f.runner.workers[id] = &workerGate{started: make(chan map[string]string, 1), release: make(chan struct{})}
 	}
@@ -114,6 +215,26 @@ func startHostTransport(t *testing.T, home, dir, settings string, effects servic
 func (f *fixture) invoke(t *testing.T, id string, caller map[string]string) map[string]string {
 	t.Helper()
 	return f.invokeProject(t, id, "", caller)
+}
+
+func (f *fixture) continueCaller(t *testing.T, source, successor string) map[string]string {
+	t.Helper()
+	status, raw := f.request(t, http.MethodPost, "/worker-sessions/"+source+"/continue", map[string]any{
+		"resolveHead": true, "requestId": successor + "-visit", "successorWorkerSessionId": successor, "followUpInput": "authorized later visit",
+	}, nil)
+	if status != http.StatusAccepted {
+		t.Fatalf("sender continuation after restart: %d %s", status, raw)
+	}
+	select {
+	case caller := <-f.runner.workers[successor].started:
+		if caller["YOU_WORKER_SESSION_ID"] != successor || caller["YOU_WORKER_SESSION_TOKEN"] == "" {
+			t.Fatal("new sender lacks genuine execution credentials")
+		}
+		return caller
+	case <-time.After(15 * time.Second):
+		t.Fatal("new sender did not start")
+	}
+	return nil
 }
 
 func (f *fixture) invokeProject(t *testing.T, id, project string, caller map[string]string) map[string]string {
@@ -146,7 +267,7 @@ func (f *fixture) request(t *testing.T, method, path string, body any, caller ma
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), method, f.server.URL()+path, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(t.Context(), method, f.baseURL()+path, bytes.NewReader(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,12 +298,12 @@ func (f *fixture) send(t *testing.T, request map[string]any, caller map[string]s
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatal(err)
 	}
-	return result.Message
+	return f.awaitDeliveryOutcome(t, caller, result.Message)
 }
 
 func (f *fixture) cli(t *testing.T, caller map[string]string, args ...string) []byte {
 	t.Helper()
-	argv := append([]string{"you", "--json", "--server", f.server.URL(), "message"}, args...)
+	argv := append([]string{"you", "--json", "--server", f.baseURL(), "message"}, args...)
 	argv = append(argv, "--output", "json")
 	inputs := support.FakeInputs(t.Context(), argv)
 	inputs.Input.Env, inputs.Input.WorkingDirectory = append([]string{}, f.env...), f.dir
@@ -201,7 +322,78 @@ func (f *fixture) cliSend(t *testing.T, caller map[string]string, args ...string
 	if err := json.Unmarshal(f.cli(t, caller, args...), &result); err != nil {
 		t.Fatal(err)
 	}
-	return result.Message
+	return f.awaitDeliveryOutcome(t, caller, result.Message)
+}
+
+// The logger edge supplies only a completion signal after commit. The public
+// read proves the final outcome. Raw-send journeys separately protect pending
+// responses and register live-only follow before sending.
+func (f *fixture) awaitDeliveryOutcome(t *testing.T, caller map[string]string, message api.AgentMessage) api.AgentMessage {
+	t.Helper()
+	if message.Reason == nil || *message.Reason != "REVIVE_PENDING" {
+		return message
+	}
+	select {
+	case <-f.outcomes.signal(message.MessageId):
+	case <-time.After(15 * time.Second):
+		t.Fatal("provider outcome did not commit")
+	}
+	page := readPage(t, f, "/messages?threadId="+message.ThreadId, caller)
+	for _, m := range page.Messages {
+		if m.MessageId == message.MessageId {
+			return m
+		}
+	}
+	t.Fatal("settled message disappeared from public read")
+	return api.AgentMessage{}
+}
+
+type deliveryOutcomeSignal struct {
+	zapcore.Core
+	mu   sync.Mutex
+	done map[string]chan struct{}
+}
+
+func (s *deliveryOutcomeSignal) Enabled(zapcore.Level) bool        { return true }
+func (s *deliveryOutcomeSignal) With([]zapcore.Field) zapcore.Core { return s }
+func (s *deliveryOutcomeSignal) Check(entry zapcore.Entry, checked *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	return checked.AddCore(entry, s)
+}
+func (s *deliveryOutcomeSignal) signal(id string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.done[id] == nil {
+		s.done[id] = make(chan struct{})
+	}
+	return s.done[id]
+}
+func (s *deliveryOutcomeSignal) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	if entry.Message != "Agent Message revival outcome committed" {
+		return nil
+	}
+	var id, state string
+	for _, field := range fields {
+		if field.Key == "message_id" {
+			id = field.String
+		}
+		if field.Key == "state" {
+			state = field.String
+		}
+	}
+	if id == "" || state == "ADMITTED" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.done[id] == nil {
+		s.done[id] = make(chan struct{})
+	}
+	select {
+	case <-s.done[id]:
+	default:
+		close(s.done[id])
+	}
+	return nil
 }
 
 // Hydrate a legacy equal-ID observation through the same public replay path

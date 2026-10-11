@@ -1401,13 +1401,13 @@ export interface components {
           bodySecret: boolean;
           inReplyTo?: string;
           /**
-           * @description INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+           * @description INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED before any effect.
            * @default QUEUE
            * @enum {string}
            */
           delivery: AgentMessageSendRequestDelivery;
           /**
-           * @description T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+           * @description REVIVE continues an ended eligible recipient. HOLD retains the message for authorized pull.
            * @default REVIVE
            * @enum {string}
            */
@@ -1447,6 +1447,7 @@ export interface components {
         kind: AgentMessageToKind;
         workerSessionId: string;
         factorySessionId?: string | null;
+        /** @description Exact successor reached after provider-confirmed resumed progress and durable delivery. */
         deliveredWorkerSessionId?: string | null;
       };
       correlation?: {
@@ -1465,18 +1466,19 @@ export interface components {
       /** @enum {string} */
       replyIfEnded: AgentMessageReplyIfEnded;
       status: components["schemas"]["AgentMessageDeliveryStatus"];
-      /** @description Typed code only. T5 may emit REVIVE_UNSUPPORTED. */
+      /** @description Typed code only. QUEUED may report REVIVE_PENDING, REVIVE_UNSUPPORTED, REVIVE_FAILED or REVIVE_LIMIT. REVIVE_PENDING awaits provider-confirmed resumed progress. Provider-classified resume rejection reports REVIVE_UNSUPPORTED. Uncertain evidence remains queued with REVIVE_FAILED. */
       reason?: string | null;
       hop: number;
       /** Format: date-time */
       sentAt: string;
       /** Format: date-time */
       expiresAt: string;
+      /** @description Exact successor. Published only after provider-confirmed resumed progress and durable delivery commit. */
       revivedWorkerSessionId?: string | null;
       repliedByMessageId?: string | null;
     };
     /**
-     * @description T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+     * @description Messaging produces QUEUED, READ, DELIVERED_REVIVE, REPLIED and EXPIRED. DELIVERED_REVIVE requires provider-confirmed resumed progress and durable delivery status. DELIVERED_INTERRUPT and REJECTED remain reserved.
      * @enum {string}
      */
     AgentMessageDeliveryStatus: AgentMessageDeliveryStatus;
@@ -8085,6 +8087,11 @@ export interface components {
       limits?: {
         /** @default 10 */
         sendsPerChainPerHour: number;
+        /**
+         * @description Provider-confirmed revivals per recipient continuation chain in a rolling hour. Failed attempts do not consume this limit.
+         * @default 6
+         */
+        revivesPerChainPerHour: number;
         /** @default 8 */
         messagesPerThread: number;
         /** @default 8192 */
@@ -11058,6 +11065,8 @@ export const AgentMessageObservationKind = {
   READ: "READ",
   REPLIED: "REPLIED",
   EXPIRED: "EXPIRED",
+  DELIVERED_REVIVE: "DELIVERED_REVIVE",
+  DELIVERY_UPDATED: "DELIVERY_UPDATED",
 } as const;
 export type AgentMessageObservationKind =
   (typeof AgentMessageObservationKind)[keyof typeof AgentMessageObservationKind];

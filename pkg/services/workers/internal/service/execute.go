@@ -74,7 +74,14 @@ func (s *Service) Execute(
 
 	identity, err := s.prepareAttempt(ctx, &request, cleanup)
 	if err != nil {
-		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, correlation, err)
+		err = s.preStartError(ctx, cleanup, correlation, err)
+		var providerErr *workers.ProviderError
+		if errors.As(err, &providerErr) && providerErr.Type == workers.WorkFailureTypeMissingExecutable {
+			// Runtime consumers require structured failure facts even when a
+			// prerequisite prevents the runner from starting.
+			return s.normalizeResult(correlation, request, workers.RunnerExecutionResult{}, err, 0, false), err
+		}
+		return workers.ExecuteResult{}, err
 	}
 	if request.Input.PreparedRequestObserver != nil {
 		request.Input.PreparedRequestObserver(request)
