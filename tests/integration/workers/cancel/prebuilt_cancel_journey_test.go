@@ -62,9 +62,10 @@ func TestJoinedSessionCancelStopsOneShotWaiter(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatalf("one-shot waiter failed to exit after HTTP cancel: %v", ctx.Err())
 	}
-	if exitCode(oneShot.waitError()) != 1 || !strings.Contains(oneShot.stderr.String(), "INVOCATION_INTERRUPTED") || strings.Contains(oneShot.stdout.String(), "joined-peer-result") {
+	if exitCode(oneShot.waitError()) != 1 || !strings.Contains(oneShot.stderr.String(), "INVOCATION_INTERRUPTED") {
 		t.Fatalf("one-shot cancellation exit=%d stdout=%s stderr=%s", exitCode(oneShot.waitError()), oneShot.stdout.String(), oneShot.stderr.String())
 	}
+	assertJoinedCancelInvocationResult(t, oneShot.stdout.String(), session, workID)
 	assertJoinedCancelTreeGone(t, tree)
 	if err := cancelPortAvailabilityError(fixture.port); err != nil {
 		t.Fatal(err)
@@ -86,6 +87,34 @@ func TestJoinedSessionCancelStopsOneShotWaiter(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("I-CANCEL PASS: matched real tree joined; one-shot exited non-success without forced cleanup; canonical replay retained unfinished Work; serving peer completed and accepted later Work")
+}
+
+func assertJoinedCancelInvocationResult(t *testing.T, stream, session, workID string) {
+	t.Helper()
+	decoder := json.NewDecoder(strings.NewReader(stream))
+	count := 0
+	for {
+		var record struct {
+			RecordType string                        `json:"recordType"`
+			Response   factoryapi.InvocationResponse `json:"response"`
+		}
+		if err := decoder.Decode(&record); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if record.RecordType != "invocation_result" {
+			continue
+		}
+		count++
+		response := record.Response
+		if response.Status != factoryapi.InvocationTerminalStatusFailed || response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || response.PrimaryResult != nil || response.SessionId == nil || *response.SessionId != session || response.WorkId == nil || *response.WorkId != workID || response.WorkState == nil || *response.WorkState != "init" {
+			t.Fatalf("canceled invocation result = %+v", response)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("canceled invocation result count=%d, want one", count)
+	}
 }
 
 func assertJoinedCancelOfflineReplay(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, session, workID string) {
