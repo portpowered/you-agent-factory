@@ -29,8 +29,10 @@ func TestProviderSessionCLIJourneys(t *testing.T) {
 	t.Run("TestWorkerSessionsListWorkScopedSelectedReadFailure", testWorkerSessionsListWorkScopedSelectedReadFailure)
 	t.Run("TestWorkerSessionsFleetActiveListDeadlineRepair", testProvidersessionscliWorkerSessionsFleetActiveListDeadlineRepair)
 	t.Run("TestWorkerSessionsFleetListBoundedRootPages", testProvidersessionscliWorkerSessionsFleetListBoundedRootPages)
-	t.Run("TestCompletedObservationCapabilities", testCompletedObservationCapabilities)
 	t.Run("TestWorkerSessionsFleetListCLIConcurrent", testProvidersessionscliWorkerSessionsFleetListCLIConcurrent)
 	t.Run("TestWorkerSessionsListWorkScopedDefault", testWorkerSessionsListWorkScopedDefault)
+	// This scenario retains a process-owned direct successor after its Factory
+	// Session closes, so run it after the cohort's global fleet assertions.
+	t.Run("TestCompletedObservationCapabilities", testCompletedObservationCapabilities)
 	functionalevidence.Covers(t, "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream")
 }
