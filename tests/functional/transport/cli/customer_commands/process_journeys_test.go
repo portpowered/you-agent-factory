@@ -6,6 +6,7 @@ import "testing"
 func TestCLIProcessJourneys(t *testing.T) {
 	t.Parallel()
 	initializeProcessFixture(t)
+	t.Run("TestCLIHTTPErrorPropagation", testCLIHTTPErrorPropagation)
 	t.Run("TestCLIStartupLoadCauseWithoutDebug", testCLIStartupLoadCauseWithoutDebug)
 	t.Run("TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess", testProcessACPServeCancellationPreservesContextCanceledIdentityThroughProcess)
 	t.Run("TestCLIWorkerFailureExitCode", testProcessCLIWorkerFailureExitCode)

@@ -193,9 +193,9 @@ func queryCurrentError(statusCode int, body []byte) error {
 		return unexpectedCurrentFactoryStatusError(statusCode)
 	}
 	if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
-		return fmt.Errorf("%w: %s", ErrCurrentFactoryNotFound, errResp.Message)
+		return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("%s: %s", ErrCurrentFactoryNotFound, errResp.Message), ErrCurrentFactoryNotFound)
 	}
-	return fmt.Errorf("query current factory failed (%d): %s", statusCode, errResp.Message)
+	return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("query current factory failed (%d): %s", statusCode, errResp.Message), nil)
 }
 
 func unexpectedCurrentFactoryStatusError(statusCode int) error {

@@ -192,7 +192,7 @@ func replaceCurrentHTTPError(failureLabel string, statusCode int, body []byte) e
 	if json.Unmarshal(body, &errResp) != nil || errResp.Message == "" {
 		return unexpectedReplaceCurrentHTTPError(failureLabel, statusCode)
 	}
-	return fmt.Errorf("%s failed (%d): %s", failureLabel, statusCode, errResp.Message)
+	return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("%s failed (%d): %s", failureLabel, statusCode, errResp.Message), nil)
 }
 
 func buildReplaceCurrentFactoryRequest(current factoryapi.Factory) factoryapi.SaveFactoryForSessionRequest {
