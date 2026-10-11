@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -74,5 +75,58 @@ func assertHealthyWork(t *testing.T, f *fixture) {
 	}, func(page api.ListWorkResponse) bool { return support.CountWorkAtCustomerState(page, "task:done") == 1 })
 	if err != nil {
 		t.Fatalf("Factory Work did not finish after Messaging outcome: %v", err)
+	}
+}
+
+func TestFailedReplyWritePreservesParentAndRetryAuthority(t *testing.T) {
+	t.Parallel()
+	f := startHost(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"sendsPerChainPerHour":1}}}`, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	parent := f.cliSend(t, lane, "lead", "--request-id", "parent", "--body", "durable parent")
+	path := filepath.Join(f.home, ".you-agent-factory", "messages", "messages.jsonl")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := path + ".preserved"
+	// A directory at the selected file path is a real, portable write fault.
+	// Preserve the customer's bytes while making only this test-owned path
+	// unwritable; restore it before retrying the same public request.
+	if err := os.Rename(path, backup); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	request := map[string]any{"requestId": "retry-reply", "inReplyTo": parent.MessageId, "body": "retryable reply"}
+	assertError(t, f, http.MethodPost, "/messages", request, lead, http.StatusServiceUnavailable, "MESSAGE_STORE_UNAVAILABLE")
+	page := readPage(t, f, "/messages?threadId="+parent.ThreadId, lane)
+	if len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" || page.Messages[0].RepliedByMessageId != nil {
+		t.Fatal("failed flush published reply or changed its parent")
+	}
+	preserved, err := os.ReadFile(backup)
+	if err != nil || !bytes.Equal(before, preserved) {
+		t.Fatal("failed write altered previously durable records")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(backup, path); err != nil {
+		t.Fatal(err)
+	}
+	reply := f.send(t, request, lead)
+	if reply.ThreadId != parent.ThreadId || reply.To.WorkerSessionId != "lane" {
+		t.Fatal("write failure spent request alias or successful-send authority")
+	}
+	assertRepliedParent(t, f, parent.MessageId, reply.MessageId)
+	if replay := f.send(t, request, lead); replay.MessageId != reply.MessageId {
+		t.Fatal("successful retry was not idempotent")
+	}
+	f.server.Close(t)
+	second := startHost(t, f.home, f.dir, "")
+	assertRepliedParent(t, second, parent.MessageId, reply.MessageId)
+	if page := readPage(t, second, "/messages?threadId="+parent.ThreadId, nil); len(page.Messages) != 2 {
+		t.Fatal("reconstruction lost atomic reply or retained a failed attempt")
 	}
 }

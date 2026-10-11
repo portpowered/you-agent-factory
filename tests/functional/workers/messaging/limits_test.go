@@ -13,7 +13,11 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestConfiguredLimitsPrivacyAndConcurrentReplay(t *testing.T) {
@@ -132,5 +136,100 @@ func TestConcurrentRepliesCommitOneParentTransition(t *testing.T) {
 	assertRepliedParent(t, f, parent.MessageId, winner)
 	if page := readPage(t, f, "/messages?threadId="+parent.ThreadId, nil); len(page.Messages) != 2 {
 		t.Fatal("concurrent reply left an orphan or duplicate thread row")
+	}
+}
+
+func TestRefusedMessagesPreserveQuotaAndPrivateDiagnostics(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.DebugLevel)
+	f := startHostEffects(t, t.TempDir(), t.TempDir(), `{"messaging":{"limits":{"sendsPerChainPerHour":1,"maxBodyBytes":64}}}`, false, serviceedges.Edges{ProcessLogger: zap.New(core)}, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	for _, cell := range []struct {
+		name, body, target, parent, code string
+		status                           int
+	}{
+		{"empty", "", "lead", "", "MESSAGE_INVALID_REQUEST", http.StatusBadRequest},
+		{"byte overflow", strings.Repeat("🙂", 17), "lead", "", "MESSAGE_LIMIT_EXCEEDED", http.StatusTooManyRequests},
+		{"self", "self refused", "lane", "", "MESSAGE_NOT_PERMITTED", http.StatusForbidden},
+		{"missing parent", "unknown reply", "", "missing", "MESSAGE_NOT_FOUND", http.StatusNotFound},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			request := map[string]any{"requestId": "reusable", "body": cell.body}
+			if cell.target != "" {
+				request["to"] = map[string]string{"workerSessionId": cell.target}
+			} else {
+				request["inReplyTo"] = cell.parent
+			}
+			assertError(t, f, http.MethodPost, "/messages", request, lane, cell.status, cell.code)
+		})
+	}
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 0 {
+		t.Fatal("refused sends persisted records")
+	}
+	request := map[string]any{"requestId": "reusable", "body": strings.Repeat("🙂", 16), "to": map[string]string{"workerSessionId": "lead"}}
+	message := f.send(t, request, lane)
+	if len(message.Body) != 64 || message.ExpiresAt.Sub(message.SentAt) != 24*time.Hour {
+		t.Fatal("exact UTF-8 byte boundary or default expiry changed")
+	}
+	assertConcurrentReplay(t, f, request, lane, message.MessageId)
+	secret := "error-secret-" + lane["YOU_WORKER_SESSION_TOKEN"]
+	request["body"], request["bodySecret"] = secret, true
+	assertError(t, f, http.MethodPost, "/messages", request, lane, http.StatusConflict, "MESSAGE_REQUEST_CONFLICT")
+	request["requestId"] = "quota-overflow"
+	assertError(t, f, http.MethodPost, "/messages", request, lane, http.StatusTooManyRequests, "MESSAGE_LIMIT_EXCEEDED")
+	if page := readPage(t, f, "/messages", nil); len(page.Messages) != 1 || page.Messages[0].MessageId != message.MessageId {
+		t.Fatal("refusals or replays changed successful-send quota or records")
+	}
+	f.server.Close(t)
+	private := []string{secret, lane["YOU_WORKER_SESSION_TOKEN"], lead["YOU_WORKER_SESSION_TOKEN"]}
+	for _, entry := range logs.All() {
+		encoded, err := json.Marshal(map[string]any{"message": entry.Message, "fields": entry.ContextMap()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range private {
+			if strings.Contains(string(encoded), value) {
+				t.Fatal("message error leaked private content to captured diagnostics")
+			}
+		}
+	}
+	assertPrivateArtifacts(t, f.home, private)
+	assertPrivateArtifacts(t, f.dir, private)
+}
+
+func TestInboxExpiryAndSelectedRetentionAfterReconstruction(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	// Only timestamps are controlled; production lifecycle timers remain real.
+	effects := serviceedges.Edges{Clock: struct{ platformclock.Source }{clock}}
+	home, dir := t.TempDir(), t.TempDir()
+	settings := `{"messaging":{"retentionDays":1,"limits":{"defaultExpirySeconds":60}}}`
+	f := startHostEffects(t, home, dir, settings, false, effects, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	old := f.cliSend(t, lane, "lead", "--request-id", "old", "--body", "old message")
+	clock.SetTick(59)
+	if page := readPage(t, f, "/messages?threadId="+old.ThreadId, lane); len(page.Messages) != 1 || page.Messages[0].Status != "QUEUED" {
+		t.Fatal("message expired before its declared deadline")
+	}
+	clock.SetTick(60)
+	if page := readPage(t, f, "/messages?threadId="+old.ThreadId, lane); len(page.Messages) != 1 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("deadline read did not durably expire the message")
+	}
+	assertError(t, f, http.MethodPost, "/messages", map[string]any{"requestId": "expired-reply", "inReplyTo": old.MessageId, "body": "late reply"}, lead, http.StatusBadRequest, "MESSAGE_INVALID_REQUEST")
+	readPage(t, f, "/messages?toMe=true&markRead=true", lead)
+	if page := readPage(t, f, "/messages?threadId="+old.ThreadId, lane); page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("mark-read regressed an expired terminal status")
+	}
+	clock.SetTick(23 * 60 * 60)
+	recent := f.cliSend(t, lane, "lead", "--request-id", "recent", "--body", "retained message")
+	f.server.Close(t)
+	clock.SetTick(25 * 60 * 60)
+	second := startHostEffects(t, home, dir, settings, false, effects)
+	assertError(t, second, http.MethodGet, "/messages/"+old.MessageId, nil, nil, http.StatusNotFound, "MESSAGE_NOT_FOUND")
+	page := readPage(t, second, "/messages", nil)
+	if len(page.Messages) != 1 || page.Messages[0].MessageId != recent.MessageId || page.Messages[0].BodySha256 != recent.BodySha256 || page.Messages[0].Status != "EXPIRED" {
+		t.Fatal("selected retention removed recent content or failed recovered expiry")
 	}
 }
