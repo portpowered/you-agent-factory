@@ -184,6 +184,8 @@ Pending messages and retained thread relationships remain available.
 Reconstructing the process with the same isolated profile recovers identities, redacted content, statuses, reply relationships, and request deduplication.
 Startup also reconciles interrupted continuations through the original request, input, and successor identity.
 Confirmed provider progress produces durable delivery facts without another provider attempt.
+Recorded provider-classified rejection retains `REVIVE_UNSUPPORTED` and the failed successor after restart.
+That rejected attempt does not consume successful revival volume.
 Unavailable or incomplete evidence keeps the message queued with `REVIVE_FAILED`.
 Separate processes must not share a writable messaging profile.
 

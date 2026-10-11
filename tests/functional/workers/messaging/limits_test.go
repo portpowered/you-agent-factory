@@ -843,6 +843,39 @@ func assertRecoveredFailureIdentity(t *testing.T, pending, recovered api.AgentMe
 	}
 }
 
+func TestRecoveryRetainsProviderRejectionWithoutSpendingReviveQuota(t *testing.T) {
+	t.Parallel()
+	clock := platformclock.NewDeterministic(time.Now().UTC(), time.Second)
+	result := &platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("No rollout found for thread id controlled-thread\n")}
+	first, failed, pending, successor := interruptedWindowFixture(t, clock, "FAILED", result)
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{})}
+	second := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival)
+	recovered := second.awaitDeliveryOutcome(t, nil, pending)
+	assertRejectedProviderOutcome(t, second, recovered, map[string]string{"YOU_WORKER_SESSION_ID": successor}, "REVIVE_UNSUPPORTED")
+	assertRecoveredFailureIdentity(t, pending, recovered)
+	assertNoRecoveryCommand(t, failed, revival)
+	second.server.Close(t)
+	third := startHostRunner(t, first.home, first.dir, "", serviceedges.Edges{}, nil, revival, "lane-next")
+	page := readPage(t, third, "/messages?threadId="+recovered.ThreadId, nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], recovered) {
+		t.Fatal("repeat reconstruction changed provider rejection")
+	}
+	lane := third.continueCaller(t, "lane", "lane-next")
+	request := map[string]any{"requestId": "window", "to": map[string]string{"workerSessionId": "lead"}, "body": pending.Body}
+	assertProviderRetry(t, third, request, lane, recovered)
+	assertConcurrentReplay(t, third, request, lane, recovered.MessageId)
+	assertNoRecoveryCommand(t, failed, revival)
+	before := third.server.GetFactoryEvents(t)
+	allowed := third.cliSend(t, lane, "lead", "--request-id", "after-rejection", "--body", "retry after classified rejection")
+	assertReviveAdmission(t, third, revival, allowed, nil)
+	close(revival.release)
+	third.waitEndedWorker(t, *allowed.RevivedWorkerSessionId)
+	if after := third.server.GetFactoryEvents(t); !reflect.DeepEqual(before, after) {
+		t.Fatal("rejection recovery or retry changed Factory Events")
+	}
+	third.endWorker(t, "lane-next")
+}
+
 func assertNoRecoveryCommand(t *testing.T, gates ...*workerGate) {
 	t.Helper()
 	for _, gate := range gates {

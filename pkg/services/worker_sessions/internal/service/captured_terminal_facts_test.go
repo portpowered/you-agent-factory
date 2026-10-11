@@ -199,6 +199,53 @@ func TestCapturedTerminalEnrichmentUsesCommittedFailureClassification(t *testing
 	}
 }
 
+func TestRecordedProviderFailureSurvivesCaptureAndContinuationReplay(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"recorded", "unsupported", "invalid"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cause := workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "the Workers execution result was not successful",
+				ProviderFailureKind: providers.ExecuteFailureKindSessionNotFound, ProviderContinuationFailureKind: providers.ContinuationFailureKindStale,
+				AgentRunFailureClass: workers.AgentRunFailureClassProvider}
+			if name == "unsupported" {
+				cause.ProviderFailureKind = ""
+				cause.ProviderContinuationFailureKind = ""
+				cause.ProviderContinuationOutcome = providers.ContinuationOutcomeUnsupported
+			}
+			result := workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed, Cause: &cause}
+			draft, err := terminalDraft(workersessions.StateFailed, result, "attempt")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if name == "invalid" {
+				var payload terminalSessionPayload
+				_ = json.Unmarshal(draft.Payload, &payload)
+				payload.ProviderContinuationFailureKind = "untrusted-classification"
+				draft.Payload, _ = json.Marshal(payload)
+			}
+			encoded, _ := json.Marshal(draft)
+			item := completedSummaryFixture(t, true)
+			item.MetadataRecords[1].Payload = encoded
+			r := &registry{logs: &LogReader{reader: &terminalSummaryReader{item: item}}, publications: map[string]*publication{scopedWorkerAddress("worker", "factory"): {recordingID: "recording"}}}
+			archived, readErr := r.logs.GetObservationByWorkerSessionID(t.Context(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker", FactorySessionID: "factory"})
+			replay, replayErr := continuationTerminalResult(encoded, "FAILED", "attempt")
+			if name == "invalid" {
+				if readErr == nil || replayErr == nil {
+					t.Fatal("untrusted captured classification established terminal facts")
+				}
+				return
+			}
+			if readErr != nil || replayErr != nil || !reflect.DeepEqual(archived.Failure, &cause) || !reflect.DeepEqual(replay, &result) {
+				t.Fatalf("recorded failure lost: archived=%+v replay=%+v errors=%v/%v", archived, replay, readErr, replayErr)
+			}
+			live := r.withCapturedTerminalObservation(t.Context(), workersessions.Observation{WorkerSessionID: "worker", FactorySessionID: "factory", AttemptID: "attempt", State: workersessions.StateFailed, Failure: &cause})
+			if !reflect.DeepEqual(live.Failure, archived.Failure) {
+				t.Fatal("live and archived recorded failures disagree")
+			}
+		})
+	}
+}
+
 func TestCapturedTerminalEnrichmentUsesCommittedConfirmationAndOptionalFailure(t *testing.T) {
 	t.Parallel()
 	for _, state := range []workersessions.State{workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled, workersessions.StateTerminated} {
