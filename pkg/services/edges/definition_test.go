@@ -864,7 +864,7 @@ func (*edgeWorktreeGit) Run(context.Context, string, ...string) (string, string,
 	return "", "", 0, nil
 }
 
-func (*edgeDirectoryReplacementStore) Commit(string, string, string) (string, error) {
+func (*edgeDirectoryReplacementStore) Commit(string, string, string, ...string) (string, error) {
 	return "", nil
 }
 

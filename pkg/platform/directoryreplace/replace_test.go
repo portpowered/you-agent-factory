@@ -166,3 +166,42 @@ func assertFixture(t *testing.T, dir, name, want string) {
 		t.Fatalf("fixture = %q, want %q", got, want)
 	}
 }
+
+func TestCommitRetainsOpaqueStateAndRestoresPreviousState(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target, stage := filepath.Join(root, "factory"), filepath.Join(root, "stage")
+	writeFixture(t, target, "definition", "old")
+	writeFixture(t, filepath.Join(target, "runtime", "cursors"), "committed", "cursor-one")
+	writeFixture(t, stage, "definition", "new")
+	store := NewLocal(runtime.GOOS)
+	backup, err := store.Commit(root, target, stage, "runtime", "absent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFixture(t, target, filepath.Join("runtime", "cursors", "committed"), "cursor-one")
+	assertFixture(t, target, "definition", "new")
+	// New generation writes cannot alter the rollback snapshot.
+	writeFixture(t, filepath.Join(target, "runtime", "cursors"), "committed", "cursor-two")
+	store.Restore(target, backup)
+	assertFixture(t, target, "definition", "old")
+	assertFixture(t, target, filepath.Join("runtime", "cursors", "committed"), "cursor-one")
+}
+
+func TestCommitRejectedRetentionLeavesTargetUnchanged(t *testing.T) {
+	t.Parallel()
+	for _, retained := range []string{"..", ".", "not-directory"} {
+		t.Run(retained, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			target, stage := filepath.Join(root, "factory"), filepath.Join(root, "stage")
+			writeFixture(t, target, "not-directory", "old")
+			writeFixture(t, stage, "definition", "new")
+			_, err := NewLocal(runtime.GOOS).Commit(root, target, stage, retained)
+			if err == nil {
+				t.Fatal("invalid retention succeeded")
+			}
+			assertFixture(t, target, "not-directory", "old")
+		})
+	}
+}

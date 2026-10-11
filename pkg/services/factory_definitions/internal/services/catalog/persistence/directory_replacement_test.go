@@ -19,7 +19,7 @@ type recordingDirectoryStore struct {
 	staging   string
 }
 
-func (s *recordingDirectoryStore) Commit(parentDir, targetDir, stagingDir string) (string, error) {
+func (s *recordingDirectoryStore) Commit(parentDir, targetDir, stagingDir string, _ ...string) (string, error) {
 	s.parentDir = parentDir
 	s.targetDir = targetDir
 	s.staging = stagingDir

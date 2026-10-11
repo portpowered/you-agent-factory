@@ -578,6 +578,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		original,
 		replacement,
 		true,
+		true,
 		lifecycleFake{},
 		sidecars,
 		func(handle factory.RuntimeRun) error {
@@ -647,7 +648,7 @@ func TestReplaceReadinessFailureRestoresSelectedSourcesAndPreservesPeer(t *testi
 	}}
 	sidecars := &replacementSidecars{}
 	_, err := runtimebinding.Replace(t.Context(), sessions, &active, original, &hostedInstanceFake{},
-		true, lifecycle, sidecars, lifecycle.Stop, nil, nil)
+		true, true, lifecycle, sidecars, lifecycle.Stop, nil, nil)
 	if !errors.Is(err, cause) || candidate == nil || !candidate.Completed() {
 		t.Fatalf("failed candidate cleanup/cause: run=%v error=%v", candidate, err)
 	}

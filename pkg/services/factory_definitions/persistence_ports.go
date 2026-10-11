@@ -14,7 +14,7 @@ type CurrentFactoryPointerWriter = contracts.CurrentFactoryPointerWriter
 // Definitions owns when replacement and rollback occur; Platform implements
 // only the directory mechanics.
 type DirectoryReplacementStore interface {
-	Commit(parentDir, targetDir, stagingDir string) (backupDir string, err error)
+	Commit(parentDir, targetDir, stagingDir string, retained ...string) (backupDir string, err error)
 	Restore(targetDir, backupDir string)
 }
 

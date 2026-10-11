@@ -28,7 +28,11 @@ func (local Local) Commit(
 	parentDir string,
 	targetDir string,
 	stagingDir string,
+	retained ...string,
 ) (backupDir string, err error) {
+	if err := retainDirectories(targetDir, stagingDir, retained); err != nil {
+		return "", err
+	}
 	segment := filepath.Base(targetDir)
 	backupDir, err = os.MkdirTemp(parentDir, "."+segment+".previous-")
 	if err != nil {
@@ -133,6 +137,35 @@ func clearDirectoryContents(dir string) error {
 	for _, entry := range entries {
 		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
 			return fmt.Errorf("remove existing directory entry %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
+}
+
+// retainDirectories copies opaque caller-selected state before atomic publication.
+// Callers must quiesce writers before invoking Commit.
+func retainDirectories(target, staging string, retained []string) error {
+	for _, name := range retained {
+		if name == "." || !filepath.IsLocal(name) {
+			return fmt.Errorf("invalid retained directory %q", name)
+		}
+		source := filepath.Join(target, name)
+		info, err := os.Stat(source)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect retained directory %q: %w", name, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("retained path %q is not a directory", name)
+		}
+		destination := filepath.Join(staging, name)
+		if err := os.MkdirAll(destination, info.Mode().Perm()); err != nil {
+			return fmt.Errorf("stage retained directory %q: %w", name, err)
+		}
+		if err := os.CopyFS(destination, os.DirFS(source)); err != nil {
+			return fmt.Errorf("copy retained directory %q: %w", name, err)
 		}
 	}
 	return nil

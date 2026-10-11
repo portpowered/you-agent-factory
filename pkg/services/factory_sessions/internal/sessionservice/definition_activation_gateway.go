@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -191,3 +192,39 @@ func (g keyedDefinitionActivationGateway) SwapPersistedNamedFactoryRuntime(ctx c
 }
 
 var _ factorydefinitions.DefinitionActivationGateway = keyedDefinitionActivationGateway{}
+
+// withSessionSourcesStopped runs under the existing activation lock. Its callback
+// restores the definition and durable state before a failed generation resumes.
+func (fs *SessionRuntime) withSessionSourcesStopped(ctx context.Context, id string, fn func() error) error {
+	session, err := runtimebinding.RequireLiveSession(fs.owner.state, id)
+	if err != nil {
+		return err
+	}
+	current := runtimebinding.HandleFromSession(session)
+	if current == nil || runtimeModeOrDefault(fs.runtimeMode) != factorydefinitions.RuntimeModeService {
+		return fn()
+	}
+	fs.runtimeSidecars.Stop(current)
+	fs.layoutReplacement = true
+	defer func() { fs.layoutReplacement = false }()
+	err = fn()
+	if err == nil {
+		return nil
+	}
+	serviceCtx := ctx
+	if active := fs.runtimeState.Active(); active != nil && active.Context != nil {
+		serviceCtx = active.Context
+	}
+	return errors.Join(err, fs.runtimeSidecars.Start(serviceCtx, current))
+}
+
+func (g definitionActivationGateway) WithSessionSourcesStopped(ctx context.Context, id string, fn func() error) error {
+	return g.runtime.withSessionSourcesStopped(ctx, id, fn)
+}
+func (g keyedDefinitionActivationGateway) WithSessionSourcesStopped(ctx context.Context, id string, fn func() error) error {
+	owner, err := g.owner(id)
+	if err != nil {
+		return err
+	}
+	return owner.withSessionSourcesStopped(ctx, id, fn)
+}

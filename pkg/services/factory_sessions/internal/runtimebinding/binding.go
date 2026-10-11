@@ -128,6 +128,7 @@ func Replace(
 	session *livesession.LiveSession,
 	replacement RuntimeInstance,
 	serviceMode bool,
+	restoreSourcesOnFailure bool,
 	lifecycle RuntimeLifecycle,
 	sidecars factory.RuntimeSidecars,
 	stop func(RuntimeHandle) error,
@@ -153,7 +154,7 @@ func Replace(
 	if lifecycle == nil {
 		return nil, fmt.Errorf("factory runtime lifecycle service is required")
 	}
-	restoreSidecars := serviceMode
+	restoreSidecars := serviceMode && restoreSourcesOnFailure
 	if serviceMode {
 		sidecars.Stop(current)
 	}
