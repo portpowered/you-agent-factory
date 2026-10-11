@@ -160,6 +160,69 @@ func TestFleetObservationServiceResolvesWorkerSessionIdentityAcrossSources(t *te
 	}
 }
 
+func TestFleetCapturedReadResolvesArchivedPredecessor(t *testing.T) {
+	t.Parallel()
+	wanted := workersessions.Observation{
+		WorkerSessionID: "predecessor", FactorySessionID: "factory", State: workersessions.StateCompleted,
+		SuccessorWorkerSessionID: "successor", WorkIDs: []string{"owned-work"},
+		RecordingHealth: recordings.WorkerRecordingStatusDegraded,
+	}
+	ambiguous := &workersessions.AmbiguousAddressError{Candidates: []workersessions.AddressCandidate{
+		{WorkerSessionID: "predecessor", FactorySessionID: "factory"},
+		{WorkerSessionID: "predecessor", FactorySessionID: "other"},
+	}}
+	for _, test := range []struct {
+		name      string
+		request   workersessions.GetObservationByWorkerSessionIDRequest
+		result    workersessions.Observation
+		failure   error
+		wantError error
+	}{
+		{name: "archived", request: workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "predecessor", FactorySessionID: "factory"}, result: wanted},
+		{name: "unknown", request: workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "unknown"}, failure: workersessions.ErrObservationSessionNotFound, wantError: workersessions.ErrObservationSessionNotFound},
+		{name: "ambiguous", request: workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "predecessor"}, failure: ambiguous, wantError: ambiguous},
+		{name: "wrong scope", request: workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "predecessor", FactorySessionID: "other"}, result: wanted, wantError: workersessions.ErrObservationProjectionUnavailable},
+		{name: "wrong identity", request: workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "other"}, result: wanted, wantError: workersessions.ErrObservationProjectionUnavailable},
+		{name: "unavailable", request: workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "predecessor"}, failure: workersessions.ErrObservationProjectionUnavailable, wantError: workersessions.ErrObservationProjectionUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			reader := fleetCapturedReadFunc(func(_ context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+				if req != test.request {
+					t.Fatal("capture read changed exact address")
+				}
+				return test.result, test.failure
+			})
+			service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+				return []workersessions.Service{newFleetObservationSource("live")}, nil
+			}, &FleetHistory{continuation: reader})
+			if _, err := service.GetObservationByWorkerSessionID(t.Context(), test.request); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+				t.Fatalf("ordinary lookup returned archived identity: %v", err)
+			}
+			got, err := service.GetCapturedObservation(t.Context(), test.request)
+			if !errors.Is(err, test.wantError) {
+				t.Fatalf("exact read error = %v, want %v", err, test.wantError)
+			}
+			if test.wantError != nil {
+				return
+			}
+			if !reflect.DeepEqual(got, wanted) {
+				t.Fatalf("captured identity = %#v, want %#v", got, wanted)
+			}
+			got.WorkIDs[0] = "changed"
+			if wanted.WorkIDs[0] != "owned-work" {
+				t.Fatal("capture identity was not detached")
+			}
+		})
+	}
+}
+
+type fleetCapturedReadFunc func(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error)
+
+func (read fleetCapturedReadFunc) GetCapturedObservation(ctx context.Context, req workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error) {
+	return read(ctx, req)
+}
+
 func TestFleetObservationServiceUsesOneLookaheadReadPerFleetPage(t *testing.T) {
 	t.Parallel()
 

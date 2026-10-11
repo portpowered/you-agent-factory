@@ -5,7 +5,7 @@ The installed CLI also packages a fixed reference surface under
 run `you docs <topic>` for packaged topics such as `agents`,
 `authoring-factories`, `packaged-factories`, `config`, `factory-validation`,
 `mock-workers`, `record-replay`, `guards`, `relationships`, `operations`,
-`work`, `workstations`, `workers`, `resources`, `models`, `providers`,
+`work`, `messaging`, `workstations`, `workers`, `resources`, `models`, `providers`,
 `batch-inputs`, or
 `templates`.
 
@@ -26,6 +26,9 @@ run `you docs <topic>` for packaged topics such as `agents`,
 ## Packaged CLI Reference Topics
 
 These are the fixed topic names accepted by `you docs <topic>`.
+
+- `messaging` is the packaged Agent Message reference. Run `you docs messaging`
+  for worker authority, durable inboxes, replies, limits, and QUEUE delivery.
 
 - `agents` is the packaged agent orientation guide. Run `you docs agents` for
   read order, work submission, the command matrix, planner vs executor, and

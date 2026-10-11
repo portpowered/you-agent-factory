@@ -20,6 +20,20 @@ import (
 // model or paid-provider effects while still crossing validation, runtime
 // loading, and provider-backed worker execution.
 func testDocsInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
+	t.Run("Messaging topic explains authority and QUEUE limits", func(t *testing.T) {
+		t.Parallel()
+		markdown := executeDocumentationCommand(t, documentationProcess(t).process,
+			isolatedDocumentationEnvironment(t), documentationProcess(t).tempDir(t), "docs", "messaging")
+		for _, required := range []string{
+			"# Agent Messages", "Operators may observe messages but cannot send or reply.",
+			"you message list --to-me", "you message reply", "MESSAGE_INTERRUPT_UNSUPPORTED",
+			"REVIVE_UNSUPPORTED", "MESSAGE_STORE_CORRUPT",
+		} {
+			if !strings.Contains(markdown, required) {
+				t.Fatalf("installed messaging reference omitted %q", required)
+			}
+		}
+	})
 	t.Run("Factory examples validate and run", func(t *testing.T) {
 		testFactoryDocumentationExamples(t, documentationProcess(t).process, documentationProcess(t).providerRunner)
 	})

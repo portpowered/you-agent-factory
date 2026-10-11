@@ -27,6 +27,11 @@ func WorkersFamilyManifest() (climanifest.Manifest, error) {
 	return workersFamilyManifestValue(), nil
 }
 
+// MessagesFamilyManifest returns the generated Agent Message command contract.
+func MessagesFamilyManifest() (climanifest.Manifest, error) {
+	return messagesFamilyManifestValue(), nil
+}
+
 // WorkerSessionsFamilyManifest returns generated worker-session observation
 // command metadata.
 func WorkerSessionsFamilyManifest() (climanifest.Manifest, error) {

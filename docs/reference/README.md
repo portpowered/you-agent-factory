@@ -32,6 +32,7 @@ concept owners below when you need the complete customer-facing contract.
 | `record-replay` | Default recording, `--record`, `--replay`, `--resume`, and `--no-record` | [Record, replay, and resume](record-replay.md) |
 | `operations` | Real-pipeline lifetime, finite-drain classification, and recorded-state restart recovery | [Operations](operations.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
+| `messaging` | Worker-authorized Agent Messages, durable inboxes, replies, CLI/HTTP contracts, and QUEUE delivery | [Agent Messages](messaging.md) |
 | `sessions` | Session list, session show, pause and resume, factory show, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `metrics` | Factory Runtime metrics and exact operator-configured cost rollups with deterministic grouping, coverage, and Factory Session scope | [Metrics](metrics.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
@@ -84,6 +85,8 @@ filesystem work around that invocation.
   routing behavior, runtime resources, and portability fields.
 - [Submitted work](work.md) owns `POST /factory-sessions/{session_id}/work`,
   submitted-work tags, and batch cross-links.
+- [Agent Messages](messaging.md) owns Worker Session messaging authority,
+  durable inbox/read/reply behavior, CLI/HTTP messaging contracts, and limits.
 - [Sessions](sessions.md) owns live session discovery, session show, pause and
   resume, factory show, status API fields, dashboard URL, and `--server` /
   `--session` routing for HTTP client commands.

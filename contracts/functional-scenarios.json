@@ -157,6 +157,51 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.message",
+      "name": "you message",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.message.list",
+      "name": "you message list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.message.reply",
+      "name": "you message reply",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.metrics",
       "name": "you metrics",
       "interface": "cli",
@@ -1325,6 +1370,21 @@
       ]
     },
     {
+      "stableId": "rest/getAgentMessage",
+      "name": "getAgentMessage",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/getCurrentFactoryBySessionId",
       "name": "getCurrentFactoryBySessionId",
       "interface": "rest",
@@ -1691,6 +1751,21 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/listAgentMessages",
+      "name": "listAgentMessages",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/listFactorySessionArtifacts",
       "name": "listFactorySessionArtifacts",
       "interface": "rest",
@@ -2048,6 +2123,21 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/sendAgentMessage",
+      "name": "sendAgentMessage",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/messaging/inbox_test.go::TestAuthorizedInboxReplyAndReconstruction",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/setFactorySessionResourceCapacity",
       "name": "setFactorySessionResourceCapacity",
       "interface": "rest",
@@ -2338,6 +2428,21 @@
         "required": false,
         "disposition": "currently-deferred",
         "scope": "session Factory response-event stream"
+      }
+    },
+    {
+      "stableId": "sse/listAgentMessages",
+      "name": "listAgentMessages",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary.",
+      "sse": {
+        "required": true,
+        "disposition": "required",
+        "scope": "authorized Agent Message observations, including live delivery, privacy, stream gaps, backpressure, and cancellation"
       }
     },
     {

@@ -21,6 +21,71 @@ const (
 	WorkerSessionCallerScopes = "WorkerSessionCaller.Scopes"
 )
 
+// Defines values for AgentMessageDelivery.
+const (
+	AgentMessageDeliveryINTERRUPT AgentMessageDelivery = "INTERRUPT"
+	AgentMessageDeliveryQUEUE     AgentMessageDelivery = "QUEUE"
+)
+
+// Defines values for AgentMessageFromPrincipal.
+const (
+	WORKER AgentMessageFromPrincipal = "WORKER"
+)
+
+// Defines values for AgentMessageIfEnded.
+const (
+	AgentMessageIfEndedHOLD   AgentMessageIfEnded = "HOLD"
+	AgentMessageIfEndedREVIVE AgentMessageIfEnded = "REVIVE"
+)
+
+// Defines values for AgentMessageReplyIfEnded.
+const (
+	AgentMessageReplyIfEndedHOLD   AgentMessageReplyIfEnded = "HOLD"
+	AgentMessageReplyIfEndedREVIVE AgentMessageReplyIfEnded = "REVIVE"
+)
+
+// Defines values for AgentMessageToKind.
+const (
+	AgentMessageToKindWORKERSESSION AgentMessageToKind = "WORKER_SESSION"
+)
+
+// Defines values for AgentMessageDeliveryStatus.
+const (
+	AgentMessageDeliveryStatusDELIVEREDINTERRUPT AgentMessageDeliveryStatus = "DELIVERED_INTERRUPT"
+	AgentMessageDeliveryStatusDELIVEREDREVIVE    AgentMessageDeliveryStatus = "DELIVERED_REVIVE"
+	AgentMessageDeliveryStatusEXPIRED            AgentMessageDeliveryStatus = "EXPIRED"
+	AgentMessageDeliveryStatusQUEUED             AgentMessageDeliveryStatus = "QUEUED"
+	AgentMessageDeliveryStatusREAD               AgentMessageDeliveryStatus = "READ"
+	AgentMessageDeliveryStatusREJECTED           AgentMessageDeliveryStatus = "REJECTED"
+	AgentMessageDeliveryStatusREPLIED            AgentMessageDeliveryStatus = "REPLIED"
+)
+
+// Defines values for AgentMessageObservationKind.
+const (
+	AgentMessageObservationKindEXPIRED AgentMessageObservationKind = "EXPIRED"
+	AgentMessageObservationKindREAD    AgentMessageObservationKind = "READ"
+	AgentMessageObservationKindREPLIED AgentMessageObservationKind = "REPLIED"
+	AgentMessageObservationKindSENT    AgentMessageObservationKind = "SENT"
+)
+
+// Defines values for AgentMessageSendRequestDelivery.
+const (
+	AgentMessageSendRequestDeliveryINTERRUPT AgentMessageSendRequestDelivery = "INTERRUPT"
+	AgentMessageSendRequestDeliveryQUEUE     AgentMessageSendRequestDelivery = "QUEUE"
+)
+
+// Defines values for AgentMessageSendRequestIfEnded.
+const (
+	AgentMessageSendRequestIfEndedHOLD   AgentMessageSendRequestIfEnded = "HOLD"
+	AgentMessageSendRequestIfEndedREVIVE AgentMessageSendRequestIfEnded = "REVIVE"
+)
+
+// Defines values for AgentMessageSendRequestReplyIfEnded.
+const (
+	AgentMessageSendRequestReplyIfEndedHOLD   AgentMessageSendRequestReplyIfEnded = "HOLD"
+	AgentMessageSendRequestReplyIfEndedREVIVE AgentMessageSendRequestReplyIfEnded = "REVIVE"
+)
+
 // Defines values for AgentWorkerToolPolicy.
 const (
 	AgentWorkerToolPolicyDISABLED AgentWorkerToolPolicy = "DISABLED"
@@ -154,6 +219,20 @@ const (
 	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                     ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
 	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                     ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
 	ErrorResponseCodeLIFECYCLECONFLICT                              ErrorResponseCode = "LIFECYCLE_CONFLICT"
+	ErrorResponseCodeMESSAGECURSORINVALID                           ErrorResponseCode = "MESSAGE_CURSOR_INVALID"
+	ErrorResponseCodeMESSAGEINTERRUPTUNSUPPORTED                    ErrorResponseCode = "MESSAGE_INTERRUPT_UNSUPPORTED"
+	ErrorResponseCodeMESSAGEINVALIDREQUEST                          ErrorResponseCode = "MESSAGE_INVALID_REQUEST"
+	ErrorResponseCodeMESSAGELIMITEXCEEDED                           ErrorResponseCode = "MESSAGE_LIMIT_EXCEEDED"
+	ErrorResponseCodeMESSAGENOTFOUND                                ErrorResponseCode = "MESSAGE_NOT_FOUND"
+	ErrorResponseCodeMESSAGENOTPERMITTED                            ErrorResponseCode = "MESSAGE_NOT_PERMITTED"
+	ErrorResponseCodeMESSAGERECIPIENTNOTFOUND                       ErrorResponseCode = "MESSAGE_RECIPIENT_NOT_FOUND"
+	ErrorResponseCodeMESSAGEREQUESTCONFLICT                         ErrorResponseCode = "MESSAGE_REQUEST_CONFLICT"
+	ErrorResponseCodeMESSAGESTORECORRUPT                            ErrorResponseCode = "MESSAGE_STORE_CORRUPT"
+	ErrorResponseCodeMESSAGESTOREUNAVAILABLE                        ErrorResponseCode = "MESSAGE_STORE_UNAVAILABLE"
+	ErrorResponseCodeMESSAGESTREAMBACKPRESSURE                      ErrorResponseCode = "MESSAGE_STREAM_BACKPRESSURE"
+	ErrorResponseCodeMESSAGESTREAMGAP                               ErrorResponseCode = "MESSAGE_STREAM_GAP"
+	ErrorResponseCodeMESSAGESTREAMUNAVAILABLE                       ErrorResponseCode = "MESSAGE_STREAM_UNAVAILABLE"
+	ErrorResponseCodeMESSAGINGDISABLED                              ErrorResponseCode = "MESSAGING_DISABLED"
 	ErrorResponseCodeMETHODNOTALLOWED                               ErrorResponseCode = "METHOD_NOT_ALLOWED"
 	ErrorResponseCodeMETRICSINVALIDREQUEST                          ErrorResponseCode = "METRICS_INVALID_REQUEST"
 	ErrorResponseCodeMETRICSSESSIONNOTFOUND                         ErrorResponseCode = "METRICS_SESSION_NOT_FOUND"
@@ -790,6 +869,11 @@ const (
 // Defines values for GlobalConfigACPIntegrationTransport.
 const (
 	Stdio GlobalConfigACPIntegrationTransport = "stdio"
+)
+
+// Defines values for GlobalConfigMessagingPolicyAllowCrossScope.
+const (
+	False GlobalConfigMessagingPolicyAllowCrossScope = false
 )
 
 // Defines values for GlobalConfigModelLoadPolicy.
@@ -1578,7 +1662,7 @@ const (
 
 // Defines values for WorkerSessionObservationRequesterKind.
 const (
-	WORKERSESSION WorkerSessionObservationRequesterKind = "WORKER_SESSION"
+	WorkerSessionObservationRequesterKindWORKERSESSION WorkerSessionObservationRequesterKind = "WORKER_SESSION"
 )
 
 // Defines values for WorkerSessionObservationState.
@@ -1709,6 +1793,139 @@ const (
 	ListWorkerSessionsParamsStateSTARTING   ListWorkerSessionsParamsState = "STARTING"
 	ListWorkerSessionsParamsStateTERMINATED ListWorkerSessionsParamsState = "TERMINATED"
 )
+
+// AgentMessage defines model for AgentMessage.
+type AgentMessage struct {
+	// Body Privacy-normalized body only. Unauthorized workers receive no record.
+	Body               string `json:"body"`
+	BodyRedactionCount int    `json:"bodyRedactionCount"`
+
+	// BodySha256 SHA-256 of the redacted UTF-8 body.
+	BodySha256  string `json:"bodySha256"`
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+	Delivery  AgentMessageDelivery `json:"delivery"`
+	ExpiresAt time.Time            `json:"expiresAt"`
+	From      struct {
+		FactorySessionId *string                   `json:"factorySessionId"`
+		Principal        AgentMessageFromPrincipal `json:"principal"`
+		WorkerSessionId  string                    `json:"workerSessionId"`
+	} `json:"from"`
+	Hop       int                 `json:"hop"`
+	IfEnded   AgentMessageIfEnded `json:"ifEnded"`
+	InReplyTo *string             `json:"inReplyTo"`
+
+	// MessageId Globally unique msg-<ULID> identity.
+	MessageId string `json:"messageId"`
+
+	// Reason Typed code only. T5 may emit REVIVE_UNSUPPORTED.
+	Reason                 *string                  `json:"reason"`
+	RepliedByMessageId     *string                  `json:"repliedByMessageId"`
+	ReplyIfEnded           AgentMessageReplyIfEnded `json:"replyIfEnded"`
+	RevivedWorkerSessionId *string                  `json:"revivedWorkerSessionId"`
+	SentAt                 time.Time                `json:"sentAt"`
+
+	// Status T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+	Status AgentMessageDeliveryStatus `json:"status"`
+
+	// ThreadId Identity of the first message in the thread.
+	ThreadId string `json:"threadId"`
+	To       struct {
+		DeliveredWorkerSessionId *string            `json:"deliveredWorkerSessionId"`
+		FactorySessionId         *string            `json:"factorySessionId"`
+		Kind                     AgentMessageToKind `json:"kind"`
+		WorkerSessionId          string             `json:"workerSessionId"`
+	} `json:"to"`
+}
+
+// AgentMessageDelivery defines model for AgentMessage.Delivery.
+type AgentMessageDelivery string
+
+// AgentMessageFromPrincipal defines model for AgentMessage.From.Principal.
+type AgentMessageFromPrincipal string
+
+// AgentMessageIfEnded defines model for AgentMessage.IfEnded.
+type AgentMessageIfEnded string
+
+// AgentMessageReplyIfEnded defines model for AgentMessage.ReplyIfEnded.
+type AgentMessageReplyIfEnded string
+
+// AgentMessageToKind defines model for AgentMessage.To.Kind.
+type AgentMessageToKind string
+
+// AgentMessageAddress defines model for AgentMessageAddress.
+type AgentMessageAddress struct {
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// AgentMessageDeliveryStatus T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+type AgentMessageDeliveryStatus string
+
+// AgentMessageListResponse defines model for AgentMessageListResponse.
+type AgentMessageListResponse struct {
+	Messages  []AgentMessage `json:"messages"`
+	NextToken *string        `json:"nextToken"`
+}
+
+// AgentMessageObservation defines model for AgentMessageObservation.
+type AgentMessageObservation struct {
+	Kind     AgentMessageObservationKind `json:"kind"`
+	Message  AgentMessage                `json:"message"`
+	RecordId string                      `json:"recordId"`
+	Sequence int                         `json:"sequence"`
+}
+
+// AgentMessageObservationKind defines model for AgentMessageObservation.Kind.
+type AgentMessageObservationKind string
+
+// AgentMessageSendRequest At least one of to or inReplyTo is required. Replies without to target the original sender.
+type AgentMessageSendRequest struct {
+	// Body Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction.
+	Body string `json:"body"`
+
+	// BodySecret Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+	BodySecret  *bool `json:"bodySecret,omitempty"`
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+
+	// Delivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+	Delivery         *AgentMessageSendRequestDelivery `json:"delivery,omitempty"`
+	ExpiresInSeconds *int                             `json:"expiresInSeconds,omitempty"`
+
+	// IfEnded T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+	IfEnded   *AgentMessageSendRequestIfEnded `json:"ifEnded,omitempty"`
+	InReplyTo *string                         `json:"inReplyTo,omitempty"`
+
+	// ReplyIfEnded Default ifEnded for a reply, unless explicitly overridden.
+	ReplyIfEnded *AgentMessageSendRequestReplyIfEnded `json:"replyIfEnded,omitempty"`
+	RequestId    string                               `json:"requestId"`
+	To           *AgentMessageAddress                 `json:"to,omitempty"`
+	union        json.RawMessage
+}
+
+// AgentMessageSendRequestDelivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+type AgentMessageSendRequestDelivery string
+
+// AgentMessageSendRequestIfEnded T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+type AgentMessageSendRequestIfEnded string
+
+// AgentMessageSendRequestReplyIfEnded Default ifEnded for a reply, unless explicitly overridden.
+type AgentMessageSendRequestReplyIfEnded string
+
+// AgentMessageSendRequest0 defines model for .
+type AgentMessageSendRequest0 = interface{}
+
+// AgentMessageSendRequest1 defines model for .
+type AgentMessageSendRequest1 = interface{}
+
+// AgentMessageSendResponse defines model for AgentMessageSendResponse.
+type AgentMessageSendResponse struct {
+	Message AgentMessage `json:"message"`
+}
 
 // AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
 type AgentRunResponseEventPayload struct {
@@ -5500,7 +5717,8 @@ type GlobalConfig struct {
 	BackendScopeID *string `json:"backendScopeID,omitempty"`
 
 	// Defaults Operator defaults that participate independently in file, environment, and flag precedence.
-	Defaults *GlobalConfigDefaults `json:"defaults,omitempty"`
+	Defaults  *GlobalConfigDefaults  `json:"defaults,omitempty"`
+	Messaging *GlobalConfigMessaging `json:"messaging,omitempty"`
 
 	// Models Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.
 	Models *GlobalConfigModels `json:"models,omitempty"`
@@ -5562,6 +5780,27 @@ type GlobalConfigDefaults struct {
 	WorkerModelProvider  *string                `json:"workerModelProvider,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
+
+// GlobalConfigMessaging defines model for GlobalConfigMessaging.
+type GlobalConfigMessaging struct {
+	Enabled *bool `json:"enabled,omitempty"`
+	Limits  *struct {
+		DefaultExpirySeconds *int `json:"defaultExpirySeconds,omitempty"`
+		MaxBodyBytes         *int `json:"maxBodyBytes,omitempty"`
+		MaxHop               *int `json:"maxHop,omitempty"`
+		MessagesPerThread    *int `json:"messagesPerThread,omitempty"`
+		SendsPerChainPerHour *int `json:"sendsPerChainPerHour,omitempty"`
+	} `json:"limits,omitempty"`
+	Policy *struct {
+		// AllowCrossScope Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+		AllowCrossScope *GlobalConfigMessagingPolicyAllowCrossScope `json:"allowCrossScope,omitempty"`
+		ScopeLabelKeys  *[]string                                   `json:"scopeLabelKeys,omitempty"`
+	} `json:"policy,omitempty"`
+	RetentionDays *int `json:"retentionDays,omitempty"`
+}
+
+// GlobalConfigMessagingPolicyAllowCrossScope Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+type GlobalConfigMessagingPolicyAllowCrossScope bool
 
 // GlobalConfigModel Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.
 type GlobalConfigModel struct {
@@ -9908,6 +10147,12 @@ type AfterEventId = string
 // AfterSequence defines model for AfterSequence.
 type AfterSequence = int
 
+// AgentMessageCallerId defines model for AgentMessageCallerId.
+type AgentMessageCallerId = string
+
+// AgentMessageFactorySessionId defines model for AgentMessageFactorySessionId.
+type AgentMessageFactorySessionId = string
+
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
@@ -9997,6 +10242,24 @@ type WorkerSessionLimit = int
 
 // WorkerSessionStreamGenerationID defines model for WorkerSessionStreamGenerationID.
 type WorkerSessionStreamGenerationID = string
+
+// AgentMessageConflict defines model for AgentMessageConflict.
+type AgentMessageConflict = ErrorResponse
+
+// AgentMessageLimitExceeded defines model for AgentMessageLimitExceeded.
+type AgentMessageLimitExceeded = ErrorResponse
+
+// AgentMessageNotFound defines model for AgentMessageNotFound.
+type AgentMessageNotFound = ErrorResponse
+
+// AgentMessageNotPermitted defines model for AgentMessageNotPermitted.
+type AgentMessageNotPermitted = ErrorResponse
+
+// AgentMessageStreamGap defines model for AgentMessageStreamGap.
+type AgentMessageStreamGap = ErrorResponse
+
+// AgentMessagingUnavailable defines model for AgentMessagingUnavailable.
+type AgentMessagingUnavailable = ErrorResponse
 
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
@@ -10311,6 +10574,41 @@ type StreamWorkerSessionEventsByWorkerSessionIdParams struct {
 	StreamGenerationId *WorkerSessionStreamGenerationID `form:"stream_generation_id,omitempty" json:"stream_generation_id,omitempty"`
 }
 
+// ListAgentMessagesParams defines parameters for ListAgentMessages.
+type ListAgentMessagesParams struct {
+	// FactorySessionId Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
+	FactorySessionId            *AgentMessageFactorySessionId `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+	ToMe                        *bool                         `form:"toMe,omitempty" json:"toMe,omitempty"`
+	ToWorkerSessionId           *string                       `form:"toWorkerSessionId,omitempty" json:"toWorkerSessionId,omitempty"`
+	FromWorkerSessionId         *string                       `form:"fromWorkerSessionId,omitempty" json:"fromWorkerSessionId,omitempty"`
+	ThreadId                    *string                       `form:"threadId,omitempty" json:"threadId,omitempty"`
+	CorrelationWorkId           *string                       `form:"correlationWorkId,omitempty" json:"correlationWorkId,omitempty"`
+	CorrelationFactorySessionId *string                       `form:"correlationFactorySessionId,omitempty" json:"correlationFactorySessionId,omitempty"`
+	Status                      *[]AgentMessageDeliveryStatus `form:"status,omitempty" json:"status,omitempty"`
+	MaxResults                  *int                          `form:"maxResults,omitempty" json:"maxResults,omitempty"`
+	NextToken                   *string                       `form:"nextToken,omitempty" json:"nextToken,omitempty"`
+	MarkRead                    *bool                         `form:"markRead,omitempty" json:"markRead,omitempty"`
+	Follow                      *bool                         `form:"follow,omitempty" json:"follow,omitempty"`
+
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// SendAgentMessageParams defines parameters for SendAgentMessage.
+type SendAgentMessageParams struct {
+	// FactorySessionId Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority.
+	FactorySessionId *AgentMessageFactorySessionId `form:"factorySessionId,omitempty" json:"factorySessionId,omitempty"`
+
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
+// GetAgentMessageParams defines parameters for GetAgentMessage.
+type GetAgentMessageParams struct {
+	// XYouWorkerSessionId Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access.
+	XYouWorkerSessionId *AgentMessageCallerId `json:"X-You-Worker-Session-Id,omitempty"`
+}
+
 // GetMetricsParams defines parameters for GetMetrics.
 type GetMetricsParams struct {
 	// SessionId Optional discoverable live Factory Session identity.
@@ -10485,6 +10783,9 @@ type MoveWorkBySessionIdJSONRequestBody = MoveWorkRequest
 
 // ValidateFactoryJSONRequestBody defines body for ValidateFactory for application/json ContentType.
 type ValidateFactoryJSONRequestBody = Factory
+
+// SendAgentMessageJSONRequestBody defines body for SendAgentMessage for application/json ContentType.
+type SendAgentMessageJSONRequestBody = AgentMessageSendRequest
 
 // InvokeGenericModelJSONRequestBody defines body for InvokeGenericModel for application/json ContentType.
 type InvokeGenericModelJSONRequestBody = GenericModelInvocationRequest
@@ -12305,6 +12606,14 @@ func (a *GlobalConfig) UnmarshalJSON(b []byte) error {
 		delete(object, "defaults")
 	}
 
+	if raw, found := object["messaging"]; found {
+		err = json.Unmarshal(raw, &a.Messaging)
+		if err != nil {
+			return fmt.Errorf("error reading 'messaging': %w", err)
+		}
+		delete(object, "messaging")
+	}
+
 	if raw, found := object["models"]; found {
 		err = json.Unmarshal(raw, &a.Models)
 		if err != nil {
@@ -12375,6 +12684,13 @@ func (a GlobalConfig) MarshalJSON() ([]byte, error) {
 		object["defaults"], err = json.Marshal(a.Defaults)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'defaults': %w", err)
+		}
+	}
+
+	if a.Messaging != nil {
+		object["messaging"], err = json.Marshal(a.Messaging)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'messaging': %w", err)
 		}
 	}
 
@@ -15877,6 +16193,224 @@ func (a WorkstationOperationBindingSelector) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
+// AsAgentMessageSendRequest0 returns the union data inside the AgentMessageSendRequest as a AgentMessageSendRequest0
+func (t AgentMessageSendRequest) AsAgentMessageSendRequest0() (AgentMessageSendRequest0, error) {
+	var body AgentMessageSendRequest0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAgentMessageSendRequest0 overwrites any union data inside the AgentMessageSendRequest as the provided AgentMessageSendRequest0
+func (t *AgentMessageSendRequest) FromAgentMessageSendRequest0(v AgentMessageSendRequest0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAgentMessageSendRequest0 performs a merge with any union data inside the AgentMessageSendRequest, using the provided AgentMessageSendRequest0
+func (t *AgentMessageSendRequest) MergeAgentMessageSendRequest0(v AgentMessageSendRequest0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsAgentMessageSendRequest1 returns the union data inside the AgentMessageSendRequest as a AgentMessageSendRequest1
+func (t AgentMessageSendRequest) AsAgentMessageSendRequest1() (AgentMessageSendRequest1, error) {
+	var body AgentMessageSendRequest1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAgentMessageSendRequest1 overwrites any union data inside the AgentMessageSendRequest as the provided AgentMessageSendRequest1
+func (t *AgentMessageSendRequest) FromAgentMessageSendRequest1(v AgentMessageSendRequest1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAgentMessageSendRequest1 performs a merge with any union data inside the AgentMessageSendRequest, using the provided AgentMessageSendRequest1
+func (t *AgentMessageSendRequest) MergeAgentMessageSendRequest1(v AgentMessageSendRequest1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AgentMessageSendRequest) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["body"], err = json.Marshal(t.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'body': %w", err)
+	}
+
+	if t.BodySecret != nil {
+		object["bodySecret"], err = json.Marshal(t.BodySecret)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'bodySecret': %w", err)
+		}
+	}
+
+	if t.Correlation != nil {
+		object["correlation"], err = json.Marshal(t.Correlation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'correlation': %w", err)
+		}
+	}
+
+	if t.Delivery != nil {
+		object["delivery"], err = json.Marshal(t.Delivery)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'delivery': %w", err)
+		}
+	}
+
+	if t.ExpiresInSeconds != nil {
+		object["expiresInSeconds"], err = json.Marshal(t.ExpiresInSeconds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expiresInSeconds': %w", err)
+		}
+	}
+
+	if t.IfEnded != nil {
+		object["ifEnded"], err = json.Marshal(t.IfEnded)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'ifEnded': %w", err)
+		}
+	}
+
+	if t.InReplyTo != nil {
+		object["inReplyTo"], err = json.Marshal(t.InReplyTo)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inReplyTo': %w", err)
+		}
+	}
+
+	if t.ReplyIfEnded != nil {
+		object["replyIfEnded"], err = json.Marshal(t.ReplyIfEnded)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'replyIfEnded': %w", err)
+		}
+	}
+
+	object["requestId"], err = json.Marshal(t.RequestId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'requestId': %w", err)
+	}
+
+	if t.To != nil {
+		object["to"], err = json.Marshal(t.To)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'to': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *AgentMessageSendRequest) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["body"]; found {
+		err = json.Unmarshal(raw, &t.Body)
+		if err != nil {
+			return fmt.Errorf("error reading 'body': %w", err)
+		}
+	}
+
+	if raw, found := object["bodySecret"]; found {
+		err = json.Unmarshal(raw, &t.BodySecret)
+		if err != nil {
+			return fmt.Errorf("error reading 'bodySecret': %w", err)
+		}
+	}
+
+	if raw, found := object["correlation"]; found {
+		err = json.Unmarshal(raw, &t.Correlation)
+		if err != nil {
+			return fmt.Errorf("error reading 'correlation': %w", err)
+		}
+	}
+
+	if raw, found := object["delivery"]; found {
+		err = json.Unmarshal(raw, &t.Delivery)
+		if err != nil {
+			return fmt.Errorf("error reading 'delivery': %w", err)
+		}
+	}
+
+	if raw, found := object["expiresInSeconds"]; found {
+		err = json.Unmarshal(raw, &t.ExpiresInSeconds)
+		if err != nil {
+			return fmt.Errorf("error reading 'expiresInSeconds': %w", err)
+		}
+	}
+
+	if raw, found := object["ifEnded"]; found {
+		err = json.Unmarshal(raw, &t.IfEnded)
+		if err != nil {
+			return fmt.Errorf("error reading 'ifEnded': %w", err)
+		}
+	}
+
+	if raw, found := object["inReplyTo"]; found {
+		err = json.Unmarshal(raw, &t.InReplyTo)
+		if err != nil {
+			return fmt.Errorf("error reading 'inReplyTo': %w", err)
+		}
+	}
+
+	if raw, found := object["replyIfEnded"]; found {
+		err = json.Unmarshal(raw, &t.ReplyIfEnded)
+		if err != nil {
+			return fmt.Errorf("error reading 'replyIfEnded': %w", err)
+		}
+	}
+
+	if raw, found := object["requestId"]; found {
+		err = json.Unmarshal(raw, &t.RequestId)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestId': %w", err)
+		}
+	}
+
+	if raw, found := object["to"]; found {
+		err = json.Unmarshal(raw, &t.To)
+		if err != nil {
+			return fmt.Errorf("error reading 'to': %w", err)
+		}
+	}
+
+	return err
+}
+
 // AsRunRequestEventPayload returns the union data inside the FactoryEvent_Payload as a RunRequestEventPayload
 func (t FactoryEvent_Payload) AsRunRequestEventPayload() (RunRequestEventPayload, error) {
 	var body RunRequestEventPayload
@@ -19232,6 +19766,15 @@ type ServerInterface interface {
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
+	// Read permitted Agent Messages
+	// (GET /messages)
+	ListAgentMessages(w http.ResponseWriter, r *http.Request, params ListAgentMessagesParams)
+	// Send an Agent Message to a Worker Session
+	// (POST /messages)
+	SendAgentMessage(w http.ResponseWriter, r *http.Request, params SendAgentMessageParams)
+	// Read one Agent Message
+	// (GET /messages/{message_id})
+	GetAgentMessage(w http.ResponseWriter, r *http.Request, messageId string, params GetAgentMessageParams)
 	// Get canonical runtime metrics
 	// (GET /metrics)
 	GetMetrics(w http.ResponseWriter, r *http.Request, params GetMetricsParams)
@@ -21129,6 +21672,257 @@ func (siw *ServerInterfaceWrapper) ValidateFactory(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListAgentMessages operation middleware
+func (siw *ServerInterfaceWrapper) ListAgentMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAgentMessagesParams
+
+	// ------------- Optional query parameter "factorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "factorySessionId", r.URL.Query(), &params.FactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factorySessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "toMe" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "toMe", r.URL.Query(), &params.ToMe)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "toMe", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "toWorkerSessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "toWorkerSessionId", r.URL.Query(), &params.ToWorkerSessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "toWorkerSessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "fromWorkerSessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "fromWorkerSessionId", r.URL.Query(), &params.FromWorkerSessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "fromWorkerSessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "threadId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "threadId", r.URL.Query(), &params.ThreadId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "threadId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "correlationWorkId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "correlationWorkId", r.URL.Query(), &params.CorrelationWorkId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "correlationWorkId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "correlationFactorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "correlationFactorySessionId", r.URL.Query(), &params.CorrelationFactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "correlationFactorySessionId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "maxResults" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "nextToken" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "markRead" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "markRead", r.URL.Query(), &params.MarkRead)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "markRead", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "follow" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "follow", r.URL.Query(), &params.Follow)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "follow", Err: err})
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId AgentMessageCallerId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAgentMessages(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendAgentMessage operation middleware
+func (siw *ServerInterfaceWrapper) SendAgentMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SendAgentMessageParams
+
+	// ------------- Optional query parameter "factorySessionId" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "factorySessionId", r.URL.Query(), &params.FactorySessionId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "factorySessionId", Err: err})
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId AgentMessageCallerId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendAgentMessage(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentMessage operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentMessage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "message_id" -------------
+	var messageId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "message_id", mux.Vars(r)["message_id"], &messageId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "message_id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, WorkerSessionCallerScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAgentMessageParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-You-Worker-Session-Id" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-You-Worker-Session-Id")]; found {
+		var XYouWorkerSessionId AgentMessageCallerId
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-You-Worker-Session-Id", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-You-Worker-Session-Id", valueList[0], &XYouWorkerSessionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-You-Worker-Session-Id", Err: err})
+			return
+		}
+
+		params.XYouWorkerSessionId = &XYouWorkerSessionId
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentMessage(w, r, messageId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMetrics operation middleware
 func (siw *ServerInterfaceWrapper) GetMetrics(w http.ResponseWriter, r *http.Request) {
 
@@ -22070,6 +22864,12 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript", wrapper.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-validations", wrapper.ValidateFactory).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/messages", wrapper.ListAgentMessages).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/messages", wrapper.SendAgentMessage).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/messages/{message_id}", wrapper.GetAgentMessage).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/metrics", wrapper.GetMetrics).Methods("GET")
 

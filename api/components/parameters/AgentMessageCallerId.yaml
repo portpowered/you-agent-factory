@@ -1,0 +1,7 @@
+name: X-You-Worker-Session-Id
+in: header
+required: false
+schema: {type: string, minLength: 1}
+description: >-
+  Required with Bearer credentials. Omit both credentials for operator
+  read observation. Partial credentials never grant observation access.

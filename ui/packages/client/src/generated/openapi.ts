@@ -10,6 +10,50 @@
  */
 
 export interface paths {
+  "/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read permitted Agent Messages
+     * @description Filters combine with AND after read authorization. Store sequence orders pages ascending. toMe includes the verified continuation chain and exact own-Work identity, never a matching project label alone. markRead affects only messages the caller is permitted to receive. follow uses source-native Events and ends on process reconstruction. Each message frame uses the message SSE event; typed stream failures use the error SSE event with an ErrorResponse payload.
+     */
+    get: operations["listAgentMessages"];
+    put?: never;
+    /**
+     * Send an Agent Message to a Worker Session
+     * @description Worker Sessions validates the exact active RUNNING caller. Messaging permits only the caller's evidenced lead/requester chain or a lead's own Project workers. Persist before returning success. Messages remain queued. Revival and interruption are unavailable.
+     */
+    post: operations["sendAgentMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/messages/{message_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one Agent Message
+     * @description A permitted recipient reading QUEUED marks it READ durably. Sender and operator observation never marks another recipient's message. REPLIED and EXPIRED do not regress to READ.
+     */
+    get: operations["getAgentMessage"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/metrics": {
     parameters: {
       query?: never;
@@ -1343,6 +1387,113 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description At least one of to or inReplyTo is required. Replies without to target the original sender. */
+    AgentMessageSendRequest:
+      | {
+          requestId: string;
+          to?: components["schemas"]["AgentMessageAddress"];
+          /** @description Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction. */
+          body: string;
+          /**
+           * @description Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+           * @default false
+           */
+          bodySecret: boolean;
+          inReplyTo?: string;
+          /**
+           * @description INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+           * @default QUEUE
+           * @enum {string}
+           */
+          delivery: AgentMessageSendRequestDelivery;
+          /**
+           * @description T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+           * @default REVIVE
+           * @enum {string}
+           */
+          ifEnded: AgentMessageSendRequestIfEnded;
+          /**
+           * @description Default ifEnded for a reply, unless explicitly overridden.
+           * @default REVIVE
+           * @enum {string}
+           */
+          replyIfEnded: AgentMessageSendRequestReplyIfEnded;
+          correlation?: {
+            workId?: string;
+            factorySessionId?: string;
+          };
+          /** @default 86400 */
+          expiresInSeconds: number;
+        }
+      | unknown
+      | unknown;
+    AgentMessageAddress: {
+      workerSessionId: string;
+    };
+    AgentMessage: {
+      /** @description Globally unique msg-<ULID> identity. */
+      messageId: string;
+      /** @description Identity of the first message in the thread. */
+      threadId: string;
+      inReplyTo?: string | null;
+      from: {
+        /** @enum {string} */
+        principal: AgentMessageFromPrincipal;
+        workerSessionId: string;
+        factorySessionId?: string | null;
+      };
+      to: {
+        /** @enum {string} */
+        kind: AgentMessageToKind;
+        workerSessionId: string;
+        factorySessionId?: string | null;
+        deliveredWorkerSessionId?: string | null;
+      };
+      correlation?: {
+        workId?: string;
+        factorySessionId?: string;
+      };
+      /** @description Privacy-normalized body only. Unauthorized workers receive no record. */
+      body: string;
+      /** @description SHA-256 of the redacted UTF-8 body. */
+      bodySha256: string;
+      bodyRedactionCount: number;
+      /** @enum {string} */
+      delivery: AgentMessageDelivery;
+      /** @enum {string} */
+      ifEnded: AgentMessageIfEnded;
+      /** @enum {string} */
+      replyIfEnded: AgentMessageReplyIfEnded;
+      status: components["schemas"]["AgentMessageDeliveryStatus"];
+      /** @description Typed code only. T5 may emit REVIVE_UNSUPPORTED. */
+      reason?: string | null;
+      hop: number;
+      /** Format: date-time */
+      sentAt: string;
+      /** Format: date-time */
+      expiresAt: string;
+      revivedWorkerSessionId?: string | null;
+      repliedByMessageId?: string | null;
+    };
+    /**
+     * @description T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+     * @enum {string}
+     */
+    AgentMessageDeliveryStatus: AgentMessageDeliveryStatus;
+    AgentMessageSendResponse: {
+      message: components["schemas"]["AgentMessage"];
+    };
+    AgentMessageListResponse: {
+      messages: components["schemas"]["AgentMessage"][];
+      nextToken?: string | null;
+    };
+    AgentMessageObservation: {
+      recordId: string;
+      sequence: number;
+      /** @enum {string} */
+      kind: AgentMessageObservationKind;
+      message: components["schemas"]["AgentMessage"];
+    };
     SubmitWorkRequest: {
       /** @description Optional authored name for this single-work submission. When omitted, the server assigns the single-work request's canonical identity. */
       name?: string;
@@ -7217,6 +7368,7 @@ export interface components {
     };
     /** @description Shared operator configuration stored in .you-agent-factory/config.json. */
     GlobalConfig: {
+      messaging?: components["schemas"]["GlobalConfigMessaging"];
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
@@ -7892,6 +8044,38 @@ export interface components {
       /** @enum {string} */
       reason: DispatchCancellationReason;
     };
+    GlobalConfigMessaging: {
+      /** @default true */
+      enabled: boolean;
+      /** @default 30 */
+      retentionDays: number;
+      policy?: {
+        /**
+         * @default [
+         *       "tag:project"
+         *     ]
+         */
+        scopeLabelKeys: string[];
+        /**
+         * @description Reserved policy extension. T5 rejects enablement and never grants sibling or cross-project permission.
+         * @default false
+         * @enum {boolean}
+         */
+        allowCrossScope: false;
+      };
+      limits?: {
+        /** @default 10 */
+        sendsPerChainPerHour: number;
+        /** @default 8 */
+        messagesPerThread: number;
+        /** @default 8192 */
+        maxBodyBytes: number;
+        /** @default 3 */
+        maxHop: number;
+        /** @default 86400 */
+        defaultExpirySeconds: number;
+      };
+    };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
       id: string;
@@ -7925,6 +8109,62 @@ export interface components {
     };
   };
   responses: {
+    /** @description The caller lacks authority for this Agent Message operation. */
+    AgentMessageNotPermitted: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The recipient or Agent Message does not exist. */
+    AgentMessageNotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The request identity conflicts, or the recipient identity is ambiguous. */
+    AgentMessageConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Messaging is disabled, or its store or observation stream is unavailable. */
+    AgentMessagingUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The source-native observation stream has a retention gap. Pull the inbox before following again. */
+    AgentMessageStreamGap: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description A configured successful-send or thread limit prevents admission. */
+    AgentMessageLimitExceeded: {
+      headers: {
+        /** @description Seconds until a rolling sender limit permits another send. */
+        "Retry-After"?: number;
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Request payload or parameter was invalid. */
     BadRequest: {
       headers: {
@@ -8246,6 +8486,10 @@ export interface components {
     };
   };
   parameters: {
+    /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+    AgentMessageCallerId: string;
+    /** @description Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority. */
+    AgentMessageFactorySessionId: string;
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
     SessionID: string;
     /** @description Stable pending human-approval identifier. */
@@ -8323,6 +8567,117 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  listAgentMessages: {
+    parameters: {
+      query?: {
+        /** @description Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority. */
+        factorySessionId?: components["parameters"]["AgentMessageFactorySessionId"];
+        toMe?: boolean;
+        toWorkerSessionId?: string;
+        fromWorkerSessionId?: string;
+        threadId?: string;
+        correlationWorkId?: string;
+        correlationFactorySessionId?: string;
+        status?: components["schemas"]["AgentMessageDeliveryStatus"][];
+        maxResults?: number;
+        nextToken?: string;
+        markRead?: boolean;
+        follow?: boolean;
+      };
+      header?: {
+        /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+        "X-You-Worker-Session-Id"?: components["parameters"]["AgentMessageCallerId"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized page or filtered source-native observations */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentMessageListResponse"];
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      403: components["responses"]["AgentMessageNotPermitted"];
+      409: components["responses"]["AgentMessageConflict"];
+      410: components["responses"]["AgentMessageStreamGap"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["AgentMessagingUnavailable"];
+    };
+  };
+  sendAgentMessage: {
+    parameters: {
+      query?: {
+        /** @description Explicit recipient Factory Session for legacy ambiguous Worker Session identities. This selector grants no caller authority. */
+        factorySessionId?: components["parameters"]["AgentMessageFactorySessionId"];
+      };
+      header?: {
+        /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+        "X-You-Worker-Session-Id"?: components["parameters"]["AgentMessageCallerId"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AgentMessageSendRequest"];
+      };
+    };
+    responses: {
+      /** @description Persisted message, including an idempotent replay */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentMessageSendResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      403: components["responses"]["AgentMessageNotPermitted"];
+      404: components["responses"]["AgentMessageNotFound"];
+      409: components["responses"]["AgentMessageConflict"];
+      429: components["responses"]["AgentMessageLimitExceeded"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["AgentMessagingUnavailable"];
+    };
+  };
+  getAgentMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required with Bearer credentials. Omit both credentials for operator read observation. Partial credentials never grant observation access. */
+        "X-You-Worker-Session-Id"?: components["parameters"]["AgentMessageCallerId"];
+      };
+      path: {
+        message_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized message with its current durable status */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AgentMessage"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      403: components["responses"]["AgentMessageNotPermitted"];
+      404: components["responses"]["AgentMessageNotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["AgentMessagingUnavailable"];
+    };
+  };
   getMetrics: {
     parameters: {
       query?: {
@@ -10622,6 +10977,71 @@ export const PathsWorkerSessionsGetParametersQueryState = {
 } as const;
 export type PathsWorkerSessionsGetParametersQueryState =
   (typeof PathsWorkerSessionsGetParametersQueryState)[keyof typeof PathsWorkerSessionsGetParametersQueryState];
+export const AgentMessageSendRequestDelivery = {
+  QUEUE: "QUEUE",
+  INTERRUPT: "INTERRUPT",
+} as const;
+export type AgentMessageSendRequestDelivery =
+  (typeof AgentMessageSendRequestDelivery)[keyof typeof AgentMessageSendRequestDelivery];
+export const AgentMessageSendRequestIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageSendRequestIfEnded =
+  (typeof AgentMessageSendRequestIfEnded)[keyof typeof AgentMessageSendRequestIfEnded];
+export const AgentMessageSendRequestReplyIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageSendRequestReplyIfEnded =
+  (typeof AgentMessageSendRequestReplyIfEnded)[keyof typeof AgentMessageSendRequestReplyIfEnded];
+export const AgentMessageFromPrincipal = {
+  WORKER: "WORKER",
+} as const;
+export type AgentMessageFromPrincipal =
+  (typeof AgentMessageFromPrincipal)[keyof typeof AgentMessageFromPrincipal];
+export const AgentMessageToKind = {
+  WORKER_SESSION: "WORKER_SESSION",
+} as const;
+export type AgentMessageToKind =
+  (typeof AgentMessageToKind)[keyof typeof AgentMessageToKind];
+export const AgentMessageDelivery = {
+  QUEUE: "QUEUE",
+  INTERRUPT: "INTERRUPT",
+} as const;
+export type AgentMessageDelivery =
+  (typeof AgentMessageDelivery)[keyof typeof AgentMessageDelivery];
+export const AgentMessageIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageIfEnded =
+  (typeof AgentMessageIfEnded)[keyof typeof AgentMessageIfEnded];
+export const AgentMessageReplyIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageReplyIfEnded =
+  (typeof AgentMessageReplyIfEnded)[keyof typeof AgentMessageReplyIfEnded];
+export const AgentMessageDeliveryStatus = {
+  QUEUED: "QUEUED",
+  READ: "READ",
+  DELIVERED_REVIVE: "DELIVERED_REVIVE",
+  DELIVERED_INTERRUPT: "DELIVERED_INTERRUPT",
+  REPLIED: "REPLIED",
+  EXPIRED: "EXPIRED",
+  REJECTED: "REJECTED",
+} as const;
+export type AgentMessageDeliveryStatus =
+  (typeof AgentMessageDeliveryStatus)[keyof typeof AgentMessageDeliveryStatus];
+export const AgentMessageObservationKind = {
+  SENT: "SENT",
+  READ: "READ",
+  REPLIED: "REPLIED",
+  EXPIRED: "EXPIRED",
+} as const;
+export type AgentMessageObservationKind =
+  (typeof AgentMessageObservationKind)[keyof typeof AgentMessageObservationKind];
 export const InvocationInputSourceKind = {
   // Text supplied in canonical WorkContent.
   InvocationInputSourceKindText: "text",
@@ -11154,76 +11574,107 @@ export const ErrorResponseCode = {
   // Workers could not admit the Worker Session interrupt replacement.
   WORKER_SESSION_INTERRUPT_ADMISSION_FAILED:
     "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED",
-  // Lifecycle control requestId was already applied with different control inputs.
+  // The Worker Session control request is invalid.
   WORKER_SESSION_CONTROL_INVALID: "WORKER_SESSION_CONTROL_INVALID",
-  // Requested resource capacity is below the number of units currently in use.
+  // The Worker Session control conflicts with current lifecycle or request state.
   WORKER_SESSION_CONTROL_CONFLICT: "WORKER_SESSION_CONTROL_CONFLICT",
-  // The caller's expected Factory revision is no longer current.
+  // The Worker Session control could not be completed.
   WORKER_SESSION_CONTROL_FAILED: "WORKER_SESSION_CONTROL_FAILED",
-  // The Factory Session lifecycle does not admit the requested change.
+  // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
-  // A live change was admitted but its runtime application failed.
+  // Requested resource capacity is below the number of units currently in use.
   RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
-  // The Factory Response Event reconnect cursor is invalid.
+  // The caller's expected Factory revision is no longer current.
   REVISION_CONFLICT: "REVISION_CONFLICT",
-  // A Factory Response Event filter is invalid.
+  // The Factory Session lifecycle does not admit the requested change.
   LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
-  // The explicitly selected Factory Session for response events does not exist.
+  // A live change was admitted but its runtime application failed.
   ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
-  // The retained Factory Response Event stream is no longer available.
+  // The Factory Response Event reconnect cursor is invalid.
   INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
-  // The requested Provider Session provider is not loadable by this API.
+  // A Factory Response Event filter is invalid.
   INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
-  // The requested Provider Session identifier kind is not loadable by this API.
+  // The explicitly selected Factory Session for response events does not exist.
   RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
-  // The correlated Worker Session projection is temporarily unavailable.
+  // The retained Factory Response Event stream is no longer available.
   RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
-  // The durable Worker Session recording contains corrupt history.
+  // The requested Provider Session provider is not loadable by this API.
   PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
-  // The durable Worker Session recording could not be read.
+  // The requested Provider Session identifier kind is not loadable by this API.
   SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
-  // The canonical Worker Session event stream is temporarily unavailable.
+  // The correlated Worker Session projection is temporarily unavailable.
   PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
-  // The requested Worker Session has not reached a terminal state.
+  // The durable Worker Session recording contains corrupt history.
   WORKER_SESSION_RECORDING_CORRUPT: "WORKER_SESSION_RECORDING_CORRUPT",
-  // The finished Worker Session has no normalized transcript available.
+  // The durable Worker Session recording could not be read.
   WORKER_SESSION_RECORDING_UNAVAILABLE: "WORKER_SESSION_RECORDING_UNAVAILABLE",
-  // Provider Sessions could not project the normalized Worker Session transcript.
+  // The canonical Worker Session event stream is temporarily unavailable.
   WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
-  // The metrics request could not be interpreted by the canonical metrics route.
+  // The requested Worker Session has not reached a terminal state.
   WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
-  // The requested live Factory Session identity was not discoverable.
+  // The finished Worker Session has no normalized transcript available.
   WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
-  // The live Factory Session was discoverable, but no retained metrics scope was available.
+  // Provider Sessions could not project the normalized Worker Session transcript.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
-  // The selected managed model cache revision does not exist.
+  // The metrics request could not be interpreted by the canonical metrics route.
   METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
-  // The selected managed model cache revision is held by an active model host or invocation.
+  // The requested live Factory Session identity was not discoverable.
   METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
-  // Managed model cache references could not be proven safe for reclamation.
+  // The live Factory Session was discoverable, but no retained metrics scope was available.
   METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
-  // The requested resource does not exist.
+  // The selected managed model cache revision does not exist.
   MODEL_CACHE_NOT_FOUND: "MODEL_CACHE_NOT_FOUND",
-  // The server failed while handling an otherwise valid request.
+  // The selected managed model cache revision is held by an active model host or invocation.
   MODEL_CACHE_IN_USE: "MODEL_CACHE_IN_USE",
-  // The metrics costs request contained invalid configuration or selection input.
+  // Managed model cache references could not be proven safe for reclamation.
   MODEL_CACHE_REFERENCE_UNCERTAIN: "MODEL_CACHE_REFERENCE_UNCERTAIN",
-  // The metrics costs request was canceled before the report completed.
+  // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
-  // The metrics costs query failed while reading or valuing runtime usage.
+  // The server failed while handling an otherwise valid request.
   INTERNAL_ERROR: "INTERNAL_ERROR",
-  // The metrics costs query exceeded its server-side completion bound.
+  // The metrics costs request contained invalid configuration or selection input.
   COSTS_INVALID_REQUEST: "COSTS_INVALID_REQUEST",
-  // The shutdown control request came from a non-loopback peer.
+  // The metrics costs request was canceled before the report completed.
   COSTS_QUERY_CANCELED: "COSTS_QUERY_CANCELED",
-  // The invocation-local shutdown control is unavailable.
+  // The metrics costs query failed while reading or valuing runtime usage.
   COSTS_QUERY_FAILED: "COSTS_QUERY_FAILED",
+  // The metrics costs query exceeded its server-side completion bound.
   COSTS_QUERY_TIMEOUT: "COSTS_QUERY_TIMEOUT",
+  // The shutdown control request came from a non-loopback peer.
   SHUTDOWN_CONTROL_REJECTED: "SHUTDOWN_CONTROL_REJECTED",
+  // The invocation-local shutdown control is unavailable.
   SHUTDOWN_CONTROL_UNAVAILABLE: "SHUTDOWN_CONTROL_UNAVAILABLE",
+  // The message input or reference is invalid.
+  MESSAGE_INVALID_REQUEST: "MESSAGE_INVALID_REQUEST",
+  // The caller may not perform this messaging operation.
+  MESSAGE_NOT_PERMITTED: "MESSAGE_NOT_PERMITTED",
+  // The addressed Worker Session does not exist.
+  MESSAGE_RECIPIENT_NOT_FOUND: "MESSAGE_RECIPIENT_NOT_FOUND",
+  // The addressed message does not exist.
+  MESSAGE_NOT_FOUND: "MESSAGE_NOT_FOUND",
+  // The sender request key has different privacy-normalized inputs.
+  MESSAGE_REQUEST_CONFLICT: "MESSAGE_REQUEST_CONFLICT",
+  // T5 cannot interrupt a Worker Session.
+  MESSAGE_INTERRUPT_UNSUPPORTED: "MESSAGE_INTERRUPT_UNSUPPORTED",
+  // A configured message volume or thread limit was exceeded.
+  MESSAGE_LIMIT_EXCEEDED: "MESSAGE_LIMIT_EXCEEDED",
+  // The page cursor is malformed or belongs to a different authorized query.
+  MESSAGE_CURSOR_INVALID: "MESSAGE_CURSOR_INVALID",
+  // Messaging is disabled.
+  MESSAGING_DISABLED: "MESSAGING_DISABLED",
+  // The message store could not durably commit the operation.
+  MESSAGE_STORE_UNAVAILABLE: "MESSAGE_STORE_UNAVAILABLE",
+  // The message store contains invalid committed data.
+  MESSAGE_STORE_CORRUPT: "MESSAGE_STORE_CORRUPT",
+  // The process-local Agent Message observation stream is unavailable.
+  MESSAGE_STREAM_UNAVAILABLE: "MESSAGE_STREAM_UNAVAILABLE",
+  // Agent Message observation history has a retention gap; pull the durable inbox again.
+  MESSAGE_STREAM_GAP: "MESSAGE_STREAM_GAP",
+  // The Agent Message observation subscriber exceeded its bounded pending capacity.
+  MESSAGE_STREAM_BACKPRESSURE: "MESSAGE_STREAM_BACKPRESSURE",
 } as const;
 export type ErrorResponseCode =
   (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];

@@ -12,6 +12,43 @@ import (
 	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service"
 )
 
+func TestMergeDocumentProviderModelPreservesDetachedMessaging(t *testing.T) {
+	t.Parallel()
+	enabled, days, hop := false, 2, 0
+	keys := []string{"tag:project"}
+	document := operatorsettings.Document{
+		Messaging: &operatorsettings.MessagingSettings{
+			Enabled: &enabled, RetentionDays: &days,
+			Policy: &operatorsettings.MessagingPolicy{ScopeLabelKeys: &keys},
+			Limits: &operatorsettings.MessagingLimits{MaxHop: &hop},
+		},
+	}
+	// Model-only merge needs no effects. Document persistence, decoding and
+	// provider catalogs remain controlled ports outside this component witness.
+	service := internalservice.NewWithPreserver(nil, nil, nil, nil, nil, nil, nil)
+	model := "new-model"
+	updated, err := service.MergeDocumentProviderModel(document, operatorsettings.DocumentProviderModelUpdate{Model: &model})
+	if err != nil || !reflect.DeepEqual(document.Messaging, updated.Messaging) || updated.Defaults.WorkerModel != model {
+		t.Fatalf("merge lost Messaging or model update: %v", err)
+	}
+	*updated.Messaging.Enabled = true
+	(*updated.Messaging.Policy.ScopeLabelKeys)[0] = "foreign"
+	*updated.Messaging.Limits.MaxHop = 1
+	if *document.Messaging.Enabled || keys[0] != "tag:project" || hop != 0 {
+		t.Fatal("returned document aliases authored Messaging")
+	}
+	invalid := operatorsettings.Document{Messaging: &operatorsettings.MessagingSettings{InvalidJSON: []byte(`"bad"`)}}
+	updated, err = service.MergeDocumentProviderModel(invalid, operatorsettings.DocumentProviderModelUpdate{Model: &model})
+	if err != nil || string(updated.Messaging.InvalidJSON) != `"bad"` {
+		t.Fatalf("unrelated model update discarded invalid Messaging: %v", err)
+	}
+	cloned := updated.Clone()
+	cloned.Messaging.InvalidJSON[1] = 'x'
+	if string(updated.Messaging.InvalidJSON) != `"bad"` {
+		t.Fatal("document clone aliases preserved invalid section")
+	}
+}
+
 func TestApplyDocumentUpdate_ModelOnlyUpdatePreservesProviderAndReturnsValidatedDocument(t *testing.T) {
 	t.Parallel()
 
