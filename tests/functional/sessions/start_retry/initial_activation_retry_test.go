@@ -1253,12 +1253,17 @@ func testCompletedLifecycleInputReplacement(t *testing.T, sessions factorysessio
 	// Retained history belongs to the selected runtime generation. Successful
 	// replacement continues the Session sequence and accepts the prior cursor.
 	initialOpeningHistory(t, sessions, scenario.candidateID)
-	responsesAfter := support.GetFactoryResponseEventsAt(t, baseURL, scenario.candidateID)
+	assertCompletedLifecycleReplacementCursor(t, baseURL, scenario.candidateID, cursor)
+}
+
+func assertCompletedLifecycleReplacementCursor(t *testing.T, baseURL, sessionID string, cursor int64) {
+	t.Helper()
+	responsesAfter := support.GetFactoryResponseEventsAt(t, baseURL, sessionID)
 	if len(responsesAfter) == 0 {
 		t.Fatal("replacement has no observable response history")
 	}
 	stream := support.OpenFactoryResponseEventStreamAt(t,
-		support.SessionResponseEventsURLWithAfterSequence(baseURL, scenario.candidateID, cursor))
+		support.SessionResponseEventsURLWithAfterSequence(baseURL, sessionID, cursor))
 	defer stream.Close()
 	if !stream.HasRetainedFrameCount || stream.RetainedFrameCount != len(responsesAfter) {
 		t.Fatalf("replacement cursor catch-up count = %d, want %d", stream.RetainedFrameCount, len(responsesAfter))

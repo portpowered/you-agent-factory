@@ -87,24 +87,7 @@ func TestCompletedLifecycleSidecarUsesSelectedInputEffectsAndPreservesPeerOnRetr
 	var payloads []string
 	automation := &sidecarOpeningAutomation{active: make(map[string]bool)}
 	automation.onActivate = func(request automations.RuntimeActivationRequest) error {
-		input := request.Inputs.Filesystem
-		data, err := input.Files.ReadFile(request.Snapshot.FactoryDir + "/input")
-		if err != nil {
-			return err
-		}
-		payloads = append(payloads, string(data))
-		if err := input.WalkDirectory(request.Snapshot.FactoryDir, func(path string, _ fs.DirEntry, err error) error {
-			if path != request.Snapshot.FactoryDir {
-				t.Errorf("walked %q", path)
-			}
-			return err
-		}); err != nil {
-			return err
-		}
-		if got := input.WorkRequestIDs(); got != "selected-request" {
-			t.Errorf("request ID = %q", got)
-		}
-		return nil
+		return assertSelectedSidecarInputEffects(t, request, &payloads)
 	}
 	opening := NewSidecarOpening(automation, platformclock.Real{}, files, walker, newID)
 	peer := &factoryhost.Bundle{Dir: "peer", FactorySessionID: "peer", RuntimeInstanceID: "peer-runtime", RuntimeCfg: sidecarOpeningConfig{}}
@@ -132,6 +115,28 @@ func TestCompletedLifecycleSidecarUsesSelectedInputEffectsAndPreservesPeerOnRetr
 	if !automation.active["peer-runtime"] || automation.active["candidate-runtime"] {
 		t.Fatalf("stop changed peer: %v", automation.active)
 	}
+}
+
+func assertSelectedSidecarInputEffects(t *testing.T, request automations.RuntimeActivationRequest, payloads *[]string) error {
+	t.Helper()
+	input := request.Inputs.Filesystem
+	data, err := input.Files.ReadFile(request.Snapshot.FactoryDir + "/input")
+	if err != nil {
+		return err
+	}
+	*payloads = append(*payloads, string(data))
+	if err := input.WalkDirectory(request.Snapshot.FactoryDir, func(path string, _ fs.DirEntry, err error) error {
+		if path != request.Snapshot.FactoryDir {
+			t.Errorf("walked %q", path)
+		}
+		return err
+	}); err != nil {
+		return err
+	}
+	if got := input.WorkRequestIDs(); got != "selected-request" {
+		t.Errorf("request ID = %q", got)
+	}
+	return nil
 }
 
 func (a *sidecarOpeningAutomation) DeactivateRuntime(_ context.Context, request automations.RuntimeDeactivationRequest) (automations.RuntimeDeactivationResult, error) {
