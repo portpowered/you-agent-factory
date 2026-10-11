@@ -34,24 +34,7 @@ func TestDefinitionsFixedRolesInstallReadbackAndFailures(t *testing.T) {
 		return inputs.Stdout(), err
 	}
 	installed := fixedRolesInstall(t, run, root, "created")
-	original, err := os.ReadFile(filepath.Join(installed.FactoryDir, "factory.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	marker := []byte(`{"name":"customer-edited"}`)
-	if err := os.WriteFile(filepath.Join(installed.FactoryDir, "factory.json"), marker, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	fixedRolesInstall(t, run, root, "skipped")
-	retained, err := os.ReadFile(filepath.Join(installed.FactoryDir, "factory.json"))
-	if err != nil || !reflect.DeepEqual(retained, marker) {
-		t.Fatalf("skip replaced customer content: %s (%v)", retained, err)
-	}
-	fixedRolesInstall(t, run, root, "replaced", "--replace", "true")
-	restored, err := os.ReadFile(filepath.Join(installed.FactoryDir, "factory.json"))
-	if err != nil || !reflect.DeepEqual(restored, original) {
-		t.Fatalf("replacement did not restore packaged content: %v", err)
-	}
+	fixedRolesInstallReplacement(t, run, root, installed.FactoryDir)
 	factory, err := support.LoadedFactoryWithProcessAndEnv(t, process, env, filepath.Join(installed.FactoryDir, "factory.json"))
 	if err != nil || factory.Name == "" || factory.Workstations == nil || len(*factory.Workstations) == 0 {
 		t.Fatalf("installed Factory is not useful: %#v (%v)", factory, err)
@@ -77,6 +60,28 @@ func TestDefinitionsFixedRolesInstallReadbackAndFailures(t *testing.T) {
 		t.Fatalf("write failure damaged peer: %v", err)
 	}
 	fixedRolesContextFailures(t, run)
+}
+
+func fixedRolesInstallReplacement(t *testing.T, run func(context.Context, ...string) (string, error), root, installedDir string) {
+	t.Helper()
+	original, err := os.ReadFile(filepath.Join(installedDir, "factory.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := []byte(`{"name":"customer-edited"}`)
+	if err := os.WriteFile(filepath.Join(installedDir, "factory.json"), marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fixedRolesInstall(t, run, root, "skipped")
+	retained, err := os.ReadFile(filepath.Join(installedDir, "factory.json"))
+	if err != nil || !reflect.DeepEqual(retained, marker) {
+		t.Fatalf("skip replaced customer content: %s (%v)", retained, err)
+	}
+	fixedRolesInstall(t, run, root, "replaced", "--replace", "true")
+	restored, err := os.ReadFile(filepath.Join(installedDir, "factory.json"))
+	if err != nil || !reflect.DeepEqual(restored, original) {
+		t.Fatalf("replacement did not restore packaged content: %v", err)
+	}
 }
 
 func fixedRolesInstall(t *testing.T, run func(context.Context, ...string) (string, error), root, outcome string, extra ...string) struct{ Name, FactoryDir, Outcome, Format string } {

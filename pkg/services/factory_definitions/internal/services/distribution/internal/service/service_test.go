@@ -553,11 +553,14 @@ func assertScaffoldResolution(t *testing.T, result factorydefinitions.CreateFact
 
 func TestEnabledScaffoldAndInstallRejectCanceledContextsBeforeEffects(t *testing.T) {
 	t.Parallel()
-	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
-		t.Run(cause.Error(), func(t *testing.T) {
+	for _, tc := range []struct {
+		cause   error
+		expired bool
+	}{{cause: context.Canceled}, {cause: context.DeadlineExceeded, expired: true}} {
+		t.Run(tc.cause.Error(), func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithCancel(t.Context())
-			if cause == context.DeadlineExceeded {
+			if tc.expired {
 				cancel()
 				ctx, cancel = context.WithDeadline(t.Context(), time.Unix(1, 0))
 			} else {
@@ -565,14 +568,14 @@ func TestEnabledScaffoldAndInstallRejectCanceledContextsBeforeEffects(t *testing
 			}
 			defer cancel()
 			scaffold := distributionserviceimpl.NewScaffold(func(factorydefinitions.ScaffoldConfig) error { t.Fatal("canceled scaffold executed"); return nil }, func(string) (string, error) { t.Fatal("canceled scaffold resolved"); return "", nil })
-			if _, err := scaffold.CreateFactoryScaffold(ctx, factorydefinitions.CreateFactoryScaffoldRequest{}); err != cause {
+			if _, err := scaffold.CreateFactoryScaffold(ctx, factorydefinitions.CreateFactoryScaffoldRequest{}); !errors.Is(err, tc.cause) {
 				t.Fatalf("scaffold precedence: %v", err)
 			}
 			svc := newDistributionService(t, unusedScaffoldCatalog(t), factorydefinitions.PackagedFactoryInstallationOperations{Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
 				t.Fatal("canceled install executed")
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			}})
-			if _, err := svc.InstallPackagedFactory(ctx, factorydefinitions.InstallPackagedFactoryRequest{}); err != cause {
+			if _, err := svc.InstallPackagedFactory(ctx, factorydefinitions.InstallPackagedFactoryRequest{}); !errors.Is(err, tc.cause) {
 				t.Fatalf("install precedence: %v", err)
 			}
 		})
