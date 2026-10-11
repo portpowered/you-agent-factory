@@ -157,7 +157,7 @@ func (r *RuntimeOpening) openRuntimeWithOptions(
 	completionRequest := opening.completionRequest()
 	completed, err := r.openingCompletion.Complete(ctx, completionRequest,
 		opening.initial.Record, opening.initial.Completion, opening.initial.ReplacementBuilder, opening.initial.Lifecycle, opening.initial.Sidecars, opening.startupRuntime.RecordingLedger(), openedModelsScopeBinding(opening.startupRuntime),
-		opening.clock, opening.startupRuntime.RuntimeLogger(), cleanup)
+		opening.clock, opening.logger, cleanup)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}

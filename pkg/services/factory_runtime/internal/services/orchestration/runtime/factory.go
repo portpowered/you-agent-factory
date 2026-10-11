@@ -156,6 +156,19 @@ type EngineOpening struct {
 	decisionEnvelopes          interfaces.DecisionEnvelopeService
 }
 
+// EngineOpeningSelection carries one selected owner through canonical Wire.
+// Its engine-facing operational method set stays inside Factory Runtime internals.
+type EngineOpeningSelection interface {
+	selectedEngineOpening() any
+}
+
+func (o *EngineOpening) selectedEngineOpening() any { return o }
+
+// SelectedEngineOpening resolves the sealed construction value inside its owner.
+func SelectedEngineOpening(selection EngineOpeningSelection) *EngineOpening {
+	return selection.selectedEngineOpening().(*EngineOpening)
+}
+
 func NewEngineOpening(
 	invocationInterpolation interfaces.InvocationInterpolationService,
 	providerSessions providersessions.Service,
@@ -216,7 +229,7 @@ func (opening *EngineOpening) Open(
 	petriMutationRecorder factory.PetriMutationRecorder,
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner,
 ) (factoryhost.Engine, error) {
-	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, opening.workRequestIDs, opening.newID, statelessService, workerSessionsService); err != nil {
+	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, statelessService, workerSessionsService); err != nil {
 		return nil, err
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)

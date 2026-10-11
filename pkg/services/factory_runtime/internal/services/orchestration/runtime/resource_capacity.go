@@ -568,8 +568,6 @@ func validateFactoryRuntimeDependencies(
 	net *state.Net,
 	eventHistory recordings.RuntimeLedger,
 	clock factory.Clock,
-	workRequestIDs work.RequestIDGenerator,
-	newID factory.IDGenerator,
 	statelessService executeCapability,
 	workerSessionsService workersessions.Service,
 ) error {
@@ -581,12 +579,6 @@ func validateFactoryRuntimeDependencies(
 	}
 	if clock == nil {
 		return fmt.Errorf("a Factory Runtime clock is required")
-	}
-	if workRequestIDs == nil {
-		return fmt.Errorf("a Work Request ID generator is required")
-	}
-	if newID == nil {
-		return fmt.Errorf("a Factory Runtime ID generator is required")
 	}
 	if statelessService == nil {
 		return fmt.Errorf("a stateless Workers service is required")

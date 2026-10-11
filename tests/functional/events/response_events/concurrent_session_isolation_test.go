@@ -33,6 +33,8 @@ const (
 	concurrentIsolationResultSecond = "second session ordered response COMPLETE"
 )
 
+var fourScopeNames = [4]string{"alpha", "bravo", "charlie", "delta"}
+
 // TestConcurrentFactorySessionResponseEventStreamsStayIsolatedAndResumeFromCursor
 // runs two Factory Sessions concurrently against one public HTTP server, each
 // with its own open Response Event SSE stream, and proves three observable
@@ -602,8 +604,8 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	t.Parallel()
 	gates := make(map[string]*isolatedCommandGate)
 	for i := range 4 {
-		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
-		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 1), release: make(chan struct{}), returned: make(chan error, 1), output: fmt.Sprintf("four-scope-result-%d COMPLETE", i)}
+		prompt := fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[i])
+		gates[prompt] = &isolatedCommandGate{entered: make(chan context.Context, 1), release: make(chan struct{}), returned: make(chan error, 1), output: fmt.Sprintf("four-scope-result-%s COMPLETE", fourScopeNames[i])}
 	}
 	runner := &fourScopeCodexRunner{gates: gates}
 	host := support.ScaffoldFactory(t, concurrentIsolationFactoryConfig())
@@ -629,7 +631,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	}
 	contexts := make([]context.Context, 4)
 	for i := range 4 {
-		gate := gates[fmt.Sprintf("four-scope-prompt-%d", i)]
+		gate := gates[fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[i])]
 		select {
 		case contexts[i] = <-gate.entered:
 		case <-time.After(concurrentIsolationTimeout):
@@ -639,7 +641,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	canceledID := sessionIDs[3]
 	control := cancelExplicitIsolationSession(t, baseURL, canceledID)
 	select {
-	case err := <-gates["four-scope-prompt-3"].returned:
+	case err := <-gates["four-scope-prompt-delta"].returned:
 		if err != context.Canceled {
 			t.Fatalf("selected command returned %v", err)
 		}
@@ -650,7 +652,7 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		if err := contexts[i].Err(); err != nil {
 			t.Fatalf("peer %d canceled: %v", i, err)
 		}
-		close(gates[fmt.Sprintf("four-scope-prompt-%d", i)].release)
+		close(gates[fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[i])].release)
 	}
 	assertExplicitIsolationSessionStopped(t, baseURL, canceledID, control.Status)
 	cancels[canceledID]()
@@ -659,12 +661,12 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		t.Fatalf("canceled caller wait = %#v", canceled)
 	}
 	for i := range 3 {
-		gate := gates[fmt.Sprintf("four-scope-prompt-%d", i)]
+		gate := gates[fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[i])]
 		assertConcurrentIsolationInvocationCompleted(t, awaitConcurrentIsolationInvocation(t, invocations[sessionIDs[i]]), gate.output)
 		frames := collectConcurrentIsolationFrames(t, streams[i], gate.output, concurrentIsolationTimeout)
 		for j := range 4 {
 			if i != j {
-				assertSessionScopedOrderedTypedPayloads(t, sessionIDs[i], responseEventsFromFrames(frames), gate.output, gates[fmt.Sprintf("four-scope-prompt-%d", j)].output)
+				assertSessionScopedOrderedTypedPayloads(t, sessionIDs[i], responseEventsFromFrames(frames), gate.output, gates[fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[j])].output)
 			}
 		}
 		assertResponseEventStreamResumesFromCursor(t, baseURL, sessionIDs[i], frames)
@@ -697,7 +699,9 @@ func openExplicitIsolationScopes(t *testing.T, baseURL string) ([]string, []*sup
 	acknowledged := make([][]support.FactoryResponseEventFrame, 4)
 	prompts := make(map[string]string)
 	for i := range 4 {
-		prompt := fmt.Sprintf("four-scope-prompt-%d", i)
+		// Numeric fixture markers can equal declared environment secrets and be
+		// redacted from public progress. Word markers keep isolation observable.
+		prompt := fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[i])
 		opened := support.OpenFactorySessionAt(t, baseURL, scaffoldConcurrentIsolationFactory(t, prompt))
 		sessionIDs[i] = opened.Session.Id
 		if sessionIDs[i] == factorysessions.DefaultSessionID {
@@ -844,7 +848,7 @@ func assertCanceledIsolationHistory(t *testing.T, baseURL, canceledID string, ga
 			t.Fatalf("canceled history leaked identity: %#v", event)
 		}
 		for j := range 3 {
-			if strings.Contains(concurrentIsolationMessageText(event), gates[fmt.Sprintf("four-scope-prompt-%d", j)].output) {
+			if strings.Contains(concurrentIsolationMessageText(event), gates[fmt.Sprintf("four-scope-prompt-%s", fourScopeNames[j])].output) {
 				t.Fatalf("canceled history leaked peer output: %#v", event)
 			}
 		}
