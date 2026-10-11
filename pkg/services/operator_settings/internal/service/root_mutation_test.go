@@ -21,6 +21,25 @@ type gatedMutationDocument struct {
 	release  chan struct{}
 }
 
+func TestDirectSessionCapacitySurvivesRootMutationDetached(t *testing.T) {
+	t.Parallel()
+	capacity := int64(2)
+	document := &gatedMutationDocument{entered: make(chan struct{}), release: make(chan struct{}), document: operatorsettings.Document{Defaults: operatorsettings.DocumentDefaults{
+		DirectSessionCapacity: &capacity, Subagent: &operatorsettings.SubagentRoute{Provider: "CODEX", Model: "direct"},
+	}}}
+	close(document.release)
+	root := newControlledRoot(t, document, &constructionResolution{})
+	updated, err := root.ConfigureACPIntegrationAdd(t.Context(), "config", operatorsettings.ACPIntegration{ID: "entry", Name: "entry", Transport: "stdio", Command: "agent"})
+	if err != nil || updated.Defaults.DirectSessionCapacity == nil || *updated.Defaults.DirectSessionCapacity != 2 ||
+		document.document.Defaults.DirectSessionCapacity == nil || *document.document.Defaults.DirectSessionCapacity != 2 || updated.Defaults.Subagent.Model != "direct" {
+		t.Fatalf("root mutation lost direct defaults: %v", err)
+	}
+	*updated.Defaults.DirectSessionCapacity = 3
+	if capacity != 2 || *document.document.Defaults.DirectSessionCapacity != 2 {
+		t.Fatal("root mutation aliases capacity")
+	}
+}
+
 func (d *gatedMutationDocument) LoadDocument(r operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error) {
 	d.mu.Lock()
 	d.loads++

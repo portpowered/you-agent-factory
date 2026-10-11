@@ -271,6 +271,7 @@ func (h *Handler) writeMappedContinueError(w http.ResponseWriter, err error) {
 		errors.Is(err, workersessions.ErrContinuationProviderSessionInvalid):
 		writeError(w, http.StatusConflict, "recorded Provider Session cannot be continued", string(factoryapi.ErrorResponseCodeWORKERSESSIONPROVIDERCONTINUATIONINVALID))
 	case errors.Is(err, workersessions.ErrContinuationExecutionUnavailable),
+		errors.Is(err, workersessions.ErrDirectCapacityExceeded),
 		errors.Is(err, workersessions.ErrContinuationNotAccepted),
 		errors.Is(err, workersessions.ErrContinuationServerStopping),
 		errors.Is(err, workersessions.ErrEventTopicUnavailable),
