@@ -21,6 +21,71 @@ const (
 	WorkerSessionCallerScopes = "WorkerSessionCaller.Scopes"
 )
 
+// Defines values for AgentMessageDelivery.
+const (
+	AgentMessageDeliveryINTERRUPT AgentMessageDelivery = "INTERRUPT"
+	AgentMessageDeliveryQUEUE     AgentMessageDelivery = "QUEUE"
+)
+
+// Defines values for AgentMessageFromPrincipal.
+const (
+	WORKER AgentMessageFromPrincipal = "WORKER"
+)
+
+// Defines values for AgentMessageIfEnded.
+const (
+	AgentMessageIfEndedHOLD   AgentMessageIfEnded = "HOLD"
+	AgentMessageIfEndedREVIVE AgentMessageIfEnded = "REVIVE"
+)
+
+// Defines values for AgentMessageReplyIfEnded.
+const (
+	AgentMessageReplyIfEndedHOLD   AgentMessageReplyIfEnded = "HOLD"
+	AgentMessageReplyIfEndedREVIVE AgentMessageReplyIfEnded = "REVIVE"
+)
+
+// Defines values for AgentMessageToKind.
+const (
+	AgentMessageToKindWORKERSESSION AgentMessageToKind = "WORKER_SESSION"
+)
+
+// Defines values for AgentMessageDeliveryStatus.
+const (
+	AgentMessageDeliveryStatusDELIVEREDINTERRUPT AgentMessageDeliveryStatus = "DELIVERED_INTERRUPT"
+	AgentMessageDeliveryStatusDELIVEREDREVIVE    AgentMessageDeliveryStatus = "DELIVERED_REVIVE"
+	AgentMessageDeliveryStatusEXPIRED            AgentMessageDeliveryStatus = "EXPIRED"
+	AgentMessageDeliveryStatusQUEUED             AgentMessageDeliveryStatus = "QUEUED"
+	AgentMessageDeliveryStatusREAD               AgentMessageDeliveryStatus = "READ"
+	AgentMessageDeliveryStatusREJECTED           AgentMessageDeliveryStatus = "REJECTED"
+	AgentMessageDeliveryStatusREPLIED            AgentMessageDeliveryStatus = "REPLIED"
+)
+
+// Defines values for AgentMessageObservationKind.
+const (
+	AgentMessageObservationKindEXPIRED AgentMessageObservationKind = "EXPIRED"
+	AgentMessageObservationKindREAD    AgentMessageObservationKind = "READ"
+	AgentMessageObservationKindREPLIED AgentMessageObservationKind = "REPLIED"
+	AgentMessageObservationKindSENT    AgentMessageObservationKind = "SENT"
+)
+
+// Defines values for AgentMessageSendRequestDelivery.
+const (
+	AgentMessageSendRequestDeliveryINTERRUPT AgentMessageSendRequestDelivery = "INTERRUPT"
+	AgentMessageSendRequestDeliveryQUEUE     AgentMessageSendRequestDelivery = "QUEUE"
+)
+
+// Defines values for AgentMessageSendRequestIfEnded.
+const (
+	AgentMessageSendRequestIfEndedHOLD   AgentMessageSendRequestIfEnded = "HOLD"
+	AgentMessageSendRequestIfEndedREVIVE AgentMessageSendRequestIfEnded = "REVIVE"
+)
+
+// Defines values for AgentMessageSendRequestReplyIfEnded.
+const (
+	AgentMessageSendRequestReplyIfEndedHOLD   AgentMessageSendRequestReplyIfEnded = "HOLD"
+	AgentMessageSendRequestReplyIfEndedREVIVE AgentMessageSendRequestReplyIfEnded = "REVIVE"
+)
+
 // Defines values for AgentWorkerToolPolicy.
 const (
 	AgentWorkerToolPolicyDISABLED AgentWorkerToolPolicy = "DISABLED"
@@ -1594,7 +1659,7 @@ const (
 
 // Defines values for WorkerSessionObservationRequesterKind.
 const (
-	WORKERSESSION WorkerSessionObservationRequesterKind = "WORKER_SESSION"
+	WorkerSessionObservationRequesterKindWORKERSESSION WorkerSessionObservationRequesterKind = "WORKER_SESSION"
 )
 
 // Defines values for WorkerSessionObservationState.
@@ -1725,6 +1790,139 @@ const (
 	ListWorkerSessionsParamsStateSTARTING   ListWorkerSessionsParamsState = "STARTING"
 	ListWorkerSessionsParamsStateTERMINATED ListWorkerSessionsParamsState = "TERMINATED"
 )
+
+// AgentMessage defines model for AgentMessage.
+type AgentMessage struct {
+	// Body Privacy-normalized body only. Unauthorized workers receive no record.
+	Body               string `json:"body"`
+	BodyRedactionCount int    `json:"bodyRedactionCount"`
+
+	// BodySha256 SHA-256 of the redacted UTF-8 body.
+	BodySha256  string `json:"bodySha256"`
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+	Delivery  AgentMessageDelivery `json:"delivery"`
+	ExpiresAt time.Time            `json:"expiresAt"`
+	From      struct {
+		FactorySessionId *string                   `json:"factorySessionId"`
+		Principal        AgentMessageFromPrincipal `json:"principal"`
+		WorkerSessionId  string                    `json:"workerSessionId"`
+	} `json:"from"`
+	Hop       int                 `json:"hop"`
+	IfEnded   AgentMessageIfEnded `json:"ifEnded"`
+	InReplyTo *string             `json:"inReplyTo"`
+
+	// MessageId Globally unique msg-<ULID> identity.
+	MessageId string `json:"messageId"`
+
+	// Reason Typed code only. T5 may emit REVIVE_UNSUPPORTED.
+	Reason                 *string                  `json:"reason"`
+	RepliedByMessageId     *string                  `json:"repliedByMessageId"`
+	ReplyIfEnded           AgentMessageReplyIfEnded `json:"replyIfEnded"`
+	RevivedWorkerSessionId *string                  `json:"revivedWorkerSessionId"`
+	SentAt                 time.Time                `json:"sentAt"`
+
+	// Status T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+	Status AgentMessageDeliveryStatus `json:"status"`
+
+	// ThreadId Identity of the first message in the thread.
+	ThreadId string `json:"threadId"`
+	To       struct {
+		DeliveredWorkerSessionId *string            `json:"deliveredWorkerSessionId"`
+		FactorySessionId         *string            `json:"factorySessionId"`
+		Kind                     AgentMessageToKind `json:"kind"`
+		WorkerSessionId          string             `json:"workerSessionId"`
+	} `json:"to"`
+}
+
+// AgentMessageDelivery defines model for AgentMessage.Delivery.
+type AgentMessageDelivery string
+
+// AgentMessageFromPrincipal defines model for AgentMessage.From.Principal.
+type AgentMessageFromPrincipal string
+
+// AgentMessageIfEnded defines model for AgentMessage.IfEnded.
+type AgentMessageIfEnded string
+
+// AgentMessageReplyIfEnded defines model for AgentMessage.ReplyIfEnded.
+type AgentMessageReplyIfEnded string
+
+// AgentMessageToKind defines model for AgentMessage.To.Kind.
+type AgentMessageToKind string
+
+// AgentMessageAddress defines model for AgentMessageAddress.
+type AgentMessageAddress struct {
+	WorkerSessionId string `json:"workerSessionId"`
+}
+
+// AgentMessageDeliveryStatus T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+type AgentMessageDeliveryStatus string
+
+// AgentMessageListResponse defines model for AgentMessageListResponse.
+type AgentMessageListResponse struct {
+	Messages  []AgentMessage `json:"messages"`
+	NextToken *string        `json:"nextToken"`
+}
+
+// AgentMessageObservation defines model for AgentMessageObservation.
+type AgentMessageObservation struct {
+	Kind     AgentMessageObservationKind `json:"kind"`
+	Message  AgentMessage                `json:"message"`
+	RecordId string                      `json:"recordId"`
+	Sequence int                         `json:"sequence"`
+}
+
+// AgentMessageObservationKind defines model for AgentMessageObservation.Kind.
+type AgentMessageObservationKind string
+
+// AgentMessageSendRequest At least one of to or inReplyTo is required. Replies without to target the original sender.
+type AgentMessageSendRequest struct {
+	// Body Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction.
+	Body string `json:"body"`
+
+	// BodySecret Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+	BodySecret  *bool `json:"bodySecret,omitempty"`
+	Correlation *struct {
+		FactorySessionId *string `json:"factorySessionId,omitempty"`
+		WorkId           *string `json:"workId,omitempty"`
+	} `json:"correlation,omitempty"`
+
+	// Delivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+	Delivery         *AgentMessageSendRequestDelivery `json:"delivery,omitempty"`
+	ExpiresInSeconds *int                             `json:"expiresInSeconds,omitempty"`
+
+	// IfEnded T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+	IfEnded   *AgentMessageSendRequestIfEnded `json:"ifEnded,omitempty"`
+	InReplyTo *string                         `json:"inReplyTo,omitempty"`
+
+	// ReplyIfEnded Default ifEnded for a reply, unless explicitly overridden.
+	ReplyIfEnded *AgentMessageSendRequestReplyIfEnded `json:"replyIfEnded,omitempty"`
+	RequestId    string                               `json:"requestId"`
+	To           *AgentMessageAddress                 `json:"to,omitempty"`
+	union        json.RawMessage
+}
+
+// AgentMessageSendRequestDelivery INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+type AgentMessageSendRequestDelivery string
+
+// AgentMessageSendRequestIfEnded T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+type AgentMessageSendRequestIfEnded string
+
+// AgentMessageSendRequestReplyIfEnded Default ifEnded for a reply, unless explicitly overridden.
+type AgentMessageSendRequestReplyIfEnded string
+
+// AgentMessageSendRequest0 defines model for .
+type AgentMessageSendRequest0 = interface{}
+
+// AgentMessageSendRequest1 defines model for .
+type AgentMessageSendRequest1 = interface{}
+
+// AgentMessageSendResponse defines model for AgentMessageSendResponse.
+type AgentMessageSendResponse struct {
+	Message AgentMessage `json:"message"`
+}
 
 // AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
 type AgentRunResponseEventPayload struct {
@@ -15928,6 +16126,224 @@ func (a WorkstationOperationBindingSelector) MarshalJSON() ([]byte, error) {
 		}
 	}
 	return json.Marshal(object)
+}
+
+// AsAgentMessageSendRequest0 returns the union data inside the AgentMessageSendRequest as a AgentMessageSendRequest0
+func (t AgentMessageSendRequest) AsAgentMessageSendRequest0() (AgentMessageSendRequest0, error) {
+	var body AgentMessageSendRequest0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAgentMessageSendRequest0 overwrites any union data inside the AgentMessageSendRequest as the provided AgentMessageSendRequest0
+func (t *AgentMessageSendRequest) FromAgentMessageSendRequest0(v AgentMessageSendRequest0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAgentMessageSendRequest0 performs a merge with any union data inside the AgentMessageSendRequest, using the provided AgentMessageSendRequest0
+func (t *AgentMessageSendRequest) MergeAgentMessageSendRequest0(v AgentMessageSendRequest0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsAgentMessageSendRequest1 returns the union data inside the AgentMessageSendRequest as a AgentMessageSendRequest1
+func (t AgentMessageSendRequest) AsAgentMessageSendRequest1() (AgentMessageSendRequest1, error) {
+	var body AgentMessageSendRequest1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAgentMessageSendRequest1 overwrites any union data inside the AgentMessageSendRequest as the provided AgentMessageSendRequest1
+func (t *AgentMessageSendRequest) FromAgentMessageSendRequest1(v AgentMessageSendRequest1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAgentMessageSendRequest1 performs a merge with any union data inside the AgentMessageSendRequest, using the provided AgentMessageSendRequest1
+func (t *AgentMessageSendRequest) MergeAgentMessageSendRequest1(v AgentMessageSendRequest1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t AgentMessageSendRequest) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["body"], err = json.Marshal(t.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'body': %w", err)
+	}
+
+	if t.BodySecret != nil {
+		object["bodySecret"], err = json.Marshal(t.BodySecret)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'bodySecret': %w", err)
+		}
+	}
+
+	if t.Correlation != nil {
+		object["correlation"], err = json.Marshal(t.Correlation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'correlation': %w", err)
+		}
+	}
+
+	if t.Delivery != nil {
+		object["delivery"], err = json.Marshal(t.Delivery)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'delivery': %w", err)
+		}
+	}
+
+	if t.ExpiresInSeconds != nil {
+		object["expiresInSeconds"], err = json.Marshal(t.ExpiresInSeconds)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'expiresInSeconds': %w", err)
+		}
+	}
+
+	if t.IfEnded != nil {
+		object["ifEnded"], err = json.Marshal(t.IfEnded)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'ifEnded': %w", err)
+		}
+	}
+
+	if t.InReplyTo != nil {
+		object["inReplyTo"], err = json.Marshal(t.InReplyTo)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inReplyTo': %w", err)
+		}
+	}
+
+	if t.ReplyIfEnded != nil {
+		object["replyIfEnded"], err = json.Marshal(t.ReplyIfEnded)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'replyIfEnded': %w", err)
+		}
+	}
+
+	object["requestId"], err = json.Marshal(t.RequestId)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'requestId': %w", err)
+	}
+
+	if t.To != nil {
+		object["to"], err = json.Marshal(t.To)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'to': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *AgentMessageSendRequest) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["body"]; found {
+		err = json.Unmarshal(raw, &t.Body)
+		if err != nil {
+			return fmt.Errorf("error reading 'body': %w", err)
+		}
+	}
+
+	if raw, found := object["bodySecret"]; found {
+		err = json.Unmarshal(raw, &t.BodySecret)
+		if err != nil {
+			return fmt.Errorf("error reading 'bodySecret': %w", err)
+		}
+	}
+
+	if raw, found := object["correlation"]; found {
+		err = json.Unmarshal(raw, &t.Correlation)
+		if err != nil {
+			return fmt.Errorf("error reading 'correlation': %w", err)
+		}
+	}
+
+	if raw, found := object["delivery"]; found {
+		err = json.Unmarshal(raw, &t.Delivery)
+		if err != nil {
+			return fmt.Errorf("error reading 'delivery': %w", err)
+		}
+	}
+
+	if raw, found := object["expiresInSeconds"]; found {
+		err = json.Unmarshal(raw, &t.ExpiresInSeconds)
+		if err != nil {
+			return fmt.Errorf("error reading 'expiresInSeconds': %w", err)
+		}
+	}
+
+	if raw, found := object["ifEnded"]; found {
+		err = json.Unmarshal(raw, &t.IfEnded)
+		if err != nil {
+			return fmt.Errorf("error reading 'ifEnded': %w", err)
+		}
+	}
+
+	if raw, found := object["inReplyTo"]; found {
+		err = json.Unmarshal(raw, &t.InReplyTo)
+		if err != nil {
+			return fmt.Errorf("error reading 'inReplyTo': %w", err)
+		}
+	}
+
+	if raw, found := object["replyIfEnded"]; found {
+		err = json.Unmarshal(raw, &t.ReplyIfEnded)
+		if err != nil {
+			return fmt.Errorf("error reading 'replyIfEnded': %w", err)
+		}
+	}
+
+	if raw, found := object["requestId"]; found {
+		err = json.Unmarshal(raw, &t.RequestId)
+		if err != nil {
+			return fmt.Errorf("error reading 'requestId': %w", err)
+		}
+	}
+
+	if raw, found := object["to"]; found {
+		err = json.Unmarshal(raw, &t.To)
+		if err != nil {
+			return fmt.Errorf("error reading 'to': %w", err)
+		}
+	}
+
+	return err
 }
 
 // AsRunRequestEventPayload returns the union data inside the FactoryEvent_Payload as a RunRequestEventPayload

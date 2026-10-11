@@ -2781,6 +2781,20 @@ components:
     ResponseEventStreamExpired:
       $ref: './components/responses/ResponseEventStreamExpired.yaml'
   schemas:
+    AgentMessageSendRequest:
+      $ref: './components/schemas/api/AgentMessageSendRequest.yaml'
+    AgentMessageAddress:
+      $ref: './components/schemas/api/AgentMessageAddress.yaml'
+    AgentMessage:
+      $ref: './components/schemas/api/AgentMessage.yaml'
+    AgentMessageDeliveryStatus:
+      $ref: './components/schemas/api/AgentMessageDeliveryStatus.yaml'
+    AgentMessageSendResponse:
+      $ref: './components/schemas/api/AgentMessageSendResponse.yaml'
+    AgentMessageListResponse:
+      $ref: './components/schemas/api/AgentMessageListResponse.yaml'
+    AgentMessageObservation:
+      $ref: './components/schemas/api/AgentMessageObservation.yaml'
     SubmitWorkRequest:
       $ref: './components/schemas/api/SubmitWorkRequest.yaml'
     SubmitRelation:

@@ -1337,6 +1337,113 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description At least one of to or inReplyTo is required. Replies without to target the original sender. */
+    AgentMessageSendRequest:
+      | {
+          requestId: string;
+          to?: components["schemas"]["AgentMessageAddress"];
+          /** @description Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction. */
+          body: string;
+          /**
+           * @description Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+           * @default false
+           */
+          bodySecret: boolean;
+          inReplyTo?: string;
+          /**
+           * @description INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+           * @default QUEUE
+           * @enum {string}
+           */
+          delivery: AgentMessageSendRequestDelivery;
+          /**
+           * @description T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+           * @default REVIVE
+           * @enum {string}
+           */
+          ifEnded: AgentMessageSendRequestIfEnded;
+          /**
+           * @description Default ifEnded for a reply, unless explicitly overridden.
+           * @default REVIVE
+           * @enum {string}
+           */
+          replyIfEnded: AgentMessageSendRequestReplyIfEnded;
+          correlation?: {
+            workId?: string;
+            factorySessionId?: string;
+          };
+          /** @default 86400 */
+          expiresInSeconds: number;
+        }
+      | unknown
+      | unknown;
+    AgentMessageAddress: {
+      workerSessionId: string;
+    };
+    AgentMessage: {
+      /** @description Globally unique msg-<ULID> identity. */
+      messageId: string;
+      /** @description Identity of the first message in the thread. */
+      threadId: string;
+      inReplyTo?: string | null;
+      from: {
+        /** @enum {string} */
+        principal: AgentMessageFromPrincipal;
+        workerSessionId: string;
+        factorySessionId?: string | null;
+      };
+      to: {
+        /** @enum {string} */
+        kind: AgentMessageToKind;
+        workerSessionId: string;
+        factorySessionId?: string | null;
+        deliveredWorkerSessionId?: string | null;
+      };
+      correlation?: {
+        workId?: string;
+        factorySessionId?: string;
+      };
+      /** @description Privacy-normalized body only. Unauthorized workers receive no record. */
+      body: string;
+      /** @description SHA-256 of the redacted UTF-8 body. */
+      bodySha256: string;
+      bodyRedactionCount: number;
+      /** @enum {string} */
+      delivery: AgentMessageDelivery;
+      /** @enum {string} */
+      ifEnded: AgentMessageIfEnded;
+      /** @enum {string} */
+      replyIfEnded: AgentMessageReplyIfEnded;
+      status: components["schemas"]["AgentMessageDeliveryStatus"];
+      /** @description Typed code only. T5 may emit REVIVE_UNSUPPORTED. */
+      reason?: string | null;
+      hop: number;
+      /** Format: date-time */
+      sentAt: string;
+      /** Format: date-time */
+      expiresAt: string;
+      revivedWorkerSessionId?: string | null;
+      repliedByMessageId?: string | null;
+    };
+    /**
+     * @description T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+     * @enum {string}
+     */
+    AgentMessageDeliveryStatus: AgentMessageDeliveryStatus;
+    AgentMessageSendResponse: {
+      message: components["schemas"]["AgentMessage"];
+    };
+    AgentMessageListResponse: {
+      messages: components["schemas"]["AgentMessage"][];
+      nextToken?: string | null;
+    };
+    AgentMessageObservation: {
+      recordId: string;
+      sequence: number;
+      /** @enum {string} */
+      kind: AgentMessageObservationKind;
+      message: components["schemas"]["AgentMessage"];
+    };
     SubmitWorkRequest: {
       /** @description Optional authored name for this single-work submission. When omitted, the server assigns the single-work request's canonical identity. */
       name?: string;
@@ -10649,6 +10756,71 @@ export const PathsWorkerSessionsGetParametersQueryState = {
 } as const;
 export type PathsWorkerSessionsGetParametersQueryState =
   (typeof PathsWorkerSessionsGetParametersQueryState)[keyof typeof PathsWorkerSessionsGetParametersQueryState];
+export const AgentMessageSendRequestDelivery = {
+  QUEUE: "QUEUE",
+  INTERRUPT: "INTERRUPT",
+} as const;
+export type AgentMessageSendRequestDelivery =
+  (typeof AgentMessageSendRequestDelivery)[keyof typeof AgentMessageSendRequestDelivery];
+export const AgentMessageSendRequestIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageSendRequestIfEnded =
+  (typeof AgentMessageSendRequestIfEnded)[keyof typeof AgentMessageSendRequestIfEnded];
+export const AgentMessageSendRequestReplyIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageSendRequestReplyIfEnded =
+  (typeof AgentMessageSendRequestReplyIfEnded)[keyof typeof AgentMessageSendRequestReplyIfEnded];
+export const AgentMessageFromPrincipal = {
+  WORKER: "WORKER",
+} as const;
+export type AgentMessageFromPrincipal =
+  (typeof AgentMessageFromPrincipal)[keyof typeof AgentMessageFromPrincipal];
+export const AgentMessageToKind = {
+  WORKER_SESSION: "WORKER_SESSION",
+} as const;
+export type AgentMessageToKind =
+  (typeof AgentMessageToKind)[keyof typeof AgentMessageToKind];
+export const AgentMessageDelivery = {
+  QUEUE: "QUEUE",
+  INTERRUPT: "INTERRUPT",
+} as const;
+export type AgentMessageDelivery =
+  (typeof AgentMessageDelivery)[keyof typeof AgentMessageDelivery];
+export const AgentMessageIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageIfEnded =
+  (typeof AgentMessageIfEnded)[keyof typeof AgentMessageIfEnded];
+export const AgentMessageReplyIfEnded = {
+  REVIVE: "REVIVE",
+  HOLD: "HOLD",
+} as const;
+export type AgentMessageReplyIfEnded =
+  (typeof AgentMessageReplyIfEnded)[keyof typeof AgentMessageReplyIfEnded];
+export const AgentMessageDeliveryStatus = {
+  QUEUED: "QUEUED",
+  READ: "READ",
+  DELIVERED_REVIVE: "DELIVERED_REVIVE",
+  DELIVERED_INTERRUPT: "DELIVERED_INTERRUPT",
+  REPLIED: "REPLIED",
+  EXPIRED: "EXPIRED",
+  REJECTED: "REJECTED",
+} as const;
+export type AgentMessageDeliveryStatus =
+  (typeof AgentMessageDeliveryStatus)[keyof typeof AgentMessageDeliveryStatus];
+export const AgentMessageObservationKind = {
+  SENT: "SENT",
+  READ: "READ",
+  REPLIED: "REPLIED",
+  EXPIRED: "EXPIRED",
+} as const;
+export type AgentMessageObservationKind =
+  (typeof AgentMessageObservationKind)[keyof typeof AgentMessageObservationKind];
 export const InvocationInputSourceKind = {
   // Text supplied in canonical WorkContent.
   InvocationInputSourceKindText: "text",

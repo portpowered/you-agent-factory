@@ -1,0 +1,43 @@
+type: object
+additionalProperties: false
+required: [messageId, threadId, from, to, body, bodySha256, bodyRedactionCount, delivery, ifEnded, replyIfEnded, status, hop, sentAt, expiresAt]
+properties:
+  messageId: {type: string, description: 'Globally unique msg-<ULID> identity.'}
+  threadId: {type: string, description: Identity of the first message in the thread.}
+  inReplyTo: {type: string, nullable: true}
+  from:
+    type: object
+    additionalProperties: false
+    required: [principal, workerSessionId]
+    properties:
+      principal: {type: string, enum: [WORKER]}
+      workerSessionId: {type: string, minLength: 1}
+      factorySessionId: {type: string, nullable: true}
+  to:
+    type: object
+    additionalProperties: false
+    required: [kind, workerSessionId]
+    properties:
+      kind: {type: string, enum: [WORKER_SESSION]}
+      workerSessionId: {type: string, minLength: 1}
+      factorySessionId: {type: string, nullable: true}
+      deliveredWorkerSessionId: {type: string, nullable: true}
+  correlation:
+    type: object
+    additionalProperties: false
+    properties:
+      workId: {type: string}
+      factorySessionId: {type: string}
+  body: {type: string, description: Privacy-normalized body only. Unauthorized workers receive no record.}
+  bodySha256: {type: string, pattern: '^[a-f0-9]{64}$', description: SHA-256 of the redacted UTF-8 body.}
+  bodyRedactionCount: {type: integer, minimum: 0}
+  delivery: {type: string, enum: [QUEUE, INTERRUPT]}
+  ifEnded: {type: string, enum: [REVIVE, HOLD]}
+  replyIfEnded: {type: string, enum: [REVIVE, HOLD]}
+  status: {$ref: './AgentMessageDeliveryStatus.yaml'}
+  reason: {type: string, nullable: true, description: Typed code only. T5 may emit REVIVE_UNSUPPORTED.}
+  hop: {type: integer, minimum: 0, maximum: 3}
+  sentAt: {type: string, format: date-time}
+  expiresAt: {type: string, format: date-time}
+  revivedWorkerSessionId: {type: string, nullable: true}
+  repliedByMessageId: {type: string, nullable: true}

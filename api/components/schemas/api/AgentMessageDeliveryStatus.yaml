@@ -1,0 +1,3 @@
+type: string
+enum: [QUEUED, READ, DELIVERED_REVIVE, DELIVERED_INTERRUPT, REPLIED, EXPIRED, REJECTED]
+description: T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.

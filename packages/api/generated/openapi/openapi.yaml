@@ -2958,6 +2958,258 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    AgentMessageSendRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - body
+      description: At least one of to or inReplyTo is required. Replies without to target the original sender.
+      anyOf:
+        - required:
+            - to
+        - required:
+            - inReplyTo
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        to:
+          $ref: '#/components/schemas/AgentMessageAddress'
+        body:
+          type: string
+          minLength: 1
+          maxLength: 8192
+          description: Valid UTF-8 plain text. Server also enforces an 8192-byte limit before redaction.
+        bodySecret:
+          type: boolean
+          default: false
+          description: Declares the whole body secret. Redact before storage, hashing, publication or diagnostics.
+        inReplyTo:
+          type: string
+          minLength: 1
+        delivery:
+          type: string
+          enum:
+            - QUEUE
+            - INTERRUPT
+          default: QUEUE
+          description: INTERRUPT returns MESSAGE_INTERRUPT_UNSUPPORTED in T5 before any effect.
+        ifEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+          default: REVIVE
+          description: T5 keeps REVIVE queued with REVIVE_UNSUPPORTED. AM-T6 owns revival and delivery on end.
+        replyIfEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+          default: REVIVE
+          description: Default ifEnded for a reply, unless explicitly overridden.
+        correlation:
+          type: object
+          additionalProperties: false
+          properties:
+            workId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              minLength: 1
+        expiresInSeconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+          default: 86400
+    AgentMessageAddress:
+      type: object
+      additionalProperties: false
+      required:
+        - workerSessionId
+      properties:
+        workerSessionId:
+          type: string
+          minLength: 1
+    AgentMessage:
+      type: object
+      additionalProperties: false
+      required:
+        - messageId
+        - threadId
+        - from
+        - to
+        - body
+        - bodySha256
+        - bodyRedactionCount
+        - delivery
+        - ifEnded
+        - replyIfEnded
+        - status
+        - hop
+        - sentAt
+        - expiresAt
+      properties:
+        messageId:
+          type: string
+          description: Globally unique msg-<ULID> identity.
+        threadId:
+          type: string
+          description: Identity of the first message in the thread.
+        inReplyTo:
+          type: string
+          nullable: true
+        from:
+          type: object
+          additionalProperties: false
+          required:
+            - principal
+            - workerSessionId
+          properties:
+            principal:
+              type: string
+              enum:
+                - WORKER
+            workerSessionId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              nullable: true
+        to:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+            - workerSessionId
+          properties:
+            kind:
+              type: string
+              enum:
+                - WORKER_SESSION
+            workerSessionId:
+              type: string
+              minLength: 1
+            factorySessionId:
+              type: string
+              nullable: true
+            deliveredWorkerSessionId:
+              type: string
+              nullable: true
+        correlation:
+          type: object
+          additionalProperties: false
+          properties:
+            workId:
+              type: string
+            factorySessionId:
+              type: string
+        body:
+          type: string
+          description: Privacy-normalized body only. Unauthorized workers receive no record.
+        bodySha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          description: SHA-256 of the redacted UTF-8 body.
+        bodyRedactionCount:
+          type: integer
+          minimum: 0
+        delivery:
+          type: string
+          enum:
+            - QUEUE
+            - INTERRUPT
+        ifEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+        replyIfEnded:
+          type: string
+          enum:
+            - REVIVE
+            - HOLD
+        status:
+          $ref: '#/components/schemas/AgentMessageDeliveryStatus'
+        reason:
+          type: string
+          nullable: true
+          description: Typed code only. T5 may emit REVIVE_UNSUPPORTED.
+        hop:
+          type: integer
+          minimum: 0
+          maximum: 3
+        sentAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revivedWorkerSessionId:
+          type: string
+          nullable: true
+        repliedByMessageId:
+          type: string
+          nullable: true
+    AgentMessageDeliveryStatus:
+      type: string
+      enum:
+        - QUEUED
+        - READ
+        - DELIVERED_REVIVE
+        - DELIVERED_INTERRUPT
+        - REPLIED
+        - EXPIRED
+        - REJECTED
+      description: T5 produces QUEUED, READ, REPLIED and EXPIRED. Other values reserve later source-plan delivery intent.
+    AgentMessageSendResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        message:
+          $ref: '#/components/schemas/AgentMessage'
+    AgentMessageListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMessage'
+        nextToken:
+          type: string
+          nullable: true
+    AgentMessageObservation:
+      type: object
+      additionalProperties: false
+      required:
+        - recordId
+        - sequence
+        - kind
+        - message
+      properties:
+        recordId:
+          type: string
+          minLength: 1
+        sequence:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum:
+            - SENT
+            - READ
+            - REPLIED
+            - EXPIRED
+        message:
+          $ref: '#/components/schemas/AgentMessage'
     SubmitWorkRequest:
       type: object
       additionalProperties: false

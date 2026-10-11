@@ -1,0 +1,5 @@
+type: object
+additionalProperties: false
+required: [workerSessionId]
+properties:
+  workerSessionId: {type: string, minLength: 1}

@@ -1,0 +1,8 @@
+type: object
+additionalProperties: false
+required: [recordId, sequence, kind, message]
+properties:
+  recordId: {type: string, minLength: 1}
+  sequence: {type: integer, minimum: 1}
+  kind: {type: string, enum: [SENT, READ, REPLIED, EXPIRED]}
+  message: {$ref: './AgentMessage.yaml'}

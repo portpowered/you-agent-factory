@@ -1,0 +1,5 @@
+type: object
+additionalProperties: false
+required: [message]
+properties:
+  message: {$ref: './AgentMessage.yaml'}

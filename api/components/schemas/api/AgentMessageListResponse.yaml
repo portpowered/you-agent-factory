@@ -1,0 +1,6 @@
+type: object
+additionalProperties: false
+required: [messages]
+properties:
+  messages: {type: array, items: {$ref: './AgentMessage.yaml'}}
+  nextToken: {type: string, nullable: true}
