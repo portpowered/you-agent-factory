@@ -30,7 +30,7 @@ func TestSubagentRouteDefaults(t *testing.T) {
 	released := make(chan struct{})
 	var nativeCalls, acpCommands atomic.Int32
 	commands := make(map[string]chan platformprocess.CommandRequest)
-	for _, name := range []string{"default", "model-override", "codex", "claude", "agy"} {
+	for _, name := range []string{"default", "model-override", "effort-override", "codex", "claude", "agy"} {
 		commands[name] = make(chan platformprocess.CommandRequest, 2)
 	}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -55,6 +55,7 @@ func TestSubagentRouteDefaults(t *testing.T) {
 	assertSubagentExplicitRouteFailures(t, ctx, session)
 	for _, cell := range []struct{ name, provider, model, effort string }{
 		{"default", "", "", ""}, {"model-override", "", "override-model", "high"},
+		{"effort-override", "", "", "high"},
 		{"codex", "codex", "explicit-codex", "high"}, {"claude", "claude", "explicit-claude", "high"},
 		{"agy", "antigravity", "gemini-3.1-pro-high", ""},
 	} {
