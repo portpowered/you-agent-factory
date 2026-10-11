@@ -70,7 +70,11 @@ func (r *runner) Execute(
 		}
 		return acceptResult(), nil
 	}
-	recordMockWorkerUsage(ctx, request.Correlation, entry.Usage)
+	provider := strings.TrimSpace(request.ExecutorProvider)
+	if provider == "" || strings.EqualFold(provider, workers.ExecutorProviderACP) {
+		provider = request.ModelProvider
+	}
+	recordMockWorkerUsage(ctx, request.Correlation, provider, entry.Usage)
 	if entry.GateConfig != nil {
 		if err := mockworkerbehavior.WaitForGate(ctx, *entry.GateConfig, r.files); err != nil {
 			return workers.RunnerExecutionResult{}, err
@@ -146,13 +150,14 @@ func (r *runner) Execute(
 func recordMockWorkerUsage(
 	ctx context.Context,
 	correlation workers.ExecutionCorrelation,
+	provider string,
 	usage *workers.MockWorkerUsageConfig,
 ) {
 	if capture := workerexecution.MockWorkerUsageCaptureFromContext(ctx); capture != nil {
 		capture.Record(usage)
 		return
 	}
-	workerexecution.PublishMockWorkerUsage(ctx, correlation, usage)
+	workerexecution.PublishMockWorkerUsage(ctx, correlation, provider, usage)
 }
 
 func (r *runner) match(

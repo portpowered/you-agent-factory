@@ -234,10 +234,16 @@ Captured usage and Worker Session summaries label configured counters with
 An absent origin makes no claim about how usage was obtained. Explicit zero
 counts remain present; omitted token classes remain absent after replay.
 
+The declared provider and model identify the configured counters for Costs.
+They can differ from the execution provider and model. Captured usage belongs
+to the actual Worker attempt, and the Worker Session summary retains that
+attempt's execution provider and model. The usage payload retains the declared
+model.
+
 | Field | Required | Description |
 |-------|----------|-------------|
-| `provider` | When `usage` is present | Non-empty provider identity used by Worker Session inspection and Costs. |
-| `model` | When `usage` is present | Non-empty model identity used by Worker Session inspection and Costs. |
+| `provider` | When `usage` is present | Non-empty declared provider identity used by Costs. |
+| `model` | When `usage` is present | Non-empty declared model identity retained in captured usage and used by Costs. |
 | `inputTokens` | No | Non-negative input token count. An omitted class is absent; `0` remains an explicit value. |
 | `outputTokens` | No | Non-negative output token count. An omitted class is absent; `0` remains an explicit value. |
 | `cachedInputTokens` | No | Non-negative cached-input count. Requires `inputTokens` and cannot exceed it. Omitted and `0` retain the same missing-versus-zero distinction. |

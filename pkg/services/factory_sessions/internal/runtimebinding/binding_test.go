@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func newRuntimeBindingState() *sessionruntime.Service {
@@ -31,6 +32,7 @@ func newRuntimeBindingState() *sessionruntime.Service {
 }
 
 type hostedInstanceFake struct {
+	logger           *zap.Logger
 	dir              string
 	folder           string
 	backendScope     string
@@ -61,7 +63,10 @@ func (*hostedInstanceFake) AddEventTypeRecorderWithReady(func(interfaces.Factory
 func (instance *hostedInstanceFake) StreamGeneration() string {
 	return instance.streamGeneration
 }
-func (*hostedInstanceFake) RuntimeLogger() *zap.Logger {
+func (instance *hostedInstanceFake) RuntimeLogger() *zap.Logger {
+	if instance.logger != nil {
+		return instance.logger
+	}
 	return zap.NewNop()
 }
 func (*hostedInstanceFake) RuntimeMetrics() factory.MetricsEmitter { return nil }
@@ -522,8 +527,10 @@ func TestRegisterRetainsStartupFactsOnlyFromProvisionalOpening(t *testing.T) {
 }
 
 func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
+	oldCore, oldLogs := observer.New(zap.DebugLevel)
+	currentCore, currentLogs := observer.New(zap.DebugLevel)
 	sessions := newRuntimeBindingState()
-	oldInstance := &hostedInstanceFake{}
+	oldInstance := &hostedInstanceFake{logger: zap.New(oldCore)}
 	oldHandle := newHostedHandleFake(oldInstance)
 	recovery := &recordings.ResumeRecoveryMetadata{}
 	warnings := []recordings.MetadataMismatchWarning{{}}
@@ -532,7 +539,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	sessions.Register(sessionruntime.Registration{
 		SessionID: "session-1", FactoryDir: "/old", FolderPath: "/workspace",
 		ExecutionBaseDir: "/old-execution", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "alpha"},
-		Handle: &runtimebinding.SessionState{Instance: oldInstance, Handle: oldHandle, Spec: preparedSpec, Clock: clock,
+		Handle: &runtimebinding.SessionState{Instance: oldInstance, Handle: oldHandle, Spec: preparedSpec, Clock: clock, Logger: oldInstance.RuntimeLogger(),
 			ReplayMetadataWarnings: warnings, ResumeRecoveryMetadata: recovery, OperatorSettingsPath: "scoped.yaml", CurrentBoardRecordPath: "selected.jsonl"},
 		Default: false, Project: "project", Select: true,
 	})
@@ -541,7 +548,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	var runtimeState runtimebinding.State
 	runtimeState.SetActive(context.Background(), original.ID, oldHandle)
 	replacement := &hostedInstanceFake{
-		dir: "/new", service: replacementFactory{}, backendScope: "backend-new",
+		dir: "/new", service: replacementFactory{}, backendScope: "backend-new", logger: zap.New(currentCore),
 	}
 	var stopped factory.RuntimeRun
 	var retiredSessionID string
@@ -584,6 +591,10 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
 	assertActiveReplacement(t, &runtimeState, updated, newHandle)
 	bound := runtimebinding.SessionStateFrom(updated)
+	bound.Logger.Info("replacement session diagnostic")
+	if oldLogs.Len() != 0 || currentLogs.FilterMessage("replacement session diagnostic").Len() != 1 {
+		t.Fatalf("replacement diagnostic reached wrong generation: retired=%d current=%d", oldLogs.Len(), currentLogs.Len())
+	}
 	if bound.Clock != clock || bound.OperatorSettingsPath != "scoped.yaml" || bound.CurrentBoardRecordPath != "selected.jsonl" ||
 		len(bound.ReplayMetadataWarnings) != 1 || bound.ResumeRecoveryMetadata == nil || bound.ResumeRecoveryMetadata == recovery {
 		t.Fatalf("replacement lost scoped facts or failed to detach recovery metadata: %#v", bound)

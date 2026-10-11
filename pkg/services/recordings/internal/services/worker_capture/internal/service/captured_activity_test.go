@@ -22,6 +22,30 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestMockUsageSummaryRetainsExecutionModelSlot(t *testing.T) {
+	t.Parallel()
+	for _, origin := range []string{"SYNTHETIC", ""} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+			session := &recordingSession{}
+			topic := journalRecord(t, "mock-usage", "summary-worker").Record.ID.Topic
+			session.rememberSummary(catalogMetadataRecord(t, topic, workers.KindSession, `{"model":"execution-model"}`, 2))
+			payload, err := json.Marshal(workers.UsagePayload{Origin: origin, Model: "declaration-model", TotalTokens: 22})
+			if err != nil {
+				t.Fatal(err)
+			}
+			session.rememberSummary(catalogMetadataRecord(t, topic, workers.KindUsage, string(payload), 3))
+			wantModelPosition := uint64(3)
+			if origin == "SYNTHETIC" {
+				wantModelPosition = 2
+			}
+			if session.summaryPositions[summaryModel] != wantModelPosition || session.summaryPositions[summaryUsage] != 3 {
+				t.Fatalf("usage replaced execution slot or lost counters: %+v", session.summaryPositions)
+			}
+		})
+	}
+}
+
 type catalogScanGate struct {
 	platformreplay.Local
 	once    sync.Once

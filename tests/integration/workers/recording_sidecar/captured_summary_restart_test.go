@@ -247,6 +247,14 @@ func assertRecordingIntegrityHTTPParity(t *testing.T, ctx context.Context, binar
 
 func assertRecordingIntegrityUsage(t *testing.T, snapshot capturedSummaryArtifactSnapshot, id string) {
 	t.Helper()
+	// Execution identity comes from the invocation, independently of declared usage.
+	wantModel := "integrity-model"
+	if !snapshot.Observation.Direct {
+		wantModel = "t7-artifact-model"
+	}
+	if snapshot.Observation.Provider == nil || !strings.EqualFold(*snapshot.Observation.Provider, "codex") || snapshot.Observation.Model == nil || *snapshot.Observation.Model != wantModel {
+		t.Fatalf("capture lost configured execution provider/model: %+v, want model %s", snapshot.Observation, wantModel)
+	}
 	usage := snapshot.Observation.TokenUsage
 	data, err := json.Marshal(snapshot.Logs.Events)
 	if err != nil {
@@ -274,9 +282,6 @@ func assertRecordingIntegrityUsage(t *testing.T, snapshot capturedSummaryArtifac
 		t.Fatalf("synthetic summary counters/zero/omission/origin changed: %+v want %+v", summary, want)
 	}
 	want["model"] = "integrity-model"
-	if snapshot.Observation.Provider == nil || !strings.EqualFold(*snapshot.Observation.Provider, "codex") || snapshot.Observation.Model == nil || *snapshot.Observation.Model != "integrity-model" {
-		t.Fatal("mock usage lost configured provider/model")
-	}
 	assertRecordingIntegrityCapturedCounters(t, snapshot.Logs, want)
 }
 
@@ -517,9 +522,13 @@ type capturedSummaryArtifactSnapshot struct {
 // calls. Factory execution exits idle with code zero despite failed Work.
 func TestCapturedSummaryCleanIdleRestart(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"direct", "factory-artifact-rejection"} {
+	for _, name := range []string{"direct", "factory-artifact-rejection", "mock-usage"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			if name == "mock-usage" {
+				runMockUsageRestart(t)
+				return
+			}
 			runCapturedSummaryCleanIdleRestart(t, name)
 		})
 	}

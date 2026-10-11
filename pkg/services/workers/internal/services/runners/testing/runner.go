@@ -56,7 +56,7 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 			DispatchID: req.DispatchID,
 			RequestID:  req.Execution.RequestID,
 			TraceID:    req.Execution.TraceID,
-		}, entry.Usage)
+		}, req.Command, entry.Usage)
 	}
 	if entry.GateConfig != nil {
 		if err := mockworkerbehavior.WaitForGate(ctx, *entry.GateConfig, r.Files); err != nil {

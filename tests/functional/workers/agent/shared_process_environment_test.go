@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,33 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func cancelJoinedAgentSession(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
+	defer func() {
+		stream.Close()
+		stream.WaitClosed(agentSharedProcessTimeout)
+	}()
+	if err := cancelAgentSession(baseURL, sessionID); err != nil {
+		t.Fatalf("cancel agent Factory Session %q: %v", sessionID, err)
+	}
+	// The response stream and stopped status can precede canonical dispatch
+	// retirement. RUN_RESPONSE follows joined reconciliation; observe it before
+	// reading the retained input Work projection, rather than retrying that read.
+	ctx, cancel := context.WithTimeout(t.Context(), agentSharedProcessTimeout)
+	defer cancel()
+	for {
+		event := stream.NextEventContext(ctx)
+		if event.Type == factoryapi.FactoryEventTypeRunResponse {
+			break
+		}
+	}
+	session := getAgentFactorySession(t, baseURL, sessionID)
+	if session.Runtime.Progress.InFlightCount != 0 {
+		t.Fatalf("joined cancellation progress = %+v, want count0", session.Runtime.Progress)
+	}
+}
 
 func agentOwnedEnvironment(home string) []string {
 	environment := make([]string, 0, len(os.Environ())+3)

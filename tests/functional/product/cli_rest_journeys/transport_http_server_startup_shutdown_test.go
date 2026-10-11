@@ -640,7 +640,7 @@ func assertBindFailurePortReleased(t *testing.T, requestedURL string) {
 
 type activeBlockingInvocation struct {
 	cancel context.CancelFunc
-	done   chan error
+	done   chan blockingInvocationOutcome
 }
 
 func startActiveBlockingInvocation(
@@ -654,10 +654,10 @@ func startActiveBlockingInvocation(
 	ctx, cancel := context.WithCancel(context.Background())
 	request := &activeBlockingInvocation{
 		cancel: cancel,
-		done:   make(chan error, 1),
+		done:   make(chan blockingInvocationOutcome, 1),
 	}
 	go func() {
-		request.done <- postBlockingInvocation(ctx, baseURL, sessionID, blocking)
+		request.done <- postBlockingInvocationOutcome(ctx, baseURL, sessionID)
 	}()
 
 	select {
@@ -675,12 +675,16 @@ func assertActiveRequestTerminatedAfterShutdown(t *testing.T, request *activeBlo
 	t.Helper()
 
 	select {
-	case err := <-request.done:
-		if err == nil {
-			t.Fatal("active blocking invocation completed without error after shutdown")
+	case result := <-request.done:
+		if result.err != nil {
+			if !errors.Is(result.err, context.Canceled) && !isClosedConnectionError(result.err) {
+				t.Fatalf("active blocking invocation after shutdown error = %v, want closed stream", result.err)
+			}
+			return
 		}
-		if !errors.Is(err, context.Canceled) && !isClosedConnectionError(err) {
-			t.Fatalf("active blocking invocation after shutdown error = %v, want closed stream", err)
+		response := result.response
+		if result.decodeErr != nil || result.statusCode != http.StatusOK || response.Status != factoryapi.InvocationTerminalStatusFailed || response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || response.PrimaryResult != nil {
+			t.Fatalf("active blocking invocation after shutdown HTTP=%d response=%+v decode=%v, want FAILED/INVOCATION_INTERRUPTED without primary result", result.statusCode, response, result.decodeErr)
 		}
 		//nolint:testsleep // Provider-entry and command-completion signals drive progress; this wall deadline only bounds a failed observation.
 	case <-time.After(5 * time.Second):

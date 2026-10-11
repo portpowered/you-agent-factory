@@ -38,6 +38,9 @@ func applyScopedOwnedControl(ctx context.Context, state runtimebinding.LiveSessi
 		runtimebinding.ObserveLifecycleControl(logger, state, sessionID, operation, control, "", "", err)
 		return factorysessions.LifecycleControlResult{}, err
 	}
+	if bound := runtimebinding.SessionStateFrom(session); bound != nil && bound.Logger != nil {
+		logger = bound.Logger
+	}
 	runtime := runtimebinding.ServiceForSession(session)
 	if runtime == nil {
 		return factorysessions.LifecycleControlResult{}, factorysessions.ErrRuntimeNotAvailable

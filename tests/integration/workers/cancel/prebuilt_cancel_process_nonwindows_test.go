@@ -21,6 +21,12 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+func retainJoinedCancelTree(t *testing.T, tree workerProcessTree) func() {
+	t.Helper()
+	registerFailedTreeCleanup(t, tree)
+	return func() { assertJoinedCancelTreeGone(t, tree) }
+}
+
 // These two executable witnesses consume the upstream CLI artifact. Functional
 // tests own the broader Work assertions with controlled ScriptCommandRunner effects.
 func TestPrebuiltPackagedScriptRuntime(t *testing.T) {

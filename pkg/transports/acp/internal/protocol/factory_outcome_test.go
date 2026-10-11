@@ -268,3 +268,23 @@ func TestFactoryInvocationFailure_DisclosesOnlyBoundedErrorCodes(t *testing.T) {
 		})
 	}
 }
+
+func TestFactoryInvocationJoinedInterruptionIsCancelled(t *testing.T) {
+	result := factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		ErrorCode:     string(work.PrimaryResultErrorCodeInterrupted),
+		Message:       "private provider diagnostic",
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "late output"}},
+	}
+	if failure := FactoryInvocationFailure(result); failure != nil {
+		t.Fatalf("joined cancellation returned protocol failure: %+v", failure)
+	}
+	outcome := MapFactoryInvocationOutcome(result)
+	if outcome.StopReason != acpsdk.StopReasonCancelled || len(outcome.Text) != 0 {
+		t.Fatalf("joined cancellation outcome=%+v, want cancelled without output", outcome)
+	}
+	result.ErrorCode = string(factorysessions.InvocationErrorCodeRuntimeFailure)
+	if FactoryInvocationFailure(result) == nil {
+		t.Fatal("genuine runtime failure was hidden as cancellation")
+	}
+}

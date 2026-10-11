@@ -50,7 +50,7 @@ func (session *recordingSession) rememberSummary(record events.Record) {
 			if capturedUsageCountersPresent(draft.Payload) {
 				session.summaryPositions[summaryUsage] = position
 			}
-			if usage.Model != "" {
+			if usage.Origin != "SYNTHETIC" && usage.Model != "" {
 				session.summaryPositions[summaryModel] = position
 			}
 		}

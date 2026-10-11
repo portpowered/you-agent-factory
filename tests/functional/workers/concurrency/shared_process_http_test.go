@@ -122,8 +122,11 @@ func assertConcurrencyCanceledInvocationResult(t *testing.T, result concurrencyI
 		!strings.Contains(result.err.Error(), "status = 404") {
 		t.Fatalf("CC-04 canceled invocation error = %v", result.err)
 	}
-	if result.err == nil && result.response.Status != factoryapi.InvocationTerminalStatusCanceled {
-		t.Fatalf("CC-04 canceled invocation response = %#v, want CANCELED", result.response)
+	if result.err == nil {
+		response := result.response
+		if response.Status != factoryapi.InvocationTerminalStatusFailed || response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || response.PrimaryResult != nil {
+			t.Fatalf("CC-04 canceled invocation response = %#v, want joined interruption without success", response)
+		}
 	}
 }
 

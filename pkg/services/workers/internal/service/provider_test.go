@@ -432,7 +432,10 @@ func TestPublishMockWorkerUsageEmitsCanonicalUsageUpdatedFragment(t *testing.T) 
 	ctx := workerexecution.WithProgressPublisher(context.Background(), func(fragment workers.ProgressFragment) {
 		fragments = append(fragments, fragment)
 	})
-	request := workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-1"}}
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-1", AttemptID: "physical-1"},
+		Target:      workers.ExecutionTarget{Provider: workers.ProviderReference{ID: "claude"}},
+	}
 	publishMockWorkerUsage(ctx, request, usage)
 
 	if len(fragments) != 1 {
@@ -443,7 +446,8 @@ func TestPublishMockWorkerUsageEmitsCanonicalUsageUpdatedFragment(t *testing.T) 
 	if !ok || draft.Provenance.Delivery != workers.DeliverySynthesized || !strings.Contains(string(draft.Payload), `"origin":"SYNTHETIC"`) {
 		t.Fatalf("mock usage provenance = %#v", fragment.CanonicalDraft)
 	}
-	if fragment.Type != "usage.updated" || fragment.Provider != "codex" || fragment.DispatchID != "dispatch-1" {
+	if fragment.Type != "usage.updated" || fragment.Provider != "claude" || fragment.DispatchID != "dispatch-1" ||
+		draft.Provenance.Provider != "claude" || draft.DispatchID != "physical-1" || fragment.Metadata["model"] != "" {
 		t.Fatalf("fragment = %#v, want canonical usage identity", fragment)
 	}
 	var payload map[string]json.RawMessage
@@ -457,5 +461,8 @@ func TestPublishMockWorkerUsageEmitsCanonicalUsageUpdatedFragment(t *testing.T) 
 	}
 	if _, ok := payload["cachedInputTokens"]; ok {
 		t.Fatalf("usage payload = %s, cachedInputTokens should remain omitted", fragment.Payload)
+	}
+	if string(payload["model"]) != `"gpt-5-codex"` || string(payload["totalTokens"]) != "5" || string(payload["inputTokens"]) != "0" {
+		t.Fatalf("declared usage facts changed: %s", fragment.Payload)
 	}
 }

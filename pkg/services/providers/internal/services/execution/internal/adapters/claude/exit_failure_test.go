@@ -4,12 +4,72 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 )
+
+func TestClaudeRejectedOutputObservedBeforeFailure(t *testing.T) {
+	t.Parallel()
+	// Failure ceiling only; observed and done channels drive synchronization.
+	const failureCeiling = 45 * time.Second
+	var progress []providers.ExecuteProgress
+	observed := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
+	runner := providerservice.CommandRunner{RunStreaming: func(_ context.Context, _ providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+		if err := observe(providerservice.OutputStreamStdout, []byte("{\"type\":\"stream_event\",\"session_id\":\"mock-claude-session\",\"event\":{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"PRIVATE ordinary output\"}}}\n{\"type\":\"result\",\"subtype\":\"error\",\"is_error\":true,\"result\":\"rejected\",\"session_id\":\"mock-claude-session\"}\n")); err != nil {
+			t.Fatal(err)
+		}
+		if err := observe(providerservice.OutputStreamStderr, []byte("PRIVATE ordinary stderr")); err != nil {
+			t.Fatal(err)
+		}
+		return providerservice.CommandResult{ExitCode: 42}, nil
+	}}
+	effect := claude.NewCommandEffect(runner, platformclock.Real{})
+	registration := claude.NewRegistration(effect)
+	var result providers.ExecuteResult
+	var err error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result, err = registration.Attempt(t.Context(), providers.ExecuteRequest{
+			Provider: providers.IDClaude, AttemptID: "rejected-attempt", UserMessage: "ordinary",
+			ProgressObserver: func(fact providers.ExecuteProgress) {
+				progress = append(progress, fact)
+				if fact.Detail == "PRIVATE ordinary stderr" {
+					close(observed)
+					<-release
+				}
+			},
+		})
+	}()
+	select {
+	case <-observed:
+	case <-done:
+		t.Fatal("attempt returned before live stderr observation")
+	case <-time.After(failureCeiling):
+		t.Fatal("live observation did not arrive")
+	}
+	select {
+	case <-done:
+		t.Fatal("finalization overtook the live callback")
+	default:
+	}
+	release <- struct{}{}
+	select {
+	case <-done:
+	case <-time.After(failureCeiling):
+		t.Fatal("attempt did not join after callback release")
+	}
+	if err == nil || result.Content != "" {
+		t.Fatalf("rejection returned accepted content: %q %v", result.Content, err)
+	}
+	assertRejectedProgress(t, progress)
+}
 
 func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 	t.Parallel()
@@ -89,4 +149,20 @@ func (stub claudeCommandRunnerStub) RunStreaming(ctx context.Context, request pr
 
 func (stub claudeCommandRunnerStub) commandEffect() providerservice.CommandRunner {
 	return providerservice.CommandRunner{Run: stub.Run, RunStreaming: stub.RunStreaming}
+}
+
+func assertRejectedProgress(t *testing.T, progress []providers.ExecuteProgress) {
+	t.Helper()
+	var output []string
+	for _, fact := range progress {
+		if fact.Detail == "PRIVATE ordinary output" || fact.Detail == "PRIVATE ordinary stderr" {
+			output = append(output, fact.Detail)
+		}
+		if fact.Phase == "run.completed" || fact.Phase == "message.completed" {
+			t.Fatalf("false completion: %+v", fact)
+		}
+	}
+	if len(output) != 2 || output[0] != "PRIVATE ordinary output" || output[1] != "PRIVATE ordinary stderr" {
+		t.Fatalf("ordered once-only output: %#v", output)
+	}
 }

@@ -7,8 +7,28 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
+
+func TestMockUsageFallbackUsesExecutorAndPhysicalAttempt(t *testing.T) {
+	t.Parallel()
+	input := int64(17)
+	r := &runner{config: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{RunType: workers.MockWorkerRunTypeAccept, Usage: &workers.MockWorkerUsageConfig{Provider: "codex", Model: "declared-model", InputTokens: &input}}}}}
+	var fragments []workers.ProgressFragment
+	ctx := workerexecution.WithProgressPublisher(t.Context(), func(fragment workers.ProgressFragment) { fragments = append(fragments, fragment) })
+	_, err := r.Execute(ctx, workers.RunnerExecutionRequest{
+		RunnerID: Identity, ExecutorProvider: "claude", ModelProvider: "codex",
+		Correlation: workers.ExecutionCorrelation{DispatchID: "logical", AttemptID: "physical"},
+	})
+	if err != nil || len(fragments) != 1 {
+		t.Fatalf("fallback publication = %+v %v", fragments, err)
+	}
+	draft := fragments[0].CanonicalDraft.(workers.Draft)
+	if fragments[0].Provider != "claude" || draft.Provenance.Provider != "claude" || draft.DispatchID != "physical" || fragments[0].Correlation.DispatchID != "logical" {
+		t.Fatalf("fallback attached declaration to another identity: %+v", fragments[0])
+	}
+}
 
 func TestMockRunnerDispatchDecisions(t *testing.T) {
 	for _, tc := range []struct {

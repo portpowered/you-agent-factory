@@ -47,13 +47,7 @@ import (
 // provideFactoryRuntimeAssembly binds process execution effects once. The
 // named runner roles preserve Wire's provider/script effect distinction.
 func provideFactoryRuntimeAssembly(
-	runtimeFactory *factoryruntimewire.RuntimeFactory,
-	workerAttemptScheduler platformclock.TimerSource,
-	workerService workers.Service,
-	workerSessions workersessions.Service,
-	workerAttempts factoryruntime.WorkerAttemptOpener,
-	requestResolver *factoryruntimewire.WorkstationRequestExecutor,
-	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
+	opening factoryruntimewire.BundleOpening,
 	sidecars *factoryruntimewire.SidecarOpening,
 	instanceHost factoryruntimewire.InstanceHost,
 	preparation factoryruntimewire.RuntimePreparation,
@@ -62,8 +56,7 @@ func provideFactoryRuntimeAssembly(
 	streams factorysessionwire.RuntimeAssembly,
 	recoverOwners recordings.WorkerCapturePreparationOperation,
 ) (*factoryruntimewire.Assembly, error) {
-	return factoryruntimewire.NewAssembly(runtimeFactory, workerAttemptScheduler, workerService, workerSessions,
-		workerAttempts, requestResolver, initialFactorySnapshot,
+	return factoryruntimewire.NewAssembly(opening,
 		sidecars,
 		instanceHost,
 		preparation,

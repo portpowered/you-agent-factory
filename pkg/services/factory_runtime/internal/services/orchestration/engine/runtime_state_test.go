@@ -47,6 +47,40 @@ func TestRestoredDispatchCompletesOnceFromRecordedResult(t *testing.T) {
 	}
 }
 
+func TestJoinedCancelReconcilesResultsWithoutScheduling(t *testing.T) {
+	t.Parallel()
+	dispatcher := &mockSubsystem{group: subsystems.Dispatcher}
+	termination := &mockSubsystem{group: subsystems.TerminationCheck}
+	applications := 0
+	router := &mockSubsystem{group: subsystems.Transitioner, execFn: func(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+		applications++
+		if len(snapshot.Results) != 1 || snapshot.Results[0].Outcome != workerexecution.OutcomeCanceled {
+			t.Fatalf("joined results = %#v", snapshot.Results)
+		}
+		return nil, nil
+	}}
+	eng := newTestFactoryEngine(buildTestNet(), petri.NewMarking("joined"), []subsystems.Subsystem{dispatcher, router, termination})
+	if err := eng.SeedRestoredDispatch(interfaces.DispatchEntry{DispatchID: "held", TransitionID: "process", ConsumedTokens: []workerexecution.Token{{ID: "input", Color: workerexecution.Color{WorkID: "work"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	eng.GetResultBuffer().Write(t.Context(), workerexecution.WorkResult{
+		DispatchID: "held", Outcome: workerexecution.OutcomeCanceled,
+		Cancellation: &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled},
+	})
+	for range 2 {
+		if err := eng.ReconcileJoinedResults(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot := eng.GetRuntimeStateSnapshot()
+	if snapshot.InFlightCount != 0 || len(snapshot.Dispatches) != 0 || len(snapshot.DispatchHistory) != 1 || applications != 1 {
+		t.Fatalf("joined retirement = %+v, applications=%d", snapshot, applications)
+	}
+	if dispatcher.callCount != 0 || termination.callCount != 0 {
+		t.Fatal("joined reconciliation scheduled or reclassified the stopped run")
+	}
+}
+
 func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *testing.T) {
 	original := interfaces.TokenMutationRecord{
 		DispatchID:   "dispatch-petri-1",

@@ -287,9 +287,7 @@ func (fixture *agentSharedProcessFixture) runScenario(
 		// customer's in-flight Work before canceling; no stream event alone
 		// acknowledges that the Work query has applied the dispatch.
 		waitForAgentProcessingWork(t, fixture.baseURL, sessionID, support.StringPointerValue(submitted.WorkId))
-		if err := cancelAgentSession(fixture.baseURL, sessionID); err != nil {
-			t.Fatalf("cancel agent Factory Session %q: %v", sessionID, err)
-		}
+		cancelJoinedAgentSession(t, fixture.baseURL, sessionID)
 		scenario.runner.waitFinished(t, agentSharedProcessTimeout)
 		if got := scenario.runner.canceledCount(); got != 1 {
 			t.Fatalf("canceled agent calls = %d, want exactly one", got)

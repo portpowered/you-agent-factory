@@ -162,6 +162,8 @@ func selectedAwaitRetry(t *testing.T, scheduler *selectedOperationScheduler, run
 }
 
 type selectedInvocation struct {
+	cancel    context.CancelFunc
+	logDir    string
 	done      chan error
 	stdout    func() string
 	inputs    *support.CapturedInputs
@@ -191,7 +193,8 @@ func startSelectedWriterInvocation(t *testing.T, process support.Process, ctx co
 	home := t.TempDir()
 	sessionID := uuid.NewString()
 	args := append([]string{"you", "run"}, flags...)
-	args = append(args, "--factory", filepath.Join(dir, interfaces.FactoryConfigFile), "--session", sessionID, "--no-record", prompt)
+	logDir := filepath.Join(home, "runtime-logs")
+	args = append(args, "--factory", filepath.Join(dir, interfaces.FactoryConfigFile), "--session", sessionID, "--runtime-log-dir", logDir, "--no-record", prompt)
 	input := support.FakeInputs(ctx, args)
 	if output != nil {
 		input.Input.Stdout = output
@@ -208,7 +211,7 @@ func startSelectedWriterInvocation(t *testing.T, process support.Process, ctx co
 		defer close(joined)
 		done <- process.Execute(input.Input)
 	}()
-	return selectedInvocation{done: done, stdout: input.Stdout, inputs: input, sessionID: sessionID, dir: dir}
+	return selectedInvocation{cancel: cancel, logDir: logDir, done: done, stdout: input.Stdout, inputs: input, sessionID: sessionID, dir: dir}
 }
 
 func scaffoldSelectedFactory(t *testing.T, config string) string {

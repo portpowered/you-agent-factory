@@ -22,6 +22,7 @@ const selectedWatchCeiling = 30 * time.Second
 type selectedWatchHost struct {
 	process  support.ApplicationProcess
 	endpoint string
+	done     <-chan struct{}
 }
 
 func startSelectedWatchHost(t *testing.T, process support.ApplicationProcess) *selectedWatchHost {
@@ -56,6 +57,7 @@ func startWatchHost(t *testing.T, process support.ApplicationProcess, dir string
 
 	inputs.Input.Context = context.Background()
 	command := support.StartProcessCommand(t, process, inputs.Input)
+	host.done = command.Done()
 	for {
 		select {
 		case timer := <-selectedWatchScheduler.startup:
