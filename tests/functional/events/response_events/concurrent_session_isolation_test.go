@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -615,10 +614,8 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 	baseURL := server.URL()
 	sessionIDs, streams, acknowledged, prompts := openExplicitIsolationScopes(t, baseURL)
 	invocations := make(map[string]chan concurrentIsolationInvocation)
-	cancels := make(map[string]context.CancelFunc)
 	for id, prompt := range prompts {
 		ctx, cancel := context.WithCancel(t.Context())
-		cancels[id] = cancel
 		t.Cleanup(cancel)
 		done := make(chan concurrentIsolationInvocation, 1)
 		invocations[id] = done
@@ -653,9 +650,8 @@ func TestFourExplicitSessionsIsolateOneCancellation(t *testing.T) {
 		close(gates[fmt.Sprintf("four-scope-prompt-%d", i)].release)
 	}
 	assertExplicitIsolationSessionStopped(t, baseURL, canceledID, control.Status)
-	cancels[canceledID]()
 	canceled := awaitConcurrentIsolationInvocation(t, invocations[canceledID])
-	if !errors.Is(canceled.err, context.Canceled) {
+	if canceled.err != nil || canceled.response.Status != factoryapi.InvocationTerminalStatusFailed || canceled.response.ErrorCode == nil || *canceled.response.ErrorCode != factoryapi.INVOCATIONINTERRUPTED || canceled.response.PrimaryResult != nil || canceled.response.SessionId == nil || *canceled.response.SessionId != canceledID {
 		t.Fatalf("canceled caller wait = %#v", canceled)
 	}
 	for i := range 3 {
@@ -677,8 +673,8 @@ func assertExplicitIsolationSessionStopped(t *testing.T, baseURL, canceledID str
 	// Live cancel currently returns SUCCEEDED for its stopped runtime (durable
 	// cancel uses CANCELED). Preserve that typed control outcome.
 	// Session control's typed terminal outcome is independent of the HTTP
-	// invocation wait. Observe the public session status, then release that
-	// caller-owned wait rather than inventing a session-to-request guarantee.
+	// invocation result. Observe the stopped Session before asserting that
+	// joined cancellation wakes the caller with an unfinished-Work result.
 	support.WaitForSessionStopped(t, baseURL, canceledID, concurrentIsolationTimeout)
 	read := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+url.PathEscape(canceledID))
 	session, err := read.AsFactorySession()
