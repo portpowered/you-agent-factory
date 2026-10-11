@@ -63,6 +63,9 @@ func TestWorkerEventsDirectIdleFollowAndObserverDetach(t *testing.T) {
 	assertWorkerEventsDirectDenial(t, ctx, host.baseURL+"/worker-sessions/unknown-worker/events", http.StatusNotFound, api.ErrorResponseCodeNOTFOUND)
 	assertWorkerEventsDirectDenial(t, ctx, host.baseURL+"/factory-sessions/foreign/worker-sessions/events-target/events", http.StatusNotFound, api.ErrorResponseCodeNOTFOUND)
 	assertWorkerEventsDirectDenial(t, ctx, endpoint+"?after_position=9223372036854775807", http.StatusBadRequest, api.ErrorResponseCodeWORKERSESSIONEVENTCURSORFUTURE)
+	assertWorkerEventsCanceledSetup(t, ctx, host, home, dir, endpoint)
+	assertWorkerEventsCommandIdle(t, runner)
+	assertWorkerEventsCommandIdle(t, peer)
 	cliFollow, cliWriter := startWorkerEventsDirectCLI(t, ctx, host, home, dir)
 	logsCtx, detachLogs := context.WithCancel(ctx)
 	detachedLogs, _ := startWorkerEventsDirectCLI(t, logsCtx, host, home, dir, "read", "--worker-session-id", "events-target", "--view", "logs", "--follow")
@@ -107,6 +110,39 @@ func TestWorkerEventsDirectIdleFollowAndObserverDetach(t *testing.T) {
 	assertWorkerEventsCommandIdle(t, peer)
 	peer.releaseProgress()
 	t19AwaitSignal(t, ctx, peer.joined, "peer provider joined")
+}
+
+// Cancellation already present at the public boundary must return its typed
+// cause without establishing a stream. A fresh observer then proves the
+// canceled request has not damaged the target's event delivery.
+func assertWorkerEventsCanceledSetup(t *testing.T, ctx context.Context, host invokeContinueStartedProcess, home, dir, endpoint string) {
+	t.Helper()
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	request, err := http.NewRequestWithContext(canceled, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if response != nil {
+		response.Body.Close()
+		t.Fatal("canceled HTTP setup established a response")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled HTTP setup: %v", err)
+	}
+	input := support.FakeInputs(canceled, []string{"you", "--remote", "--server", host.baseURL, "--json", "worker-sessions", "stream", "--worker-session-id", "events-target", "--follow"})
+	input.Input.Env, input.Input.WorkingDirectory = invokeContinueEnvironment(home), dir
+	if err := host.process.Execute(input.Input); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled CLI setup: %v stderr=%s", err, input.Stderr())
+	}
+	if input.Stdout() != "" {
+		t.Fatalf("canceled CLI setup produced stream frames: %s", input.Stdout())
+	}
+	frames := readWorkerEventsFinite(t, ctx, endpoint+"?replayOnly=true")
+	if len(frames) == 0 {
+		t.Fatal("fresh observer lost the retained prefix after canceled setup")
+	}
 }
 
 // The existing finite MCP view must match public SSE frames and its bounded

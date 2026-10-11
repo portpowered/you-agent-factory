@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,52 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
+
+// The writer component must preserve an already delivered prefix, close its
+// collaborator, and end the response after loss rather than invent completion.
+func TestWorkerEventsPrefixThenSourceFailureEOF(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []workersessions.ObservationDeliveryKind{workersessions.ObservationDeliverySourceFailure, workersessions.ObservationDeliveryClosed} {
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			source := &fakeObservationSubscription{deliveries: []workersessions.ObservationDelivery{
+				{Kind: workersessions.ObservationDeliveryRecord, Event: workersessions.ObservationEvent{Position: 1, Payload: json.RawMessage(`{"content":"retained-prefix"}`)}},
+				{Kind: kind, Err: workersessions.ErrObservationSourceClosed},
+			}}
+			service := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-prefix"}, streamByWorkerSubscription: source}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/worker-sessions/worker-prefix/events", nil), "worker-prefix", factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{})
+			response := recorder.Result()
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil || response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "text/event-stream" {
+				t.Fatalf("stream response: %d %v %v", response.StatusCode, response.Header, err)
+			}
+			frames := decodeSSEFrames(t, string(body))
+			if len(frames) != 2 || frames[0].Delivery != "RECORD" || frames[0].Event == nil || frames[1].Delivery != "SOURCE_FAILURE" || frames[1].Event != nil || frames[1].ReplaySummary != nil {
+				t.Fatalf("prefix/failure frames: %+v", frames)
+			}
+			if frames[1].ErrorCode == nil || *frames[1].ErrorCode != "WORKER_SESSION_STREAM_CLOSED" || !strings.Contains(string(body), "retained-prefix") || !source.closed || source.index != 2 {
+				t.Fatalf("loss must close once after the prefix: %s closed=%v reads=%d", body, source.closed, source.index)
+			}
+		})
+	}
+}
+
+func TestWorkerEventsCanceledSetupDoesNotAcquireSubscription(t *testing.T) {
+	t.Parallel()
+	service := &fakeObservationService{getByWorkerResult: workersessions.Observation{WorkerSessionID: "worker-canceled"}}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/worker-sessions/worker-canceled/events", nil).WithContext(ctx)
+	handler.StreamWorkerSessionEventsByTopLevelWorkerSessionId(recorder, request, "worker-canceled", factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{})
+	if service.getByWorkerCalled || service.streamByWorkerRequest.WorkerSessionID != "" || recorder.Body.Len() != 0 || recorder.Header().Get("Content-Type") == "text/event-stream" {
+		t.Fatalf("canceled setup acquired an observer or wrote success: lookup=%v request=%+v response=%s", service.getByWorkerCalled, service.streamByWorkerRequest, recorder.Body.String())
+	}
+}
 
 type gatedStreamWork struct {
 	workServiceStub
