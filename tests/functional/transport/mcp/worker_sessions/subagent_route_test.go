@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -26,20 +28,29 @@ func TestSubagentRouteDefaults(t *testing.T) {
 	home, workDir := t.TempDir(), t.TempDir()
 	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
 	released := make(chan struct{})
+	var nativeCalls, acpCommands atomic.Int32
 	commands := make(map[string]chan platformprocess.CommandRequest)
 	for _, name := range []string{"default", "model-override", "codex", "claude", "agy"} {
 		commands[name] = make(chan platformprocess.CommandRequest, 2)
 	}
 	host := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: support.ScaffoldSingleStepFactory(t, "subagent-route"), WorkingDirectory: workDir,
+		// No real ACP process may run, even if preflight regresses. Native
+		// routes use the held-open command-runner edge below.
+		DeniedProcessAttempts: &acpCommands,
 		Edges: serviceedges.Edges{
 			FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
-			ProviderCommandRunner:              subagentRouteRunner{commands: commands, released: released},
+			ProviderCommandRunner:              subagentRouteRunner{commands: commands, released: released, calls: &nativeCalls},
+			ProviderCatalogProbe:               unavailableSubagentOpenCode,
 		},
 	})
 	t.Cleanup(func() { close(released) })
 	session, ctx := startMCP(t, client, host.URL())
 	assertSubagentInvalidDefaults(t, ctx, session, configPath)
+	assertSubagentUnavailableRoutes(t, ctx, session, configPath)
+	if nativeCalls.Load() != 0 || acpCommands.Load() != 0 {
+		t.Fatalf("rejected routes executed providers: native=%d ACP=%d", nativeCalls.Load(), acpCommands.Load())
+	}
 	writeSubagentProfile(t, configPath, map[string]any{"provider": "codex", "model": "dedicated-model"})
 	assertSubagentExplicitRouteFailures(t, ctx, session)
 	for _, cell := range []struct{ name, provider, model, effort string }{
@@ -76,6 +87,50 @@ func TestSubagentRouteDefaults(t *testing.T) {
 			assertSubagentProfileSiblings(t, configPath)
 		})
 	}
+}
+
+// Readiness is an external catalog fact injected through the existing process
+// edge. This proves fail-closed admission, not installed OpenCode availability.
+func unavailableSubagentOpenCode(_ context.Context, descriptor providers.Descriptor) (providers.Descriptor, error) {
+	if strings.EqualFold(descriptor.ID.String(), "opencode") {
+		descriptor.Readiness = providers.ReadinessUnavailable
+		descriptor.Prerequisites = []providers.Prerequisite{{
+			Kind: providers.PrerequisiteExecutable, Name: "opencode",
+			Status: providers.PrerequisiteMissing, Description: "install the selected OpenCode executable",
+		}}
+	}
+	return descriptor, nil
+}
+
+func assertSubagentUnavailableRoutes(t *testing.T, ctx context.Context, session *mcp.ClientSession, path string) {
+	t.Helper()
+	writeSubagentProfile(t, path, map[string]any{"provider": "opencode", "model": "controlled-free-model"})
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, explicit := range []bool{false, true} {
+		id := fmt.Sprintf("unavailable-%t", explicit)
+		args := map[string]any{"requestId": id + "-request", "workerSessionId": id, "prompt": "must not run"}
+		if explicit {
+			args["provider"], args["model"] = "opencode", "controlled-free-model"
+		}
+		result := callTool(t, ctx, session, "you.subagent", args)
+		assertToolError(t, result, "worker_session.unavailable", true)
+		text := result.Content[0].(*mcp.TextContent).Text
+		encoded, err := json.Marshal(result.StructuredContent)
+		if err != nil || !strings.Contains(text, "prerequisites") || !strings.Contains(string(encoded), `"upstreamCode":"PROVIDER_UNAVAILABLE"`) {
+			t.Fatalf("unavailable route lacks typed prerequisite guidance: %s", text)
+		}
+		assertToolError(t, callTool(t, ctx, session, "you.subagent", map[string]any{
+			"action": "READ", "workerSessionId": id,
+		}), "worker_session.not_found", false)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("rejected route changed the operator document: %v", err)
+	}
+	assertSubagentProfileSiblings(t, path)
 }
 
 func assertSubagentAdmission(t *testing.T, result *mcp.CallToolResult, id string) {
@@ -222,9 +277,11 @@ func assertSubagentRouteCommand(t *testing.T, command platformprocess.CommandReq
 type subagentRouteRunner struct {
 	commands map[string]chan platformprocess.CommandRequest
 	released <-chan struct{}
+	calls    *atomic.Int32
 }
 
 func (r subagentRouteRunner) Run(ctx context.Context, command platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.calls.Add(1)
 	observed := r.commands[filepath.Base(command.WorkDir)]
 	if observed == nil {
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider execution in %q", command.WorkDir)
