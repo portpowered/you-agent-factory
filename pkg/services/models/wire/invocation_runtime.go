@@ -11,24 +11,6 @@ import (
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
-type backendInvocationRuntime struct {
-	backend InvocationBackend
-}
-
-func (runtime backendInvocationRuntime) Invoke(
-	ctx context.Context,
-	request inference.InvocationRuntimeRequest,
-) (inference.InvocationRuntimeResult, error) {
-	content, artifacts, err := runtime.backend(ctx, request.Request)
-	if err != nil {
-		return inference.InvocationRuntimeResult{}, err
-	}
-	return inference.InvocationRuntimeResult{
-		Content:   content,
-		Artifacts: invocationArtifactSources(artifacts),
-	}, nil
-}
-
 func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
 	if len(artifacts) == 0 {
 		return nil
@@ -46,75 +28,17 @@ func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference
 	return sources
 }
 
-type operationInvocationRuntime struct {
-	generic   invocationRuntime
-	omni      invocationRuntime
-	asr       invocationRuntime
-	embedding invocationRuntime
-	tts       invocationRuntime
-}
-
-func (runtime operationInvocationRuntime) Invoke(
-	ctx context.Context,
-	request inference.InvocationRuntimeRequest,
-) (inference.InvocationRuntimeResult, error) {
-	if isASROperation(request) {
-		return runtime.asr.Invoke(
-			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
-		)
-	}
-	if isOMNIOperation(request) {
-		return runtime.omni.Invoke(ctx, request)
-	}
-	if isEmbeddingOperation(request) {
-		return runtime.embedding.Invoke(
-			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
-		)
-	}
-	if isTTSOperation(request) {
-		return runtime.tts.Invoke(
-			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
-		)
-	}
-	return runtime.generic.Invoke(ctx, request)
-}
-
 // NewGenericInvocationRuntime normalizes the optional public override.
 func NewGenericInvocationRuntime(backend InvocationBackend) GenericInvocationRuntime {
 	if backend == nil {
-		return failClosedInvocationRuntime{}
+		return modelsruntime.UnavailableInvocationRuntime{}
 	}
-	return backendInvocationRuntime{backend: backend}
+	return modelsruntime.NewGenericInvocationRuntime(modelsruntime.InvocationBackend(backend))
 }
 
 // NewUnavailableInvocationRuntime supplies an explicit fail-closed role.
-func NewUnavailableInvocationRuntime() InvocationRuntime { return failClosedInvocationRuntime{} }
-
-// failClosedInvocationRuntime is the production default when no operation
-// adapter was composed. It intentionally emits no content, preserving the
-// distinction between an unavailable backend and generated model output.
-type failClosedInvocationRuntime struct{}
-
-func (failClosedInvocationRuntime) Invoke(
-	ctx context.Context,
-	request inference.InvocationRuntimeRequest,
-) (inference.InvocationRuntimeResult, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := ctx.Err(); err != nil {
-		return inference.InvocationRuntimeResult{}, err
-	}
-	operation := strings.TrimSpace(request.Operation.Name)
-	if operation == "" {
-		operation = strings.TrimSpace(request.Request.Operation)
-	}
-	return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
-		Class:     models.InvocationFailureClassConfiguration,
-		Operation: operation,
-		Message:   "model operation backend is unavailable",
-		Cause:     models.ErrUnavailable,
-	}
+func NewUnavailableInvocationRuntime() InvocationRuntime {
+	return modelsruntime.UnavailableInvocationRuntime{}
 }
 
 func NewASRInvocationRuntime(backend ASRBackend, extract, normalize InvocationAudioTransform) (ASRInvocationRuntime, error) {
@@ -195,7 +119,7 @@ func (runtime omniInvocationRuntime) Invoke(
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
 	if !isOMNIOperation(request) {
-		return failClosedInvocationRuntime{}.Invoke(ctx, request)
+		return modelsruntime.UnavailableInvocationRuntime{}.Invoke(ctx, request)
 	}
 	if runtime.codec == nil {
 		return inference.InvocationRuntimeResult{}, models.ErrUnavailable
@@ -238,18 +162,6 @@ func (adapter invocationProtocolAdapter) Predict(
 
 func isOMNIOperation(request inference.InvocationRuntimeRequest) bool {
 	return invocationOperationName(request) == models.OperationOMNI
-}
-
-func isASROperation(request inference.InvocationRuntimeRequest) bool {
-	return invocationOperationName(request) == models.OperationASR
-}
-
-func isEmbeddingOperation(request inference.InvocationRuntimeRequest) bool {
-	return invocationOperationName(request) == models.OperationEMBED
-}
-
-func isTTSOperation(request inference.InvocationRuntimeRequest) bool {
-	return invocationOperationName(request) == models.OperationTTS
 }
 
 func invocationOperationName(request inference.InvocationRuntimeRequest) string {

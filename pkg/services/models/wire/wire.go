@@ -21,6 +21,7 @@ import (
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	modelsruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
@@ -347,12 +348,7 @@ type TTSInvocationRuntime interface{ InvocationRuntime }
 func NewInvocationRuntime(generic GenericInvocationRuntime, omni OMNIInvocationRuntime,
 	asr ASRInvocationRuntime, embedding EmbeddingInvocationRuntime, tts TTSInvocationRuntime,
 ) (InvocationRuntime, error) {
-	for _, role := range []any{generic, omni, asr, embedding, tts} {
-		if isNilDependency(role) {
-			return nil, models.ErrInvalidInferenceDependencies
-		}
-	}
-	return operationInvocationRuntime{generic: generic, omni: omni, asr: asr, embedding: embedding, tts: tts}, nil
+	return modelsruntime.NewInvocationRuntime(generic, omni, asr, embedding, tts)
 }
 
 type InvocationArtifactRegistrar = inferencewire.InvocationArtifactRegistrar

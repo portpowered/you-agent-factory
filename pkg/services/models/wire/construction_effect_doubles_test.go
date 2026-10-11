@@ -312,7 +312,7 @@ func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
 	}
 	request := models.InvokeModelRequest{Operation: models.OperationEMBED}
 	var received models.InvokeModelRequest
-	runtime := backendInvocationRuntime{backend: func(
+	backend := InvocationBackend(func(
 		_ context.Context,
 		request models.InvokeModelRequest,
 	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
@@ -321,7 +321,8 @@ func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
 			Artifact: artifactRef, Name: "fixture-output", MediaType: "application/octet-stream",
 			SizeBytes: 2, Properties: map[string]string{"source": "fixture"},
 		}}, nil
-	}}
+	})
+	runtime := NewGenericInvocationRuntime(backend)
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: request})
 	if err != nil {
@@ -339,9 +340,9 @@ func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
 	}
 
 	wantErr := errors.New("fixture backend failed")
-	runtime.backend = func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	runtime = NewGenericInvocationRuntime(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 		return nil, nil, wantErr
-	}
+	})
 	if _, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{}); !errors.Is(err, wantErr) {
 		t.Fatalf("backend error = %v, want %v", err, wantErr)
 	}
@@ -352,7 +353,10 @@ func TestOperationInvocationRuntimeSelectsASROnlyForASROperations(t *testing.T) 
 
 	generic := &recordingInvocationRuntime{result: inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Content: "generic"}}}}
 	asr := &recordingInvocationRuntime{result: inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Content: "asr"}}}}
-	runtime := operationInvocationRuntime{generic: generic, asr: asr}
+	runtime, err := NewInvocationRuntime(generic, NewUnavailableInvocationRuntime(), asr, generic, NewUnavailableInvocationRuntime())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
 		Request: models.InvokeModelRequest{Operation: models.OperationASR},
@@ -827,7 +831,7 @@ func invocationFixture(options invocationFixtureOptions) (invocationRuntime, err
 		}
 		embedding = role
 	}
-	var tts TTSInvocationRuntime = failClosedInvocationRuntime{}
+	var tts TTSInvocationRuntime = NewUnavailableInvocationRuntime()
 	ttsBackend := localai.NewPinnedTTSBackend(options.Dialer, options.TTSTempDirectory, options.TTSCreateTemp,
 		options.TTSWriteFile, options.TTSInspectFile, options.TTSReadFile, options.TTSRemoveFile)
 	if ttsBackend != nil {

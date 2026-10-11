@@ -146,3 +146,71 @@ func ttsRuntimeWAV() []byte {
 	audio[45] = 0x02
 	return audio
 }
+
+// Each collaborator is a completed fake role: this isolates the selector.
+type fixedInvocationRole string
+
+func (role fixedInvocationRole) Invoke(_ context.Context, request inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	return inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Name: "selected", Content: string(role)}}}, nil
+}
+
+func TestInvocationSelectsCompletedRoles(t *testing.T) {
+	t.Parallel()
+	runtime, err := ttsruntime.NewInvocationRuntime(fixedInvocationRole("generic"), fixedInvocationRole("omni"),
+		fixedInvocationRole("asr"), fixedInvocationRole("embedding"), fixedInvocationRole("tts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ operation, want string }{
+		{"custom", "generic"}, {" omni ", "omni"}, {"asr", "asr"}, {"EMBED", "embedding"}, {"TTS", "tts"},
+	} {
+		result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{Operation: test.operation}})
+		if err != nil || len(result.Content) != 1 || result.Content[0].Content != test.want {
+			t.Fatalf("operation %q = %#v, %v; want %s", test.operation, result, err, test.want)
+		}
+	}
+}
+
+func TestInvocationRejectsIncompleteRoles(t *testing.T) {
+	t.Parallel()
+	role := fixedInvocationRole("complete")
+	for missing := 0; missing < 5; missing++ {
+		roles := []ttsruntime.InvocationRuntime{role, role, role, role, role}
+		roles[missing] = nil
+		if _, err := ttsruntime.NewInvocationRuntime(roles[0], roles[1], roles[2], roles[3], roles[4]); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+			t.Fatalf("missing role %d: %v", missing, err)
+		}
+	}
+	var missingRole *fixedInvocationRole
+	if _, err := ttsruntime.NewInvocationRuntime(missingRole, role, role, role, role); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+		t.Fatalf("typed nil role: %v", err)
+	}
+}
+
+func TestInvocationGenericPreservesDeniedCauseAndDetachedArtifact(t *testing.T) {
+	t.Parallel()
+	denied := &models.InvocationFailure{Class: models.InvocationFailureClassBackendProtocol, Message: "controlled policy denial", Cause: models.ErrUnavailable}
+	backend := ttsruntime.NewGenericInvocationRuntime(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return nil, nil, denied
+	})
+	result, err := backend.Invoke(t.Context(), inference.InvocationRuntimeRequest{})
+	if !errors.Is(err, denied) || result.Content != nil || result.Artifacts != nil {
+		t.Fatalf("denied generic = %#v, %v", result, err)
+	}
+	artifact, err := (models.InferenceArtifactRef{}).Parse("artifact://selected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	properties := map[string]string{"source": "selected"}
+	backend = ttsruntime.NewGenericInvocationRuntime(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return []models.InferenceContent{{Content: "selected output"}}, []models.InferenceArtifact{{Artifact: artifact, Name: "selected", MediaType: "text/plain", Properties: properties}}, nil
+	})
+	result, err = backend.Invoke(t.Context(), inference.InvocationRuntimeRequest{})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "selected output" || len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != artifact.String() {
+		t.Fatalf("generic output = %#v, %v", result, err)
+	}
+	properties["source"] = "changed"
+	if result.Artifacts[0].Properties["source"] != "selected" {
+		t.Fatalf("artifact properties changed after backend mutation: %#v", result.Artifacts[0].Properties)
+	}
+}
