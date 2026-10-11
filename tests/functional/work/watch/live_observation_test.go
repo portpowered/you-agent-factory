@@ -303,7 +303,14 @@ func newLiveObservation(t *testing.T, host *selectedWatchHost, structured, follo
 	if opened.Session == nil || opened.Session.Id == "" {
 		t.Fatal("missing selected session")
 	}
-	t.Cleanup(func() { support.TerminateFactorySessionAt(t, host.endpoint, opened.Session.Id) })
+	t.Cleanup(func() {
+		select {
+		case <-host.done:
+			return
+		default:
+			support.TerminateFactorySessionAt(t, host.endpoint, opened.Session.Id)
+		}
+	})
 	return attachLiveObservation(t, host, opened.Session.Id, command, follow)
 }
 

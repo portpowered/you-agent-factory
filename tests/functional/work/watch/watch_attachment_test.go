@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -17,9 +19,105 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestJoinedSessionCancelRecordedReadbackAndFlushFault(t *testing.T) {
+	ensureWatchFixture(t)
+	for _, fault := range []bool{false, true} {
+		t.Run(fmt.Sprintf("recording flush fault=%t", fault), func(t *testing.T) {
+			t.Parallel()
+			session := uuid.NewString()
+			config := observationFactoryConfig(true, "complete")
+			config["workTypes"].([]map[string]any)[0]["handlingBehavior"] = []string{"DEFAULT"}
+			dir := support.ScaffoldFactory(t, config)
+			command := newHeldObservationCommand(t)
+			command.canceled, command.join = make(chan struct{}), make(chan struct{})
+			observationCommands.routes.Store(filepath.Clean(dir), command)
+			t.Cleanup(func() { observationCommands.routes.Delete(filepath.Clean(dir)) })
+			selectedPath := filepath.Join(dir, "canceled.__factory_session_id__.json")
+			path := strings.ReplaceAll(selectedPath, "__factory_session_id__", session)
+			host, running := startWatchHost(t, observationWatchProcess, dir, "--session", session, "--record", selectedPath)
+			selected := attachLiveObservation(t, host, session, command, false)
+			peer := newLiveObservation(t, host, true, false, "complete")
+			primary := startObservationInvocation(t, selected)
+			selected.awaitCommand(t)
+			var joined sync.Once
+			releaseJoin := func() { joined.Do(func() { close(command.join) }) }
+			t.Cleanup(releaseJoin)
+			cause := &fs.PathError{Op: "publish canceled recording", Path: path, Err: fs.ErrPermission}
+			if fault {
+				observationRecordingFailures.Store(filepath.Clean(path), cause)
+				t.Cleanup(func() { observationRecordingFailures.Delete(filepath.Clean(path)) })
+			}
+			cancelJoinedObservation(t, selected, releaseJoin)
+			outcome := awaitObservationInvocation(t, primary)
+			if outcome.Status != factoryapi.InvocationTerminalStatusFailed || outcome.ErrorCode == nil || *outcome.ErrorCode != "INVOCATION_INTERRUPTED" || outcome.PrimaryResult != nil {
+				t.Fatalf("canceled recorded invocation=%+v", outcome)
+			}
+			peerWork := peer.submit(t, "peer-after-recording-cancel")
+			peer.awaitCommand(t)
+			close(peer.command.release)
+			peer.finish(t)
+			assertWorkWatchTransitionLines(t, decodeWatchLines(t, peer.out.String()), peer.session, peerWork, [][2]string{{"init", "complete"}})
+			selected.cancel()
+			selected.watch.AcceptError()
+			host.execute(t, "server", "stop")
+			select {
+			case <-running.Done():
+			case <-time.After(selectedWatchCeiling):
+				t.Fatal("recorded host did not join after public stop")
+			}
+			if fault {
+				if !errors.Is(running.Err(), cause) {
+					t.Fatalf("recording flush lost original cause: %v", running.Err())
+				}
+				running.AcceptError()
+				return // A failed flush is never evidence of durable cancellation.
+			}
+			if running.Err() != nil {
+				t.Fatalf("recorded host shutdown=%v", running.Err())
+			}
+			assertCanceledRecordingReadback(t, session, path)
+		})
+	}
+}
+
+func assertCanceledRecordingReadback(t *testing.T, session, path string) {
+	t.Helper()
+	// The public historical query reconstructs only the chosen artifact. It
+	// cannot borrow the live ledger or dispatch the retained retryable Work.
+	history, err := observationRecordings.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: recordings.RecordingID(session),
+			Artifact: recordings.RecordingArtifactReference(path), Scope: recordings.CanonicalEventScope{FactorySessionID: session}},
+	})
+	if err != nil {
+		t.Fatalf("public canceled recording readback: %v", err)
+	}
+	responses := 0
+	for index, event := range history.Events {
+		if index > 0 && event.Sequence <= history.Events[index-1].Sequence {
+			t.Fatal("canceled recording lost canonical order")
+		}
+		if event.Kind == "WORK_STATE_CHANGE" {
+			t.Fatalf("canceled primary recording routed unfinished Work: %+v", event)
+		}
+		if event.Kind != "DISPATCH_RESPONSE" {
+			continue
+		}
+		responses++
+		var payload factoryapi.DispatchResponseEventPayload
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil || payload.Outcome != factoryapi.WorkOutcomeCanceled || payload.Cancellation == nil || payload.StructuredResult != nil {
+			t.Fatalf("recorded interruption=%+v error=%v", payload, err)
+		}
+	}
+	if responses != 1 || history.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("recorded canceled responses=%d status=%+v", responses, history.Status)
+	}
+}
 
 // Only the loopback connection is substituted. All responses and retained
 // cursors are emitted by the real Factory Session handlers and recording ledger.

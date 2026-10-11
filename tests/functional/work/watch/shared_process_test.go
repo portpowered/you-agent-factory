@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,6 +24,8 @@ var workWatchProcess support.ApplicationProcess
 var selectedWatchProcess support.ApplicationProcess
 var observationWatchProcess support.ApplicationProcess
 var observationCommands observationCommandRouter
+var observationRecordingFailures sync.Map
+var observationRecordings recordings.Service
 var legacyWatchSource watchObservationSource
 var selectedWatchSource watchObservationSource
 var selectedWatchScheduler = &watchSelectedScheduler{
@@ -137,6 +141,13 @@ func initializeWatchProcesses() error {
 	// the existing timing cohorts deliberately contain no workers.
 	observationWatchProcess, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: &observationCommands, APIServerStarter: watchAPIStarter,
+		RecordingsRootObserver: func(service recordings.Service) { observationRecordings = service },
+		RecordingWriteFile: func(target string, content []byte) error {
+			if cause, ok := observationRecordingFailures.Load(filepath.Clean(target)); ok {
+				return cause.(error)
+			}
+			return os.WriteFile(target, content, 0o600)
+		},
 	})
 	return err
 }

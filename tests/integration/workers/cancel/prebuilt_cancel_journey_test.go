@@ -4,20 +4,272 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// Hosts are sequential: the one-shot must exit by itself before read-only
+// replay reads the canceled history before an independently serving peer host.
+// This HTTP control witness does not prove native signals or broken pipes.
+func TestJoinedSessionCancelStopsOneShotWaiter(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("O1 matched-child witness currently covers Windows only")
+	}
+	binary := resolveCancelArtifact(t)
+	assertJoinedCancelArtifactHead(t, binary)
+	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Second)
+	defer cancel()
+	fixture := writeJoinedCancelFixture(t)
+	hash, err := fileSHA256(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("I-CANCEL artifact=%s sha256=%s declaredHead=%s OS=%s/%s", binary, hash, os.Getenv(cancelGitHeadEnvironment), runtime.GOOS, runtime.GOARCH)
+	session := uuid.NewString()
+	oneShot := startCancelCommand(t, ctx, binary, fixture, []string{
+		"--json", "run", "--factory", fixture.factoryDir, "--session", session,
+		"--with-server", "--listen", strings.TrimPrefix(fixture.serverURL, "http://"),
+		"--record", fixture.recordPath, "held primary",
+	})
+	waitForJoinedCancelSession(t, ctx, fixture, session, oneShot, true)
+	works, err := getJSON[factoryapi.ListWorkResponse](ctx, http.DefaultClient, sessionWorkURL(fixture.serverURL, session))
+	if err != nil || len(works.Results) != 1 || works.Results[0].WorkId == nil {
+		t.Fatalf("one-shot admitted Work=%+v error=%v", works, err)
+	}
+	workID := *works.Results[0].WorkId
+	waitForRunningWorkerSession(t, ctx, fixture.serverURL, session, workID, oneShot)
+	tree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, workID)
+	registerFailedTreeCleanup(t, tree)
+	assertObservedTreeAncestry(t, tree)
+	postJoinedSessionCancel(t, ctx, fixture, session)
+	select {
+	case <-oneShot.done:
+	case <-ctx.Done():
+		t.Fatalf("one-shot waiter failed to exit after HTTP cancel: %v", ctx.Err())
+	}
+	if exitCode(oneShot.waitError()) != 1 || !strings.Contains(oneShot.stderr.String(), "INVOCATION_INTERRUPTED") || strings.Contains(oneShot.stdout.String(), "joined-peer-result") {
+		t.Fatalf("one-shot cancellation exit=%d stdout=%s stderr=%s", exitCode(oneShot.waitError()), oneShot.stdout.String(), oneShot.stderr.String())
+	}
+	assertJoinedCancelTreeGone(t, tree)
+	if err := cancelPortAvailabilityError(fixture.port); err != nil {
+		t.Fatal(err)
+	}
+	// Mark naturally exited hosts joined so fallback cleanup cannot become a
+	// passing-path process kill. Readback opens only after this join.
+	oneShot.mu.Lock()
+	oneShot.stopped = true
+	oneShot.mu.Unlock()
+	assertJoinedCancelOfflineReplay(t, ctx, binary, fixture, session, workID)
+	// The original source stays read-only. The separately persistent host owns
+	// its own recording and opens selected and peer Sessions on one listener.
+	fixture.recordPath = filepath.Join(fixture.root, "serving-peer.jsonl")
+	serving := startCancelDaemon(t, ctx, binary, fixture)
+	waitForCancelFactorySession(t, ctx, fixture.serverURL, serving)
+	runJoinedCancelServingPeer(t, ctx, binary, fixture, serving)
+	stopCancelDaemon(t, binary, fixture, serving)
+	if err := cancelPortAvailabilityError(fixture.port); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("I-CANCEL PASS: matched real tree joined; one-shot exited non-success without forced cleanup; canonical replay retained unfinished Work; serving peer completed and accepted later Work")
+}
+
+func assertJoinedCancelOfflineReplay(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, session, workID string) {
+	t.Helper()
+	command := exec.CommandContext(ctx, binary, "run", "--replay", fixture.recordPath, "--no-record")
+	command.Dir, command.Env = fixture.factoryDir, append([]string(nil), fixture.environment...)
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	if err := command.Run(); err != nil {
+		t.Fatalf("compiled historical replay: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	text := stdout.String()
+	if !strings.Contains(text, "Replayed Factory Session: "+session) ||
+		!strings.Contains(text, fmt.Sprintf("Work: id=%q type=\"task\" state=\"init\"", workID)) ||
+		strings.Count(text, "DISPATCH_RESPONSE (") != 1 || strings.Contains(text, "joined-peer-result") {
+		t.Fatalf("compiled canceled recording lost unfinished Work/one response: %s", text)
+	}
+}
+
+func writeJoinedCancelFixture(t *testing.T) cancelFixture {
+	t.Helper()
+	fixture, err := writeCancelFixture(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// V2 JSONL supports read-only historical inspection. Legacy V1 JSON
+	// invokes deterministic re-execution, a different replay contract.
+	fixture.recordPath = filepath.Join(fixture.root, "joined-cancel.jsonl")
+	path := filepath.Join(fixture.factoryDir, "factory.json")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var definition map[string]any
+	if err := json.Unmarshal(content, &definition); err != nil {
+		t.Fatal(err)
+	}
+	definition["workTypes"].([]any)[0].(map[string]any)["handlingBehavior"] = []string{"DEFAULT"}
+	content, err = json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The release protocol lets the independent peer produce useful output;
+	// cancellation never writes release and must join the actual held tree.
+	grandchild := strings.Replace(cancelGrandchildPowerShell, "while ($true)", "while (-not (Test-Path -LiteralPath (Join-Path $MarkerDir 'release')))", 1)
+	worker := cancelWorkerPowerShell + "\n[Console]::Out.WriteLine('joined-peer-result')\n"
+	for name, script := range map[string]string{"cancel-grandchild.ps1": grandchild, "cancel-worker.ps1": worker} {
+		if err := os.WriteFile(filepath.Join(fixture.factoryDir, "scripts", name), []byte(script), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return fixture
+}
+
+func assertJoinedCancelArtifactHead(t *testing.T, binary string) {
+	t.Helper()
+	want := strings.TrimSpace(os.Getenv(cancelGitHeadEnvironment))
+	if want == "" {
+		t.Fatalf("%s must identify the exact changed-head artifact", cancelGitHeadEnvironment)
+	}
+	metadata, err := buildinfo.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := make(map[string]string)
+	for _, setting := range metadata.Settings {
+		settings[setting.Key] = setting.Value
+	}
+	if settings["vcs.revision"] != want || settings["vcs.modified"] != "false" {
+		t.Fatalf("artifact revision=%s modified=%s, want clean %s", settings["vcs.revision"], settings["vcs.modified"], want)
+	}
+}
+
+func waitForJoinedCancelSession(t *testing.T, ctx context.Context, fixture cancelFixture, session string, daemon *cancelDaemon, started ...bool) {
+	t.Helper()
+	// Listener readiness is an OS boundary, with no injectable ready channel.
+	// Poll only until the public selected Session reports its started dispatch.
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		value, err := getJSON[factoryapi.FactorySession](ctx, http.DefaultClient, fixture.serverURL+"/factory-sessions/"+session)
+		if err == nil && value.Id == session && (len(started) == 0 || value.Runtime.Progress.InFlightCount == 1) {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			t.Fatalf("selected Session readiness: %v (last error %v)", ctx.Err(), err)
+		case <-daemon.done:
+			t.Fatalf("host exited before selected Session readiness: %v stderr=%s", daemon.waitError(), daemon.stderr.String())
+		}
+	}
+}
+
+func postJoinedSessionCancel(t *testing.T, ctx context.Context, fixture cancelFixture, session string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, fixture.serverURL+"/factory-sessions/"+session+"/cancel", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var applied factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(response.Body).Decode(&applied); err != nil || response.StatusCode != http.StatusOK || applied.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted || applied.Operation != factoryapi.FactorySessionLifecycleControlKindCancel {
+		t.Fatalf("Session cancel HTTP=%d response=%+v error=%v", response.StatusCode, applied, err)
+	}
+}
+
+func assertJoinedCancelTreeGone(t *testing.T, tree workerProcessTree) {
+	t.Helper()
+	if present, err := processPIDsPresent(tree.PIDs); err != nil || len(present) != 0 {
+		t.Fatalf("joined cancellation left matched tree alive: present=%v error=%v", present, err)
+	}
+}
+
+func assertJoinedCancelReadback(t *testing.T, ctx context.Context, fixture cancelFixture, session, workID, dispatchID string) {
+	t.Helper()
+	events, err := readFactoryEvents(ctx, fixture.serverURL, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts, err := canceledDispatchFacts(events, workID, dispatchID)
+	if err != nil || facts.Responses != 1 || facts.LateOutputReturned {
+		t.Fatalf("canonical interruption readback=%+v error=%v", facts, err)
+	}
+	work := readCancelWork(t, ctx, fixture.serverURL, session, workID)
+	if work.State == nil || work.State.Type == factoryapi.WorkStateTypeTERMINAL || work.State.Type == factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("joined cancellation terminalized Work: %+v", work)
+	}
+	value, err := getJSON[factoryapi.FactorySession](ctx, http.DefaultClient, fixture.serverURL+"/factory-sessions/"+session)
+	if err != nil || value.Runtime.Progress.InFlightCount != 0 {
+		t.Fatalf("joined selected inflight=%+v error=%v", value.Runtime, err)
+	}
+}
+
+func runJoinedCancelServingPeer(t *testing.T, ctx context.Context, binary string, fixture cancelFixture, daemon *cancelDaemon) {
+	t.Helper()
+	open := func() string {
+		result := runCancelCLI(ctx, binary, fixture, "session", "create", "--dir", fixture.factoryDir)
+		var opened factoryapi.OpenFactorySessionResponse
+		if err := json.Unmarshal([]byte(result.stdout), &opened); err != nil || result.err != nil || opened.Session == nil {
+			t.Fatalf("open serving Session: result=%+v response=%+v error=%v", result, opened, err)
+		}
+		return opened.Session.Id
+	}
+	selected, peer := open(), open()
+	target := submitCancelWork(t, ctx, fixture.serverURL, selected, "serving-target")
+	peerWork := submitCancelWork(t, ctx, fixture.serverURL, peer, "serving-peer")
+	observation := waitForRunningWorkerSession(t, ctx, fixture.serverURL, selected, target, daemon)
+	targetTree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, target)
+	peerTree := waitForFixtureProcessTree(t, ctx, fixture.stateDir, peerWork)
+	registerFailedTreeCleanup(t, targetTree)
+	registerFailedTreeCleanup(t, peerTree)
+	postJoinedSessionCancel(t, ctx, fixture, selected)
+	assertJoinedCancelTreeGone(t, targetTree)
+	assertNativeTreesLive(t, peerTree)
+	if err := waitForCanceledDispatchEvent(t, ctx, fixture.serverURL, selected, observation.AttemptId); err != nil {
+		t.Fatal(err)
+	}
+	assertJoinedCancelReadback(t, ctx, fixture, selected, target, observation.AttemptId)
+	for index, workID := range []string{peerWork, submitCancelWork(t, ctx, fixture.serverURL, peer, "later-peer")} {
+		tree := peerTree
+		if index != 0 {
+			tree = waitForFixtureProcessTree(t, ctx, fixture.stateDir, workID)
+			registerFailedTreeCleanup(t, tree)
+		}
+		marker := filepath.Join(fixture.stateDir, safePathSegment(workID), fmt.Sprintf("run-%d", tree.RootPID), "release")
+		if err := os.WriteFile(marker, []byte("release"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		waitForFactoryForceResponse(t, ctx, fixture, peer, workID)
+		work := readCancelWork(t, ctx, fixture.serverURL, peer, workID)
+		if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL || !strings.Contains(workContentText(work), "joined-peer-result") {
+			t.Fatalf("useful serving peer Work=%+v", work)
+		}
+		assertJoinedCancelTreeGone(t, tree)
+	}
+}
 
 // A real host death and joined restart prove the delivered transport repair.
 // Default CLI control has its own owner-placement cases below; no synthetic
