@@ -39,3 +39,6 @@ type Service interface {
 // ScaffoldFactoryNameResolver reads the authored factory aggregate name from a
 // scaffolded factory directory after materialization.
 type ScaffoldFactoryNameResolver func(factoryDir string) (string, error)
+
+// ScaffoldOperation is the complete scaffold behavior selected at construction.
+type ScaffoldOperation func(context.Context, factorydefinitions.CreateFactoryScaffoldRequest) (factorydefinitions.CreateFactoryScaffoldResult, error)
