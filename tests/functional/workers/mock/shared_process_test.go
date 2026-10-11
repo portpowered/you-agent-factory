@@ -65,6 +65,8 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "ExpectedArtifacts", run: testExpectedArtifactsEnforceThroughSharedProcess},
 		{name: "MockUsage", run: testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess},
 		{name: "MockUsageCapture", run: testMockUsageCapture},
+		{name: "MockUsageBusinessInvalid", run: testMockUsageBusinessInvalid},
+		{name: "MockUsageNativePassthrough", run: testMockUsageNativePassthrough},
 		{name: "JavaScriptLiveCapacity", run: testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren},
 		{name: "LiveCapacityIncrease", run: testLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch},
 		{name: "LiveCapacitySafeReduction", run: testLiveResourceCapacityReductionPreservesActiveWork},
@@ -405,6 +407,11 @@ func sharedMockWorkersPayload(gate *support.MockWorkerGate) map[string]any {
 	return map[string]any{
 		"unmatchedDispatchPolicy": "passthrough",
 		"mockWorkers": []map[string]any{
+			{
+				"id": "mock-usage-business", "workInputs": []map[string]string{{"workId": "mock-usage-business"}},
+				"runType": "accept", "resultBody": map[string]any{"decision": "ACCEPTED", "output": "MOCK_USAGE_BUSINESS_OK", "recorded_output_work": []any{map[string]any{"workTypeId": "undeclared-output", "state": "complete", "content": []any{map[string]string{"type": "text", "text": "invalid proposal"}}}}},
+				"usage": map[string]any{"provider": "codex", "model": "gpt-5-codex", "inputTokens": 17, "outputTokens": 5, "cachedInputTokens": 0, "reasoningOutputTokens": 0},
+			},
 			{
 				"id": "mock-usage-capture", "workInputs": []map[string]string{{"workId": "mock-usage-capture"}},
 				"runType": "accept", "resultBody": map[string]string{"decision": "ACCEPTED", "output": "MOCK_USAGE_FACTORY_OK"},

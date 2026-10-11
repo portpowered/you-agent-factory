@@ -85,6 +85,9 @@ func TestPublishedDirectWorkerSessionMockJourney(t *testing.T) {
 			})
 		}
 	})
+	t.Run("MockUsagePeerCursor", func(t *testing.T) {
+		assertMockUsagePeerCursor(t, server, dir, environment, "usage-cross", "usage-match")
+	})
 	publishedDirectMockCommands(t, server, dir, path, environment)
 	if denied.calls.Load() != 0 || nativeCalls.Load() != 0 {
 		t.Fatalf("mock example attempted native effects: commands=%d subprocess/ACP=%d", denied.calls.Load(), nativeCalls.Load())
@@ -131,6 +134,7 @@ func publishedDirectUsage(t *testing.T, server *support.FunctionalAPIServer, dir
 	if err := json.Unmarshal([]byte(execute("worker-sessions", "show", "--worker-session-id", id)), &summary); err != nil || summary.Provider == nil || *summary.Provider != provider || summary.Model == nil || *summary.Model != model || summary.FactorySessionId != nil {
 		t.Fatalf("direct execution identity: %+v %v", summary, err)
 	}
+	assertMockUsageReadParity(t, server, dir, environment, summary, logs)
 	if name == "none" {
 		if summary.TokenUsage != nil || strings.Contains(logs, `"kind":"USAGE"`) || !strings.Contains(logs, "MOCK_USAGE_DIRECT_OK") {
 			t.Fatalf("no declaration fabricated usage: %s", logs)
