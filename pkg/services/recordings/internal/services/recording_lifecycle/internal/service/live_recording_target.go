@@ -74,7 +74,13 @@ func (planner *liveRecordingTargetPlanner) PlanLiveRecordingTarget(
 			wantPath,
 		)
 	}
-	return recordings.LiveRecordingTarget{ServicePath: reservedPath, ReportedPath: reservedPath}, nil
+	servicePath := reservedPath
+	if strings.TrimSpace(request.ReportedSessionID) == canonicalID {
+		// A peer's runtime resolves session tokens rather than appending the
+		// explicit-path suffix. Reserve and write the same canonical UUID file.
+		servicePath = planner.join(filepath.Dir(reservedPath), "__factory_session_id__.json")
+	}
+	return recordings.LiveRecordingTarget{ServicePath: servicePath, ReportedPath: reservedPath}, nil
 }
 
 func isUUID(value string) bool {

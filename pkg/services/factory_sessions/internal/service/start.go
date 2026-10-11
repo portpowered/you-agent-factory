@@ -360,6 +360,11 @@ func (r *RuntimeOpening) prepareLiveStartRequest(ctx context.Context, request fa
 	if request.RuntimeSelection != nil {
 		runtimeSelection = *request.RuntimeSelection
 	}
+	if request.ActivationOnly && selectedID != factorysessions.DefaultSessionID && strings.TrimSpace(runtimeSelection.SystemConfigHome) == "" {
+		if current := runtimebinding.SessionStateFrom(r.assembly.Resolve(factorysessions.DefaultSessionID)); current != nil {
+			runtimeSelection.SystemConfigHome = current.RecordingHome
+		}
+	}
 	if strings.TrimSpace(runtimeSelection.SystemConfigHome) == "" && r.resolveHome != nil {
 		home, homeErr := r.resolveHome()
 		if homeErr != nil {
@@ -376,6 +381,9 @@ func (r *RuntimeOpening) prepareLiveStartRequest(ctx context.Context, request fa
 		return factorysessions.SessionStartRequest{}, resolveErr
 	}
 	selected.FolderPath = selectedFolder
+	if err := r.selectPeerRecording(ctx, request, selectedID, &runtimeSelection); err != nil {
+		return factorysessions.SessionStartRequest{}, err
+	}
 	if strings.TrimSpace(runtimeSelection.ExecutionBaseDir) == "" {
 		runtimeSelection.ExecutionBaseDir = strings.TrimSpace(selected.FolderPath)
 	}
@@ -387,6 +395,36 @@ func (r *RuntimeOpening) prepareLiveStartRequest(ctx context.Context, request fa
 	}
 	selected.RuntimeSelection = &runtimeSelection
 	return selected, nil
+}
+
+// Independent API admissions share the selected host profile, never its writer.
+// Top-level CLI recording selections remain authoritative, including no-record.
+func (r *RuntimeOpening) selectPeerRecording(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string, selection *factorysessions.SessionRuntimeSelection) error {
+	if !request.ActivationOnly || request.ValidateOnly || selectedID == factorysessions.DefaultSessionID {
+		return nil
+	}
+	recording := &selection.Recording
+	if recording.RecordPath != "" || recording.ReplayPath != "" || recording.ResumePath != "" {
+		return nil
+	}
+	current := runtimebinding.SessionStateFrom(r.assembly.Resolve(factorysessions.DefaultSessionID))
+	if current == nil || strings.TrimSpace(current.CurrentBoardRecordPath) == "" {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target, err := r.recordingsRuntime.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+		HomeDir: selection.SystemConfigHome, CanonicalSessionID: selectedID, ReportedSessionID: selectedID,
+	})
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(target.ServicePath) == "" {
+		return fmt.Errorf("peer recording target planner returned an empty path")
+	}
+	recording.RecordPath = target.ServicePath
+	return nil
 }
 
 func (r *RuntimeOpening) inheritCurrentSelection(selectedID string, selection *factorysessions.SessionRuntimeSelection) {

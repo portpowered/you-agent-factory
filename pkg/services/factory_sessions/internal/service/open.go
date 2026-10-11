@@ -186,6 +186,9 @@ func (opening *sessionRuntimeOpening) bindSelectedState(state runtimebinding.Ope
 		SkippedBoardRecordings: opening.skippedBoardRecordings,
 		ReplayMetadataWarnings: opening.load.ReplayMetadataWarnings,
 	}
+	if opening.sessionSelection != nil {
+		metadata.RecordingHome = opening.sessionSelection.SystemConfigHome
+	}
 	if opening.resumeInput != nil {
 		resume := opening.resumeInput.RecoveryMetadata
 		resume.SuccessorRecordingID = recoveryRecordingID(opening.configured.Runtime.RuntimeInstanceID)
