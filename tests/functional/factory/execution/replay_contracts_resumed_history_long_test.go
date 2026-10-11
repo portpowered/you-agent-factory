@@ -1,6 +1,6 @@
 //go:build functionallong
 
-package replay_contracts
+package execution_test
 
 import (
 	"bytes"
