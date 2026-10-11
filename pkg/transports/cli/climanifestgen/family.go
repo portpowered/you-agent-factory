@@ -101,6 +101,7 @@ var WorkerSessionsFamilyCommandIDs = []string{
 	"you.worker-sessions.read",
 	"you.worker-sessions.show",
 	"you.worker-sessions.stream",
+	"you.worker-sessions.follow",
 }
 
 // IsWorkerSessionsFamilyCommandID reports whether id belongs to the worker

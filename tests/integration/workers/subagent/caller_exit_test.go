@@ -134,7 +134,7 @@ func prebuiltCLI(t *testing.T) string {
 	return path
 }
 
-func startHost(t *testing.T, ctx context.Context, directory, home string, env []string, runner *heldProvider) string {
+func startHost(t *testing.T, ctx context.Context, directory, home string, env []string, runner platformprocess.CommandRunner) string {
 	t.Helper()
 	ready := make(chan string, 1)
 	process, err := root.BuildProcess(ctx, serviceedges.Edges{
