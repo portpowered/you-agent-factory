@@ -37,36 +37,48 @@ func NewStartup(enabled bool, journal Activator, now func() time.Time, retention
 }
 
 func (s *Startup) Start(ctx context.Context) error {
-	return s.start(ctx, "")
+	return s.start(ctx, "", nil)
 }
 
 // StartAt binds the already constructed journal to the selected profile's
 // absolute store path. A mismatched profile is rejected before exposure; store
 // activation faults still quarantine Messaging without failing Factory startup.
-func (s *Startup) StartAt(ctx context.Context, path string) error {
-	if path == "" || !filepath.IsAbs(path) {
+// Explicit settings arrive after profile selection, rather than at construction.
+// Once selected, they cannot be changed, even for a disabled/quarantined store.
+func (s *Startup) StartAt(ctx context.Context, path string, enabled bool, retention time.Duration) error {
+	if path == "" || !filepath.IsAbs(path) || retention < 24*time.Hour {
 		return agentmessages.ErrBadRequest
 	}
-	return s.start(ctx, filepath.Clean(path))
+	return s.start(ctx, filepath.Clean(path), &startupSettings{enabled, retention})
 }
 
-func (s *Startup) start(ctx context.Context, path string) error {
+type startupSettings struct {
+	enabled   bool
+	retention time.Duration
+}
+
+func (s *Startup) start(ctx context.Context, path string, settings *startupSettings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if s.started {
-		if path != "" && s.path != path {
+		if path != "" && (s.path != path || s.enabled != settings.enabled || s.retention != settings.retention) {
 			return agentmessages.ErrBadRequest
 		}
 		return nil
 	}
-	if path != "" && s.enabled {
+	enabled, retention := s.enabled, s.retention
+	if settings != nil {
+		enabled, retention = settings.enabled, settings.retention
+	}
+	if path != "" && enabled {
 		if err := s.journal.Bind(path); err != nil {
 			return err
 		}
 	}
+	s.enabled, s.retention = enabled, retention
 	s.path = path
 	s.started = true
 	if !s.enabled {

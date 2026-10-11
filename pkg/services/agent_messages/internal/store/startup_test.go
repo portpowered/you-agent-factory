@@ -138,11 +138,11 @@ func TestStartupSelectsExplicitProfileOnce(t *testing.T) {
 	s := NewStartup(true, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := s.StartAt(ctx, path); !errors.Is(err, context.Canceled) || j.path != "" {
+	if err := s.StartAt(ctx, path, true, DefaultRetention); !errors.Is(err, context.Canceled) || j.path != "" {
 		t.Fatal("cancellation consumed profile selection", err)
 	}
 	for range 2 {
-		if err := s.StartAt(context.Background(), path); err != nil {
+		if err := s.StartAt(context.Background(), path, true, DefaultRetention); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -150,7 +150,7 @@ func TestStartupSelectsExplicitProfileOnce(t *testing.T) {
 		t.Fatal("startup did not retain the selected profile")
 	}
 	other := filepath.Join(filepath.Dir(path), "other.jsonl")
-	if err := s.StartAt(context.Background(), other); !errors.Is(err, agentmessages.ErrBadRequest) || j.path != path || j.calls != 1 {
+	if err := s.StartAt(context.Background(), other, true, DefaultRetention); !errors.Is(err, agentmessages.ErrBadRequest) || j.path != path || j.calls != 1 {
 		t.Fatal("startup accepted a different profile", err)
 	}
 }
@@ -164,12 +164,12 @@ func TestStartupRejectsInvalidOrConflictingSelectionBeforeActivation(t *testing.
 	j := &startupJournal{bindErr: agentmessages.ErrBadRequest}
 	s := NewStartup(true, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
 	for _, invalid := range []string{"", "relative/messages.jsonl", path} {
-		if err := s.StartAt(context.Background(), invalid); !errors.Is(err, agentmessages.ErrBadRequest) || j.calls != 0 || j.path != "" {
+		if err := s.StartAt(context.Background(), invalid, true, DefaultRetention); !errors.Is(err, agentmessages.ErrBadRequest) || j.calls != 0 || j.path != "" {
 			t.Fatal("invalid selection activated a profile", err)
 		}
 	}
 	j.bindErr = nil
-	if err := s.StartAt(context.Background(), path); err != nil || j.calls != 1 {
+	if err := s.StartAt(context.Background(), path, true, DefaultRetention); err != nil || j.calls != 1 {
 		t.Fatal("selection rejection prevented a valid later start", err)
 	}
 }
@@ -182,7 +182,123 @@ func TestStartupDisabledProfileSkipsStoreAndClock(t *testing.T) {
 	}
 	j := &startupJournal{bindErr: errors.New("must not bind")}
 	s := NewStartup(false, j, func() time.Time { t.Error("disabled startup read clock"); return time.Time{} }, DefaultRetention, logging.NoopLogger{})
-	if err := s.StartAt(context.Background(), path); err != nil || j.calls != 0 || j.path != "" {
+	if err := s.StartAt(context.Background(), path, false, DefaultRetention); err != nil || j.calls != 0 || j.path != "" {
 		t.Fatal("disabled startup touched the journal", err)
+	}
+}
+
+func TestStartupUsesSelectedSettingsInsteadOfConstructionDefaults(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "messages.jsonl")
+	j := &startupJournal{}
+	s := NewStartup(false, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
+	retention := 2 * 24 * time.Hour
+	if err := s.StartAt(t.Context(), path, true, retention); err != nil {
+		t.Fatal(err)
+	}
+	if j.path != path || j.calls != 1 || j.retention != retention {
+		t.Fatal("selected enabled/retention settings were ignored")
+	}
+	if err := s.Start(t.Context()); err != nil || j.calls != 1 {
+		t.Fatal("legacy startup reapplied construction defaults", err)
+	}
+	for _, settings := range []startupSettings{{false, retention}, {true, DefaultRetention}} {
+		if err := s.StartAt(t.Context(), path, settings.enabled, settings.retention); !errors.Is(err, agentmessages.ErrBadRequest) {
+			t.Fatal("active store accepted different settings", err)
+		}
+	}
+	if j.calls != 1 || j.retention != retention {
+		t.Fatal("rejected settings changed the store")
+	}
+}
+
+func TestStartupSelectedDisabledAndQuarantinedSettingsRemainImmutable(t *testing.T) {
+	t.Parallel()
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			j := &startupJournal{err: ErrCorrupt}
+			s := NewStartup(true, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
+			retention := 24 * time.Hour
+			for range 2 {
+				if err := s.StartAt(t.Context(), path, enabled, retention); err != nil {
+					t.Fatal("selected startup failed unrelated execution", err)
+				}
+			}
+			wantCalls := 0
+			if enabled {
+				wantCalls = 1
+			}
+			if j.calls != wantCalls {
+				t.Fatal("disabled store activated or quarantined store retried")
+			}
+			if err := s.StartAt(t.Context(), path, !enabled, retention); !errors.Is(err, agentmessages.ErrBadRequest) {
+				t.Fatal("selected enablement changed", err)
+			}
+			if err := s.StartAt(t.Context(), path, enabled, DefaultRetention); !errors.Is(err, agentmessages.ErrBadRequest) {
+				t.Fatal("selected retention changed", err)
+			}
+			if j.calls != wantCalls {
+				t.Fatal("settings rejection retried activation")
+			}
+		})
+	}
+}
+
+func TestStartupRejectedSettingsDoNotConsumeSelection(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "messages.jsonl")
+	j := &startupJournal{bindErr: agentmessages.ErrBadRequest}
+	s := NewStartup(false, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
+	for _, retention := range []time.Duration{0, -24 * time.Hour, 24*time.Hour - time.Nanosecond, 24 * time.Hour} {
+		if err := s.StartAt(t.Context(), path, true, retention); !errors.Is(err, agentmessages.ErrBadRequest) {
+			t.Fatal("invalid setting or binding was accepted", err)
+		}
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := s.StartAt(ctx, path, true, 24*time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatal("canceled settings selection was accepted", err)
+	}
+	if j.calls != 0 || j.path != "" {
+		t.Fatal("rejected settings touched the journal")
+	}
+	j.bindErr = nil
+	if err := s.StartAt(t.Context(), path, false, DefaultRetention); err != nil || j.calls != 0 || j.path != "" {
+		t.Fatal("rejected enabled selection replaced later disabled settings", err)
+	}
+}
+
+func TestStartupConcurrentSettingsSelectOneImmutableConfiguration(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "messages.jsonl")
+	j := &startupJournal{}
+	s := NewStartup(false, j, func() time.Time { return time.Unix(1, 0) }, DefaultRetention, logging.NoopLogger{})
+	results := make(chan error, 2)
+	start := make(chan struct{})
+	for _, retention := range []time.Duration{24 * time.Hour, DefaultRetention} {
+		go func() {
+			<-start
+			results <- s.StartAt(t.Context(), path, true, retention)
+		}()
+	}
+	close(start)
+	success, rejected := 0, 0
+	for range 2 {
+		switch err := <-results; {
+		case err == nil:
+			success++
+		case errors.Is(err, agentmessages.ErrBadRequest):
+			rejected++
+		default:
+			t.Fatal(err)
+		}
+	}
+	if success != 1 || rejected != 1 || j.calls != 1 {
+		t.Fatal("competing startup settings did not select exactly one activation")
+	}
+	if err := s.StartAt(t.Context(), path, true, j.retention); err != nil || j.calls != 1 {
+		t.Fatal("selected settings were not idempotent", err)
 	}
 }
