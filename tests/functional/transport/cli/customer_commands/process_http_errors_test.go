@@ -20,7 +20,7 @@ func testCLIHTTPErrorPropagation(t *testing.T) {
 		{id: "F01", status: 404, code: "NOT_FOUND", family: "NOT_FOUND", message: "factory session not found", hint: true},
 		{id: "F02", status: 200, success: true},
 		{id: "F03", status: 200, success: true, empty: true},
-		{id: "F04", status: 500, code: "INTERNAL_ERROR", family: "INTERNAL_SERVER_ERROR", message: "synthetic internal failure"},
+		{id: "F04", status: 500, code: "INTERNAL_ERROR", family: "INTERNAL_SERVER_ERROR", message: "  synthetic internal failure\n"},
 		{id: "F05", status: 500},
 		{id: "F06", command: "session", status: 400, code: "BAD_REQUEST", family: "BAD_REQUEST", message: "invalid scope", details: "server guidance"},
 		{id: "F07", command: "move", status: 409, code: "CONFLICT", family: "CONFLICT", message: "move rejected"},
@@ -63,21 +63,8 @@ type cliHTTPScenario struct {
 }
 
 func (tc cliHTTPScenario) serve(t *testing.T, sessionID string, call int32, w http.ResponseWriter, r *http.Request) {
-	workPath := "/factory-sessions/" + sessionID + "/work"
 	w.Header().Set("Content-Type", "application/json")
-	expectedPath, method := workPath, http.MethodGet
-	switch tc.command {
-	case "session":
-		expectedPath = "/factory-sessions"
-	case "watch":
-		expectedPath = "/factory-sessions/" + sessionID + "/events"
-	case "move":
-		expectedPath += "/work-1"
-		if call == 2 {
-			expectedPath += "/move"
-			method = http.MethodPost
-		}
-	}
+	expectedPath, method := tc.requestTarget(sessionID, call)
 	if r.URL.Path != expectedPath || r.Method != method {
 		t.Errorf("request = %s %s, want %s %s", r.Method, r.URL.Path, method, expectedPath)
 		w.WriteHeader(500)
@@ -181,4 +168,22 @@ func (tc cliHTTPScenario) assertFailure(t *testing.T, result cliResult) {
 	if strings.Contains(result.Stderr, "private") {
 		t.Fatal("private response or continuation leaked")
 	}
+}
+
+func (tc cliHTTPScenario) requestTarget(sessionID string, call int32) (string, string) {
+	workPath := "/factory-sessions/" + sessionID + "/work"
+	expectedPath, method := workPath, http.MethodGet
+	switch tc.command {
+	case "session":
+		expectedPath = "/factory-sessions"
+	case "watch":
+		expectedPath = "/factory-sessions/" + sessionID + "/events"
+	case "move":
+		expectedPath += "/work-1"
+		if call == 2 {
+			expectedPath += "/move"
+			method = http.MethodPost
+		}
+	}
+	return expectedPath, method
 }
