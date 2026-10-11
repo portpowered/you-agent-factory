@@ -124,7 +124,7 @@ func (service *service) Move(cfg MoveConfig) error {
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move response endpointPath=%s status=%d durationMillis=%d", moveEndpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return moveFailureError(resp.StatusCode, errResp)
+			return clihttp.NewAPIErrorFromResponse(resp, errResp, moveFailureError(resp.StatusCode, errResp).Error(), nil)
 		}
 		return fmt.Errorf("move work failed (%d)", resp.StatusCode)
 	}
@@ -184,14 +184,14 @@ func loadWorkStateBeforeMove(cfg MoveConfig) (string, error) {
 	if resp.StatusCode == http.StatusNotFound {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move prefetch response endpointPath=%s status=%d durationMillis=%d", showEndpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return "", fmt.Errorf("work %q not found: %s", cfg.WorkID, errResp.Message)
+			return "", clihttp.NewAPIErrorFromResponse(resp, errResp, fmt.Sprintf("work %q not found: %s", cfg.WorkID, errResp.Message), nil)
 		}
 		return "", fmt.Errorf("work %q not found", cfg.WorkID)
 	}
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move prefetch response endpointPath=%s status=%d durationMillis=%d", showEndpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return "", fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
+			return "", clihttp.NewAPIErrorFromResponse(resp, errResp, fmt.Sprintf("get work failed (%d): %s", resp.StatusCode, errResp.Message), nil)
 		}
 		return "", fmt.Errorf("get work failed (%d)", resp.StatusCode)
 	}

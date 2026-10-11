@@ -127,7 +127,11 @@ func SetResourceCapacity(cfg ResourceCapacityConfig) error {
 		if !ok {
 			response = factoryapi.ErrorResponse{Message: "resource capacity request rejected"}
 		}
-		return &ResourceCapacityRejectedError{StatusCode: resp.StatusCode, Response: response}
+		cause := &ResourceCapacityRejectedError{StatusCode: resp.StatusCode, Response: response}
+		if ok {
+			return clihttp.NewAPIErrorFromResponse(resp, response, cause.Error(), cause)
+		}
+		return cause
 	}
 	var result factoryapi.FactorySessionResourceCapacityResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
