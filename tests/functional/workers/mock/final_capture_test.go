@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -83,6 +85,19 @@ func TestFactoryFinalCapture(t *testing.T) {
 			assertNativeFinalCapture(t, host, id, provider, "PRIVATE accepted <redacted>", environment)
 		})
 	}
+	// The second graph owns a different durable profile. Its immutable edges
+	// deny execution; knowing an ID must not disclose another profile's capture.
+	foreignEnv := finalCaptureEnvironment(t)
+	foreign := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: declaredResultFactory(t), WaitForServiceModeRuntime: true, Env: foreignEnv,
+		Edges: serviceedges.Edges{ProviderCommandRunner: denied, ScriptCommandRunner: denied},
+	})
+	for _, provider := range []string{"codex", "claude"} {
+		t.Run(provider+"/factory/foreign-capture-scope", func(t *testing.T) {
+			t.Parallel()
+			runFinalCaptureScopeScenario(t, host, foreign, routes, denied, provider, foreignEnv)
+		})
+	}
 	t.Run("foreign-worker-cursor", func(t *testing.T) {
 		t.Parallel()
 		var ids []string
@@ -98,6 +113,97 @@ func TestFactoryFinalCapture(t *testing.T) {
 		}
 		assertMockUsagePeerCursor(t, host, t.TempDir(), environment, ids[0], ids[1])
 	})
+}
+
+func runFinalCaptureScopeScenario(t *testing.T, host, foreign *support.FunctionalAPIServer, routes *sharedWorkersMockCommandRunner, denied *directExampleDeniedRunner, provider string, foreignEnv []string) {
+	t.Helper()
+	dir, environment := declaredResultFactory(t), finalCaptureEnvironment(t)
+	body := `{"decision":"ACCEPTED","output":"PRIVATE_NATIVE_FINAL"}`
+	stdout := support.CodexSuccessStdout(body)
+	if provider == "claude" {
+		stdout = claudeNativeFinalFixture(t, body)
+	}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+	routes.setFor(dir, runner)
+	t.Cleanup(func() { routes.setFor(dir, nil) })
+	id := invokeNativeFinalFactory(t, host, dir, provider, environment)
+	assertNativeFinalCapture(t, host, id, provider, body, environment)
+	before := assertRejectedCapturePages(t, host, id, environment)
+	peerDir := declaredResultFactory(t)
+	peerScope := support.OpenFactorySessionAt(t, host.URL(), peerDir).Session.Id
+	assertFinalCaptureScopeDenial(t, host, environment, id, peerScope)
+	assertFinalCaptureScopeDenial(t, foreign, foreignEnv, id, "")
+	if after := assertRejectedCapturePages(t, host, id, environment); !reflect.DeepEqual(before, after) {
+		t.Fatal("denied reads changed committed capture")
+	}
+	if len(runner.Requests()) != 1 || denied.calls.Load() != 0 {
+		t.Fatalf("denied read effects: provider=%d forbidden=%d", len(runner.Requests()), denied.calls.Load())
+	}
+}
+
+func assertFinalCaptureScopeDenial(t *testing.T, host *support.FunctionalAPIServer, environment []string, id, scope string) {
+	t.Helper()
+	connection, ctx := mockUsageMCP(t, host, t.TempDir(), environment)
+	views := []string{"summary", "transcript", "logs"}
+	if scope != "" {
+		// Logs uses the top-level Worker ID; there is no Factory-scoped route.
+		views = []string{"summary", "transcript"}
+	}
+	for _, view := range views {
+		args := []string{"you", "--json", "--server", host.URL(), "worker-sessions", "read", "--worker-session-id", id, "--view", view}
+		if view == "summary" {
+			args = []string{"you", "--json", "--server", host.URL(), "worker-sessions", "show", "--worker-session-id", id}
+		}
+		arguments := map[string]any{"action": "READ", "workerSessionId": id, "view": view}
+		mcpCode := "worker_session.not_found"
+		path := "/worker-sessions/" + url.PathEscape(id)
+		code := factoryapi.ErrorResponseCodeNOTFOUND
+		if view != "summary" {
+			path += "/" + view
+			if view == "logs" {
+				code = "WORKER_SESSION_NOT_FOUND"
+			}
+		}
+		if scope != "" {
+			args = append(args, "--session", scope)
+			arguments["factorySessionId"] = scope
+			// MCP READ is ID-scoped and rejects a Factory selector rather than
+			// accepting it as authority. Preserve that published contract.
+			mcpCode = "worker_session.invalid_request"
+			path = "/factory-sessions/" + url.PathEscape(scope) + path
+		}
+		inputs := support.FakeInputs(ctx, args)
+		inputs.Input.Env, inputs.Input.WorkingDirectory = environment, t.TempDir()
+		if err := host.Execute(t, inputs.Input); err == nil || inputs.Stdout() != "" {
+			t.Fatalf("foreign capture CLI disclosed %s: %v %s", view, err, inputs.Stdout())
+		}
+		var cliFailure factoryapi.ErrorResponse
+		if err := json.Unmarshal([]byte(inputs.Stderr()), &cliFailure); err != nil || cliFailure.Code != "WORKER_SESSION_NOT_FOUND" {
+			t.Fatalf("foreign capture CLI error: %s %v", inputs.Stderr(), err)
+		}
+		assertMockUsageHTTPNotFound(t, host, path, code)
+		result, err := connection.CallTool(ctx, &mcp.CallToolParams{Name: "you.subagent", Arguments: arguments})
+		if err != nil || !result.IsError {
+			t.Fatalf("foreign capture MCP disclosed %s: %+v %v", view, result, err)
+		}
+		assertFinalCaptureMCPDenial(t, result, mcpCode)
+	}
+}
+
+func assertFinalCaptureMCPDenial(t *testing.T, result *mcp.CallToolResult, code string) {
+	t.Helper()
+	var failure struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	encoded, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(encoded, &failure); err != nil || failure.Error.Code != code {
+		t.Fatalf("foreign capture MCP error: %s %v", encoded, err)
+	}
 }
 
 // Equal text is not a duplicate identity. Conversely, successive snapshots of
