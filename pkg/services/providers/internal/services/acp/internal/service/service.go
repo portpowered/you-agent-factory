@@ -903,8 +903,20 @@ func (service *Service) ValidatePrerequisites(ctx context.Context, id providers.
 	}
 	if lookupErr != nil {
 		// Locator errors and configured command text are private. The public
-		// admission mapper supplies the existing actionable guidance.
-		return providers.ErrProviderUnavailable
+		// admission mapper supplies the existing actionable guidance. Retain
+		// only the safe failure classification for execution preflight callers.
+		failure := providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "ACP executable prerequisite is unavailable",
+		}
+		var lookupFailure providers.ExecuteFailure
+		if errors.As(lookupErr, &lookupFailure) && lookupFailure.Diagnostics != nil &&
+			lookupFailure.Diagnostics.Metadata["work-failure-type"] == "missing_executable" {
+			failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+				"work-failure-type": "missing_executable",
+			}}
+		}
+		return fmt.Errorf("%w: %w", providers.ErrProviderUnavailable, failure)
 	}
 	return nil
 }

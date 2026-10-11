@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,8 +59,8 @@ func TestACPPrerequisiteLookupIsFreshAndDoesNotLaunch(t *testing.T) {
 				if !errors.Is(err, want) {
 					t.Fatalf("present=%v: %v", present, err)
 				}
-				if !present && err.Error() != providers.ErrProviderUnavailable.Error() {
-					t.Fatal("private lookup error escaped")
+				if !present {
+					assertSafeMissingExecutablePrerequisite(t, err, executable)
 				}
 			}
 			if calls != 3 {
@@ -76,6 +77,18 @@ func TestACPPrerequisiteLookupIsFreshAndDoesNotLaunch(t *testing.T) {
 				t.Fatal("canceled check performed lookup")
 			}
 		})
+	}
+}
+
+func assertSafeMissingExecutablePrerequisite(t *testing.T, err error, executable string) {
+	t.Helper()
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency ||
+		failure.Diagnostics == nil || failure.Diagnostics.Metadata["work-failure-type"] != "missing_executable" {
+		t.Fatalf("missing executable lost typed classification: %v", err)
+	}
+	if strings.Contains(err.Error(), executable) || strings.Contains(err.Error(), "private") {
+		t.Fatal("private lookup error escaped")
 	}
 }
 
