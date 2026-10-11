@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -506,19 +507,88 @@ func v2LifecycleSnapshot(recordedAt time.Time, eventCount int, finalized bool) r
 	return recordings.RecordingSnapshot{Status: status, Events: events}
 }
 
-func TestNewRecordingFlushTickerFactoryStopsTicker(t *testing.T) {
-	t.Parallel()
-
-	factory := NewRecordingFlushTickerFactory()
-	ticker := factory(10 * time.Millisecond)
-	defer ticker.Stop()
-	select {
-	case <-ticker.Ticks:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("expected flush ticker to emit")
-	}
+// Timer registration acknowledges delivery and re-arm without wall-time sleeps.
+type flushCadenceClock struct {
+	*platformclock.Deterministic
+	armed chan struct{}
 }
 
+func (clock *flushCadenceClock) NewTimer(d time.Duration) platformclock.Timer {
+	timer := clock.Deterministic.NewTimer(d)
+	clock.armed <- struct{}{}
+	return timer
+}
+func awaitFlushCadence(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cadence did not re-arm")
+	}
+}
+func TestNewRecordingFlushTickerFactoryStopsTicker(t *testing.T) {
+	t.Parallel()
+	for _, stopBeforeFire := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stop-before-fire=%t", stopBeforeFire), func(t *testing.T) {
+			clock := &flushCadenceClock{Deterministic: platformclock.NewDeterministic(time.Unix(0, 0), time.Second), armed: make(chan struct{}, 8)}
+			factory := NewRecordingFlushTickerFactory(clock)
+			select {
+			case <-clock.armed:
+				t.Fatal("factory activated timer")
+			default:
+			}
+			ticker := factory(10 * time.Second)
+			defer ticker.Stop()
+			awaitFlushCadence(t, clock.armed)
+			clock.SetTick(9)
+			select {
+			case <-ticker.Ticks:
+				t.Fatal("early tick")
+			default:
+			}
+			if !stopBeforeFire {
+				clock.SetTick(10)
+				awaitFlushCadence(t, clock.armed)
+				if tick := <-ticker.Ticks; !tick.Equal(time.Unix(10, 0)) {
+					t.Fatalf("tick = %v", tick)
+				}
+				clock.SetTick(20)
+				awaitFlushCadence(t, clock.armed)
+				// Hold the consumer over a large jump: only one tick may be pending.
+				clock.SetTick(105)
+				awaitFlushCadence(t, clock.armed)
+				<-ticker.Ticks
+				select {
+				case <-ticker.Ticks:
+					t.Fatal("missed periods were queued")
+				default:
+				}
+				clock.SetTick(109)
+				select {
+				case <-ticker.Ticks:
+					t.Fatal("cadence fired early after jump")
+				default:
+				}
+				clock.SetTick(110)
+				awaitFlushCadence(t, clock.armed)
+				// Stop must discard this pending delivery as well as cancel re-arm.
+			}
+			ticker.Stop()
+			ticker.Stop()
+			clock.SetTick(1000)
+			select {
+			case <-ticker.Ticks:
+				t.Fatal("tick after joined Stop")
+			default:
+			}
+			select {
+			case <-clock.armed:
+				t.Fatal("timer re-armed after Stop")
+			default:
+			}
+		})
+	}
+}
 func TestRecordingSnapshotWritersRedactBeforeSerialization(t *testing.T) {
 	t.Parallel()
 

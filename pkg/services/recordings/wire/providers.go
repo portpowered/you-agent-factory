@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -208,6 +210,6 @@ func NewReplayRecordingSnapshotWriter(
 	return recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile, appendFile, readFile)
 }
 
-func NewRecordingFlushTickerFactory() recordings.RecordingFlushTickerFactory {
-	return recordingsinternal.NewRecordingFlushTickerFactory()
+func NewRecordingFlushTickerFactory(scheduler platformclock.TimerSource) recordings.RecordingFlushTickerFactory {
+	return recordingsinternal.NewRecordingFlushTickerFactory(scheduler)
 }
