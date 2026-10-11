@@ -151,10 +151,8 @@ func assertCapturedCodexRestartLogs(t *testing.T, logs api.WorkerSessionLogPage)
 		if record.Event.Payload["kind"] != "TOOL" {
 			continue
 		}
-		raw, err := json.Marshal(record.Event.Payload)
-		var draft workers.Draft
-		var payload workers.ToolPayload
-		if err != nil || json.Unmarshal(raw, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil || index >= len(wantIDs) || payload.ToolCallID != wantIDs[index] || payload.Status != wantStatuses[index] {
+		payload := decodeCapturedCodexRestartTool(t, record.Event.Payload)
+		if index >= len(wantIDs) || payload.ToolCallID != wantIDs[index] || payload.Status != wantStatuses[index] {
 			t.Fatal("restart lost native-shaped tool lifecycle facts")
 		}
 		name := "command_execution"
@@ -170,6 +168,17 @@ func assertCapturedCodexRestartLogs(t *testing.T, logs api.WorkerSessionLogPage)
 	if index != len(wantIDs) || logs.CommittedPosition != int64(len(logs.Events)) {
 		t.Fatal("restart lost or duplicated captured lifecycle entries")
 	}
+}
+
+func decodeCapturedCodexRestartTool(t *testing.T, value map[string]interface{}) workers.ToolPayload {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	var draft workers.Draft
+	var payload workers.ToolPayload
+	if err != nil || json.Unmarshal(raw, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+		t.Fatal("restart tool payload invalid")
+	}
+	return payload
 }
 
 func assertCapturedCodexRestartResult(t *testing.T, payload workers.ToolPayload, index int) {

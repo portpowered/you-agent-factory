@@ -115,11 +115,22 @@ func assertCapturedCodexPartialReads(t *testing.T, ctx context.Context, fixture 
 		assertCapturedCodexUnavailableTranscript(t, ctx, fixture, scenario, id, false)
 		return
 	}
+	assertCapturedCodexPartialTranscript(t, ctx, fixture, scenario, id)
+}
+
+func assertCapturedCodexPartialTranscript(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string) {
+	t.Helper()
 	status, body := t7HTTP(t, ctx, http.MethodGet, fixture.baseURL+"/worker-sessions/"+id+"/transcript", nil)
 	var transcript api.WorkerSessionTranscriptResponse
 	if status != http.StatusOK || json.Unmarshal([]byte(body), &transcript) != nil || len(transcript.Entries) != 2 {
 		t.Fatal("partial transcript lost emitted call/output")
 	}
+	assertCapturedCodexPartialTranscriptFacts(t, transcript, body)
+	assertCapturedCodexPartialTranscriptParity(t, ctx, fixture, scenario, id, transcript)
+}
+
+func assertCapturedCodexPartialTranscriptFacts(t *testing.T, transcript api.WorkerSessionTranscriptResponse, body string) {
+	t.Helper()
 	for _, entry := range transcript.Entries {
 		if entry.CallId == nil || *entry.CallId != "partial" || entry.Status == nil || *entry.Status != "in_progress" {
 			t.Fatal("partial transcript invented completion or lost identity")
@@ -131,7 +142,6 @@ func assertCapturedCodexPartialReads(t *testing.T, ctx context.Context, fixture 
 	if strings.Contains(body, "exit_code") || strings.Contains(body, "private-command") || strings.Contains(body, "private-output") || strings.Contains(body, "must never arrive") {
 		t.Fatal("partial transcript invented unavailable facts or leaked private summary")
 	}
-	assertCapturedCodexPartialTranscriptParity(t, ctx, fixture, scenario, id, transcript)
 }
 
 func assertCapturedCodexStaleAttempt(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string, before api.WorkerSessionLogPage) {
@@ -206,10 +216,8 @@ func assertCapturedCodexPartialLogs(t *testing.T, page api.WorkerSessionLogPage)
 		if record.Event.Payload["kind"] != "TOOL" {
 			continue
 		}
-		raw, err := json.Marshal(record.Event.Payload)
-		var draft workers.Draft
-		var payload workers.ToolPayload
-		if err != nil || json.Unmarshal(raw, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil || payload.ToolCallID != "partial" || payload.ToolName != "command_execution" || payload.Status != "in_progress" {
+		payload, raw := decodeCapturedCodexPartialTool(t, record.Event.Payload)
+		if payload.ToolCallID != "partial" || payload.ToolName != "command_execution" || payload.Status != "in_progress" {
 			t.Fatal("partial tool facts changed")
 		}
 		if strings.Contains(string(raw), "exit_code") || strings.Contains(string(raw), "private-command") || strings.Contains(string(raw), "private-output") {
@@ -220,6 +228,17 @@ func assertCapturedCodexPartialLogs(t *testing.T, page api.WorkerSessionLogPage)
 	if count != 2 || page.CommittedPosition != int64(len(page.Events)) {
 		t.Fatal("partial tool lifecycle lost or duplicated facts")
 	}
+}
+
+func decodeCapturedCodexPartialTool(t *testing.T, value map[string]interface{}) (workers.ToolPayload, []byte) {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	var draft workers.Draft
+	var payload workers.ToolPayload
+	if err != nil || json.Unmarshal(raw, &draft) != nil || json.Unmarshal(draft.Payload, &payload) != nil {
+		t.Fatal("partial tool payload invalid")
+	}
+	return payload, raw
 }
 
 func assertCapturedCodexPartialTranscriptParity(t *testing.T, ctx context.Context, fixture *invokeContinuePackageFixture, scenario *invokeContinueScenario, id string, want api.WorkerSessionTranscriptResponse) {
