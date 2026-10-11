@@ -276,6 +276,32 @@ describe("useWorkerSessionTimeline", () => {
   });
 });
 
+describe("direct Worker Session inspection", () => {
+  it("requires an explicit direct fact before following without a Factory Session and closes on scope loss", () => {
+    const { result, rerender } = renderHook(
+      ({ direct }) =>
+        useWorkerSessionTimeline({
+          factorySessionID: null,
+          workerSessionID: "worker-1",
+          direct,
+          openStream,
+        }),
+      { initialProps: { direct: false } },
+    );
+    expect(streams).toHaveLength(0);
+    expect(result.current.status).toBe("idle");
+    rerender({ direct: true });
+    expect(streams).toHaveLength(1);
+    expect(streams[0].options.direct).toBe(true);
+    expect(streams[0].options.factorySessionID).toBeNull();
+    act(() => streams[0].emitFrame(frame("RECORD", record(1))));
+    expect(result.current.records).toHaveLength(1);
+    rerender({ direct: false });
+    expect(streams[0].closed).toBe(true);
+    expect(result.current.status).toBe("idle");
+  });
+});
+
 describe("useWorkerSessionTimelineTarget", () => {
   it("loads Worker Session targets for the selected Work and selects the first server-ordered attempt", async () => {
     const loadTargets = vi

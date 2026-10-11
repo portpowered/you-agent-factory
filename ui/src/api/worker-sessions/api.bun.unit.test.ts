@@ -8,6 +8,22 @@ import {
 import { listWorkerSessionsForWork } from "./observations";
 
 describe("Worker Session event stream API", () => {
+  it("reads a publicly confirmed direct successor through the captured host's root events endpoint", () => {
+    expect(
+      buildWorkerSessionEventStreamURL({
+        factorySessionID: null,
+        workerSessionID: "direct successor",
+        direct: true,
+        origin: "http://selected-host",
+      }),
+    ).toBe("http://selected-host/worker-sessions/direct%20successor/events");
+    expect(() =>
+      buildWorkerSessionEventStreamURL({
+        factorySessionID: null,
+        workerSessionID: "unconfirmed",
+      }),
+    ).toThrow("Worker Session observation scope is required.");
+  });
   it("builds the provider-neutral scoped URL with a reconnect cursor", () => {
     expect(
       buildWorkerSessionEventStreamURL({
