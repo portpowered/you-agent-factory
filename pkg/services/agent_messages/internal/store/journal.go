@@ -14,12 +14,15 @@ import (
 )
 
 // FileSystem is the exact file effect accepted by the journal. The production
-// Local adapter supplies durable, truncatable descriptors; the store owns the
+// adapter supplies durable, truncatable descriptors; the store owns the
 // format, transaction ordering and rollback policy.
 type FileSystem interface {
 	ReadFile(string) ([]byte, error)
 	MkdirAll(string, fs.FileMode) error
 	OpenFile(string, int, fs.FileMode) (io.WriteCloser, error)
+	// ReplaceDurable atomically publishes flushed bytes. Failure preserves the
+	// existing file; implementations must never remove it before replacement.
+	ReplaceDurable(string, []byte) error
 }
 
 type durableFile interface {

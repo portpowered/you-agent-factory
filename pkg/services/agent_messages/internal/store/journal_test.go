@@ -19,7 +19,17 @@ import (
 )
 
 type testFiles struct {
-	open func(string, int, fs.FileMode) (io.WriteCloser, error)
+	open    func(string, int, fs.FileMode) (io.WriteCloser, error)
+	replace func(string, []byte) error
+}
+
+func (files testFiles) ReplaceDurable(path string, data []byte) error {
+	if files.replace != nil {
+		return files.replace(path, data)
+	}
+	// Controlled successful replacement effect. Host atomic replacement and
+	// flush failures belong to the platform adapter's own tests.
+	return os.WriteFile(path, data, 0o600)
 }
 
 func (testFiles) ReadFile(path string) ([]byte, error)         { return os.ReadFile(path) }
