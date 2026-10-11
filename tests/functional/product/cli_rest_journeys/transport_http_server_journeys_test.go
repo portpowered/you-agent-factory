@@ -33,6 +33,7 @@ func TestRESTServerJourneys(t *testing.T) {
 	t.Run("TestAPIStatusReportsReadyAfterStartup", testTransporthttpserverAPIStatusReportsReadyAfterStartup)
 	t.Run("TestAPIStatusDoesNotLeakInternalConfiguration", testTransporthttpserverAPIStatusDoesNotLeakInternalConfiguration)
 	t.Run("TestAPIStatusMissingSessionDoesNotFallBack", testTransporthttpserverAPIStatusMissingSessionDoesNotFallBack)
+	t.Run("TestAPIAddressedReadDeadlinePreservesPeer", testTransporthttpserverAPIAddressedReadDeadlinePreservesPeer)
 	t.Run("TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary", testTransporthttpserverWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary)
 	functionalevidence.Covers(t, "rest/getEventsBySessionId", "rest/getStatusBySessionId", "rest/listWorkBySessionId", "rest/submitWorkBySessionId")
 }
