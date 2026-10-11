@@ -5,16 +5,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -22,6 +25,45 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestRecipientChainReviveLimitCountsConfirmedSuccessors(t *testing.T) {
+	t.Parallel()
+	revival := &workerGate{started: make(chan map[string]string, 6), requests: make(chan platformprocess.CommandRequest, 6), release: make(chan struct{})}
+	// Every controlled resume completes; the public terminal stream gates the
+	// next send against the ended head rather than racing its lifecycle.
+	close(revival.release)
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	for i := range 6 {
+		request := map[string]any{"requestId": fmt.Sprintf("revive-%d", i), "to": map[string]string{"workerSessionId": "lead"}, "body": fmt.Sprintf("independent ask %d", i)}
+		message := f.send(t, request, lane)
+		successor := assertReviveAdmission(t, f, revival, message, lead)
+		f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+		assertConcurrentReplay(t, f, request, lane, message.MessageId)
+	}
+	request := map[string]any{"requestId": "seventh", "to": map[string]string{"workerSessionId": "lead"}, "body": "preserve the seventh ask"}
+	limited := f.sendRaw(t, request, lane)
+	if limited.Status != "QUEUED" || limited.Reason == nil || *limited.Reason != "REVIVE_LIMIT" || limited.RevivedWorkerSessionId != nil {
+		t.Fatal("seventh confirmed-chain revive did not remain queued")
+	}
+	assertProviderRetry(t, f, request, lane, limited)
+	page := readPage(t, f, "/messages?threadId="+limited.ThreadId, lane)
+	if len(page.Messages) != 1 || page.Messages[0].MessageId != limited.MessageId || page.Messages[0].Body != limited.Body {
+		t.Fatal("revive limit lost the readable queued ask")
+	}
+	select {
+	case <-revival.requests:
+		t.Fatal("revive limit or exact retries started another provider")
+	default:
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("chain revive quota changed Factory Events")
+	}
+	f.endWorker(t, "lane")
+}
 
 func TestConfiguredLimitsPrivacyAndConcurrentReplay(t *testing.T) {
 	t.Parallel()

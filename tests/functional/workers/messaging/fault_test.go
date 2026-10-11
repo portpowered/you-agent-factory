@@ -27,6 +27,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
@@ -37,6 +38,7 @@ type messageOutcomeFileSystem struct {
 	entered, release chan struct{}
 	unblock          sync.Once
 	reject           bool
+	state            string
 }
 
 type messageOutcomeFile struct {
@@ -55,10 +57,16 @@ func (g *messageOutcomeFileSystem) OpenFile(path string, flags int, mode fs.File
 
 func (f *messageOutcomeFile) Write(data []byte) (int, error) {
 	var record struct {
-		Kind string `json:"kind"`
+		Kind            string `json:"kind"`
+		DeliveryIntents []struct {
+			State string `json:"state"`
+		} `json:"deliveryIntents"`
 	}
 	if json.Unmarshal(data, &record) == nil {
 		f.outcome = record.Kind == "REVIVE_OUTCOME"
+		if f.gate.state != "" {
+			f.outcome = f.outcome && len(record.DeliveryIntents) == 1 && record.DeliveryIntents[0].State == f.gate.state
+		}
 	}
 	return f.File.Write(data)
 }
@@ -88,6 +96,32 @@ type outcomeSendResponse struct {
 	body   []byte
 }
 
+// The diagnostic sink acknowledges completion of the controlled failure.
+// Durable facts and public streams remain the behavioral assertions.
+type outcomeFailureSignal struct {
+	zapcore.Core
+	failed chan struct{}
+	once   *sync.Once
+}
+
+func (c *outcomeFailureSignal) With(fields []zapcore.Field) zapcore.Core {
+	return &outcomeFailureSignal{Core: c.Core.With(fields), failed: c.failed, once: c.once}
+}
+
+func (c *outcomeFailureSignal) Check(entry zapcore.Entry, checked *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if c.Enabled(entry.Level) {
+		return checked.AddCore(entry, c)
+	}
+	return checked
+}
+
+func (c *outcomeFailureSignal) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	if entry.Message == "Agent Message revival outcome unavailable" {
+		c.once.Do(func() { close(c.failed) })
+	}
+	return c.Core.Write(entry, fields)
+}
+
 func TestReviveDeliveryWaitsForOutcomeFlush(t *testing.T) {
 	t.Parallel()
 	for _, reject := range []bool{false, true} {
@@ -95,6 +129,97 @@ func TestReviveDeliveryWaitsForOutcomeFlush(t *testing.T) {
 			t.Parallel()
 			exerciseOutcomeFlush(t, reject)
 		})
+	}
+}
+
+// The provider can confirm progress after send has returned. Its final
+// observation still waits for the selected profile's durable outcome flush.
+func TestProviderConfirmedDeliveryWaitsForOutcomeFlush(t *testing.T) {
+	t.Parallel()
+	for _, reject := range []bool{false, true} {
+		t.Run(map[bool]string{false: "committed", true: "refused"}[reject], func(t *testing.T) {
+			t.Parallel()
+			exerciseProviderOutcomeFlush(t, reject)
+		})
+	}
+}
+
+func exerciseProviderOutcomeFlush(t *testing.T, reject bool) {
+	t.Helper()
+	gate := &messageOutcomeFileSystem{entered: make(chan struct{}), release: make(chan struct{}), reject: reject, state: "ACCEPTED"}
+	defer gate.unblock.Do(func() { close(gate.release) })
+	progress := make(chan struct{})
+	revival := &workerGate{started: make(chan map[string]string, 1), requests: make(chan platformprocess.CommandRequest, 1), release: make(chan struct{}), progress: progress}
+	core, _ := observer.New(zap.InfoLevel)
+	failure := &outcomeFailureSignal{Core: core, failed: make(chan struct{}), once: &sync.Once{}}
+	signal := &subscriptionSignal{Core: failure, ready: make(chan struct{}), once: &sync.Once{}}
+	f := startHostRunner(t, t.TempDir(), t.TempDir(), "", serviceedges.Edges{AgentMessageStoreFileSystem: gate, ProcessLogger: zap.New(signal)}, nil, revival, "lead", "lane")
+	lead := f.invoke(t, "lead", nil)
+	lane := f.invoke(t, "lane", lead)
+	f.endWorker(t, "lead")
+	before := messageFactoryStreams(t, f, "lead", "lane")
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	frames, finished := make(chan []byte, 8), make(chan error, 1)
+	go streamFramesAt(ctx, f.server.URL(), "/messages?follow=true", lane, frames, finished)
+	select {
+	case <-signal.ready:
+	case <-ctx.Done():
+		t.Fatal("provider flush follow did not register")
+	}
+	request := map[string]any{"requestId": "provider-flush", "to": map[string]string{"workerSessionId": "lead"}, "body": "durable provider confirmation"}
+	pending := f.sendRaw(t, request, lane)
+	assertPendingProviderResponse(t, pending)
+	assertPendingProviderFrames(t, ctx, pending, frames, finished)
+	successor := <-revival.started
+	<-revival.requests
+	close(progress)
+	select {
+	case <-gate.entered:
+	case <-ctx.Done():
+		t.Fatal("provider confirmation did not reach outcome flush")
+	}
+	select {
+	case <-frames:
+		t.Fatal("provider delivery published before durable flush")
+	default:
+	}
+	gate.unblock.Do(func() { close(gate.release) })
+	final := pending
+	if reject {
+		select {
+		case <-failure.failed:
+		case <-ctx.Done():
+			t.Fatal("provider outcome failure did not complete")
+		}
+		assertProviderRetry(t, f, request, lane, pending)
+		select {
+		case <-frames:
+			t.Fatal("refused provider flush published delivery")
+		default:
+		}
+	} else {
+		final = f.awaitDeliveryOutcome(t, lane, pending)
+		assertProviderFinalOutcome(t, ctx, f, final, successor, frames, finished, false)
+		assertProviderRetry(t, f, request, lane, final)
+	}
+	if after := messageFactoryStreams(t, f, "lead", "lane"); !reflect.DeepEqual(before, after) {
+		t.Fatal("provider flush changed Factory Events")
+	}
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(15 * time.Second):
+		t.Fatal("provider flush follow did not join")
+	}
+	close(revival.release)
+	f.waitEndedWorker(t, successor["YOU_WORKER_SESSION_ID"])
+	f.endWorker(t, "lane")
+	f.server.Close(t)
+	second := startHost(t, f.home, f.dir, "")
+	page := readPage(t, second, "/messages?threadId="+pending.ThreadId, nil)
+	if len(page.Messages) != 1 || !reflect.DeepEqual(page.Messages[0], final) {
+		t.Fatal("reconstruction changed the last durable provider outcome")
 	}
 }
 

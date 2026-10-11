@@ -37,9 +37,14 @@ func TestReviveSendToStartingLatency(t *testing.T) {
 			t.Fatal("successor did not reach STARTING", ctx.Err())
 		}
 		values[i] = admitted.at.Sub(started)
-		if response.Message.Status != "DELIVERED_REVIVE" || response.Message.RevivedWorkerSessionId == nil ||
-			*response.Message.RevivedWorkerSessionId != admitted.env["YOU_WORKER_SESSION_ID"] {
-			t.Fatal("measurement did not observe the admitted successor")
+		// This runner withholds all provider output. STARTING proves admission,
+		// while the message must remain pending until resumed progress exists.
+		if response.Message.Status != "QUEUED" || response.Message.Reason == nil || *response.Message.Reason != "REVIVE_PENDING" ||
+			response.Message.RevivedWorkerSessionId != nil || response.Message.To.DeliveredWorkerSessionId != nil {
+			t.Fatal("measurement claimed delivery before provider progress")
+		}
+		if admitted.env["YOU_WORKER_SESSION_ID"] == "" || admitted.env["YOU_WORKER_SESSION_TOKEN"] == "" {
+			t.Fatal("measurement did not observe an authenticated successor")
 		}
 	}
 	sort.Slice(values, func(a, b int) bool { return values[a] < values[b] })
