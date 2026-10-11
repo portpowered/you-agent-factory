@@ -304,9 +304,23 @@ func assertArchivedUnknownCLIHTTP(t *testing.T, server *support.FunctionalAPISer
 // The legacy cell supplies compatible committed input at the authorized store
 // edge. It proves public reading of a pre-catalog name, not current production
 // emission of that format. All identities and terminal records remain real.
-type legacyOpeningNameStore struct{ *terminalCommitGate }
+type legacyOpeningNameStore struct {
+	*terminalCommitGate
+	namelessScope string
+}
 
 func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
+	// Compatible legacy captures can retain exact membership without a name or
+	// originating board artifact. Supply that absence at the authorized storage
+	// edge; the current board still knows the public Work's name.
+	if record.FactorySessionID == store.namelessScope {
+		record.WorkName, record.OriginatingArtifact = "", ""
+		var err error
+		record.Record.Payload, err = namelessArchivedPayload(record.Record.Payload)
+		if err != nil {
+			return err
+		}
+	}
 	if record.WorkName == "legacy-name" {
 		var draft workers.Draft
 		var opening workers.SessionPayload
@@ -343,20 +357,55 @@ func (store *legacyOpeningNameStore) PersistWorkerRecord(ctx context.Context, re
 	return store.terminalCommitGate.PersistWorkerRecord(ctx, record)
 }
 
+func namelessArchivedPayload(payload json.RawMessage) (json.RawMessage, error) {
+	var draft workers.Draft
+	if err := json.Unmarshal(payload, &draft); err != nil {
+		return nil, err
+	}
+	// Explicit zero counters are compatible committed input. Normal native
+	// command normalization can omit zero-only usage; actual configured mock
+	// emission is a separate prebuilt-artifact witness, not claimed here.
+	if draft.Kind == workers.KindUsage {
+		draft.Payload = json.RawMessage(`{"origin":"SYNTHETIC","inputTokens":0,"outputTokens":0,"totalTokens":0}`)
+		return json.Marshal(draft)
+	}
+	if draft.Kind != workers.KindSession {
+		return payload, nil
+	}
+	var session workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &session); err != nil {
+		return nil, err
+	}
+	var metadata map[string]json.RawMessage
+	if len(session.SessionMetadata) == 0 {
+		return payload, nil
+	}
+	if err := json.Unmarshal(session.SessionMetadata, &metadata); err != nil {
+		return nil, err
+	}
+	delete(metadata, "labels")
+	var err error
+	session.SessionMetadata, err = json.Marshal(metadata)
+	if err != nil {
+		return nil, err
+	}
+	draft.Payload, err = json.Marshal(session)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(draft)
+}
+
 func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	t.Parallel()
 	runner, gates, cases, config := committedTerminalFixture(t)
 	// Independent sessions share one host and edge shape. Joined reopen
 	// must be sequential: the captured profile has exactly one writer.
 	cases = []committedTerminalCase{cases[8], cases[12]}
-	peer := cases[0]
-	peer.model, peer.scope = "archive-peer-codex-COMPLETED", uuid.NewString()
-	peer.dir = support.ScaffoldSingleStepFactory(t, peer.model)
-	support.ClearSeedInputs(t, peer.dir)
-	support.WriteAgentConfig(t, peer.dir, "processor", support.BuildModelWorkerConfig(peer.provider, peer.model))
-	gates[peer.model] = make(chan struct{})
-	runner.slots[peer.model] = newFunctionalWorkerGate(gates[peer.model])
+	peer := newArchivedPeerCase(t, cases[0], "archive-peer-codex-COMPLETED", runner, gates)
 	cases = append(cases, peer)
+	nameless := newArchivedPeerCase(t, peer, "archive-nameless-codex-COMPLETED", runner, gates)
+	cases = append(cases, nameless)
 	first := make(map[string]*functionalWorkerGate)
 	for _, cell := range cases {
 		first[cell.model] = newFunctionalWorkerGate(make(chan struct{}))
@@ -368,7 +417,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	}
 	backing := &terminalCommitGate{entered: make(chan struct{}), proceed: make(chan struct{})}
 	backing.release()
-	config.Edges.WorkerRecordingWriter = &legacyOpeningNameStore{terminalCommitGate: backing}
+	config.Edges.WorkerRecordingWriter = &legacyOpeningNameStore{terminalCommitGate: backing, namelessScope: nameless.scope}
 	config.Edges.WorkerRecordingStoreObserver = func(store recordings.WorkerRecordingStore) { backing.WorkerRecordingStore = store }
 	// Close a real empty-board recording before admitting any Work. Later
 	// restoration consumes this immutable public recording, never a rewritten
@@ -377,7 +426,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	earlier.Close(t)
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".latest.json")
 	server := support.StartFunctionalAPIServer(t, config)
-	names := []string{"catalog-name", "catalog-name", "legacy-name", "legacy-name", "peer-catalog-name", "peer-catalog-name"}
+	names := []string{"catalog-name", "catalog-name", "legacy-name", "legacy-name", "peer-catalog-name", "peer-catalog-name", "catalog-name", "catalog-name"}
 	before := make([]factoryapi.WorkerSessionObservation, 2*len(cases))
 	logs := make([]factoryapi.WorkerSessionLogPage, len(before))
 	cursors := make([]string, len(before))
@@ -405,6 +454,7 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 		}
 		cursors[index] = *page.NextToken
 	}
+	assertArchivedExplicitZeroUsage(t, before[len(before)-1])
 	emptyWorks := submitArchivedPeerNamedWork(t, server, cases, names)
 	assertArchivedProviderCollision(t, server, before, true)
 	server.Close(t)
@@ -414,9 +464,12 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	assertArchivedEmptyWorkParity(t, latest, emptyWorks, true)
 	assertArchivedProviderCollision(t, latest, before, true)
 	latest.Close(t)
+	// A peer has the same known name, but cannot supply a missing legacy fact.
+	archivedNames := append([]string(nil), names...)
+	archivedNames[6], archivedNames[7] = "", ""
 	config.BeforeStart = archivedResumeBoards(cases, home, ".older.json", ".restored.json")
 	reopened := support.StartFunctionalAPIServer(t, config)
-	assertArchivedResumedBoard(t, reopened, before, logs, names, cursors, transcripts, false)
+	assertArchivedResumedBoard(t, reopened, before, logs, archivedNames, cursors, transcripts, false)
 	assertArchivedEmptyWorkParity(t, reopened, emptyWorks, false)
 	assertArchivedProviderCollision(t, reopened, before, false)
 	reopened.Close(t)
@@ -424,11 +477,22 @@ func TestWorkerSessionArchivedOwnScopeParity(t *testing.T) {
 	// Its capture remains read-only, exact-scope authority on the same profile.
 	config.BeforeStart = nil
 	closedScopes := support.StartFunctionalAPIServer(t, config)
-	assertArchivedClosedScopeParity(t, closedScopes, before, logs, names, transcripts)
+	assertArchivedClosedScopeParity(t, closedScopes, before, logs, archivedNames, transcripts)
 	assertArchivedEmptyWorkParity(t, closedScopes, emptyWorks, false)
 	assertArchivedProviderCollision(t, closedScopes, before, false)
 	closedScopes.Close(t)
 	assertArchivedPrivateProfileFence(t, config, before)
+}
+
+func newArchivedPeerCase(t *testing.T, template committedTerminalCase, model string, runner *committedTerminalRunner, gates map[string]chan struct{}) committedTerminalCase {
+	t.Helper()
+	template.model, template.scope = model, uuid.NewString()
+	template.dir = support.ScaffoldSingleStepFactory(t, model)
+	support.ClearSeedInputs(t, template.dir)
+	support.WriteAgentConfig(t, template.dir, "processor", support.BuildModelWorkerConfig(template.provider, model))
+	gates[model] = make(chan struct{})
+	runner.slots[model] = newFunctionalWorkerGate(gates[model])
+	return template
 }
 
 // Admit terminal Work through the public batch boundary while both Factories
@@ -440,6 +504,9 @@ func submitArchivedPeerNamedWork(t *testing.T, server *support.FunctionalAPIServ
 	works := make(map[string]string, len(cases))
 	for index, cell := range cases {
 		name := names[2*((index+1)%len(cases))]
+		if name == names[2*index] {
+			name = names[2*((index+2)%len(cases))]
+		}
 		works[cell.scope] = submitArchivedAttemptFreeWork(t, server, cell.scope, name)
 		postLiveRuntimeLifecycleControl(t, server.URL(), cell.scope, factoryapi.FactorySessionLifecycleControlKindResume)
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -523,6 +590,9 @@ func assertArchivedClosedScopeParity(t *testing.T, server *support.FunctionalAPI
 		got := assertTerminalReadParity(t, server, attempt.WorkerSessionId)
 		assertArchivedKnownName(t, got, names[index])
 		assertArchivedOwnScopeReads(t, server, got)
+		if !reflect.DeepEqual(got.TokenUsage, attempt.TokenUsage) {
+			t.Fatal("closed-scope recovery changed committed usage, including explicit zeroes")
+		}
 		if !reflect.DeepEqual(assertArchivedTranscriptParity(t, server, got), transcripts[index]) {
 			t.Fatal("closed-scope transcript changed")
 		}
@@ -677,7 +747,7 @@ func assertArchivedResumedBoard(t *testing.T, server *support.FunctionalAPIServe
 		if !reflect.DeepEqual(assertArchivedTranscriptParity(t, server, got), transcripts[index]) {
 			t.Fatal("joined restart changed transcript identity or content")
 		}
-		if !committedTerminalFactsEqual(got, original) || !reflect.DeepEqual(got.FactorySessionId, original.FactorySessionId) || got.AttemptId != original.AttemptId || !reflect.DeepEqual(got.WorkId, original.WorkId) {
+		if !committedTerminalFactsEqual(got, original) || !reflect.DeepEqual(got.TokenUsage, original.TokenUsage) || !reflect.DeepEqual(got.FactorySessionId, original.FactorySessionId) || got.AttemptId != original.AttemptId || !reflect.DeepEqual(got.WorkId, original.WorkId) {
 			t.Fatalf("restart changed committed identity/facts: before=%+v after=%+v", original, got)
 		}
 		page := assertCommittedTerminalCapture(t, server, got.WorkerSessionId)
@@ -944,7 +1014,24 @@ func assertArchivedAvailableTranscript(t *testing.T, server *support.FunctionalA
 
 func assertArchivedKnownName(t *testing.T, row factoryapi.WorkerSessionObservation, name string) {
 	t.Helper()
+	if name == "" {
+		if row.WorkName != nil {
+			t.Fatalf("absent legacy name was fabricated: %+v", row)
+		}
+		return
+	}
 	if row.WorkName == nil || *row.WorkName != name {
 		t.Fatalf("committed name lost: %+v; want %q", row, name)
+	}
+}
+
+func assertArchivedExplicitZeroUsage(t *testing.T, row factoryapi.WorkerSessionObservation) {
+	t.Helper()
+	if row.State != "COMPLETED" || row.TokenUsage == nil || row.TokenUsage.InputTokens == nil ||
+		row.TokenUsage.OutputTokens == nil || row.TokenUsage.TotalTokens == nil ||
+		row.TokenUsage.Origin == nil || *row.TokenUsage.Origin != "SYNTHETIC" ||
+		row.TokenUsage.CachedInputTokens != nil || row.TokenUsage.ReasoningOutputTokens != nil ||
+		*row.TokenUsage.InputTokens != 0 || *row.TokenUsage.OutputTokens != 0 || *row.TokenUsage.TotalTokens != 0 {
+		t.Fatalf("committed explicit zeroes became missing or nonzero: %+v", row.TokenUsage)
 	}
 }
