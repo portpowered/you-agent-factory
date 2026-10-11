@@ -126,9 +126,9 @@ for provider completion. Use READ and CONTROL with the returned `workerSessionId
 Caller disconnect after admission does not end the Worker Session.
 
 Omitted `provider`, `model`, and `reasoningEffort` use the dedicated
-`defaults.subagent` route. Configure that route with
-`you.operator_settings.set_subagent_defaults`, or supply explicit provider and
-model values. Generic worker defaults do not supply this route. A missing or
+`defaults.subagent` route. Edit that route in the selected host's
+`~/.you-agent-factory/config.json`, or supply explicit provider and model values.
+Generic worker defaults do not supply this route. A missing or
 unavailable route returns a typed error without provider fallback.
 
 Set `workingRoot` to an absolute workspace path, or omit it to use the MCP
