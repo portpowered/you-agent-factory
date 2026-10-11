@@ -20,6 +20,7 @@ const (
 	Read         = "READ"
 	Replied      = "REPLIED"
 	Expired      = "EXPIRED"
+	InboxUpdated = "INBOX_UPDATED"
 	RequestAlias = "REQUEST_ALIAS"
 	Snapshot     = "SNAPSHOT"
 	maxBodyBytes = 8192
@@ -69,7 +70,7 @@ func (t Transaction) validate() error {
 		return ErrInvalidTransaction
 	}
 	switch t.Kind {
-	case Sent, Read, Replied, Expired, RequestAlias, Snapshot:
+	case Sent, Read, Replied, Expired, InboxUpdated, RequestAlias, Snapshot:
 	default:
 		return ErrInvalidTransaction
 	}

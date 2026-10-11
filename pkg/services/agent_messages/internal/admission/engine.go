@@ -45,10 +45,11 @@ type Engine struct {
 	ledger    Ledger
 	now       func() time.Time
 	newID     func() string
+	cursorKey []byte
 }
 
-func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string) *Engine {
-	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID}
+func NewEngine(enabled bool, authority Authority, validator InputValidator, quota Quota, ledger Ledger, now func() time.Time, newID func() string, cursorKey []byte) *Engine {
+	return &Engine{enabled: enabled, authority: authority, validator: validator, quota: quota, ledger: ledger, now: now, newID: newID, cursorKey: append([]byte(nil), cursorKey...)}
 }
 
 func (e *Engine) Send(ctx context.Context, request agentmessages.SendRequest, caller *workersessions.CallerIdentity, factory string) (agentmessages.Message, error) {

@@ -89,6 +89,55 @@ func assertRequestRecovered(t *testing.T, journal *Journal, request Request) {
 	}
 }
 
+func TestJournalInboxUpdatesAreAtomicAndReconstructed(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []string{"none", "short", "sync"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "messages.jsonl")
+			files := &testFiles{}
+			j := newTestJournal(t, files, path)
+			mustCommit(t, j, sentTransaction("first", 1))
+			mustCommit(t, j, sentTransaction("second", 2))
+			before, _, err := j.Entries()
+			if err != nil {
+				t.Fatal(err)
+			}
+			changes := append([]Entry{}, before...)
+			changes[0].Message.Status = agentmessages.Read
+			changes[1].Message.Status = agentmessages.Expired
+			if fault != "none" {
+				files.open = func(path string, flags int, mode fs.FileMode) (io.WriteCloser, error) {
+					file, err := os.OpenFile(path, flags, mode)
+					if err != nil {
+						return nil, err
+					}
+					return &faultFile{File: file, fault: fault}, nil
+				}
+			}
+			err = j.Commit(transaction(3, InboxUpdated, changes...))
+			want := changes
+			if fault != "none" {
+				if !errors.Is(err, ErrUnavailable) {
+					t.Fatal("fault reported success", err)
+				}
+				want = before
+			} else if err != nil {
+				t.Fatal(err)
+			}
+			entries, _, err := j.Entries()
+			if err != nil || !reflect.DeepEqual(entries, want) {
+				t.Fatal("page update was partially published", err)
+			}
+			rebuilt := newTestJournal(t, testFiles{}, path)
+			recovered, _, err := rebuilt.Entries()
+			if err != nil || !reflect.DeepEqual(recovered, want) {
+				t.Fatal("page update was not durably atomic", err)
+			}
+		})
+	}
+}
+
 // The store component is the subject: real files prove its commit/reconstruction
 // contract, while short writes and flush failures are controlled descriptors.
 func TestJournalPreservesMultibyteRequestIDAtCharacterLimit(t *testing.T) {

@@ -122,6 +122,14 @@ func validTransition(old, next Entry, kind string) bool {
 	if old.Message.Status == agentmessages.Expired || old.Message.Status == agentmessages.Replied {
 		return false
 	}
+	// A page may mark live messages READ and due messages EXPIRED atomically.
+	// Each entry still follows one of the original monotonic transitions.
+	if kind == InboxUpdated {
+		if next.Message.Status != agentmessages.Read && next.Message.Status != agentmessages.Expired {
+			return false
+		}
+		kind = string(next.Message.Status)
+	}
 	expected := old
 	switch kind {
 	case Read:

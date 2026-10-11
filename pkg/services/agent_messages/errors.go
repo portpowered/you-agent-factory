@@ -11,6 +11,7 @@ var (
 	ErrInterruptUnsupported = errors.New("MESSAGE_INTERRUPT_UNSUPPORTED")
 	ErrLimitExceeded        = errors.New("MESSAGE_LIMIT_EXCEEDED")
 	ErrRequestConflict      = errors.New("MESSAGE_REQUEST_CONFLICT")
+	ErrCursorInvalid        = errors.New("MESSAGE_CURSOR_INVALID")
 	ErrMessageNotFound      = errors.New("MESSAGE_NOT_FOUND")
 	ErrDisabled             = errors.New("MESSAGING_DISABLED")
 )

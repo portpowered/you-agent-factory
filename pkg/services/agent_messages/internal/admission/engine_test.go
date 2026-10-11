@@ -128,7 +128,7 @@ func newEngineFixture() *engineFixture {
 	f.quota = &engineQuota{limit: 100}
 	f.caller = &workersessions.CallerIdentity{WorkerSessionID: "worker", Token: "caller-secret"}
 	id := 0
-	f.engine = NewEngine(true, f.authority, engineValidator{}, f.quota, f.ledger, func() time.Time { return f.now }, func() string { id++; return fmt.Sprintf("id-%d", id) })
+	f.engine = NewEngine(true, f.authority, engineValidator{}, f.quota, f.ledger, func() time.Time { return f.now }, func() string { id++; return fmt.Sprintf("id-%d", id) }, []byte("controlled-cursor-signing-key-32bytes"))
 	return f
 }
 
