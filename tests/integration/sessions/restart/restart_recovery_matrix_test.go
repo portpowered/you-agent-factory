@@ -710,21 +710,21 @@ func assertSingleTerminalCompletion(t *testing.T, events []factoryapi.FactoryEve
 
 func assertRestartReconciledBeforeRearm(t *testing.T, events []factoryapi.FactoryEvent, oldDispatchID, successorDispatchID string) {
 	t.Helper()
-	oldInterruptedAt, successorRequestedAt := -1, -1
+	oldRespondedAt, successorRequestedAt := -1, -1
 	for index, event := range events {
 		if event.Context.DispatchId == nil {
 			continue
 		}
 		dispatchID := *event.Context.DispatchId
-		if dispatchID == oldDispatchID && event.Type == factoryapi.FactoryEventTypeDispatchInterrupted && oldInterruptedAt < 0 {
-			oldInterruptedAt = index
+		if dispatchID == oldDispatchID && event.Type == factoryapi.FactoryEventTypeDispatchResponse && oldRespondedAt < 0 {
+			oldRespondedAt = index
 		}
 		if dispatchID == successorDispatchID && event.Type == factoryapi.FactoryEventTypeDispatchRequest && successorRequestedAt < 0 {
 			successorRequestedAt = index
 		}
 	}
-	if oldInterruptedAt < 0 || successorRequestedAt < 0 || oldInterruptedAt >= successorRequestedAt {
-		t.Fatalf("public dispatch history order = interrupted-old:%d requested-successor:%d; want the historical owner closed before the successor request", oldInterruptedAt, successorRequestedAt)
+	if oldRespondedAt < 0 || successorRequestedAt < 0 || oldRespondedAt >= successorRequestedAt {
+		t.Fatalf("public dispatch history order = joined-response-old:%d requested-successor:%d; want the historical owner closed before the successor request", oldRespondedAt, successorRequestedAt)
 	}
 }
 
@@ -734,15 +734,19 @@ func assertRestartDispatchHistory(t *testing.T, states map[string]boardPersisten
 		t.Fatalf("dispatch history contains %d dispatches, want source and one successor: %#v", len(states), states)
 	}
 	old, ok := states[oldID]
-	if !ok || old.RequestEvents != 1 || old.ResponseEvents != 0 || old.InterruptedEvents != 1 {
-		t.Fatalf("source dispatch history = %#v, want one request, one interruption, and no response", old)
+	if !ok {
+		t.Fatalf("source dispatch %q missing from history", oldID)
 	}
+	assertBoardJoinedCancellation(t, old, workID)
 	newDispatch, ok := states[successorID]
 	if !ok || newDispatch.RequestEvents != 1 || newDispatch.ResponseEvents != 1 || newDispatch.InterruptedEvents != 0 {
 		t.Fatalf("successor dispatch history = %#v, want one request and one response", newDispatch)
 	}
 	if _, ok := newDispatch.WorkIDs[workID]; !ok {
 		t.Fatalf("successor dispatch %q does not own eligible Work %q: %#v", successorID, workID, newDispatch.WorkIDs)
+	}
+	if len(old.WorkerSessionIDs) != 1 || old.WorkerSessionIDs[0] == "" || (len(newDispatch.WorkerSessionIDs) == 1 && old.WorkerSessionIDs[0] == newDispatch.WorkerSessionIDs[0]) {
+		t.Fatalf("source/successor Worker Session identities must be distinct: %#v / %#v", old.WorkerSessionIDs, newDispatch.WorkerSessionIDs)
 	}
 	if len(newDispatch.WorkerSessionIDs) != 1 || newDispatch.WorkerSessionIDs[0] == "" {
 		t.Fatalf("successor dispatch worker-session associations = %#v, want exactly one owner", newDispatch.WorkerSessionIDs)

@@ -220,11 +220,18 @@ func testOrchestrationpetriguardsGuardCancellationStopsGatedDispatchAndHostReuse
 	waitForSharedGuardSignal(t, gate.canceled, "cancellable provider context")
 	support.WaitForSessionStopped(t, fixture.baseURL, session.sessionID, sharedGuardFixtureShutdownTimeout)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.sessionID)
-	if responses := guardDispatchResponseEventsForTransition(t, events, sharedGuardSingleStepTransition); len(responses) != 0 {
-		t.Fatalf("canceled dispatch responses = %d, want no post-cancellation response", len(responses))
+	responses := guardDispatchResponseEventsForTransition(t, events, sharedGuardSingleStepTransition)
+	if len(responses) != 1 {
+		t.Fatalf("canceled dispatch responses = %d, want one joined response", len(responses))
+	}
+	assertGuardResponseOutcome(t, responses[0], factoryapi.WorkOutcomeCanceled, "")
+	payload, err := responses[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil || payload.StructuredResult != nil || support.StringPointerValue(payload.Output) != "" {
+		t.Fatalf("canceled dispatch success output=%+v error=%v", payload, err)
 	}
 	_, listed, _ := readSharedGuardSession(t, session)
 	assertGuardWorkCounts(t, listed, 0, 0)
+	assertGuardWorkState(t, listed, "guard-cancelled", "init")
 	session.close(t)
 	if got := fixture.router.routeCount(); got != 0 {
 		t.Fatalf("routes after canceled session cleanup = %d, want zero", got)

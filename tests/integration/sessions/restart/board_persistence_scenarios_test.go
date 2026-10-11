@@ -442,10 +442,17 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 	if rearmedObservation.WorkerSessionId == scenario.activeWorkerSessionID {
 		t.Fatalf("re-armed Worker Session reused original identity %q", scenario.activeWorkerSessionID)
 	}
+	events, err := readBoardEvents(t.Context(), second.baseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRestartReconciledBeforeRearm(t, events, scenario.activeDispatchID, rearmedDispatchID)
 	if err := os.WriteFile(scenario.releasePath, []byte("release\n"), 0o600); err != nil {
 		t.Fatalf("release re-armed worker helper: %v", err)
 	}
 	waitForBoardDispatchResponse(t, second.baseURL, boardPersistenceProcessingWorkID, rearmedDispatchID, 120*time.Second)
+	dispatches := waitForBoardDispatchStates(t, second.baseURL, 120*time.Second)
+	assertRestartDispatchHistory(t, dispatches, scenario.activeDispatchID, rearmedDispatchID, boardPersistenceProcessingWorkID)
 	scenario.expected[boardPersistenceProcessingWorkID] = boardPersistenceExpectedWork{
 		Name:           "board-processing",
 		WorkID:         boardPersistenceProcessingWorkID,

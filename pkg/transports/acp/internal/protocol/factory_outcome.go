@@ -34,6 +34,9 @@ type PromptOutcome struct {
 // absent PrimaryResult, or one carrying only parts with no text form at all
 // (image/audio/binary), yields a nil Text rather than fabricated content.
 func MapFactoryInvocationOutcome(result factorysessions.InvocationResult) PromptOutcome {
+	if joinedInvocationCanceled(result) {
+		return PromptOutcome{StopReason: acpsdk.StopReasonCancelled}
+	}
 	return PromptOutcome{
 		StopReason: mapFactoryTerminalStatus(string(result.Status)),
 		Text:       primaryResultText(result.PrimaryResult),
@@ -60,10 +63,16 @@ func MapFactoryInvocationOutcome(result factorysessions.InvocationResult) Prompt
 // A cancelled or timed-out invocation is not a failure: both have a truthful
 // StopReason (cancelled), so they keep answering with a successful response.
 func FactoryInvocationFailure(result factorysessions.InvocationResult) *acpsdk.RequestError {
-	if !failedInvocationStatus(string(result.Status)) {
+	if !failedInvocationStatus(string(result.Status)) || joinedInvocationCanceled(result) {
 		return nil
 	}
 	return acpsdk.NewInternalError(map[string]any{"reason": boundedInvocationErrorCode(result.ErrorCode)})
+}
+
+// Joined dispatch interruption is non-success for CLI/HTTP, but ACP represents
+// that same cancellation with its existing cancelled stop reason.
+func joinedInvocationCanceled(result factorysessions.InvocationResult) bool {
+	return result.Status == factorysessions.InvocationTerminalStatusFailed && result.ErrorCode == string(work.PrimaryResultErrorCodeInterrupted)
 }
 
 func failedInvocationStatus(status string) bool {

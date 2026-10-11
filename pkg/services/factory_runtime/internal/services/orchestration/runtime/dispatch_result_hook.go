@@ -291,7 +291,16 @@ func (h *dispatchPlanningResultHook) acceptLiveWorkersResult(
 	workResult workerexecution.WorkResult,
 ) {
 	intent, ok := h.planner.Intent(workResult.DispatchID)
-	if !ok || intent.Result != nil {
+	if ok && intent.Result != nil {
+		// This callback joins the already accepted dispatch; it is not a new
+		// terminal submission. Preserve the canonical outcome even when stopping
+		// the owned attempt changes its eventual Workers result.
+		if _, err := h.planner.Retire(ctx, *intent.Result); err != nil {
+			h.recordCanonicalError(err)
+		}
+		return
+	}
+	if !ok {
 		outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
 		h.recordAcceptedResult(ctx, request, workResult, outcome)
 		return

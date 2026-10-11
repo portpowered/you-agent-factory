@@ -272,21 +272,35 @@ func postBlockingInvocation(
 	sessionID string,
 	blocking *blockingInvocationRunner,
 ) error {
+	return postBlockingInvocationOutcome(ctx, baseURL, sessionID).err
+}
+
+type blockingInvocationOutcome struct {
+	err        error
+	statusCode int
+	response   factoryapi.InvocationResponse
+	decodeErr  error
+}
+
+func postBlockingInvocationOutcome(ctx context.Context, baseURL, sessionID string) blockingInvocationOutcome {
 	body, err := json.Marshal(textInvocationRequest("concurrent isolation invoke"))
 	if err != nil {
-		return err
+		return blockingInvocationOutcome{err: err}
 	}
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/invocations"
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return blockingInvocationOutcome{err: err}
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := http.DefaultClient.Do(request)
-	if response != nil {
-		_ = response.Body.Close()
+	if err != nil {
+		return blockingInvocationOutcome{err: err}
 	}
-	return err
+	defer response.Body.Close()
+	result := blockingInvocationOutcome{statusCode: response.StatusCode}
+	result.decodeErr = json.NewDecoder(response.Body).Decode(&result.response)
+	return result
 }
 
 func textInvocationRequest(text string) factoryapi.InvocationRequest {
