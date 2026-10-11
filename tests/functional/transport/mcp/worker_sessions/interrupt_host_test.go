@@ -338,11 +338,6 @@ func (s *failingSuccessorStore) PersistWorkerRecord(ctx context.Context, record 
 	return s.WorkerRecordingStore.PersistWorkerRecord(ctx, record)
 }
 
-func capturedProviderFixtureOutput(t *testing.T) []byte {
-	t.Helper()
-	return support.CapturedCodexSuccessOutput(t)
-}
-
 func waitProviderRequest(t *testing.T, ctx context.Context, runner *interruptHostRunner) platformprocess.CommandRequest {
 	t.Helper()
 	select {
@@ -352,11 +347,6 @@ func waitProviderRequest(t *testing.T, ctx context.Context, runner *interruptHos
 		t.Fatal("provider request barrier not reached")
 		return platformprocess.CommandRequest{}
 	}
-}
-
-func postHostJSON(t *testing.T, ctx context.Context, url string, payload any, status int) any {
-	t.Helper()
-	return support.PostHostJSON(t, ctx, url, payload, status)
 }
 
 func assertInterruptAdmission(t *testing.T, result map[string]any) {

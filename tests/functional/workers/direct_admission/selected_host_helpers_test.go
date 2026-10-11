@@ -1,4 +1,4 @@
-package support
+package directadmission_test
 
 import (
 	"bytes"
@@ -19,26 +19,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // Remote clients share initialized operator storage. Each connection still owns
 // its context, pipes and working directory; real hosts retain their own stores.
-type SelectedHostClientProcess struct {
-	Process
+type selectedHostClientProcess struct {
+	support.Process
 	environment []string
 }
 
 // Environment returns the prepared profile for additional public client setup.
-func (process SelectedHostClientProcess) Environment() []string {
+func (process selectedHostClientProcess) Environment() []string {
 	return append([]string(nil), process.environment...)
 }
 
-func (process SelectedHostClientProcess) Execute(input root.Input) error {
+func (process selectedHostClientProcess) Execute(input root.Input) error {
 	input.Env = append([]string(nil), process.environment...)
 	return process.Process.Execute(input)
 }
 
-func NewSelectedHostClientProcess(t *testing.T) SelectedHostClientProcess {
+func newSelectedHostClientProcess(t *testing.T) selectedHostClientProcess {
 	t.Helper()
 	home := t.TempDir()
 	environment := make([]string, 0, len(os.Environ())+3)
@@ -51,12 +52,12 @@ func NewSelectedHostClientProcess(t *testing.T) SelectedHostClientProcess {
 	}
 	environment = append(environment, "HOME="+home, "USERPROFILE="+home,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(home, "models"))
-	process := SelectedHostClientProcess{
-		Process:     BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectSelectedHostProvider{t: t}}),
+	process := selectedHostClientProcess{
+		Process:     support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: rejectSelectedHostProvider{t: t}}),
 		environment: environment,
 	}
 	// Finish bootstrap before any parallel connection can use this home.
-	inputs := FakeInputs(t.Context(), []string{"you", "init", "--provider", "codex"})
+	inputs := support.FakeInputs(t.Context(), []string{"you", "init", "--provider", "codex"})
 	inputs.WorkingDirectory = t.TempDir()
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("initialize remote-client home: %v\n%s", err, inputs.Stderr())
@@ -70,13 +71,13 @@ func (r rejectSelectedHostProvider) Run(context.Context, platformprocess.Command
 	r.t.Error("selected-host MCP executed a local provider")
 	return platformprocess.CommandResult{}, errors.New("local provider execution forbidden")
 }
-func StartSelectedHostMCP(t *testing.T, process Process, host string) (*mcp.ClientSession, context.Context) {
+func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context) {
 	t.Helper()
-	session, ctx, _ := StartCancellableSelectedHostMCP(t, process, host)
+	session, ctx, _ := startCancellableMCP(t, process, host)
 	return session, ctx
 }
 
-func StartCancellableSelectedHostMCP(t *testing.T, process Process, host string, workspace ...string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
+func startCancellableMCP(t *testing.T, process support.Process, host string, workspace ...string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
 	t.Helper()
 	// The session spans host shutdown/recovery and independent profile setup.
 	// Bound individual protocol operations, rather than expiring the transport
@@ -127,7 +128,7 @@ func StartCancellableSelectedHostMCP(t *testing.T, process Process, host string,
 	return session, ctx, cancel
 }
 
-func CallMCPTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
+func callTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -138,22 +139,22 @@ func CallMCPTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, 
 	return result
 }
 
-func CallSubagentAction(t *testing.T, ctx context.Context, session *mcp.ClientSession, action string, args map[string]any) *mcp.CallToolResult {
+func callAction(t *testing.T, ctx context.Context, session *mcp.ClientSession, action string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	input := make(map[string]any, len(args)+1)
 	for key, value := range args {
 		input[key] = value
 	}
 	input["action"] = action
-	return CallMCPTool(t, ctx, session, "you.subagent", input)
+	return callTool(t, ctx, session, "you.subagent", input)
 }
 
-func GetHostJSON(t *testing.T, url string) any {
+func getHost(t *testing.T, url string) any {
 	t.Helper()
-	return RequestHostJSON(t, http.MethodGet, url)
+	return requestHost(t, http.MethodGet, url)
 }
 
-func RequestHostJSON(t *testing.T, method, url string) any {
+func requestHost(t *testing.T, method, url string) any {
 	t.Helper()
 	request, err := http.NewRequest(method, url, nil)
 	if err != nil {
@@ -171,7 +172,7 @@ func RequestHostJSON(t *testing.T, method, url string) any {
 	return value
 }
 
-func AssertJSONEqual(t *testing.T, actual, expected any) {
+func assertJSONEqual(t *testing.T, actual, expected any) {
 	t.Helper()
 	left, _ := json.Marshal(actual)
 	right, _ := json.Marshal(expected)
@@ -190,7 +191,7 @@ func AssertJSONEqual(t *testing.T, actual, expected any) {
 	}
 }
 
-func AssertMCPToolError(t *testing.T, result *mcp.CallToolResult, code string, retryable bool) {
+func assertToolError(t *testing.T, result *mcp.CallToolResult, code string, retryable bool) {
 	t.Helper()
 	encoded, err := json.Marshal(result.StructuredContent)
 	if err != nil {
@@ -210,7 +211,7 @@ func AssertMCPToolError(t *testing.T, result *mcp.CallToolResult, code string, r
 	}
 }
 
-func PostHostJSON(t *testing.T, ctx context.Context, url string, payload any, status int) any {
+func postHostJSON(t *testing.T, ctx context.Context, url string, payload any, status int) any {
 	t.Helper()
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -237,9 +238,9 @@ func PostHostJSON(t *testing.T, ctx context.Context, url string, payload any, st
 	return result
 }
 
-func CapturedCodexSuccessOutput(t *testing.T) []byte {
+func capturedProviderFixtureOutput(t *testing.T) []byte {
 	t.Helper()
-	fixture := filepath.Join(testutil.MustRepoRoot(t), filepath.FromSlash(ProviderSessionFixturePath("codex", "success")))
+	fixture := filepath.Join(testutil.MustRepoRoot(t), filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
 	output, err := os.ReadFile(filepath.Join(fixture, "stdout.jsonl"))
 	if err != nil {
 		t.Fatal(err)
@@ -247,7 +248,7 @@ func CapturedCodexSuccessOutput(t *testing.T) []byte {
 	return output
 }
 
-func AssertSubagentAdmission(t *testing.T, result *mcp.CallToolResult, id string) {
+func assertSubagentAdmission(t *testing.T, result *mcp.CallToolResult, id string) {
 	t.Helper()
 	if result.IsError || len(result.Content) != 1 {
 		t.Fatalf("START result: %+v", result)

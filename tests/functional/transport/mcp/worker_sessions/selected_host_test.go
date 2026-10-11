@@ -386,16 +386,6 @@ func (r rejectLocalProvider) Run(context.Context, platformprocess.CommandRequest
 	return platformprocess.CommandResult{}, errors.New("local provider execution forbidden")
 }
 
-func startMCP(t *testing.T, process support.Process, host string) (*mcp.ClientSession, context.Context) {
-	t.Helper()
-	return support.StartSelectedHostMCP(t, process, host)
-}
-
-func startCancellableMCP(t *testing.T, process support.Process, host string, workspace ...string) (*mcp.ClientSession, context.Context, context.CancelFunc) {
-	t.Helper()
-	return support.StartCancellableSelectedHostMCP(t, process, host, workspace...)
-}
-
 func packagedOperationsListInput(t *testing.T, process support.Process) map[string]any {
 	t.Helper()
 	workDir := t.TempDir()
@@ -445,16 +435,6 @@ func readHost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func callTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
-	t.Helper()
-	return support.CallMCPTool(t, ctx, session, name, args)
-}
-
-func callAction(t *testing.T, ctx context.Context, session *mcp.ClientSession, action string, args map[string]any) *mcp.CallToolResult {
-	t.Helper()
-	return support.CallSubagentAction(t, ctx, session, action, args)
-}
-
 func callWorker(t *testing.T, ctx context.Context, session *mcp.ClientSession, tool string, args map[string]any) map[string]any {
 	t.Helper()
 	result := callAction(t, ctx, session, strings.ToUpper(tool), args)
@@ -466,26 +446,6 @@ func callWorker(t *testing.T, ctx context.Context, session *mcp.ClientSession, t
 		t.Fatal(err)
 	}
 	return envelope
-}
-
-func getHost(t *testing.T, url string) any {
-	t.Helper()
-	return support.GetHostJSON(t, url)
-}
-
-func requestHost(t *testing.T, method, url string) any {
-	t.Helper()
-	return support.RequestHostJSON(t, method, url)
-}
-
-func assertJSONEqual(t *testing.T, actual, expected any) {
-	t.Helper()
-	support.AssertJSONEqual(t, actual, expected)
-}
-
-func assertToolError(t *testing.T, result *mcp.CallToolResult, code string, retryable bool) {
-	t.Helper()
-	support.AssertMCPToolError(t, result, code, retryable)
 }
 
 func assertReadView(t *testing.T, result map[string]any, view, host string) {

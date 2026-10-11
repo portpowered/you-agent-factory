@@ -190,11 +190,6 @@ func assertSubagentUnavailableRoutes(t *testing.T, ctx context.Context, session 
 	assertSubagentProfileSiblings(t, path)
 }
 
-func assertSubagentAdmission(t *testing.T, result *mcp.CallToolResult, id string) {
-	t.Helper()
-	support.AssertSubagentAdmission(t, result, id)
-}
-
 func assertSubagentInvalidDefaults(t *testing.T, ctx context.Context, session *mcp.ClientSession, path string) {
 	t.Helper()
 	// Successive fixture edits model an operator correcting one document; no

@@ -19,30 +19,30 @@ import (
 
 func TestDirectCapacityOpeningFailureReleases(t *testing.T) {
 	t.Parallel()
-	client := support.NewSelectedHostClientProcess(t)
+	client := newSelectedHostClientProcess(t)
 	runner := &joinedCapacityProvider{outcome: "success", started: make(chan struct{}, 2), canceled: make(chan struct{}), release: make(chan struct{}), replacement: make(chan struct{})}
 	writer := &capacityOpeningWriter{}
 	host, dir, _ := newCapacityProfileHost(t, runner, `{"defaults":{"directSessionCapacity":1}}`, writer)
 	t.Cleanup(runner.unblock)
-	session, ctx := support.StartSelectedHostMCP(t, client, host.URL())
+	session, ctx := startMCP(t, client, host.URL())
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	failed := support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("opening-failure", dir))
-	support.AssertMCPToolError(t, failed, "worker_session.unavailable", true)
-	response := support.PostHostJSON(t, ctx, host.URL()+"/worker-sessions", capacityLifetimeArgs("opening-failure", dir), 503).(map[string]any)
+	failed := callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("opening-failure", dir))
+	assertToolError(t, failed, "worker_session.unavailable", true)
+	response := postHostJSON(t, ctx, host.URL()+"/worker-sessions", capacityLifetimeArgs("opening-failure", dir), 503).(map[string]any)
 	if response["code"] != "WORKER_SESSION_START_OPENING_FAILED" || runner.calls.Load() != 0 {
 		t.Fatalf("opening failure code=%v provider calls=%d", response["code"], runner.calls.Load())
 	}
-	support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("replacement", dir)), "replacement")
+	assertSubagentAdmission(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("replacement", dir)), "replacement")
 	waitCapacityGate(t, ctx, runner.started)
-	support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("excess", dir)), "worker_session.capacity_exceeded", true)
+	assertToolError(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("excess", dir)), "worker_session.capacity_exceeded", true)
 	runner.unblock()
 	followCapacityTerminal(t, ctx, client, host.URL(), dir, "replacement", "COMPLETED")
 }
 
 func TestDirectCapacityInvalidSavedSetting(t *testing.T) {
 	t.Parallel()
-	client := support.NewSelectedHostClientProcess(t)
+	client := newSelectedHostClientProcess(t)
 	var calls atomic.Int32
 	runner := capacityProvider{launched: make(chan platformprocess.CommandRequest, 1), released: make(chan struct{}), calls: &calls}
 	host, dir, home := newCapacityProfileHost(t, runner, `{"defaults":{"directSessionCapacity":1}}`, nil)
@@ -52,14 +52,14 @@ func TestDirectCapacityInvalidSavedSetting(t *testing.T) {
 		t.Fatal(err)
 	}
 	baseline := capacityFactoryIDs(t, host.URL())
-	session, ctx := support.StartSelectedHostMCP(t, client, host.URL())
+	session, ctx := startMCP(t, client, host.URL())
 	args := capacityLifetimeArgs("invalid-setting", dir)
-	support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, session, "you.subagent", args), "worker_session.invalid_request", false)
-	response := support.PostHostJSON(t, ctx, host.URL()+"/worker-sessions", args, 400).(map[string]any)
+	assertToolError(t, callTool(t, ctx, session, "you.subagent", args), "worker_session.invalid_request", false)
+	response := postHostJSON(t, ctx, host.URL()+"/worker-sessions", args, 400).(map[string]any)
 	if response["code"] != "SUBAGENT_ROUTE_INVALID" {
 		t.Fatal("invalid document lost typed refusal")
 	}
-	support.AssertMCPToolError(t, support.CallSubagentAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "invalid-setting"}), "worker_session.not_found", false)
+	assertToolError(t, callAction(t, ctx, session, "READ", map[string]any{"workerSessionId": "invalid-setting"}), "worker_session.not_found", false)
 	if calls.Load() != 0 || !reflect.DeepEqual(baseline, capacityFactoryIDs(t, host.URL())) {
 		t.Fatal("invalid saved capacity created execution or Factory effects")
 	}
@@ -67,19 +67,19 @@ func TestDirectCapacityInvalidSavedSetting(t *testing.T) {
 
 func TestDirectCapacitySelectedHostsAreIndependent(t *testing.T) {
 	t.Parallel()
-	client := support.NewSelectedHostClientProcess(t)
+	client := newSelectedHostClientProcess(t)
 	release := make(chan struct{})
 	var callsA, callsB atomic.Int32
 	launchA, launchB := make(chan platformprocess.CommandRequest, 1), make(chan platformprocess.CommandRequest, 2)
 	hostA, dirA, _ := newCapacityProfileHost(t, capacityProvider{launched: launchA, released: release, calls: &callsA}, `{"defaults":{"directSessionCapacity":1}}`, nil)
 	hostB, dirB, _ := newCapacityProfileHost(t, capacityProvider{launched: launchB, released: release, calls: &callsB}, `{"defaults":{"directSessionCapacity":2}}`, nil)
 	t.Cleanup(func() { close(release) })
-	a, ctx := support.StartSelectedHostMCP(t, client, hostA.URL())
-	b, _ := support.StartSelectedHostMCP(t, client, hostB.URL())
-	support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, a, "you.subagent", capacityLifetimeArgs("a", dirA)), "a")
-	support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, a, "you.subagent", capacityLifetimeArgs("a-excess", dirA)), "worker_session.capacity_exceeded", true)
+	a, ctx := startMCP(t, client, hostA.URL())
+	b, _ := startMCP(t, client, hostB.URL())
+	assertSubagentAdmission(t, callTool(t, ctx, a, "you.subagent", capacityLifetimeArgs("a", dirA)), "a")
+	assertToolError(t, callTool(t, ctx, a, "you.subagent", capacityLifetimeArgs("a-excess", dirA)), "worker_session.capacity_exceeded", true)
 	for _, id := range []string{"b-first", "b-second"} {
-		support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, b, "you.subagent", capacityLifetimeArgs(id, dirB)), id)
+		assertSubagentAdmission(t, callTool(t, ctx, b, "you.subagent", capacityLifetimeArgs(id, dirB)), id)
 	}
 	assertCapacityParity(t, client, ctx, b, hostB.URL(), dirB, capacityLifetimeArgs("excess", dirB))
 	select {
@@ -101,7 +101,7 @@ func TestDirectCapacitySelectedHostsAreIndependent(t *testing.T) {
 
 func TestDirectCapacityDocumentUpdateAndFreshHost(t *testing.T) {
 	t.Parallel()
-	client := support.NewSelectedHostClientProcess(t)
+	client := newSelectedHostClientProcess(t)
 	runner := &joinedCapacityProvider{outcome: "success", started: make(chan struct{}, 2), canceled: make(chan struct{}), release: make(chan struct{}), replacement: make(chan struct{})}
 	profile := `{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"directSessionCapacity":1,"workerModelProvider":"codex","workerModel":"generic-before","subagent":{"provider":"codex","model":"controlled-model"},"futureDefault":{"enabled":true}},"futureRoot":{"retained":true},"runtime":{"futureRuntime":"retained"},"models":{},"messaging":{"enabled":false}}`
 	host, dir, home := newCapacityProfileHost(t, runner, profile, nil)
@@ -139,15 +139,15 @@ func TestDirectCapacityDocumentUpdateAndFreshHost(t *testing.T) {
 				return d, nil
 			}},
 	})
-	session, ctx := support.StartSelectedHostMCP(t, client, fresh.URL())
+	session, ctx := startMCP(t, client, fresh.URL())
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	args := capacityLifetimeArgs("replacement", dir)
 	delete(args, "provider")
 	delete(args, "model")
-	support.AssertSubagentAdmission(t, support.CallMCPTool(t, ctx, session, "you.subagent", args), "replacement")
+	assertSubagentAdmission(t, callTool(t, ctx, session, "you.subagent", args), "replacement")
 	waitCapacityGate(t, ctx, runner.started)
-	support.AssertMCPToolError(t, support.CallMCPTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("excess", dir)), "worker_session.capacity_exceeded", true)
+	assertToolError(t, callTool(t, ctx, session, "you.subagent", capacityLifetimeArgs("excess", dir)), "worker_session.capacity_exceeded", true)
 	runner.unblock()
 	followCapacityTerminal(t, ctx, client, fresh.URL(), dir, "replacement", "COMPLETED")
 }
