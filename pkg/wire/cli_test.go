@@ -395,8 +395,9 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 	routes := make(chan string, 1)
 	publishers := make(chan workers.ProgressPublisher, 1)
 	workerService := localBoundaryWorkersService{routes: routes, publishers: publishers}
+	home := t.TempDir()
 	service, err := provideWorkerSessionsService(serviceedges.Edges{}, workerService, eventsService,
-		logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil, nil)
+		logging.NoopLogger{}, platformclock.Real{}, platformclock.Real{}, nil, nil, unavailableWorkerControlStore{}, unavailableWorkerControlStore{}, provideWorkerHistorySnapshotBudget(), nil, nil, newTestOperatorSettingsService(t, logging.NoopLogger{}), func() (string, error) { return home, nil })
 	if err != nil {
 		t.Fatal(err)
 	}

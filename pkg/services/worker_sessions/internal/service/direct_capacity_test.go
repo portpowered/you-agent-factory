@@ -210,3 +210,91 @@ func TestDirectCapacityReplayConflictAndReleaseOnce(t *testing.T) {
 		t.Fatalf("duplicate release freed replacement: %v", err)
 	}
 }
+
+func TestDirectCapacityContinuationReservationAndReplay(t *testing.T) {
+	t.Parallel()
+	request := continuationReservationRequest()
+	r := newContinuationSource(t, request)
+	r.capacityResolver = func(context.Context) (int64, error) { return 1, nil }
+	r.supervisions[request.SourceWorkerSessionID] = newSupervision("dispatch-1", "turn-1", continuationValidExecution("dispatch-1"))
+	r.supervisions[request.SourceWorkerSessionID].executor = r.execution
+	r.supervisions[request.SourceWorkerSessionID].clock = r.clock
+	r.supervisions[request.SourceWorkerSessionID].scheduler = r.scheduler
+	if _, _, err := r.reserveStart(workersessions.StartRequest{ID: "occupied", RequestID: "occupied"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.reserveContinuation(request, context.Background()); !errors.Is(err, workersessions.ErrDirectCapacityExceeded) {
+		t.Fatalf("saturated continuation=%v", err)
+	}
+	if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("refused successor reserved: %v", err)
+	}
+	r.releaseDirect("occupied")
+	replay, owner, err := r.reserveContinuation(request, context.Background())
+	if err != nil || !owner {
+		t.Fatalf("successor reservation=%t %v", owner, err)
+	}
+	duplicate, owner, err := r.reserveContinuation(request, context.Background())
+	if err != nil || owner || duplicate != replay {
+		t.Fatalf("saturated successor replay=%t %v", owner, err)
+	}
+	if _, _, err := r.reserveStart(workersessions.StartRequest{ID: "excess", RequestID: "excess"}); !errors.Is(err, workersessions.ErrDirectCapacityExceeded) {
+		t.Fatalf("successor did not hold charge: %v", err)
+	}
+	r.releaseDirect(request.SuccessorWorkerSessionID)
+	if _, owner, err := r.reserveStart(workersessions.StartRequest{ID: "replacement", RequestID: "replacement"}); err != nil || !owner {
+		t.Fatalf("successor charge leaked: %t %v", owner, err)
+	}
+}
+
+func TestDirectCapacityRetryRetainsOneCharge(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	r.capacityResolver = func(context.Context) (int64, error) { return 1, nil }
+	second, release := make(chan struct{}), make(chan struct{})
+	var unblockOnce sync.Once
+	unblock := func() { unblockOnce.Do(func() { close(release) }) }
+	defer unblock()
+	calls := 0
+	r.execution = coverageExecution{
+		execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+			calls++
+			if calls == 1 {
+				result := coverageExecutionResult(request, workers.ExecutionOutcomeFailed)
+				result.Failure = &workers.ExecutionFailure{Family: workers.WorkFailureFamilyRetryable, Type: workers.WorkFailureTypeTimeout}
+				return result, nil
+			}
+			close(second)
+			select {
+			case <-release:
+				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+			case <-ctx.Done():
+				return workers.ExecuteResult{}, ctx.Err()
+			}
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	request := workersessions.StartRequest{ID: "retry", RequestID: "retry", Execution: dispatchHandoff("retry-dispatch"), Retry: workersessions.RetryPolicy{MaxAttempts: 2}}
+	if _, err := r.Start(ctx, request); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-second:
+	case <-ctx.Done():
+		t.Fatal("retry did not reach controlled execution")
+	}
+	if _, _, err := r.reserveStart(workersessions.StartRequest{ID: "excess", RequestID: "excess"}); !errors.Is(err, workersessions.ErrDirectCapacityExceeded) {
+		t.Fatalf("retry lost lifetime charge: %v", err)
+	}
+	unblock()
+	if err := r.waitForSupervisionDriver(ctx, request.ID); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("attempts=%d", calls)
+	}
+	if _, owner, err := r.reserveStart(workersessions.StartRequest{ID: "replacement", RequestID: "replacement"}); err != nil || !owner {
+		t.Fatalf("retry charge leaked: %t %v", owner, err)
+	}
+}
