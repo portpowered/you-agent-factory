@@ -6,24 +6,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func newInitialOpeningChildScenario(t *testing.T) initialOpeningScenario {
@@ -88,11 +90,72 @@ func newOpeningPolicyScenario(t *testing.T) initialOpeningScenario {
 	return scenario
 }
 
+func newDeniedChildScenario(t *testing.T) initialOpeningScenario {
+	t.Helper()
+	scenario := newInitialOpeningChildScenario(t)
+	path := filepath.Join(scenario.candidateDir, "factory.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	javascript := config["orchestrator"].(map[string]any)["javascript"].(map[string]any)
+	javascript["defaultPolicy"] = map[string]any{"maxAgents": 1, "concurrency": 1, "allowedModels": []string{"gpt-5-codex"}}
+	javascript["inlineSource"].(map[string]any)["inline"] = `return agent.run({
+  prompt: "selected policy child", label: "selected-child", modelProvider: "codex",
+  model: args.prompt === "deny" ? "gpt-denied" : "gpt-5-codex", resourceId: "opening-child-slot"
+});`
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return scenario
+}
+
+// M11 exercises policy admission through the same explicit runtime binding.
+// The next allowed child must acquire its sole slot and finish, while the peer
+// remains usable. Effect observations are scoped to this scenario's directory.
+func testDeniedChildRetry(t *testing.T, process support.Process, sessions factorysessions.Service, scenario initialOpeningScenario, effects *initialOpeningEffects, serverURL string) {
+	t.Helper()
+	peer := scenario.startPeer(t, sessions)
+	startInitialOpeningSession(t, sessions, scenario.request())
+	for _, prompt := range []string{"deny", "allow"} {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
+			"--json", "run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--output", "primary", "--no-record", prompt})
+		inputs.Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
+		inputs.Input.WorkingDirectory = scenario.candidateDir
+		err := process.Execute(inputs.Input)
+		calls := effects.forScenario(scenario)[filepath.Clean(scenario.candidateDir)+"|worker.codex"]
+		if prompt == "deny" {
+			if err == nil || !strings.Contains(fmt.Sprint(err, inputs.Stdout(), inputs.Stderr()), `policy denied: model "gpt-denied" is not listed in allowedModels`) || calls != 0 {
+				t.Fatalf("denied child: error=%v calls=%d stdout=%s stderr=%s", err, calls, inputs.Stdout(), inputs.Stderr())
+			}
+		} else {
+			var response factoryapi.InvocationResponse
+			if err != nil || json.Unmarshal([]byte(inputs.Stdout()), &response) != nil || response.Status != factoryapi.InvocationTerminalStatusCompleted || calls != 1 || !strings.Contains(inputs.Stdout(), "initial opening COMPLETE") {
+				t.Fatalf("corrected child failed to reuse capacity: error=%v calls=%d stdout=%s stderr=%s", err, calls, inputs.Stdout(), inputs.Stderr())
+			}
+			if response.SessionId == nil || *response.SessionId == "" {
+				t.Fatal("corrected child omitted durable identity")
+			}
+			assertInitialChildResponses(t, sessions, *response.SessionId)
+		}
+		assertInitialOpeningHistoryPreserved(t, sessions, scenario.peerID, peer)
+	}
+	assertInitialOpeningInvocation(t, sessions, scenario.peerID)
+}
+
 func openingPolicySecret(scenario initialOpeningScenario) string {
 	return "private-policy-" + scenario.candidateID
 }
 
-// Both command invocations reach their selected provider before current
+// All four command invocations reach their selected provider before current
 // selection moves. Captured streams are read only after their command joins.
 func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions factorysessions.Service, scenarios []initialOpeningScenario, gate *selectedProviderGate, serverURL string, logs *observer.ObservedLogs) {
 	t.Helper()
@@ -105,14 +168,15 @@ func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions fa
 		request := scenario.request()
 		request.RuntimeSelection.Verbose = i == 1
 		startInitialOpeningSession(t, sessions, request)
-		mode := "--quiet"
-		if i == 1 {
-			mode = "--verbose"
-		}
 		args := []string{"you", "--remote", "--server", serverURL, "--session", scenario.candidateID,
-			"run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--no-record", mode, "--secret", openingPolicySecret(scenario), "selected policy Work"}
-		if i == 1 {
-			args = append(args, "--json", "--output", "primary")
+			"run", "--factory", filepath.Join(scenario.candidateDir, "factory.json"), "--no-record", "--secret", openingPolicySecret(scenario), "selected policy Work"}
+		switch i {
+		case 0:
+			args = append(args, "--quiet")
+		case 1:
+			args = append(args, "--verbose", "--json", "--output", "primary")
+		case 3:
+			args = append(args, "--json")
 		}
 		inputs[i] = support.FakeInputs(ctx, args)
 		inputs[i].Input.Env = append(os.Environ(), "HOME="+scenario.home, "USERPROFILE="+scenario.home)
@@ -147,7 +211,7 @@ func testOpeningPolicyOverlap(t *testing.T, process support.Process, sessions fa
 		case <-ctx.Done():
 			t.Fatal("policy command did not complete")
 		}
-		assertOpeningPolicyOutput(t, sessions, scenario, inputs[i], logs, i == 0)
+		assertOpeningPolicyOutput(t, sessions, scenario, inputs[i], logs, i)
 	}
 	assertInitialOpeningHistoryPreserved(t, sessions, scenarios[0].peerID, peerHistory)
 	assertInitialOpeningInvocation(t, sessions, scenarios[0].peerID)
@@ -173,32 +237,29 @@ func awaitOpeningPolicyProviders(t *testing.T, ctx context.Context, gate *select
 				default:
 				}
 			}
-			t.Fatal("quiet and verbose providers did not overlap")
+			t.Fatal("quiet, normal, verbose and NDJSON providers did not overlap")
 		}
 	}
 }
 
-func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, inputs *support.CapturedInputs, logs *observer.ObservedLogs, quiet bool) {
+func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, inputs *support.CapturedInputs, logs *observer.ObservedLogs, mode int) {
 	t.Helper()
-	if quiet {
+	switch mode {
+	case 0:
 		if inputs.Stdout() != scenario.candidateID+" COMPLETE" || inputs.Stderr() != "" {
 			t.Fatalf("quiet result framing: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
 		}
-	} else {
-		var response factoryapi.InvocationResponse
-		if err := json.Unmarshal([]byte(inputs.Stdout()), &response); err != nil {
-			t.Fatalf("single JSON framing: %v stdout=%q", err, inputs.Stdout())
+	case 1:
+		assertOpeningPolicySingleJSON(t, scenario.candidateID, inputs.Stdout())
+	case 2:
+		if !strings.HasSuffix(strings.TrimSpace(inputs.Stdout()), scenario.candidateID+" COMPLETE") || !strings.Contains(inputs.Stdout(), "Work") {
+			t.Fatalf("human stream lost lifecycle or final result: %q", inputs.Stdout())
 		}
-		if response.Status != factoryapi.InvocationTerminalStatusCompleted || response.SessionId == nil || response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
-			t.Fatalf("selected policy result = %+v", response)
+		if strings.Contains(inputs.Stdout(), "\"recordType\"") || strings.Contains(inputs.Stdout()+inputs.Stderr(), "\x1b[") {
+			t.Fatalf("human stream contains structured records or interactive controls: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
 		}
-		content, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
-		if err != nil || content.Text != scenario.candidateID+" COMPLETE" {
-			t.Fatalf("selected policy content = %+v, %v", content, err)
-		}
-		if *response.SessionId != scenario.candidateID {
-			t.Fatalf("policy result session = %s, want %s", *response.SessionId, scenario.candidateID)
-		}
+	case 3:
+		assertOpeningPolicyNDJSON(t, sessions, scenario, inputs.Stdout())
 	}
 	secret := openingPolicySecret(scenario)
 	if strings.Contains(inputs.Stdout()+inputs.Stderr(), secret) {
@@ -211,6 +272,142 @@ func assertOpeningPolicyOutput(t *testing.T, sessions factorysessions.Service, s
 	}
 	initialOpeningHistory(t, sessions, scenario.candidateID)
 	assertOpeningPolicyResponseCorrelation(t, sessions, scenario.candidateID, logs)
+}
+
+func assertOpeningPolicySingleJSON(t *testing.T, sessionID, output string) {
+	t.Helper()
+	var response factoryapi.InvocationResponse
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		t.Fatalf("single JSON framing: %v stdout=%q", err, output)
+	}
+	assertOpeningPolicyTerminal(t, sessionID, response)
+}
+
+func assertOpeningPolicyTerminal(t *testing.T, sessionID string, response factoryapi.InvocationResponse) {
+	t.Helper()
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted || response.SessionId == nil || *response.SessionId != sessionID || response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("selected policy result = %+v", response)
+	}
+	content, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil || content.Text != sessionID+" COMPLETE" {
+		t.Fatalf("selected policy content = %+v, %v", content, err)
+	}
+}
+
+func assertOpeningPolicyNDJSON(t *testing.T, sessions factorysessions.Service, scenario initialOpeningScenario, output string) {
+	t.Helper()
+	sessionID := scenario.candidateID
+	history := initialOpeningHistory(t, sessions, sessionID).History
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	events, terminal, startup := 0, 0, 0
+	lastSequence := -1
+	for i, line := range lines {
+		var record struct {
+			RecordType string                        `json:"recordType"`
+			Event      factoryapi.FactoryEvent       `json:"event"`
+			Response   factoryapi.InvocationResponse `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("NDJSON line %d: %v: %q", i, err, line)
+		}
+		switch record.RecordType {
+		case "factory_event":
+			assertOpeningPolicyRecordedEvent(t, history, record.Event)
+			if i < 2 {
+				assertOpeningPolicyStartup(t, scenario, record.Event, i)
+				startup++
+			}
+			events++
+			if (record.Event.Context.SessionId != nil && *record.Event.Context.SessionId != sessionID) || record.Event.Context.Sequence <= lastSequence {
+				t.Fatalf("NDJSON event crossed Session or order: %#v", record.Event)
+			}
+			lastSequence = record.Event.Context.Sequence
+		case "invocation_result":
+			terminal++
+			if i != len(lines)-1 {
+				t.Fatalf("NDJSON terminal is not the final line: %d", i)
+			}
+			assertOpeningPolicyTerminal(t, sessionID, record.Response)
+		default:
+			t.Fatalf("unexpected NDJSON record: %s", line)
+		}
+	}
+	if events == 0 || terminal != 1 || startup != 2 {
+		t.Fatalf("NDJSON events=%d terminals=%d startup=%d, want lifecycle, two startup frames and one terminal", events, terminal, startup)
+	}
+}
+
+// Lifecycle frames can omit Session identity. Their selected public history,
+// including the complete payload, is the attribution boundary for those frames.
+func assertOpeningPolicyRecordedEvent(t *testing.T, history []factorydefinitions.FactoryEvent, event factoryapi.FactoryEvent) {
+	t.Helper()
+	for _, recorded := range history {
+		if recorded.Context.Sequence != event.Context.Sequence {
+			continue
+		}
+		// The public projection deliberately omits private execution facts,
+		// such as the association event's model and reasoning effort.
+		public, err := apisurface.FactoryEventToAPI(recorded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Union payloads retain JSON bytes; object-key order is not framing.
+		var got, want any
+		for _, value := range []struct {
+			event factoryapi.FactoryEvent
+			into  *any
+		}{{event, &got}, {public, &want}} {
+			encoded, err := json.Marshal(value.event)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(encoded, value.into); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// CLI presentation hides provider diagnostics and identity even when
+		// the recording/API retains them. This fixture has no nested private
+		// observations; the selected result and all remaining fields must match.
+		if event.Type == factoryapi.FactoryEventTypeModelResponse || event.Type == factoryapi.FactoryEventTypeInferenceResponse || event.Type == factoryapi.FactoryEventTypeAgentRunResponse {
+			gotPayload := got.(map[string]any)["payload"].(map[string]any)
+			wantPayload := want.(map[string]any)["payload"].(map[string]any)
+			for _, key := range []string{"diagnostics", "providerSession"} {
+				if _, exposed := gotPayload[key]; exposed {
+					t.Fatalf("NDJSON exposed private %s", key)
+				}
+				delete(wantPayload, key)
+			}
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("NDJSON event differs from selected public history: got=%+v want=%+v", event, recorded)
+		}
+		return
+	}
+	t.Fatalf("NDJSON event is absent from selected public history: %+v", event)
+}
+
+func assertOpeningPolicyStartup(t *testing.T, scenario initialOpeningScenario, event factoryapi.FactoryEvent, index int) {
+	t.Helper()
+	var source factoryapi.Factory
+	switch {
+	case index == 0 && event.Type == factoryapi.FactoryEventTypeRunRequest:
+		payload, err := event.Payload.AsRunRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		source = payload.Factory
+	case index == 1 && event.Type == factoryapi.FactoryEventTypeInitialStructureRequest:
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		source = payload.Factory
+	default:
+		t.Fatalf("unexpected unattributed NDJSON event at %d: %s", index, event.Type)
+	}
+	if event.Context.Sequence != index || source.FactoryDirectory == nil || filepath.Clean(*source.FactoryDirectory) != scenario.candidateDir {
+		t.Fatalf("NDJSON startup lost selected source or order: context=%#v source=%#v", event.Context, source)
+	}
 }
 
 func assertOpeningPolicyResponseCorrelation(t *testing.T, sessions factorysessions.Service, id string, logs *observer.ObservedLogs) {

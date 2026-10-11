@@ -88,8 +88,8 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	canceled := newInitialOpeningScenario(t)
 	reused := newInitialOpeningScenario(t)
 	selected := newInitialOpeningProviderScenario(t)
-	policies := []initialOpeningScenario{newOpeningPolicyScenario(t), newOpeningPolicyScenario(t)}
-	policyGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, 2), release: make(chan struct{})}
+	policies := []initialOpeningScenario{newOpeningPolicyScenario(t), newOpeningPolicyScenario(t), newOpeningPolicyScenario(t), newOpeningPolicyScenario(t)}
+	policyGate := &selectedProviderGate{paths: make(map[string]string), entered: make(chan platformprocess.CommandRequest, len(policies)), release: make(chan struct{})}
 	for _, scenario := range policies {
 		policyGate.paths[scenario.candidateDir] = scenario.candidateID
 	}
@@ -120,6 +120,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 	parameterized := newInitialOpeningDefaultProviderScenario(t, "", "${model}")
 	durable := newInitialOpeningScenario(t)
 	child := newInitialOpeningChildScenario(t)
+	deniedChild := newDeniedChildScenario(t)
 	bindingChildren := []initialOpeningScenario{newBindingChildScenario(t), newBindingChildScenario(t)}
 	bindingGate := &bindingChildGate{entered: make(chan platformprocess.CommandRequest, 4), release: make(chan struct{}),
 		selected: make(map[string]string), active: make(map[string]int), maximum: make(map[string]int)}
@@ -221,6 +222,10 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testInitialOpeningChildInvocation(t, sessions, process, child, effects, api.WaitForURL(t))
 	})
+	t.Run("policy denied child dispatches no command and corrected invocation reuses capacity", func(t *testing.T) {
+		t.Parallel()
+		testDeniedChildRetry(t, process, sessions, deniedChild, effects, api.WaitForURL(t))
+	})
 
 	t.Run("selected bytes survive authored changes and peer opening", func(t *testing.T) {
 		t.Parallel()
@@ -270,7 +275,7 @@ func TestExplicitSessionOpeningFailureAndCancellationPreservePeers(t *testing.T)
 		t.Parallel()
 		testSelectedProviderOverlap(t, process, sessions, overlap, providerGate, api.WaitForURL(t), logs)
 	})
-	t.Run("quiet and verbose invocations retain selected observations across current selection", func(t *testing.T) {
+	t.Run("quiet normal verbose and NDJSON invocations retain selected observations across current selection", func(t *testing.T) {
 		t.Parallel()
 		testOpeningPolicyOverlap(t, process, sessions, policies, policyGate, api.WaitForURL(t), logs)
 	})
