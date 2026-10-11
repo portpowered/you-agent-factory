@@ -576,11 +576,8 @@ func TestSkillsValidationAndPagination(t *testing.T) {
 	}
 }
 
-func TestServeValidatesServerAndTransport(t *testing.T) {
+func TestServeValidatesCallerTransport(t *testing.T) {
 	t.Parallel()
-	if err := (*Server)(nil).Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "server is required") {
-		t.Fatalf("Serve(nil server) error = %v", err)
-	}
 	server, err := New(scriptedToolOperation(nil, nil), Options{})
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -22,6 +23,34 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// One completed process serves two connection-owned profiles. Reads and
+// reconnect cursors remain attributable after the other connection closes.
+func testCompletedMCPConnectionReads(t *testing.T, process support.Process) {
+	t.Parallel()
+	first, peer := startComposedMemoryMCP(t, process), startComposedMemoryMCP(t, process)
+	initializeMCPClient(t, first.client)
+	initializeMCPClient(t, peer.client)
+	firstID := assertComposedMCPSync(t, first, "completed-first")
+	peerID := assertComposedMCPSync(t, peer, "completed-peer")
+	if firstID == peerID {
+		t.Fatal("connections shared session identity")
+	}
+	assertComposedMCPEvents(t, first.client, firstID)
+	before := assertComposedMCPEvents(t, peer.client, peerID)
+	assertComposedReadError(t, peer.client, factorysessionmcp.ReadEventsInput{SessionID: "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")}, "factory_session.session.not_found", "")
+	first.closeInput(t)
+	after := assertComposedMCPEvents(t, peer.client, peerID)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("peer close changed retained events")
+	}
+	tail := decodeComposedTool[factorysessionmcp.ReadEventsResult](t, composedEventRead(peer.client, factorysessionmcp.ReadEventsInput{SessionID: peerID, AfterEventID: before.Events[len(before.Events)-1].Id}))
+	if tail.SessionID != peerID || len(tail.Events) != 0 {
+		t.Fatalf("retained tail = %#v", tail)
+	}
+	assertComposedMCPSync(t, peer, "completed-after-close")
+	peer.closeInput(t)
+}
 
 type selectedSyncPoll struct {
 	delay time.Duration
@@ -103,7 +132,7 @@ func (scheduler *selectedSyncScheduler) advance() {
 // One immutable root serves independent connection-owned profiles/sessions.
 // Cases are ordered because advancing a shared scheduler intentionally affects
 // all its sessions. The whole cohort runs alongside unrelated functional tests.
-func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
+func TestCompletedMCPConnectionsSelectedSchedulerControlsSyncOperations(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
 	facts := platformclock.NewDeterministic(base, time.Second)
@@ -120,68 +149,7 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 	cohort := t
 	for _, name := range []string{"completion", "timeout keeps session running", "timeout cancels owned session"} {
 		t.Run(name, func(t *testing.T) {
-			cancelOnTimeout := name == "timeout cancels owned session"
-			server := startComposedMemoryMCPWithLifetime(t, cohort, process)
-			initializeMCPClient(t, server.client)
-			gate := runner.gate(t, server.root)
-			terminal := make(chan struct{}, 1)
-			if cancelOnTimeout || name == "completion" {
-				files.terminal.Store(filepath.Clean(server.root), terminal)
-				defer files.terminal.Delete(filepath.Clean(server.root))
-			}
-			reply := make(chan mcpJSONRPCResponse, 1)
-			timeout := int64(3600000)
-			if name != "completion" {
-				timeout = 20
-			}
-			go func() { reply <- selectedSyncCall(server.client, timeout, cancelOnTimeout) }()
-			awaitComposedSignal(t, gate.entered)
-			poll := scheduler.poll(t)
-			facts.SetTick(3600)
-			select {
-			case <-poll.ticks:
-				t.Fatal("fact clock released selected sync poll")
-			default:
-			}
-			select {
-			case response := <-reply:
-				t.Fatalf("held sync returned: %#v", response)
-			default:
-			}
-			if name == "completion" {
-				close(gate.release)
-				awaitComposedSignal(t, terminal)
-			}
-			scheduler.advance()
-			if cancelOnTimeout {
-				scheduler.poll(t)
-				scheduler.advance() // The unchanged 20ms wait timeout requests cancellation.
-				// Persistence runs on host goroutines, independently of selected
-				// time. Do not exhaust five virtual seconds of join polls before
-				// those goroutines run; release any join poll after the edge signals.
-				awaitComposedSignal(t, terminal)
-			}
-			response := advanceSelectedSyncToReply(t, scheduler, reply)
-			result := decodeComposedTool[factoryapi.FactorySessionSyncExecutionResponse](t, response)
-			if result.SessionId == "" {
-				t.Fatal("sync response lost session identity")
-			}
-			if name == "timeout keeps session running" {
-				assertSelectedSyncStillRunning(t, server, result)
-				close(gate.release)
-			} else if cancelOnTimeout {
-				if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeTimedOut || result.SessionCanceledByTimeout == nil || !*result.SessionCanceledByTimeout {
-					t.Fatalf("timeout cancellation = %#v", result)
-				}
-				t.Log("S03: selected timeout and cancellation-join polls retain timeout cancellation flags")
-			} else {
-				encoded, _ := json.Marshal(result.Result)
-				if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted || !strings.Contains(string(encoded), "completed at ") {
-					t.Fatalf("completed result = %#v", result)
-				}
-				t.Log("S01/S09 sync edge: only selected scheduler releases completion; independent fact timers preserve precedence")
-			}
-			server.closeInput(t)
+			assertSelectedSyncScenario(t, cohort, name, process, runner, facts, scheduler, files)
 		})
 	}
 	t.Run("request cancellation leaves live peer held", func(t *testing.T) {
@@ -192,6 +160,77 @@ func TestSelectedSchedulerControlsMCPSyncOperations(t *testing.T) {
 	initializeMCPClient(t, peer.client)
 	assertComposedMCPSync(t, peer, "selected-peer")
 	peer.closeInput(t)
+}
+
+func assertSelectedSyncScenario(t, lifetime *testing.T, name string, process support.Process, runner *mcpRootResultRunner, facts *platformclock.Deterministic, scheduler *selectedSyncScheduler, files *selectedSyncPersistence) {
+	t.Helper()
+	cancelOnTimeout := name == "timeout cancels owned session"
+	server := startComposedMemoryMCPWithLifetime(t, lifetime, process)
+	initializeMCPClient(t, server.client)
+	gate := runner.gate(t, server.root)
+	terminal := make(chan struct{}, 1)
+	if cancelOnTimeout || name == "completion" {
+		files.terminal.Store(filepath.Clean(server.root), terminal)
+		defer files.terminal.Delete(filepath.Clean(server.root))
+	}
+	reply := make(chan mcpJSONRPCResponse, 1)
+	timeout := int64(3600000)
+	if name != "completion" {
+		timeout = 20
+	}
+	go func() { reply <- selectedSyncCall(server.client, timeout, cancelOnTimeout) }()
+	awaitComposedSignal(t, gate.entered)
+	poll := scheduler.poll(t)
+	facts.SetTick(3600)
+	select {
+	case <-poll.ticks:
+		t.Fatal("fact clock released selected sync poll")
+	default:
+	}
+	select {
+	case response := <-reply:
+		t.Fatalf("held sync returned: %#v", response)
+	default:
+	}
+	if name == "completion" {
+		close(gate.release)
+		awaitComposedSignal(t, terminal)
+	}
+	scheduler.advance()
+	if cancelOnTimeout {
+		scheduler.poll(t)
+		scheduler.advance() // The unchanged 20ms wait timeout requests cancellation.
+		// Persistence runs on host goroutines, independently of selected
+		// time. Do not exhaust five virtual seconds of join polls before
+		// those goroutines run; release any join poll after the edge signals.
+		awaitComposedSignal(t, terminal)
+	}
+	response := advanceSelectedSyncToReply(t, scheduler, reply)
+	result := decodeComposedTool[factoryapi.FactorySessionSyncExecutionResponse](t, response)
+	if result.SessionId == "" {
+		t.Fatal("sync response lost session identity")
+	}
+	assertSelectedSyncScenarioResult(t, name, server, result, gate.release)
+	server.closeInput(t)
+}
+
+func assertSelectedSyncScenarioResult(t *testing.T, name string, server *composedMemoryMCP, result factoryapi.FactorySessionSyncExecutionResponse, release chan struct{}) {
+	t.Helper()
+	if name == "timeout keeps session running" {
+		assertSelectedSyncStillRunning(t, server, result)
+		close(release)
+	} else if name == "timeout cancels owned session" {
+		if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeTimedOut || result.SessionCanceledByTimeout == nil || !*result.SessionCanceledByTimeout {
+			t.Fatalf("timeout cancellation = %#v", result)
+		}
+		t.Log("S03: selected timeout and cancellation-join polls retain timeout cancellation flags")
+	} else {
+		encoded, _ := json.Marshal(result.Result)
+		if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted || !strings.Contains(string(encoded), "completed at ") {
+			t.Fatalf("completed result = %#v", result)
+		}
+		t.Log("S01/S09 sync edge: only selected scheduler releases completion; independent fact timers preserve precedence")
+	}
 }
 
 func assertSelectedSyncRequestCancellation(t, lifetime *testing.T, process support.Process, runner *mcpRootResultRunner, scheduler *selectedSyncScheduler, files *selectedSyncPersistence) {

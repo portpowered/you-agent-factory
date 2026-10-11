@@ -169,9 +169,6 @@ func newHTTPRuntimeHandlerWithMetrics(
 	logger *zap.Logger,
 	messagesHTTP *agentmessageshttp.Handler,
 ) (http.Handler, error) {
-	if root == nil {
-		return nil, errors.New("bind HTTP mappings: Factory Sessions root is required")
-	}
 	presentation, err := root.SessionPresentation(sessionID)
 	if err != nil {
 		return nil, err
