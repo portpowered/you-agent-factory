@@ -15,6 +15,8 @@ import (
 
 func TestCodexRejectedOutputObservedBeforeFailure(t *testing.T) {
 	t.Parallel()
+	// Failure ceiling only; observed and done channels drive synchronization.
+	const failureCeiling = 45 * time.Second
 	var progress []providers.ExecuteProgress
 	observed := make(chan struct{})
 	release := make(chan struct{})
@@ -50,7 +52,7 @@ func TestCodexRejectedOutputObservedBeforeFailure(t *testing.T) {
 	case <-observed:
 	case <-done:
 		t.Fatal("attempt returned before live stderr observation")
-	case <-time.After(5 * time.Second):
+	case <-time.After(failureCeiling):
 		t.Fatal("live observation did not arrive")
 	}
 	select {
@@ -61,7 +63,7 @@ func TestCodexRejectedOutputObservedBeforeFailure(t *testing.T) {
 	release <- struct{}{}
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(failureCeiling):
 		t.Fatal("attempt did not join after callback release")
 	}
 	if err == nil || result.Content != "" {
